@@ -1,0 +1,6 @@
+{
+  "name": "xrb-workspace",
+  "private": true,
+  "description": "XR Build workspace: projects and plugins",
+  "packageManager": "pnpm@9.15.9"
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@xr-build/control-panel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local developer control panel: projects, builds, packages, runs on the display, debug views",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.ts --open",
+    "test": "node --test \"test/**/*.test.ts\""
+  }
+}

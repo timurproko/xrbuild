@@ -1,0 +1,54 @@
+name: Nightly triage
+
+# After the scheduled CI run on main: a failure opens (or comments on) one draft PR `fix/nightly-<date>` labelled
+# `nightly-failure` with an OpenSpec change scaffold and the failure summary; a green run is noted on it. Never merges.
+# See tools/pr-automation/nightly-triage.mjs. Dispatch with a run id to triage any CI run by hand.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: CI run id to triage
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: nightly-triage
+
+jobs:
+  triage:
+    name: Triage
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'schedule' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - name: Check out main's scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: base
+          persist-credentials: false
+      - id: bot
+        uses: ./base/.github/actions/app-token
+        with:
+          app-id: ${{ vars.XRB_BOT_APP_ID }}
+          private-key: ${{ secrets.XRB_BOT_PRIVATE_KEY }}
+      - name: Check out a working copy as the App
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: work
+          fetch-depth: 0
+          token: ${{ steps.bot.outputs.token }}
+      - env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          GH_WORKFLOW_TOKEN: ${{ github.token }}
+          AUTHOR: ${{ steps.bot.outputs.author }}
+          RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
+        run: node base/tools/pr-automation/nightly-triage.mjs --repo work --run "$RUN_ID" --author "$AUTHOR"

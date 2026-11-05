@@ -1,0 +1,55 @@
+{
+  "$comment": "The repository's GitHub settings, main ruleset and workflow labels. Only declared keys are checked (pnpm governance check) and written (pnpm governance apply --confirm apply-xr-build-governance, the maintainer's credentials).",
+  "repository": {
+    "allow_squash_merge": true,
+    "allow_merge_commit": false,
+    "allow_rebase_merge": false,
+    "allow_auto_merge": true,
+    "delete_branch_on_merge": true,
+    "allow_update_branch": false,
+    "squash_merge_commit_title": "PR_TITLE",
+    "squash_merge_commit_message": "BLANK"
+  },
+  "actions": {
+    "default_workflow_permissions": "read",
+    "can_approve_pull_request_reviews": false
+  },
+  "rulesets": [
+    {
+      "name": "protect-main",
+      "target": "branch",
+      "enforcement": "active",
+      "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+      "bypass_actors": [{ "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }],
+      "rules": [
+        { "type": "deletion" },
+        { "type": "non_fast_forward" },
+        { "type": "required_linear_history" },
+        {
+          "type": "pull_request",
+          "parameters": {
+            "required_approving_review_count": 0,
+            "dismiss_stale_reviews_on_push": false,
+            "require_code_owner_review": false,
+            "require_last_push_approval": false,
+            "required_review_thread_resolution": true,
+            "allowed_merge_methods": ["squash"]
+          }
+        },
+        {
+          "type": "required_status_checks",
+          "parameters": {
+            "strict_required_status_checks_policy": false,
+            "required_status_checks": [{ "context": "CI required", "integration_id": 15368 }]
+          }
+        }
+      ]
+    }
+  ],
+  "labels": [
+    { "name": "no-auto-merge", "color": "bfd4f2", "description": "Keep a docs-only PR from merging by itself" },
+    { "name": "openspec-in-progress", "color": "c5def5", "description": "Edits an OpenSpec change delivered over several PRs" },
+    { "name": "openspec-reconcile", "color": "fbca04", "description": "OpenSpec changes merged without being archived" },
+    { "name": "nightly-failure", "color": "d93f0b", "description": "Fix for a failed nightly CI run" }
+  ]
+}

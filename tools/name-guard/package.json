@@ -1,0 +1,1 @@
+{ "name": "@xr-build/name-guard", "version": "0.0.0", "private": true, "type": "module", "scripts": { "test": "node --test" } }

@@ -1,0 +1,7 @@
+## Implementation
+
+- [x] Add bounded plugin-manifest provisioning for managed main-menu tools and migrate Hand Tracking Input off the manual workspace registration; verify enabled/disabled behavior, combined ID/path collision rejection and unchanged passive external-tool support.
+- [x] Make managed-tool navigation return the actual application document on the first successful request and move fixed package-graph setup before panel listen/open; verify concurrent cold requests share one runtime and no normal navigation response contains a Starting/setup page.
+- [x] Rename maintained private integration identities from the retired laboratory codename to Hand Tracking Input / `hand-tracking`, including project, package, plugin, provider, endpoints, services, generated outputs and documentation; verify only explicit bounded legacy readers/migrations retain old recording or persisted-key literals.
+- [x] Distribute the native RGB-D helper as a pinned LFS runtime with source-input provenance and remove native compilation from navigation; verify opening/reloading creates no build process, camera stream, model worker, recording or native camera service, while explicit capture uses the prepared runtime.
+- [x] Add selected Windows CI build/runtime validation and focused Control Panel plus Hand Tracking Input regressions; verify strict OpenSpec, name guard, relevant full suites, production build and `git diff --check` pass, and a cold browser navigation reaches the application directly.

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 52" width="220" height="52">
+  <style>
+    text { font: 400 22px 'JetBrains Mono', SFMono-Regular, Consolas, Menlo, monospace; fill: rgb(166,181,255); text-anchor: middle; dominant-baseline: central; }
+    .star { animation: twinkle 2.4s ease-in-out infinite; }
+    .s2 { animation-delay: -.8s; }
+    .s3 { animation-delay: -1.6s; }
+    @keyframes twinkle { 0%,100% { fill-opacity: .25; } 45%,55% { fill-opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .star { animation: none; fill-opacity: .7; } }
+  </style>
+  <text x="110" y="30" xml:space="preserve"><tspan class="star s1">*</tspan> <tspan class="star s2">*</tspan> <tspan class="star s3">*</tspan></text>
+</svg>

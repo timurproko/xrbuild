@@ -1,0 +1,13 @@
+{
+  "name": "@xr-build/desktop-package",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Built-in portable Windows desktop package",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "xrBuild": {
+    "packager": "./src/packager.ts"
+  }
+}

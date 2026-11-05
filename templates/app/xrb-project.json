@@ -1,0 +1,11 @@
+{
+  "name": "__NAME__",
+  "description": "",
+  "kind": "app",
+  "entry": "dist",
+  "inputs": ["mouse"],
+  "scripts": {
+    "build": "build",
+    "dev": "dev"
+  }
+}

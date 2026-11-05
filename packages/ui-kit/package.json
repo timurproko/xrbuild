@@ -1,0 +1,23 @@
+{
+  "name": "@xr-build/ui-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "3D controls for XR Build apps (button, switch, segmented, slider, dial, trackball, label) on the shared hand interaction core",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@xr-build/sdk": "workspace:*",
+    "lucide": "^1.54.0"
+  },
+  "peerDependencies": {
+    "three": ">=0.160.0"
+  },
+  "devDependencies": {
+    "three": "0.170.0"
+  }
+}

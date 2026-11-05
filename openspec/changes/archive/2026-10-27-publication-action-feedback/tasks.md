@@ -1,0 +1,17 @@
+# Tasks
+
+## 1. Consistent publication action
+
+- [x] 1.1 Replace the published-row trash action with a compact Unpublish button in the same Build-card slot and geometry as Publish while preserving the deployed URL row and confirmation dialog; verify focused UI tests cover unpublished, published, wide and narrow layouts.
+- [x] 1.2 Expose explicit publish/unpublish metadata on publication jobs; while pending, keep the compact action's normal height, replace its text with a centered accessible spinner and disable Publisher and Slug; keep idle Publish/Unpublish text self-describing without a tooltip trigger; after publication keep Publisher enabled but make the selected Slug read-only, visibly muted and included in provider-change saves; suppress stale locked-field errors and top-align labels, inputs and the action; verify job and UI tests cover these states.
+- [x] 1.3 Re-render publication feedback from live job events while leaving the rest of the panel interactive and without opening a progress modal; verify an automated UI assertion covers the non-blocking path and a browser check confirms navigation and settings remain usable during a publication job.
+- [x] 1.4 Show each publisher's validated HTTPS hostname in the selector while preserving its stable name as the saved value; verify focused UI tests cover hostname display, fallback behavior and unchanged manifest identity.
+- [x] 1.5 Hide package history, its divider and its empty placeholder when no package matches the current channel and identity, then reveal it when a package exists; verify focused UI tests cover empty, populated and delete-last-package states.
+- [x] 1.6 Preload packaging descriptors for every Platform choice and standalone publication status, render every Platform click immediately, and serialize one request plus the latest queued choice; automatically rebase stale Platform saves onto authoritative settings without a conflict dialog and retain rollback/reload for true failures; verify focused tests cover these paths.
+- [x] 1.7 Let Publisher changes remember a slug and preload status per independent deployment destination without confirmation or removing the old deployment; pin the latest Publisher/Slug/status across background refreshes and publication jobs, prevent actions from targeting a prior provider, never switch provider on completion, discard superseded project responses, automatically rebase and retry stale publication saves without a conflict dialog, and submit confirmed live route moves against the latest manifest; verify focused tests cover these paths.
+- [x] 1.8 Render one Build-card block for every published provider, titled with its displayed hostname and followed by the complete linked URL, while keeping all live blocks visible across Publisher selection changes; verify focused UI and server tests cover multiple simultaneous deployments.
+- [x] 1.9 On successful publication job completion, immediately override the selected provider's action/list state while authoritative status catches up, animate Publish rows expanding in and Unpublish rows collapsing away, and respect reduced motion; verify focused UI assertions cover completion events, bounded refresh and both animations.
+
+## 2. Checks
+
+- [x] 2.1 Run the focused control-panel suite, JavaScript syntax check and name guard; verify all pass and report any publisher-duration browser check that cannot be automated as a manual acceptance gap.

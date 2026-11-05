@@ -1,0 +1,39 @@
+name: Docs auto-merge
+
+# A ready PR that changes only documentation merges by itself (squash) once "CI required" passes; see
+# tools/pr-automation/docs-auto-merge.mjs for what counts as documentation, the PRs it never takes (linked to an
+# OpenSpec change, editing an active change) and the `no-auto-merge` opt-out. Armed as the repo's GitHub App, so the
+# merge starts CI on main. pull_request_target runs main's copy of the workflow and the script; the PR's code is never
+# checked out.
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, edited, labeled, unlabeled]
+
+permissions: {}
+
+concurrency:
+  group: docs-auto-merge-${{ github.event.pull_request.number }}
+
+jobs:
+  auto-merge:
+    name: Docs auto-merge
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/app-token
+        with:
+          app-id: ${{ vars.XRB_BOT_APP_ID }}
+          private-key: ${{ secrets.XRB_BOT_PRIVATE_KEY }}
+      - env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          BOT_LOGIN: ${{ steps.bot.outputs.login }}
+          PR: ${{ github.event.pull_request.number }}
+        run: node tools/pr-automation/docs-auto-merge.mjs "$PR"

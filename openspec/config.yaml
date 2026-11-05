@@ -1,0 +1,15 @@
+schema: spec-driven
+
+context: |
+  The XR Build core and private development workspace are independent Git repositories. Authorized developers
+  clone the workspace at the core checkout's ignored `.xrbuild/` path; it is not a submodule or junction. Ordinary
+  users use `XRB_HOME`, else `%USERPROFILE%\.xrbuild`. Core CI requires no private workspace credentials or assets. Never use a
+  proprietary name (a vendor, product or SDK, client, person, or where code came from) in core artifacts, paths
+  outside `.xrbuild/`, proposals, designs, specs, tasks, examples or scenario data. Describe roles instead
+  ("a 3D display", "a hand tracker", "a station platform") and use made-up example names (`stereo-panel`, `tracker`,
+  `station`). The entire private `.xrbuild/` workspace is exempt from the core name guard; its plugin, project and
+  pinned Git LFS dependency paths may use external names. Do not export it publicly. Concrete integrations live
+  only as separate plugins under `.xrbuild/plugins/`; core changes stay generic. `pnpm check:names` must pass.
+  A change ships in the PR that implements it, as the change-delivery skill describes
+  (`.claude/skills/change-delivery/SKILL.md`): plan first as a draft PR linked to the change, implementation after
+  approval, then the repo bot archives the change in that PR so main gets the code and the synced specs together.

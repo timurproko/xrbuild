@@ -1,0 +1,19 @@
+{
+  "name": "@xr-build/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "three.js on 3D displays with hand input, for the XR Build host",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "peerDependencies": {
+    "three": ">=0.160.0"
+  },
+  "devDependencies": {
+    "three": "0.170.0"
+  }
+}

@@ -1,0 +1,32 @@
+name: OpenSpec reconcile
+
+# Nightly: lists OpenSpec changes still active on main that a merged PR delivered, in one issue labelled
+# `openspec-reconcile` (updated in place, closed when clean); see tools/pr-automation/reconcile.mjs.
+on:
+  schedule:
+    - cron: '43 2 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: openspec-reconcile
+
+jobs:
+  reconcile:
+    name: Reconcile
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/app-token
+        with:
+          app-id: ${{ vars.XRB_BOT_APP_ID }}
+          private-key: ${{ secrets.XRB_BOT_PRIVATE_KEY }}
+      - env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+        run: node tools/pr-automation/reconcile.mjs --repo .

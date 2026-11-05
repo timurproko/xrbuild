@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Side-by-side test</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// Fixed stereo pattern for checking the host's side-by-side output on a 3D display.
+// The page is 2 eyes wide; each eye draws the same scene with a horizontal shift
+// (disparity). Expected on the glass: the grid sits on the panel, the orange
+// square floats in front of it, the blue square sits behind it, and the white
+// ring slowly moves in depth. In a normal browser you just see two halves.
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+}
+addEventListener('resize', resize);
+resize();
+
+function drawEye(x0, w, h, eye, t) {
+  // eye = -1 (left) or +1 (right); disparity in pixels of the eye image.
+  // Crossed disparity (left image shifted right) puts an object in front of the panel.
+  const shift = (d) => -eye * d * w / 400;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x0, 0, w, h);
+  ctx.clip();
+  ctx.fillStyle = '#101418';
+  ctx.fillRect(x0, 0, w, h);
+
+  ctx.strokeStyle = '#3a4a5a';
+  ctx.lineWidth = Math.max(1, w / 960);
+  const step = w / 16;
+  for (let x = 0; x <= w; x += step) { ctx.beginPath(); ctx.moveTo(x0 + x, 0); ctx.lineTo(x0 + x, h); ctx.stroke(); }
+  for (let y = 0; y <= h; y += step) { ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + w, y); ctx.stroke(); }
+
+  const s = w / 6;
+  ctx.fillStyle = '#2f6fdf';                       // behind the panel
+  ctx.fillRect(x0 + w * 0.62 - s / 2 + shift(-4), h * 0.5 - s / 2, s, s);
+  ctx.fillStyle = '#f08a24';                       // in front of the panel
+  ctx.fillRect(x0 + w * 0.38 - s / 2 + shift(4), h * 0.5 - s / 2, s, s);
+
+  const d = 4 * Math.sin(t / 1500);                // ring moving through the panel plane
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = w / 120;
+  ctx.beginPath();
+  ctx.arc(x0 + w * 0.5 + shift(d), h * 0.22, w / 18, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = '#c8d0d8';
+  ctx.font = `${Math.round(w / 60)}px system-ui, sans-serif`;
+  ctx.fillText(`${eye < 0 ? 'LEFT' : 'RIGHT'} eye  ${w}x${h}`, x0 + w * 0.03, h * 0.95);
+  ctx.restore();
+}
+
+function frame(t) {
+  const W = canvas.width, H = canvas.height;
+  // Side by side when the view is wider than 2:1 (the host gives 2 x panel width).
+  if (W / H > 2.5) {
+    drawEye(0, W / 2, H, -1, t);
+    drawEye(W / 2, W / 2, H, 1, t);
+  } else {
+    drawEye(0, W, H, -1, t);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+console.log(`sbs test page ${innerWidth}x${innerHeight}`);
+</script>
+</body>
+</html>

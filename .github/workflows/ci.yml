@@ -1,0 +1,161 @@
+name: CI
+
+# Every PR to main runs the checks its changes need; "CI required" collects them and is the one check the main ruleset
+# requires. A draft runs only the light jobs; marking it ready (or editing its body or labels) runs the rest. Pushes to
+# main run the fast jobs; the nightly schedule and explicit dispatch also build and test the native host. The delivery
+# check runs the base commit's copy of its script, so a PR cannot weaken its own check.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, labeled, unlabeled]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to a PR cancels its older run; runs on main (push, nightly, dispatch) each get their own group, so every
+# commit on main is checked to the end.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-run-{0}', github.run_id) }}
+  cancel-in-progress: true
+
+jobs:
+  readiness:
+    name: Readiness
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.ready.outputs.ready }}
+    steps:
+      - id: ready
+        env:
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          if [ "$EVENT" = "pull_request" ] && [ "$DRAFT" = "true" ]; then ready=false; else ready=true; fi
+          echo "ready=$ready" | tee -a "$GITHUB_OUTPUT"
+
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      node: ${{ steps.select.outputs.node }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: select
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "node=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(git diff --name-only "$BASE...$HEAD")
+          echo "$files"
+          # A change to CI itself selects all PR-eligible jobs; the host lane remains nightly/manual.
+          match() { echo "$files" | grep -qE "$1" && echo true || echo false; }
+          echo "node=$(match '^(packages/|tools/|templates/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
+
+  names:
+    name: Name guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: node tools/name-guard/name-guard.mjs check
+
+  openspec:
+    name: OpenSpec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # Keep the same pinned CLI as finalization: overlong requirements are INFO, other warnings fail strict.
+      - run: npx --yes @fission-ai/openspec@1.11.0 validate --all --strict --no-interactive
+
+  delivery:
+    name: Delivery
+    needs: readiness
+    if: github.event_name == 'pull_request' && needs.readiness.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # The base commit's policy, not the PR's (tools/pr-automation/delivery.mjs).
+          policy="$RUNNER_TEMP/policy"
+          mkdir -p "$policy"
+          if ! git cat-file -e "$BASE:tools/pr-automation/delivery.mjs" 2>/dev/null; then
+            echo "::notice title=Delivery::the base commit has no delivery check yet; skipped"; exit 0
+          fi
+          git archive "$BASE" tools/pr-automation | tar -x -C "$policy"
+          node "$policy/tools/pr-automation/delivery.mjs" --repo . --base "$BASE" --head "$HEAD" --event "$GITHUB_EVENT_PATH"
+
+  node:
+    name: Node tests
+    needs: [readiness, changes]
+    if: needs.readiness.outputs.ready == 'true' && needs.changes.outputs.node == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # --no-bail: every suite reports, not only the first that fails.
+      - run: pnpm -r --no-bail --if-present test
+
+  native:
+    name: Host build and tests
+    needs: [readiness]
+    # Deliberately skip every PR and main push; a dispatch can check a sensitive change before merge.
+    if: needs.readiness.outputs.ready == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            third_party/*
+            !third_party/README.md
+          key: third-party-${{ hashFiles('tools/fetch-deps/deps.lock.json', 'tools/fetch-deps/sources.mjs') }}
+      - run: node tools/fetch-deps/fetch-deps.mjs
+      # The runner's newest Visual Studio (no -G): the image decides the version.
+      - run: cmake -S native/host -B native/host/build -A x64
+      - run: cmake --build native/host/build --config Release --parallel
+      - run: native/host/build/Release/host-tests.exe
+
+  required:
+    name: CI required
+    if: always()
+    needs: [readiness, changes, names, openspec, delivery, node, native]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          # A skipped host job on a PR is intentional, not proof of a native build. Fail on any failed/cancelled job.
+          if echo "$RESULTS" | grep -qE '"(failure|cancelled)"'; then exit 1; fi

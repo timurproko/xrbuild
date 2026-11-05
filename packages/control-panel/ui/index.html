@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>XR Build · Apps</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Ctext%20y%3D%2250%22%20x%3D%2232%22%20text-anchor%3D%22middle%22%20font-size%3D%2250%22%3E%F0%9F%8E%9B%EF%B8%8F%3C%2Ftext%3E%3C%2Fsvg%3E">
+  <script>{const route=location.pathname.replace(/\/$/,'');if(route==='/plugins'){document.title='XR Build · Plugins';document.querySelector('link[rel="icon"]').href='data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cstyle%3Etext%7Bfilter%3Abrightness(0)%20saturate(100%25)%20invert(31%25)%20sepia(78%25)%20saturate(1794%25)%20hue-rotate(213deg)%20brightness(85%25)%20contrast(90%25)%7D%40media(prefers-color-scheme%3Adark)%7Btext%7Bfilter%3Abrightness(0)%20saturate(100%25)%20invert(70%25)%20sepia(39%25)%20saturate(1071%25)%20hue-rotate(194deg)%20brightness(101%25)%20contrast(103%25)%7D%7D%3C%2Fstyle%3E%3Ctext%20y%3D%2250%22%20x%3D%2232%22%20text-anchor%3D%22middle%22%20font-size%3D%2250%22%3E%F0%9F%A7%A9%3C%2Ftext%3E%3C%2Fsvg%3E'}else if(route==='/settings'){document.title='XR Build · Settings';document.querySelector('link[rel="icon"]').href='data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Ctext%20y%3D%2250%22%20x%3D%2232%22%20text-anchor%3D%22middle%22%20font-size%3D%2250%22%3E%E2%9A%99%EF%B8%8F%3C%2Ftext%3E%3C%2Fsvg%3E'}}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/design-system.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="workspace-pending">
+  <header class="top xrb-app-bar">
+    <h1 class="xrb-brand">XR Build <button id="panel-menu-button" class="panel-menu-button xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Apps</button></h1>
+    <span id="host-chip" class="chip" hidden></span>
+    <span id="panel-chip" class="chip warn" hidden>restart available</span>
+    <span class="spacer"></span>
+    <!-- Page fps and hands Hz of the running app, shown here once the Running card scrolled out of view -->
+    <div id="stats-dock" class="stats-dock" hidden></div>
+    <!-- Run / Stop of the selected project, shown here once its own button scrolled out of view -->
+    <div id="run-dock" class="run-dock" hidden><div class="run-project"><img alt=""><span class="name"></span><button type="button" class="action-button"></button></div></div>
+  </header>
+
+  <main id="dashboard" class="xrb-workspace-layout">
+    <nav id="projects" aria-label="Projects"></nav>
+
+    <div id="workspace-content">
+    <section id="project-content">
+      <div id="detail" aria-live="polite">
+        <p class="empty">Select a project.</p>
+      </div>
+    </section>
+
+    <aside id="side">
+      <section class="card" id="run-card">
+        <div class="row xrb-card-heading"><h2>Analytics</h2><span class="spacer"></span><label class="toggle xrb-toggle-pill xrb-toggle-pill-compact" id="camera-toggle" data-tooltip="Show input camera images, such as hand-tracking views, here." hidden><input type="checkbox" id="act-cams"> Cameras</label></div>
+        <div id="run-warning" class="warning" hidden></div>
+        <div id="run-metrics"></div>
+        <!-- Camera view (Run with "Cameras" on): the input provider's debug images, e.g. infrared with the 2D detections and colour -->
+        <div id="run-cameras" class="cameras" hidden></div>
+      </section>
+      <section class="card activity-card" id="log-card">
+        <div class="xrb-tab-toolbar">
+        <div class="activity-tabs" role="tablist" aria-label="Activity output">
+          <button type="button" class="activity-tab" role="tab" id="activity-jobs-tab" aria-controls="activity-jobs" aria-selected="false" tabindex="-1">Jobs</button>
+          <button type="button" class="activity-tab" role="tab" id="activity-log-tab" aria-controls="activity-log" aria-selected="true">Log</button>
+        </div>
+        <div class="xrb-tab-toolbar-center">
+          <div id="activity-log-filters" class="log-filters xrb-filter-group" role="group" aria-label="Show in the log">
+            <button type="button" class="log-filter xrb-filter-chip" data-level="info" aria-pressed="true" aria-label="Toggle messages" data-tooltip="Show or hide messages"><span class="ico xrb-filter-indicator" aria-hidden="true"></span><span class="n xrb-filter-count">0</span></button>
+            <button type="button" class="log-filter xrb-filter-chip" data-level="warn" data-tone="warn" aria-pressed="true" aria-label="Toggle warnings" data-tooltip="Show or hide warnings"><span class="ico xrb-filter-indicator" aria-hidden="true"></span><span class="n xrb-filter-count">0</span></button>
+            <button type="button" class="log-filter xrb-filter-chip" data-level="err" data-tone="error" aria-pressed="true" aria-label="Toggle errors" data-tooltip="Show or hide errors"><span class="ico xrb-filter-indicator" aria-hidden="true"></span><span class="n xrb-filter-count">0</span></button>
+            <span id="log-debug" class="log-debug" role="group" aria-label="Plugin debug messages" hidden></span>
+          </div>
+          <div id="activity-jobs-filters" class="log-filters xrb-filter-group" role="group" aria-label="Show jobs by status" hidden>
+            <button type="button" class="log-filter job-filter xrb-filter-chip" data-state="queued" data-tone="warn" aria-pressed="true" aria-label="Toggle queued jobs" data-tooltip="Show or hide queued jobs"><span class="ico xrb-filter-indicator" aria-hidden="true"></span><span class="n xrb-filter-count">0</span></button>
+            <button type="button" class="log-filter job-filter xrb-filter-chip" data-state="running" data-tone="accent" aria-pressed="true" aria-label="Toggle running jobs" data-tooltip="Show or hide running jobs"><span class="ico xrb-filter-indicator" aria-hidden="true"></span><span class="n xrb-filter-count">0</span></button>
+            <button type="button" class="log-filter job-filter xrb-filter-chip" data-state="done" data-tone="success" aria-pressed="true" aria-label="Toggle completed jobs" data-tooltip="Show or hide completed jobs"><span class="ico xrb-filter-indicator" aria-hidden="true"></span><span class="n xrb-filter-count">0</span></button>
+            <button type="button" class="log-filter job-filter xrb-filter-chip" data-state="failed" data-tone="error" aria-pressed="true" aria-label="Toggle failed jobs" data-tooltip="Show or hide failed jobs"><span class="ico xrb-filter-indicator" aria-hidden="true"></span><span class="n xrb-filter-count">0</span></button>
+          </div>
+        </div>
+        <div class="xrb-tab-toolbar-end">
+          <span id="activity-log-actions"><button type="button" class="xrb-icon-button log-clear" id="log-clear" title="Clear the log" aria-label="Clear log" aria-disabled="true" data-xrb-icon="close" hidden></button></span>
+          <span id="activity-jobs-actions" hidden><button type="button" class="xrb-icon-button" id="jobs-clear" title="Remove finished jobs from the list" aria-label="Clear jobs" data-xrb-icon="close" hidden></button></span>
+        </div>
+        </div>
+        <div id="activity-log" role="tabpanel" aria-labelledby="activity-log-tab">
+          <div id="run-log" class="console" role="log" aria-live="off" hidden></div>
+          <div id="log-empty" class="empty-note">The host log shows here while an app runs.</div>
+        </div>
+        <div id="activity-jobs" role="tabpanel" aria-labelledby="activity-jobs-tab" hidden>
+          <div id="jobs" class="list"></div>
+        </div>
+      </section>
+    </aside>
+    </div>
+  </main>
+
+  <main id="plugins-manager" class="plugins-manager xrb-workspace-layout" hidden>
+    <nav id="plugin-nav" aria-label="Installed plugins"></nav>
+    <section id="plugin-details"><h2 class="col-label xrb-section-label">Details</h2><div id="plugin-detail"></div></section>
+  </main>
+
+  <main id="global-settings" class="global-settings xrb-workspace-layout" hidden>
+    <nav id="settings-nav" aria-label="Settings filters"></nav>
+    <section id="settings-details"><div id="settings-content"></div></section>
+  </main>
+
+  <div id="panel-menu" class="menu xrb-menu panel-menu" role="menu" aria-label="XR Build navigation" hidden></div>
+
+  <div id="display-menu" class="menu xrb-menu" role="menu" aria-label="Display actions" hidden>
+    <button type="button" role="menuitem" data-act="refresh-displays">Refresh displays</button>
+  </div>
+
+  <div id="publication-links-menu" class="menu xrb-menu" role="menu" aria-label="Published destinations" hidden></div>
+
+  <div id="version-menu" class="menu xrb-menu" role="menu" aria-label="Version actions" hidden>
+    <button type="button" role="menuitem" data-version-bump="patch"><span>Patch</span><span class="version-next" aria-hidden="true"></span></button>
+    <button type="button" role="menuitem" data-version-bump="minor"><span>Minor</span><span class="version-next" aria-hidden="true"></span></button>
+    <button type="button" role="menuitem" data-version-bump="major"><span>Major</span><span class="version-next" aria-hidden="true"></span></button>
+  </div>
+
+  <div id="ctx-menu" class="menu xrb-menu" role="menu" hidden>
+    <button type="button" role="menuitem" data-act="favicon" class="submenu-item" aria-haspopup="menu" aria-expanded="false">Favicon</button>
+    <button type="button" role="menuitem" data-act="rebuild-app">Rebuild</button>
+    <button type="button" role="menuitem" data-act="rename">Rename</button>
+    <button type="button" role="menuitem" data-act="archive">Archive</button>
+    <button type="button" role="menuitem" data-act="delete" class="danger-item">Delete</button>
+  </div>
+
+  <!-- Right-click on a section heading in the list. -->
+  <div id="sec-menu" class="menu xrb-menu" role="menu" hidden>
+    <button type="button" role="menuitem" data-act="new">New section…</button>
+    <button type="button" role="menuitem" data-act="up">Move up</button>
+    <button type="button" role="menuitem" data-act="down">Move down</button>
+    <button type="button" role="menuitem" data-act="rename">Rename</button>
+    <button type="button" role="menuitem" class="danger-item" data-act="delete">Delete section</button>
+  </div>
+
+  <!-- The project thumbnail's menu: the default sphere's colour, or the project's own icon (uploaded or rendered). -->
+  <div id="icon-menu" class="menu xrb-menu" role="menu" hidden>
+    <div class="menu-colors xrb-swatch-group" role="group" aria-label="Default icon colour">
+      <button type="button" class="swatch xrb-swatch c-blue" data-swatch="blue" data-icon-color="blue" title="Blue (default)" aria-label="Blue"></button>
+      <button type="button" class="swatch xrb-swatch c-green" data-swatch="green" data-icon-color="green" title="Green" aria-label="Green"></button>
+      <button type="button" class="swatch xrb-swatch c-amber" data-swatch="amber" data-icon-color="amber" title="Amber" aria-label="Amber"></button>
+      <button type="button" class="swatch xrb-swatch c-red" data-swatch="red" data-icon-color="red" title="Red" aria-label="Red"></button>
+      <button type="button" class="swatch xrb-swatch c-purple" data-swatch="purple" data-icon-color="purple" title="Purple" aria-label="Purple"></button>
+      <button type="button" class="swatch xrb-swatch c-teal" data-swatch="teal" data-icon-color="teal" title="Teal" aria-label="Teal"></button>
+      <button type="button" class="swatch xrb-swatch c-grey" data-swatch="grey" data-icon-color="grey" title="Grey" aria-label="Grey"></button>
+    </div>
+    <button type="button" role="menuitem" data-act="upload-icon">Upload image…</button>
+    <button type="button" role="menuitem" data-act="render-icon" hidden>Render 3D…</button>
+    <button type="button" role="menuitem" class="danger-item" data-act="remove-icon" hidden>Remove</button>
+  </div>
+
+  <dialog id="workspace-setup" class="xrb-dialog workspace-setup" aria-labelledby="workspace-title" aria-describedby="workspace-message">
+    <h1 class="workspace-brand">XR Build <span>Setup</span></h1>
+    <div class="workspace-panel">
+      <h3 id="workspace-title">Create your workspace</h3>
+      <p id="workspace-message" class="muted">Projects and plugins live in your workspace, separate from the XR Build core. Create it with the standard folders and a starter app.</p>
+      <div class="workspace-folder">
+        <span class="label">Workspace folder</span>
+        <code id="workspace-folder"></code>
+      </div>
+      <p id="workspace-error" class="field-error" role="alert" hidden></p>
+      <div class="row ask-buttons"><span class="spacer"></span>
+        <button type="button" class="action-button primary" id="ws-create" autofocus>Create workspace</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="job-progress" class="xrb-dialog xrb-progress-dialog xrb-job-progress-dialog" aria-labelledby="job-progress-title" aria-describedby="job-progress-message">
+      <div class="xrb-progress-status"><span id="job-progress-status-icon" class="xrb-progress-status-icon" data-state="running" aria-hidden="true">
+          <span class="xrb-spinner xrb-spinner-accent xrb-progress-running"></span>
+          <span class="xrb-progress-check" data-xrb-icon="check-circle"></span>
+          <span class="xrb-progress-error" data-xrb-icon="error-circle"></span>
+        </span>
+        <div><h3 id="job-progress-title">Building package</h3>
+          <p id="job-progress-message" class="muted" role="status">Starting build…</p></div>
+      </div>
+      <pre id="job-progress-output" class="log" aria-label="Build output">Waiting for output…</pre>
+      <div id="job-progress-actions" class="row ask-buttons is-building"><label class="toggle"><input type="checkbox" id="job-progress-autoclose"> Autoclose on finish</label><span class="spacer"></span>
+        <button type="button" class="action-button" id="job-progress-view-job">View job</button>
+        <button type="button" class="action-button primary" id="job-progress-close">Close</button>
+      </div>
+  </dialog>
+
+  <!-- The panel's own confirm / prompt / message dialog (ask() in app.js). -->
+  <dialog id="ask" class="xrb-dialog ask">
+    <form method="dialog">
+      <div class="xrb-dialog-header"><h3 id="ask-title"></h3><button type="button" id="ask-close" class="xrb-dialog-close xrb-dialog-close-corner" aria-label="Close" hidden>×</button></div>
+      <p id="ask-message" class="muted"></p>
+      <a id="ask-link" target="_blank" rel="noopener noreferrer" hidden></a>
+      <div id="ask-details-block" class="xrb-copy-block xrb-copy-block-area" hidden>
+        <button type="button" id="ask-copy" class="xrb-icon-button xrb-copy-action" aria-label="Copy error details"><span data-xrb-icon="copy"></span></button>
+        <pre id="ask-details" class="log"></pre>
+        <p id="ask-copy-status" class="xrb-copy-status" role="status" aria-live="polite"></p>
+      </div>
+      <label id="ask-field" hidden><span id="ask-input-label"></span><input id="ask-input" autocomplete="off"><span id="ask-input-hint" class="xrb-help" hidden></span><span id="ask-input-error" class="xrb-help field-error" hidden></span></label>
+      <div id="ask-actions" class="row ask-buttons"><span class="spacer"></span>
+        <button type="button" id="ask-cancel" class="action-button">Cancel</button>
+        <button type="submit" id="ask-ok" class="action-button primary">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="studio" class="xrb-dialog">
+    <form method="dialog" class="studio">
+      <div class="studio-head xrb-dialog-header xrb-dialog-header-compact">
+        <h1 id="studio-title">Change icon</h1>
+        <button value="cancel" class="xrb-dialog-close xrb-dialog-close-corner" aria-label="Close" title="Close">×</button>
+      </div>
+      <div class="studio-grid">
+        <span class="label" id="studio-preview-label">Render preview</span>
+        <span class="label studio-thumb-label">Thumbnail preview</span>
+        <div class="studio-live" id="studio-live"><iframe id="studio-frame" title="Render preview"></iframe>
+          <canvas id="studio-image" class="studio-image" width="512" height="512" aria-label="The chosen image, framed for the icon" hidden></canvas>
+          <div id="studio-msg" class="studio-msg" hidden><span class="xrb-spinner xrb-spinner-accent" aria-hidden="true"></span><span class="text"></span>
+            <button type="button" id="studio-play" class="primary" hidden>Play here</button>
+            <button type="button" id="studio-pick" hidden>Choose PNG…</button><input type="file" id="studio-file" accept="image/png" hidden></div>
+        </div>
+        <div class="studio-side">
+          <div class="studio-thumb"><img id="studio-current" alt="Current icon on black"></div>
+          <div class="studio-actions">
+            <button type="button" id="studio-pause" class="studio-action xrb-tool-button" hidden aria-pressed="false">
+              <span class="pause-icon" data-xrb-icon="pause"></span>
+              <span class="play-icon" data-xrb-icon="play"></span>
+              <span class="studio-pause-label">Pause</span>
+            </button>
+            <button type="button" id="studio-take" class="studio-action xrb-tool-button" disabled>
+              <span data-xrb-icon="camera"></span>
+              Take
+            </button>
+            <button type="button" id="studio-reset" class="studio-action xrb-tool-button" hidden>
+              <span data-xrb-icon="reset"></span>
+              Reset
+            </button>
+            <button type="button" id="studio-clear" class="studio-action xrb-tool-button" hidden>
+              <span data-xrb-icon="trash"></span>
+              Delete
+            </button>
+          </div>
+          <p id="studio-hint" class="studio-hint xrb-supporting-text" hidden>Drag to turn · middle-drag to pan · right-drag or scroll to zoom</p>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

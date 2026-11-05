@@ -1,0 +1,6 @@
+{
+  "name": "xrb-projects",
+  "private": true,
+  "description": "XR Build application projects",
+  "packageManager": "pnpm@9.15.9"
+}

@@ -1,0 +1,52 @@
+name: Repo bot token
+description: >-
+  Mints a short-lived token for the repo's GitHub App (variable XRB_BOT_APP_ID, secret XRB_BOT_PRIVATE_KEY) and the
+  commit identity that goes with it. Stops with a message naming what is missing when the App is not configured.
+inputs:
+  app-id:
+    description: vars.XRB_BOT_APP_ID
+    required: false
+  private-key:
+    description: secrets.XRB_BOT_PRIVATE_KEY
+    required: false
+outputs:
+  token:
+    description: Installation token
+    value: ${{ steps.token.outputs.token }}
+  login:
+    description: The App's bot login (<slug>[bot])
+    value: ${{ steps.identity.outputs.login }}
+  author:
+    description: Commit identity, "<slug>[bot] <id+slug[bot]@users.noreply.github.com>"
+    value: ${{ steps.identity.outputs.author }}
+runs:
+  using: composite
+  steps:
+    - name: Check the App is configured
+      shell: bash
+      env:
+        APP_ID: ${{ inputs.app-id }}
+        KEY_SET: ${{ inputs.private-key != '' }}
+      run: |
+        missing=()
+        [ -n "$APP_ID" ] || missing+=("the Actions variable XRB_BOT_APP_ID")
+        [ "$KEY_SET" = "true" ] || missing+=("the Actions secret XRB_BOT_PRIVATE_KEY")
+        if [ ${#missing[@]} -gt 0 ]; then
+          printf '::error title=Repo bot not configured::Set %s (see the repo bot section of README.md).\n' "$(IFS=' and '; echo "${missing[*]}")"
+          exit 1
+        fi
+    - id: token
+      # app-id (deprecated in favour of the client id, still accepted): the repo stores the App id.
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+    - id: identity
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.token.outputs.token }}
+        SLUG: ${{ steps.token.outputs.app-slug }}
+      run: |
+        id=$(gh api "users/${SLUG}%5Bbot%5D" --jq .id)
+        echo "login=${SLUG}[bot]" >> "$GITHUB_OUTPUT"
+        echo "author=${SLUG}[bot] <${id}+${SLUG}[bot]@users.noreply.github.com>" >> "$GITHUB_OUTPUT"

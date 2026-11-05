@@ -1,0 +1,13 @@
+{
+  "name": "@xr-build/app-icon",
+  "version": "0.1.0",
+  "private": true,
+  "description": "App icons for XR Build: the default icon and its colours, .ico output, and rendering an app's own icon with xrb-host",
+  "type": "module",
+  "bin": {
+    "app-icon": "./src/cli.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\""
+  }
+}

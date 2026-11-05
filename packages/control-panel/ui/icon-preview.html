@@ -1,0 +1,42 @@
+<!doctype html>
+<!-- Icon preview for the icon studio: an app's 3D icon (the build's icon.js) alone, drawn by the SDK's icon
+     stage exactly as the app's icon view draws it, without loading the app. Answers the studio like an app
+     (hello, capture, pause). Query: model=/preview/<project>/icon.js, xrb-icon=<size>, interactive, paused. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Icon preview</title>
+  <script type="importmap">{ "imports": { "three": "/vendor/three.module.js" } }</script>
+  <style>html, body { margin: 0; background: transparent; overflow: hidden; } canvas { display: block; }</style>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { iconControls, IconStage } from '/sdk/icon-object.js';
+import { iconRender, serveIconCapture } from '/sdk/icon.js';
+
+const request = iconRender() ?? { size: 512, interactive: true };
+const model = new URLSearchParams(location.search).get('model') ?? '';
+// Only the panel's own preview routes.
+if (!model.startsWith('/preview/') || !model.endsWith('/icon.js')) throw new Error(`not an icon model: ${model}`);
+const mod = await import(model);
+const object = await (mod.default ?? mod.createIcon)();
+
+const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setPixelRatio(1);
+renderer.setSize(request.size, request.size);
+document.body.appendChild(renderer.domElement);
+const stage = new IconStage(object);
+await stage.ready;
+// The icon holds still: it is drawn on load and after each turn, zoom or reset, so every Take matches the view.
+const draw = () => stage.draw(renderer);
+draw();  // shown before the studio may pause the preview
+
+const canvas = renderer.domElement;
+// Drag turns, right-drag or scroll zooms; Reset in the studio restores the starting view.
+iconControls(canvas, stage, request.size, draw);
+serveIconCapture(canvas, draw, request.size, undefined, { reset: () => { stage.reset(); draw(); }, pausable: false });
+</script>
+</body>
+</html>

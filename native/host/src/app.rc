@@ -1,0 +1,3 @@
+// Built-in window and exe icon: the default app icon (packages use it as their thumbnail too).
+// Regenerate app.ico with: node packages/app-icon/src/cli.ts default-ico native/host/src/app.ico
+1 ICON "app.ico"

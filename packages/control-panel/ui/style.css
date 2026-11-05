@@ -1,0 +1,374 @@
+/* Product-specific control-panel layout. Shared typography, chrome and components live in design-system.css. */
+main { display: grid; grid-template-columns: var(--sidebar-w) minmax(440px, 1fr) 430px; align-items: start; max-width: 1760px; margin: 0 auto; }
+#workspace-content { display: contents; }
+/* Narrower: the project list keeps the left column at full height; project and activity sections flow together. */
+@media (max-width: 1320px) {
+  main { grid-template-columns: var(--sidebar-compact-w) minmax(0, 1fr); }
+  #projects { grid-column: 1; grid-row: 1; }
+  #workspace-content { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: var(--xrb-workspace-gap); min-width: 0; }
+  #project-content, #side { min-width: 0; }
+  #detail > .card:last-child { margin-bottom: 0; }
+}
+main.plugins-manager, main.global-settings { grid-template-columns: var(--sidebar-w) minmax(440px, 1fr) 430px; }
+@media (max-width: 1320px) { main.plugins-manager, main.global-settings { grid-template-columns: var(--sidebar-compact-w) minmax(0, 1fr); } }
+body.plugins-page .run-dock, body.plugins-page .stats-dock, body.settings-page .run-dock, body.settings-page .stats-dock { display: none; }
+@media (max-width: 700px) { main.plugins-manager, main.global-settings { grid-template-columns: minmax(0, 1fr); } }
+#settings-nav { align-self: start; }
+.settings-module-heading, .settings-owner-heading { position: sticky; top: var(--xrb-workspace-sticky-top); z-index: 3; background: var(--bg); box-shadow: 0 calc(-1 * var(--xrb-workspace-block-start)) 0 var(--bg), 0 var(--xrb-sticky-mask-gap) 0 var(--bg); }
+.settings-owner-heading { justify-content: space-between; width: 100%; }
+.settings-owner-heading > h2 { margin: 0; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
+.settings-owner-section + .settings-owner-section { margin-top: 20px; }
+.settings-card-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--xrb-space-stack); }
+.settings-card-fields > .settings-section { grid-column: 1 / -1; }
+.settings-card-fields > label { min-width: 0; }
+.settings-card-fields > .settings-boolean-field { grid-column: 1 / -1; }
+.settings-section { margin: 4px 0 0; }
+.settings-card-disabled { opacity: .72; }
+@media (max-width: 700px) { .settings-card-fields { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- project list */
+/* Every column starts with a label of the same height, so the first cards line up. The labels
+   stay under the top bar while the page scrolls (Tests takes over from Apps in the list). */
+nav h2 { position: sticky; top: var(--top-h); z-index: 1; background: var(--bg); margin: -10px 0 0; padding: 10px 2px 8px; }
+/* Column labels exactly match the Projects | Archive row: their natural and sticky positions,
+   height, baseline and bottom gap are identical, so crossing the sticky threshold cannot move them. */
+.col-label { position: sticky; top: var(--xrb-workspace-sticky-top); z-index: 3; background: var(--bg); box-shadow: 0 calc(-1 * var(--xrb-workspace-block-start)) 0 var(--bg), 0 var(--xrb-sticky-mask-gap) 0 var(--bg); }
+nav h2:not(:first-child) { margin-top: 6px; }
+.proj { display: grid; grid-template-columns: 4px 40px minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 8px 12px 8px 0; margin-bottom: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+/* The stripe shows only a colour the developer set (right-click menu), at full strength. */
+.proj .stripe { align-self: stretch; margin: -8px 0; background: transparent; }
+.proj:hover:not(.selected) { border-color: var(--muted); }
+/* Inset: an outer ring would stick out beside the sticky column label when the list scrolls. */
+/* Selected: a soft accent fill and one accent border (no extra ring). */
+.proj.selected { border-color: color-mix(in srgb, var(--accent) 70%, var(--line)); background: var(--accent-soft); box-shadow: none; }
+.proj img { width: 40px; height: 40px; object-fit: contain; }
+.proj .text { min-width: 0; }
+/* The run state (the bulb) is a badge on the row's top-left corner, over the icon's corner. */
+.proj { position: relative; }
+.proj .pill { grid-column: 4; grid-row: 1; align-self: center; justify-self: end; }  /* error, archived */
+/* An absolute grid item with a grid area is placed in that area: reset it to place it on the row itself. */
+.proj .pill:has(.run-dot) { position: absolute; grid-column: auto; grid-row: auto; top: 6px; left: 8px; z-index: 1; }
+/* The publication tag sits centred on the right and keeps the shared job-state colors and animation. */
+.proj .published { grid-column: 4; grid-row: 1; align-self: center; justify-self: end; }
+.proj .published .state { font-size: .66rem; padding: 2px 8px; }
+.run-dot { display: block; width: 9px; height: 9px; border-radius: 50%; animation: blink 1.4s ease-in-out infinite; }
+.run-dot.launching { background: var(--muted); }  /* grey like the Launching… button */
+.run-dot.running { background: var(--err); box-shadow: 0 0 0 3px var(--err-soft); }
+.run-dot.stopping { background: var(--muted); }  /* grey like the Stopping… button */
+.proj .name { font-weight: 600; font-size: .95rem; display: flex; gap: 6px; align-items: center; }
+.proj .meta { font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Inline rename of a project: the name's own font in a field with the focus ring (no jump). */
+.proj .name input.rename { font-weight: 600; padding: 3px 8px; margin: -4px 0 -4px -9px; }
+
+.unregistered { font-size: .82rem; color: var(--muted); padding: 6px 2px; }
+
+/* ---- cards */
+/* Compact project hero: icon, name and run controls share one row. */
+.hero-top { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; gap: 18px; align-items: center; }
+/* One identity line: a compact icon (the sticky app-bar size), the title and the Folder/JSON actions at the right edge. */
+.project-hero-top { grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto; gap: 8px 12px; align-items: center; }
+.project-hero .icon-btn { grid-column: 1; grid-row: 1; align-self: center; width: 26px; height: 26px; border: 0; border-radius: 0; background: transparent; }  /* just the icon, as in the sidebar */
+.project-hero-main { grid-column: 2; grid-row: 1; min-width: 0; }
+.project-title-row { display: flex; min-width: 0; align-items: center; gap: 12px; flex-wrap: wrap; }
+.project-title-row h3 { flex: none; }
+.project-hero .hero-tag { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.project-workflow-tabs { margin-bottom: 4px; }
+/* Folder and Open JSON sit at the identity row's right edge; the surface's primary action row sits below all content. */
+.project-hero .hero-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.project-title-row .hero-actions { flex: none; }
+.project-actions { display: flex; align-items: center; justify-content: flex-start; gap: 12px; flex-wrap: wrap; }
+.project-hero .publication-hero-link { margin-left: auto; }
+.hero-tag:empty { display: none; }
+.hero .actions { border-top: 1px solid var(--line); margin: 4px -18px 0; padding: 0 18px; }
+.hero .sub { color: var(--muted); font-size: .88rem; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+
+/* The project thumbnail: right-click opens its icon menu. */
+.icon-btn { position: relative; width: 112px; height: 112px; padding: 0; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; display: block; background: #000; }  /* on black, like the package thumbnail */
+.icon-btn img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.icon-btn { cursor: default; }  /* a plain thumbnail: its actions live under Favicon in the row menu */
+.icon-btn:focus-visible { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); outline: none; background: #000; }
+
+/* Actions: equal rows (same height, same padding, dividers between), the row name in sentence
+   case and normal weight so it reads as a row caption, not as another card title. */
+/* Tabbed card (Actions | Settings). Shared tab visuals are in design-system.css. */
+.project-hero { padding-top: 16px; }
+.project-hero > .project-workflow-tabs.xrb-tabs { margin-top: -16px; }
+.card.tabbed { gap: 4px; padding-top: 6px; }
+.tab-extra { display: inline-flex; align-items: center; gap: 10px; }
+.tab-pane { padding-top: 10px; }
+#settings.tab-pane { padding-top: 14px; padding-bottom: 2px; }
+.actions .act { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: center; min-height: 58px; padding: 10px 0; border-top: 1px solid var(--line); }
+.actions .act:first-of-type { border-top: 0; }
+.actions .act:last-child { padding-bottom: 0; min-height: 48px; }
+.build-actions .act:last-child { min-height: 0; padding: 0; }
+.actions .act > .label { margin: 0; font-size: .78rem; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--muted); }  /* = form labels ("Name") */
+.actions .act .row { flex-wrap: nowrap; min-height: 34px; }
+.actions .act button, .actions .act .version { height: 34px; }
+/* The pill or text after the main button starts where the second control of the other rows starts. */
+.actions .act .row > .state { align-self: center; height: 26px; }
+/* Lifecycle, package and publication actions reserve one shared width, so labels never move controls. */
+#act-run, #act-stop, #act-web, #act-package, #act-publish, #act-update, #act-activate, #act-unpublish, #act-make-live, #act-delete-release { width: var(--action-button-w); box-sizing: border-box; padding-inline: 8px; white-space: nowrap; }
+/* The confirmed secondary Unpublish of a release-capable publisher sits beside Update without claiming the primary width; the confirmed Delete of an inspected release sits beside Activate the same way. */
+#act-unpublish.publication-secondary, #act-delete-release.publication-secondary { width: auto; color: var(--err); }
+.run-control { width: 100%; display: grid; }
+.run-main { display: flex; align-items: center; justify-content: flex-start; gap: 8px; flex-wrap: wrap; }
+.version { width: 110px; font-family: var(--font-mono); }
+.package-inline { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.package-inline > *, .package-extra-fields { min-width: 0; }
+.package-extra-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.package-extra-fields:empty { display: none; }
+.package-history { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; padding-top: 16px; border-top: 1px solid var(--line); }
+.publication-hero-link { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; gap: 8px; overflow: hidden; color: var(--muted); font: .76rem/1.35 var(--font-mono); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.publication-hero-link:hover, .publication-hero-link:focus-visible { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; outline: none; }
+.publication-hero-link.disabled { opacity: .65; cursor: default; }
+/* Several live destinations collapse into one "N published" trigger whose menu lists every link. */
+button.publication-hero-menu { align-self: center; height: auto; padding: 2px 10px; margin: 0 -10px 0 auto; border: 0; border-radius: 6px; background: none; cursor: pointer; }
+button.publication-hero-menu:hover, button.publication-hero-menu:focus-visible, button.publication-hero-menu[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); text-decoration: none; outline: none; }
+button.publication-hero-menu.disabled { opacity: 1; cursor: pointer; }
+button.publication-hero-menu.disabled .publication-status-dot { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+#publication-links-menu { min-width: 260px; max-width: min(520px, calc(100vw - 16px)); }
+#publication-links-menu .publication-link-item { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; column-gap: 10px; }
+#publication-links-menu .publication-link-label { font-weight: 600; white-space: nowrap; }
+#publication-links-menu .publication-link-url { font-size: .74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.publication-status-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.publication-hero-link.disabled .publication-status-dot { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+.version-field { display: flex; align-items: end; gap: 8px; min-width: 0; }
+.version-field > label { flex: 1; min-width: 0; }
+.version-field .version { width: 100%; }
+.settings-toolbar { min-height: 36px; flex-wrap: wrap; }
+/* Display run options stay beside the platform choices while there is room. */
+.settings-toolbar .display-options { display: inline-flex; gap: 8px; }
+/* Toolbar: platform choices, display/run options and Open JSON. Open JSON keeps the top-right
+   corner; when the card is narrow, the run options move to a second line together, left-aligned. */
+.project-surface-content { display: grid; gap: var(--xrb-space-stack); min-width: 0; }
+#settings { container-type: inline-size; width: 100%; }  /* a size container does not size to its content */
+.settings-toolbar { display: grid; grid-template-columns: minmax(0, auto) 1fr auto; align-items: end; gap: 8px; }
+/* The Platform tabs carry a field title like Display or Package title; the run options align with the tab row. */
+.platform-switch { gap: var(--xrb-space-field); }
+.platform-switch .platform-title { font-size: .78rem; color: var(--muted); font-weight: 500; }
+.platform-switch .state { justify-self: start; }
+/* Fullscreen, 2D and Dev server follow the Platform tabs on the same row. */
+.settings-tools { grid-column: 2; grid-row: 1; justify-self: start; display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.settings-tools:empty { display: none; }
+.settings-toolbar #open-manifest { grid-column: 3; grid-row: 1; }
+@container (max-width: 430px) {
+  .settings-tools { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
+}
+.settings-toolbar + .runtime-settings { margin-top: 12px; }
+.runtime-settings { align-items: start; }
+.runtime-settings:empty { display: none; }
+.platform-switch { position: relative; z-index: 0; min-width: 0; display: grid; justify-items: start; align-items: start; gap: var(--xrb-space-field); }
+/* Dragging a tab to reorder: the dragged one fades, a bar marks where it lands. */
+.platform-options button.dragging { opacity: .45; }
+.platform-options button.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+.platform-options button.drop-after { box-shadow: inset -3px 0 0 var(--accent); }
+@media (max-width: 720px) {
+  .runtime-settings, .package-inline, .package-extra-fields { grid-template-columns: minmax(0, 1fr); }
+}
+/* ---- running */
+.log-head { margin-top: 2px; }
+.log-head .label { margin: 0; }
+/* Compact toggle placement is feature layout; its visuals come from xrb-toggle-pill. */
+.actions .xrb-toggle-pill, .xrb-toggle-pill.dev-server-toggle, #camera-toggle { margin-left: auto; }
+.actions .xrb-toggle-pill + .xrb-toggle-pill, .xrb-toggle-pill.dev-server-toggle + .xrb-toggle-pill, .display-options .xrb-toggle-pill { margin-left: 0; }
+/* ---- icon studio */
+.studio { display: flex; flex-direction: column; gap: 10px; }
+.studio-body { display: flex; gap: 18px; margin-top: 4px; }
+.studio-live { position: relative; width: 512px; height: 512px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: #0b1118; }
+/* Match the app page's colour scheme (the SDK sets "light" in the studio), so transparent
+   frames show the dark preview surface instead of an opaque iframe background. */
+.studio-live iframe { width: 512px; height: 512px; border: 0; background: transparent; display: block; color-scheme: light; }
+.studio-image { position: absolute; inset: 0; width: 100%; height: 100%; cursor: default; touch-action: none; }
+.studio-image[hidden], .studio-live iframe[hidden] { display: none; }
+/* The package thumbnail is the icon on black (the packager flattens it): preview it the same way. */
+.studio-thumb { width: 220px; height: 220px; border-radius: 8px; display: grid; place-items: center; background: #000; border: 1px solid var(--line); }
+.studio-thumb img { width: 208px; height: 208px; object-fit: contain; }
+.studio-side { width: 220px; display: flex; flex-direction: column; gap: 10px; }
+.studio-actions { display: flex; flex-direction: column; gap: 8px; }
+
+/* ---- dialogs (ask(): confirm / prompt / message; the archive list) */
+/* First run is a real modal on an opaque backdrop: none of the inactive dashboard is visible. */
+dialog.workspace-setup { width: min(520px, calc(100vw - 32px)); padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: visible; }
+dialog.workspace-setup::backdrop { background: var(--bg); }
+.workspace-brand { margin-bottom: 18px; text-align: center; }
+.workspace-brand span { color: var(--muted); font-weight: 500; }
+.workspace-panel { padding: 26px 28px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: 0 14px 40px rgba(0, 0, 0, .25); }
+dialog.workspace-setup h3 { font-size: 1.3rem; }
+.workspace-panel > p { margin: 10px 0 0; }
+.workspace-folder { display: grid; gap: 6px; margin-top: 22px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.workspace-folder code { overflow-wrap: anywhere; color: var(--fg); }
+dialog.workspace-setup .ask-buttons { margin-top: 22px; }
+dialog.ask { width: min(460px, 92vw); padding: 20px 22px; }
+dialog.ask form { display: flex; flex-direction: column; gap: 12px; }
+dialog.ask #ask-input[aria-invalid="true"] { background: var(--surface-2); border-color: transparent; }
+dialog.ask #ask-input[aria-invalid="true"]:hover { border-color: var(--line); }
+.restart-status { display: flex; align-items: center; gap: 16px; }
+.restart-status h3, .restart-status p { margin: 0; }
+.restart-status p { margin-top: 4px; }
+dialog.ask h3 { font-size: 1.1rem; }
+dialog.ask p { margin: 0; white-space: pre-wrap; }
+dialog.ask .log { max-height: 200px; }
+.ask-buttons { margin-top: 6px; }
+#ask-cancel, #ask-ok { width: 96px; box-sizing: border-box; }
+#archive { width: min(560px, 92vw); }
+#archive-list { max-height: 60vh; overflow: auto; }
+
+/* Archive entry at the bottom of the project list */
+.archive-entry { display: flex; align-items: center; justify-content: space-between; width: 100%; flex: none; background: var(--bg); border: 1px dashed var(--line); color: var(--muted); font-size: .85rem; }
+.archive-entry:hover:not(:disabled) { background: transparent; color: var(--fg); }
+.archive-entry .count { font-size: .72rem; font-weight: 600; padding: 1px 8px; border-radius: 99px; background: var(--surface-2); }
+
+/* Left column = a window-high panel: the list scrolls inside it, Archive stays pinned at its
+   bottom. Its labels stick to the top of this panel (not of the page). */
+/* exactly the window below the top bar minus main's padding (20 top, 40 bottom): the page itself */
+/* never scrolls because of this column, and the list scrolls on its own */
+#projects, #plugin-nav, #settings-nav { position: sticky; top: var(--xrb-workspace-sticky-top); height: calc(100vh - var(--xrb-workspace-sticky-top) - var(--xrb-workspace-block-end)); display: flex; flex-direction: column; overflow: hidden; transform: translateZ(0); backface-visibility: hidden; }
+@media (max-width: 700px) { #plugin-nav, #settings-nav { position: static; height: auto; max-height: 40vh; } }
+.plugin-symbol { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 6px; background: var(--surface-2); color: var(--accent); }
+.plugin-symbol-emoji { font: 23px/1 "Segoe UI Emoji", "Apple Color Emoji", sans-serif; transform: translateY(-1px); }
+.plugin-symbol-tinted { filter: var(--xrb-glyph-filter); }
+.plugin-hero-card .plugin-hero-top { grid-template-columns: 72px minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 8px 14px; }
+.plugin-hero-icon { grid-column: 1; grid-row: 1 / 3; align-self: start; width: 72px; height: 72px; display: grid; place-items: center; overflow: hidden; border-radius: 10px; background: var(--surface-2); }
+.plugin-hero-icon img, .plugin-hero-icon .plugin-symbol { width: 72px; height: 72px; object-fit: contain; }
+.plugin-hero-icon .plugin-symbol { background: transparent; }
+.plugin-hero-icon .plugin-symbol-emoji { font-size: 38px; }
+.plugin-identity { grid-column: 2; grid-row: 1; min-width: 0; }
+.plugin-hero-links { grid-column: 3; grid-row: 1; align-self: start; display: flex; align-items: center; gap: 4px; }
+.plugin-hero-settings svg { transform: translateY(1px); }
+.plugin-hero-actions { grid-column: 2 / 4; grid-row: 2; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.plugin-hero-actions .plugin-roles { margin-left: auto; justify-content: flex-end; }
+.plugin-toggle-action { height: 34px; }
+.plugin-roles { display: flex; flex-wrap: wrap; gap: 6px; }
+.plugin-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 18px 24px; width: 100%; }
+.plugin-setting { display: grid; min-width: 0; gap: 6px; margin: 0; }
+.plugin-setting-text, .plugin-setting-boolean { grid-column: 1 / -1; }
+.plugin-setting-boolean { display: flex; align-items: center; gap: 8px; justify-self: start; }
+.plugin-setting-boolean input[type="checkbox"] { flex: none; margin: 0; }
+.plugin-settings .toggle { justify-self: start; }
+.plugin-description { margin: 0; font-size: .88rem; color: var(--muted); line-height: 1.5; }
+.plugin-sample-list { display: grid; gap: 10px; }
+.plugin-sample { display: flex; align-items: center; gap: 18px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.plugin-sample > div { min-width: 0; flex: 1; }
+.plugin-sample h3 { margin: 0; font-size: .94rem; }
+.plugin-sample .xrb-help { margin: 4px 0 0; }
+@media (max-width: 700px) { .plugin-settings { grid-template-columns: minmax(0, 1fr); } .plugin-setting-text, .plugin-setting-boolean { grid-column: auto; } }
+/* The list scrolls on its own under the heading; section headings stick to its top. */
+.nav-tabs.xrb-section-label { flex: none; }
+.nav-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
+#projects h2, #plugin-nav h2, #settings-nav .settings-module-heading { top: 0; }
+#projects .sec-head, #plugin-nav .sec-head { margin: 0; padding: 0 2px 8px; }
+#projects .proj, #plugin-nav .proj, #settings-nav .proj { flex: none; }
+/* Disabled plugins remain selectable so they can be re-enabled, but their tiles look inactive. */
+#plugin-nav .proj.plugin-disabled .text, #plugin-nav .proj.plugin-disabled img, #plugin-nav .proj.plugin-disabled .plugin-symbol,
+#settings-nav .proj.plugin-disabled .text, #settings-nav .proj.plugin-disabled img, #settings-nav .proj.plugin-disabled .plugin-symbol { opacity: .5; filter: grayscale(1); }
+#plugin-nav .proj.plugin-disabled.selected { background: var(--surface-2); }
+#plugin-back:hover:not(:disabled) { border-bottom-color: transparent; color: var(--fg); }
+.hero-tag { display: flex; gap: 6px; }
+
+/* ---- sections of the project list (xrb-panel.json): headings, drag & drop, new section */
+.sec { display: flex; flex-direction: column; border-radius: 8px; transition: background .1s; }
+/* one spacing scale for all columns: 8px between items of a list, 16px between groups/cards */
+.sec + .sec { margin-top: 16px; }
+.sec-head { display: flex; align-items: center; gap: 6px; cursor: default; user-select: none; }
+.sec-head .sec-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* x: an 18px box centred on the heading text, its right edge on the cards' right edge */
+/* Inline rename / new section: the heading's own type in a full-width field with the focus ring. */
+.sec-input { font: 600 .74rem/1.4 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; padding: 5px 8px; }
+.sec-input::placeholder { color: var(--muted); opacity: .5; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.sec-head:has(.sec-input) { padding: 4px 1px 6px !important; }
+.sec.drop-into { background: var(--accent-soft); }
+.sec.drop-into .empty-note { border-color: var(--accent); color: var(--accent); }
+.proj.dragging { opacity: .4; }
+.proj.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
+.proj.drop-after { box-shadow: inset 0 -3px 0 var(--accent); }
+.add-section-edit { flex: none; margin: 8px 0 16px; }
+
+/* ---- project colours (right-click menu; xrb-panel.json) */
+:root { --c-blue: #2c58cf; --c-green: #23724a; --c-amber: #b07a0c; --c-red: #b0261d; --c-purple: #7a45c9; --c-teal: #12808a; --c-grey: #7d8796; }
+@media (prefers-color-scheme: dark) {
+  :root { --c-blue: #86a4ff; --c-green: #71c995; --c-amber: #e3aa3f; --c-red: #ff8f85; --c-purple: #b99bff; --c-teal: #5fd3c4; --c-grey: #97a2b3; }
+}
+#projects .nav-list > h2 { margin: 16px 0 0; padding: 0 2px 8px; }
+
+/* Projects | Archive tabs use the shared compact design-system tab component. */
+/* Keep header geometry fixed when a clear action is unavailable. */
+#log-clear[hidden], #jobs-clear[hidden] { display: grid !important; visibility: hidden; pointer-events: none; }
+.add-section-edit .sec-input { height: 35px; }
+input.rename:focus-visible, .sec-input:focus-visible { outline: none; }
+
+/* ---- icon studio: feature layout and loading state */
+.studio-msg { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 40px; text-align: center; font-size: .88rem; color: var(--muted); }
+.studio-msg[hidden] { display: none; }
+.studio-msg[data-kind="info"] { background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--fg); line-height: 1.5; }
+.studio-msg .xrb-spinner { display: none; }
+.studio-msg[data-kind="loading"] .xrb-spinner { display: block; }
+/* The two preview labels share the first row, so both previews start level. */
+.studio-grid { display: grid; grid-template-columns: 512px 220px; column-gap: 18px; row-gap: 10px; align-items: end; margin-top: 2px; }
+.studio-grid > .studio-side { align-self: start; }
+.studio-thumb-label { margin: 0 0 2px; }
+.studio-hint { text-align: center; }
+#studio-pause .play-icon { display: none; }
+#studio-pause[aria-pressed="true"] .play-icon { display: block; }
+#studio-pause[aria-pressed="true"] .pause-icon { display: none; }
+.studio-live.paused iframe { pointer-events: none; }
+.studio-msg button { margin-top: 4px; }
+/* Status of each action (built …, last …) on the card's right edge */
+.actions .act .row > .state { margin-left: auto; }
+/* Log filters: icon + count per kind; off = dimmed */
+#activity-log, #activity-jobs { min-width: 0; }
+#camera-toggle { margin: 0; }
+.log-debug { display: inline-flex; gap: 4px; max-width: 150px; overflow-x: auto; scrollbar-width: none; }
+.log-debug::-webkit-scrollbar { display: none; }
+.log-debug .log-filter { flex: none; }
+.log-clear { margin-left: auto; }
+.log-clear[aria-disabled="true"] { opacity: .4; cursor: default; pointer-events: none; }
+/* The log keeps one height, empty or full, so the page does not jump as entries come and go. */
+.console { height: 460px; max-height: none; box-sizing: border-box; }
+/* Empty, the log and jobs show one compact note like the Running card's; they take their full height with content
+   (the last card on the page, so nothing below moves). */
+#log-empty { box-sizing: border-box; justify-content: center; }
+/* The Activity card keeps its footprint when jobs replace the log, including during refresh. */
+#jobs { height: 460px; overflow-y: auto; overscroll-behavior: contain; }
+#jobs:has(> .empty-note:only-child) { height: auto; }
+/* Run / Stop pinned in the top bar while the project's own button is scrolled away */
+/* fps / Hz uses the shared design-system stats dock. */
+.run-dock { display: contents; }
+.run-dock[hidden] { display: none; }
+.run-project { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; }
+.run-dock img { width: 26px; height: 26px; border-radius: 6px; background: #000; object-fit: contain; }
+.run-dock .name { font-weight: 600; font-size: .88rem; }
+.run-dock button { width: 62px; min-width: 62px; height: 30px; padding: 0 6px; font-size: .76rem; }
+
+.publication-fields { display: flex; flex-direction: column; gap: 12px; }
+.publication-block { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.publication-block .xrb-card-heading { margin-top: -16px; }
+#build-settings.has-package .publication-fields { margin-top: 16px; }
+#version-menu [data-version-bump] { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+#version-menu .version-next { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* A row-menu item that opens a submenu (Favicon) shows a chevron and keeps the open state while the submenu shows. */
+.menu .submenu-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.menu .submenu-item::after { content: ""; width: 6px; height: 6px; border: solid currentColor; border-width: 2px 2px 0 0; transform: rotate(45deg); opacity: .7; }
+.menu .submenu-item[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+.publication-config { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.publication-config label { min-width: 0; }
+/* One row: Next version (draft, Patch/Minor/Major on its context menu) beside the verified Live version. */
+.publication-version { display: grid; grid-template-columns: minmax(145px, .85fr) minmax(145px, .85fr); gap: 12px; align-items: end; }
+.publication-version label { min-width: 0; }
+.publication-version input { width: 100%; font-family: var(--font-mono); }
+.publication-result { min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+.publication-result.good { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.publication-result.good .publication-hero-link { color: var(--ok); }
+.publication-result-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; color: var(--text); font-size: .78rem; font-weight: 700; }
+.publication-result > a { display: block; min-width: 0; overflow: hidden; color: var(--accent); font-family: var(--font-mono); font-size: .8rem; font-weight: 600; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.publication-result > a:hover, .publication-result > a:focus-visible { text-decoration: underline; text-underline-offset: 3px; outline: none; }
+@media (max-width: 720px) {
+  .publication-config { grid-template-columns: 1fr; }
+  .publication-version { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+/* Camera view in the Running card: the input provider's debug images, e.g. per camera infrared (with 2D boxes) and colour. */
+.cameras { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cameras .cam { position: relative; min-width: 0; }
+.cameras canvas { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--line); border-radius: 6px; }
+.cameras .cam-label { position: absolute; left: 6px; top: 6px; font-size: .66rem; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: rgba(0, 0, 0, .55); color: #fff; pointer-events: none; }
+.cameras .cam-note { grid-column: 1 / -1; font-size: .74rem; color: var(--muted); }

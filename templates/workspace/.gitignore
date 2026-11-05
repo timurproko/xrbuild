@@ -1,0 +1,9 @@
+# Build output and fetched binaries: rebuilt from the sources here and the XR Build core.
+node_modules/
+dist/
+build/
+builds/
+plugins/*/bin/
+third_party/
+# Written by the panel for editors: maps the SDK to the core on this machine.
+jsconfig.json

@@ -1,0 +1,3 @@
+#!/bin/sh
+# The core stays free of vendor, product and client names (tools/name-guard). Enable with `pnpm hooks`.
+exec node tools/name-guard/name-guard.mjs check --staged
