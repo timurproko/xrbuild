@@ -1,6 +1,6 @@
 // The project list's sections, arranged by the developer (create, rename, delete, drag projects
 // between them). Sections are folders: projects/<section>/<project> in the workspace; projects in no
-// section are in projects/Unsorted/ and show under "Unsorted". xrb-panel.json in the workspace keeps only
+// section are in projects/unsorted/ and show under "Unsorted". xrb-panel.json in the workspace keeps only
 // what folders cannot: the order of sections and projects, colours, and where archived projects came from.
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';

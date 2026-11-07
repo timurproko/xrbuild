@@ -51,7 +51,7 @@ test('project 2D mode replaces global camera settings and keeps the remaining co
   assert.match(app, /const actionRow = heroButton \? `<div class="project-actions">\$\{heroButton\}<\/div>` : '';/, 'the primary action row sits below the surface content');
   assert.match(app, /data-surface="build"[\s\S]*\$\{publicationLink \? `<span class="spacer"><\/span>\$\{publicationLink\}` : ''\}/);
   assert.match(app, /const projectActions =[\s\S]*id="out-path"[\s\S]*id="open-dir"[\s\S]*\$\{manifestButton\}/);
-  assert.match(app, /el\.innerHTML = `<section class="card hero project-hero">\$\{top\}<div class="xrb-section-divider project-surface-content">\$\{settings\}\$\{buildSettings\}\$\{actionRow\}<\/div><\/section>`/);
+  assert.match(app, /renderProjectHero\(el, `<section class="card hero project-hero">\$\{top\}<div class="xrb-section-divider project-surface-content">\$\{settings\}\$\{buildSettings\}\$\{actionRow\}<\/div><\/section>`, p\.id\)/);
   assert.match(app, /view: `\$\{fullBox\}\$\{viewBox\}`/);
   assert.match(app, /3D displays always run fullscreen\.[\s\S]*checked disabled> Fullscreen/);
   assert.match(html, /id="display-menu"[\s\S]*data-act="refresh-displays"[^>]*>Refresh displays/);
@@ -78,7 +78,7 @@ test('project 2D mode replaces global camera settings and keeps the remaining co
   assert.match(fullscreenApp, /BroadcastChannel\('xrb-preview-projection'\)[\s\S]*postMessage\(\{ \.\.\.event\.data, token \}/);
   assert.match(app, /api\('POST', '\/api\/run\/view', \{ flat: e\.target\.checked \}\)/);
 
-  assert.match(app, /const filters = new Set\(\['all', 'control-panel', \.\.\.plugins\.map/);
+  assert.match(app, /const filters = new Set\(\[\.\.\.\(plugins\.length \? \['all'\] : \[\]\), 'control-panel', \.\.\.plugins\.map/);
   assert.match(app, /\{ id: 'all', name: 'All', meta: 'all settings'/);
   assert.match(app, /\{ id: 'control-panel', name: 'Apps', meta: 'built in'/);
   assert.match(app, /field\('Cursor', 'cursor', state\.appSettings\.cursor/);

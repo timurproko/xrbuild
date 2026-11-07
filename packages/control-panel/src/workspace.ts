@@ -3,6 +3,7 @@
 // files that are missing and never runs git there (versioning the workspace is the user's choice).
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { assertWritablePath } from './project-access.ts';
 import { discoverAll, liveId, MANIFEST, PROJECTS, UNSORTED, validateManifest, type Manifest } from './projects.ts';
 
 export const WORKSPACE_TEMPLATE = path.join('templates', 'workspace');
@@ -20,16 +21,18 @@ export async function isWorkspace(dir: string): Promise<boolean> {
 }
 
 /** Copies `from` into `to`, file by file, skipping files that already exist; `edit` may rewrite text files. */
-async function copyMissing(from: string, to: string, edit: (rel: string, text: string) => string = (_r, t) => t, rel = ''): Promise<string[]> {
+async function copyMissing(core: string, from: string, to: string, edit: (rel: string, text: string) => string = (_r, t) => t, rel = ''): Promise<string[]> {
   const added: string[] = [];
+  assertWritablePath(core, to, path.join(to, rel));
   await fs.mkdir(path.join(to, rel), { recursive: true });
   for (const e of await fs.readdir(path.join(from, rel), { withFileTypes: true })) {
     const r = path.join(rel, e.name);
     if (e.isDirectory()) {
-      added.push(...(await copyMissing(from, to, edit, r)));
+      added.push(...(await copyMissing(core, from, to, edit, r)));
       continue;
     }
     const dest = path.join(to, r);
+    assertWritablePath(core, to, dest);
     if (await exists(dest)) continue;
     await fs.writeFile(dest, edit(r, await fs.readFile(path.join(from, r), 'utf8')), { flag: 'wx' });
     added.push(r.split(path.sep).join('/'));
@@ -45,14 +48,16 @@ async function addStarter(core: string, dir: string, added: string[]): Promise<v
 
 /** Creates or completes a combined integration workspace with a starter app. */
 export async function createWorkspace(core: string, dir: string): Promise<string[]> {
-  const added = await copyMissing(path.join(core, WORKSPACE_TEMPLATE), dir);
+  assertWritablePath(core, dir);
+  const added = await copyMissing(core, path.join(core, WORKSPACE_TEMPLATE), dir);
   await addStarter(core, dir, added);
   return added;
 }
 
 /** Creates or completes an app-only project repository without private integration folders. */
 export async function createProjectWorkspace(core: string, dir: string): Promise<string[]> {
-  const added = await copyMissing(path.join(core, PROJECTS_TEMPLATE), dir);
+  assertWritablePath(core, dir);
+  const added = await copyMissing(core, path.join(core, PROJECTS_TEMPLATE), dir);
   await addStarter(core, dir, added);
   return added;
 }
@@ -62,16 +67,17 @@ export class ProjectRefused extends Error {}
 /** Folder names a new project may have: lower case words with dashes (also its package name). */
 export const PROJECT_FOLDER = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
-/** A new app from templates/app in `<workspace>/projects/Unsorted/<folder>`; refused when a project has that name. */
+/** A new app from templates/app in `<workspace>/projects/unsorted/<folder>`; refused when a project has that name. */
 export async function createProject(core: string, workspace: string, folder: string, name = folder): Promise<string[]> {
   if (!PROJECT_FOLDER.test(folder)) throw new ProjectRefused(`"${folder}" is not a project folder name (lower case letters, digits, dashes)`);
   const dir = path.join(workspace, PROJECTS, UNSORTED, folder);
+  assertWritablePath(core, workspace, dir);
   const taken = (await discoverAll(workspace)).find((p) => liveId(p.id).toLowerCase() === folder.toLowerCase());
   if (taken) throw new ProjectRefused(`a project named ${folder} already exists (${path.relative(workspace, taken.dir).split(path.sep).join('/')})`);
   if (await exists(dir)) throw new ProjectRefused(`${PROJECTS}/${UNSORTED}/${folder} already exists`);
   const json = (s: string) => JSON.stringify(s).slice(1, -1);
   const html = (s: string) => s.replace(/[&<>"]/g, (c) => `&${({ '&': 'amp', '<': 'lt', '>': 'gt', '"': 'quot' } as Record<string, string>)[c]};`);
-  return copyMissing(path.join(core, APP_TEMPLATE), dir, (rel, text) =>
+  return copyMissing(core, path.join(core, APP_TEMPLATE), dir, (rel, text) =>
     text.replaceAll('__PACKAGE__', folder).replaceAll('__NAME__', rel.endsWith('.html') ? html(name) : json(name)));
 }
 
@@ -140,6 +146,7 @@ export async function writeEditorConfig(core: string, workspace: string): Promis
     exclude: ['**/node_modules', '**/dist', '**/build', 'plugins/*/bin', 'third_party', 'builds'],
   };
   const file = path.join(workspace, 'jsconfig.json');
+  assertWritablePath(core, workspace, file);
   const text = JSON.stringify(config, null, 2) + '\n';
   if ((await fs.readFile(file, 'utf8').catch(() => null)) === text) return false;
   await fs.writeFile(file, text, 'utf8');

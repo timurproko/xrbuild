@@ -14,11 +14,23 @@
     "governance": "node tools/repo-governance/governance.mjs",
     "hooks": "git config core.hooksPath .githooks",
     "worktree": "node tools/worktree/worktree.mjs",
+    "task:repos": "node tools/worktree/repository-task.mjs",
     "panel": "node packages/control-panel/src/server.ts --open",
     "panel:repo": "node packages/control-panel/src/server.ts --open --workspace=.xrbuild",
     "host": "node packages/control-panel/src/rebuild-host.ts",
     "host:repo": "node packages/control-panel/src/rebuild-host.ts --workspace=.xrbuild",
-    "test": "pnpm -r --if-present test",
+    "embedded": "node tools/embedded/embedded.ts",
+    "setup:embedded": "node tools/embedded/embedded.ts setup",
+    "setup:services": "node tools/embedded/embedded.ts services",
+    "build:embedded": "node tools/embedded/embedded.ts build",
+    "test:embedded": "node tools/embedded/embedded.ts test",
+    "check:types": "tsc -p tsconfig.json",
+    "test": "pnpm check:types && pnpm -r --if-present test && pnpm test:embedded --if-present --workspace=.artifacts/embedded-user",
     "preview:readme": "node tools/preview-readme/preview-readme.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "@types/three": "0.170.0",
+    "typescript": "5.9.3"
   }
 }

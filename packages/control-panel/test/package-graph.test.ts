@@ -33,17 +33,17 @@ test('user and repository workspaces refresh mutable graphs while explicit works
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'panel-package-install-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
   await fs.writeFile(path.join(root,'package.json'),'{}\n');
   const commands:string[]=[];
-  const projectModules=path.join(root,'projects','Unsorted','new-app','node_modules');
+  const projectModules=path.join(root,'projects','unsorted','new-app','node_modules');
   const context={line(){},async run(_command:string,args:string[]){
     commands.push(args.at(-1)??'');
-    if(await fs.access(path.join(root,'projects','Unsorted','new-app','package.json')).then(()=>true,()=>false)) await fs.mkdir(projectModules,{recursive:true});
+    if(await fs.access(path.join(root,'projects','unsorted','new-app','package.json')).then(()=>true,()=>false)) await fs.mkdir(projectModules,{recursive:true});
   }};
   const userPanel=new Panel('core',root,hub,root,true);
   await userPanel.ensureInstalled(context);
   assert.deepEqual(commands,['corepack pnpm install --no-frozen-lockfile']);
   commands.length=0;
-  await fs.mkdir(path.join(root,'projects','Unsorted','new-app'),{recursive:true});
-  await fs.writeFile(path.join(root,'projects','Unsorted','new-app','package.json'),'{"dependencies":{"vite":"1.0.0"}}\n');
+  await fs.mkdir(path.join(root,'projects','unsorted','new-app'),{recursive:true});
+  await fs.writeFile(path.join(root,'projects','unsorted','new-app','package.json'),'{"dependencies":{"vite":"1.0.0"}}\n');
   await userPanel.ensureInstalled(context);
   assert.deepEqual(commands,['corepack pnpm install --no-frozen-lockfile'],'a new user project refreshes the generated lock and links');
   assert.equal(await packageGraphReady(root),true);
@@ -53,12 +53,12 @@ test('user and repository workspaces refresh mutable graphs while explicit works
   await userPanel.ensureInstalled(context);
   assert.deepEqual(commands,['corepack pnpm install --no-frozen-lockfile'],'missing project links are restored before its dev script runs');
   commands.length=0;
-  await fs.writeFile(path.join(root,'projects','Unsorted','new-app','package.json'),'{"dependencies":{"vite":"2.0.0"}}\n');
+  await fs.writeFile(path.join(root,'projects','unsorted','new-app','package.json'),'{"dependencies":{"vite":"2.0.0"}}\n');
   const repositoryPanel=new Panel('core',root,hub,root,true);
   await repositoryPanel.ensureInstalled(context);
   assert.deepEqual(commands,['corepack pnpm install --no-frozen-lockfile'],'repository development workspaces repair their lock after pulled package changes');
   commands.length=0;
-  await fs.writeFile(path.join(root,'projects','Unsorted','new-app','package.json'),'{"dependencies":{"vite":"3.0.0"}}\n');
+  await fs.writeFile(path.join(root,'projects','unsorted','new-app','package.json'),'{"dependencies":{"vite":"3.0.0"}}\n');
   const explicitPanel=new Panel('core',root,hub);
   await explicitPanel.ensureInstalled(context);
   assert.deepEqual(commands,['corepack pnpm install --frozen-lockfile'],'arbitrary explicit workspaces still require a committed current lockfile');

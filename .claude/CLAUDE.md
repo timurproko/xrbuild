@@ -2,7 +2,8 @@
 
 Runs three.js web apps on 3D displays with hand input, and packages them for station platforms. The **core**
 (engine) is the host, plugin ABI, SDK, ui-kit and control panel. Displays, inputs, platforms and packagers are
-providers behind abstract contracts; every concrete integration is a plugin. Authorized developers separately clone a
+providers behind abstract contracts; every concrete integration is a plugin. Reviewed public modules may live in the
+core-owned `embedded/` workspace; generic engine code stays independent of concrete integrations. Authorized developers separately clone a
 private development **workspace** at the ignored `.xrbuild/` path (see [Workspace](#workspace)). It owns its Git
 history and instructions; read its `CLAUDE.md` and each affected plugin's instructions before private edits. Ordinary users use `XRB_HOME`, else `%USERPROFILE%\.xrbuild`; explicit
 repository-development commands or the separate XR Build Dev Start-menu shortcut select this checkout's `.xrbuild/`. The plan lives in OpenSpec (`openspec/specs/`, `openspec/changes/`).
@@ -40,9 +41,9 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
 - `pnpm check:names` (`tools/name-guard`) enforces that boundary from hashes only (`banned.sha256`, no plain list anywhere);
   a Claude Code hook refuses such edits and `pnpm hooks` adds a pre-commit check. To ban another name:
   `pnpm names add <name>` (`--exact` for one whose lower-case form is an ordinary word), then commit the hash file.
-- A concrete integration belongs in the selected workspace (`.xrbuild/plugins/<name>` for repository development),
-  never in the core. Core features are
-  generic and reach plugins only through the C ABI (`native/plugin-sdk/include/xrb_plugin.h`), the host channel
+- A concrete integration belongs in the selected workspace (`.xrbuild/plugins/<name>` for repository development)
+  or, after an explicit public export audit/approval, in `embedded/plugins/<name>`. Never put concrete integration
+  branches in the generic engine. Core features reach plugins only through the C ABI (`native/plugin-sdk/include/xrb_plugin.h`), the host channel
   and the packager contract (`packages/control-panel/src/packagers.ts`). A plugin-specific need is a plugin key
   (`--plugin.<name>.<key>=`), a capability or a new neutral ABI call, never a plugin branch in the core.
 - Docs and specs describe roles ("a display plugin", "a station platform"), not plugins.
@@ -62,14 +63,46 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
 - `packages/control-panel` - local control panel (Node server + browser UI, 127.0.0.1:5180 for user mode,
   5181 for explicit workspaces) over the workspace:
   projects, web and package builds, runs with live status, camera view, icon studio, "Rebuild host" (host +
-  workspace plugins). User mode: `start.vbs` or `pnpm panel`; repository mode: `start-repo.vbs` or `pnpm panel:repo`.
+  selected plugins). User mode: `start.vbs` or `pnpm panel`; repository mode: `start-repo.vbs` or `pnpm panel:repo`.
 - `templates/workspace`, `templates/app` - what the panel creates: a new workspace, a new app.
+- `embedded/` - core-owned product workspace for approved public plugins/projects; no independent `.git`.
+  Same root-relative manifests and `plugins/`, `projects/<section>/<id>/`, `docs/`, `third_party/` structure as a user
+  workspace. Product sources/defaults are read-only in ordinary panel use; user config belongs in
+  `<selected-workspace>/config/plugins/<id>/`. Public bundled dependency fetches use core `third_party/`.
+  Bundled project IDs are origin-qualified; packaged preview/run is read-only. Editing/development/publication/package/
+  icon actions currently require Copy to workspace in the selected editable project repository. Copies do not inherit
+  live deployment or device identity. Launch config, generated icons and bundled recordings use selected-workspace
+  `build/project-state/`, not product source. Personal run settings use scoped `config/projects/<key>/run.json` with
+  explicit revision-checked Save/Restore; malformed or linked settings block Run without being replaced. Advanced
+  choices bind actual selected provider ownership/schema and permit declared boolean/number/select fields only. Explicit bundled rebuilds install the frozen public embedded workspace in a fresh
+  selected-workspace `build/projects/<key>/` snapshot, then publish immutable output without product writes. Cached
+  preview/native runs share validated output; stale/failed/foreign state blocks automatic fallback. Browser routes pin
+  generations. No user/private workspace packages or ambient repository/package-manager configuration is inherited;
+  build code is trusted, not sandboxed. `setup:embedded`, `build:embedded` and `test:embedded` use explicit writable
+  workspaces and fresh `build/embedded/e-<core-key>/` snapshots. Local package graphs and frozen lockfile links must
+  agree; prerequisite builds precede tests/project builds. Root test and public Node CI invoke this lane explicitly.
+  The scaffold has no promoted modules; validation snapshots are not activated runtimes or distributable packages.
+  Plugins source selection is available in the UI with revision-checked, locked preference updates and paired idle
+  publisher/packager refresh. Out-of-band catalog/preferences/runtime changes refresh coherently when idle; new actions
+  recheck state, busy refresh blocks new consumers, and changed already-executed module/dependency code or tool identity
+  requires actual restart. Declared exports/references resolve #aliases through selected origin-qualified owners.
+  Desktop packages stage fixed host/CEF inventories and selected DLL/license files; additional plugin assets require
+  a bounded xrb-runtime.json allowlist. Source/credential/link escapes and existing-folder/version replacement are refused.
+  All panel adapters receive neutral checked input snapshots. Explicit setup:services activates isolated public dependency/
+  build snapshots with locked source-bound receipts; discovery never installs private/user packages or writes product source.
+  Operational content checks are not export/license approval; actual promoted-module/distribution acceptance remains open.
+  Reviewed cache cleanup removes only owned obsolete working generations, preserving reserved/published/current/unknown/
+  Git/private/KEEP data and all user configuration/recordings. It never cleans a worktree or auto-removes stale locks.
+  See `docs/embedded-extensions.md` for implemented contracts and remaining rollout work.
 - `tools/fetch-deps` - native binaries with pinned SHA-256s: the core's into `third_party/`, the workspace
   plugins' (`--workspace`) into `<workspace>/third_party/`.
 - `tools/name-guard` - the name guard (hashes in `banned.sha256`).
 - `tools/worktree` - `pnpm worktree add|enter|remove|sweep|handoff`: task worktrees in `.worktrees/` share only
   fetched core dependencies. Private workspaces must be cloned independently; builds stay worktree-local.
   Cleanup refuses `.xrbuild/` or `.artifacts/KEEP`, even with clean outer Git status; sweep preserves them as dirty.
+  `pnpm task:repos` routes core/embedded/private/paired tasks, explicitly provisions independent private clones only when
+  needed, and records exact tested HEAD/work state in ignored artifacts. No implicit export/stage/PR/push/merge/cleanup;
+  private instructions and native session/worktree checks still apply. Spec prerequisites are recorded in the active change.
 - `tools/pr-automation` - the PR body link (`pr-body.mjs`), delivery check, OpenSpec finalization, docs auto-merge,
   unarchived-change report and nightly triage that the workflows run.
 - `tools/repo-governance` + `config/github-repository-governance.json` - repository settings as code (`pnpm governance`).
@@ -86,8 +119,10 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
 ## Workspace
 
 - `.xrbuild/` is an independent private Git clone physically inside the checkout but ignored as a whole by core.
-  It keeps its own `.git`, `package.json`, `pnpm-workspace.yaml` and LFS attributes/hooks. Never add its projects,
-  plugins, Git metadata or binaries to core Git or the core pnpm workspace. It is not a submodule or symlink.
+  It keeps its own `.git`, `package.json`, `pnpm-workspace.yaml` and LFS attributes/hooks. Never stage the clone,
+  its Git metadata/private history or private binaries in core Git, and never enroll private packages in the core
+  pnpm workspace. Public promotion is a separately approved, audited source snapshot, not a copy of the clone or
+  a history merge. It is not a submodule or symlink.
 - Provision each task's private clone explicitly; never junction the primary workspace into a task. Use `XRB_CORE`
   to select that task's core. Preserve private uncommitted/unpushed work and move the private clone separately
   before core worktree cleanup. Mark important ignored artifacts with `.artifacts/KEEP` until separately preserved.
@@ -101,7 +136,7 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   `%USERPROFILE%\.xrbuild`. The old `%USERPROFILE%\.xr-build` is not migrated; set `XRB_HOME` to keep using it.
   Never set a permanent `XRB_HOME` to the primary checkout: it would bypass task worktrees.
 - Layout: `projects/<section>/<name>` (projects: a folder with an `xrb-project.json`; sections are the panel's sections,
-  `projects/Unsorted/` for none, `projects/archive/<name>` archived; folder names unique), `plugins/<name>`,
+  `projects/unsorted/` for none, `projects/archive/<name>` archived; folder names unique), `plugins/<name>`,
   plugin-owned originals under `plugins/<name>/samples/<sample>` (imported editable copies go to `projects/plugins/`),
   and `xrb-panel.json`; pinned `third_party/` assets use Git LFS. Ignored: `plugins/*/bin/`, `builds/`, `node_modules/`,
   `dist/`, `build/`, `jsconfig.json`. Never stage credentials, signing material, installed packages, compiled plugin
@@ -111,8 +146,15 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   in its own process; the app's Vite config aliases `@xr-build/sdk` / `@xr-build/ui-kit` to it and dedupes three.
   Workspace code (packagers too) reaches core modules only through `XRB_CORE`, never by a relative path.
 - Plugins build against the core with the CMake variables the panel passes: `XRB_PLUGIN_SDK`, `XRB_THIRD_PARTY`
-  (workspace), `XRB_CORE_THIRD_PARTY` (core), `XRB_PLUGIN_BIN_DIR` (the plugin's own `plugins/<p>/bin/`). Runs pass
-  one `--plugin-dir=` per plugin `bin/`; packagers get `pluginDirs` (plugin name -> folder, from `--list-plugins`).
+  (selected origin's dependencies), `XRB_CORE_THIRD_PARTY` (core), `XRB_PLUGIN_BIN_DIR` (resolved output).
+  Workspace plugins retain `plugins/<p>/bin/`; embedded plugin rebuilds use a core/source-scoped cache under the
+  selected workspace's `build/native/`, never embedded sources. Incomplete/failed output is unavailable until a
+  successful rebuild. Native provider roots are queried separately; conflicting or invalid roots are excluded from
+  runs and package mappings. `--core-only` skips optional plugins; `--plugins-only` rebuilds plugins without writing
+  the installed host/product tree. Managed full/core-only rebuilds use selected-workspace `build/native/h-<core-key>/b`
+  and publish immutable `r-<generation>/` runtime snapshots. Receipts gate activation; failures never fall back to packaged
+  output. Runs, provider queries, icon jobs, packages and CLI host tests use the selected snapshot. Old snapshots and
+  product-side legacy plugins are not automatically removed; standalone developer CMake paths remain explicit.
 
 ## Build and run (Windows, VS 2022 Build Tools)
 
@@ -127,6 +169,11 @@ native/host/build/Release/host-tests.exe          # unit tests
 start.vbs                                         # user workspace control panel
 start-repo.vbs                                    # this checkout's .xrbuild workspace
 ```
+
+Public production TypeScript is checked with `pnpm check:types` (exact pinned compiler/type packages, strict no-emit,
+Node-compatible erasable syntax). Root `pnpm test` runs it before suites; private/embedded package workspaces remain separate.
+Public embedded/contracts/dependency changes select the Windows frozen/types/compiler boundary lane; full managed host
+and selected bundled native rebuilds keep the nightly/manual lane. Never describe disabled remote Actions as acceptance.
 
 Tests: `node --test "test/**/*.test.ts"` in `packages/sdk`, `packages/ui-kit`, `packages/app-icon`,
 `packages/control-panel` (Node runs the .ts directly; no TypeScript parameter properties, type stripping refuses
@@ -168,7 +215,8 @@ Logs: `%LOCALAPPDATA%\XRBuild\logs` (`xrb-host.log`).
   console, so Ctrl+C there killed it before the display's exit and the panel stayed in 3D.
 - When the same plugin name is found twice, the host keeps the first (`<exe>\plugins` before `--plugin-dir=`) and
   rejects the other: plugin folders left next to a host by an older build hid the workspace's. The panel marks the
-  host outdated for them and Rebuild host removes them.
+  host outdated for them. Managed Rebuild host leaves product-side files untouched and selects a clean user-cached
+  runtime; cached legacy plugin folders are preserved outside the published runtime.
 - App icon: one PNG per app (`icon.png` in the app's folder) is the package thumbnail (the packager decides its
   format) and the window icon (`app-icon.png` next to the exe, or `--icon=`); the built-in default is
   `native/host/src/app.ico` (`app-icon default-ico`). The app renders its own icon: `app-icon render --app <dist>

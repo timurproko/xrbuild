@@ -90,6 +90,6 @@ test('managed module realpath cannot escape through a workspace junction', async
   const port = await freePort(), panel = createServer({ workspace, port }); panel.server.listen(port, '127.0.0.1'); await once(panel.server, 'listening');
   try {
     const base = `http://127.0.0.1:${port}`; assert.equal((await fetch(base + '/escape/')).status, 503);
-    assert.match((await fetch(base + '/api/tools/escape/status').then((response) => response.json())).error, /escapes .*workspace/);
+    assert.match((await fetch(base + '/api/tools/escape/status').then((response) => response.json())).error, /symbolic link or junction/);
   } finally { await panel.close(); await fs.rm(root, { recursive: true, force: true }); }
 });

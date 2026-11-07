@@ -48,7 +48,7 @@ Authorized developers clone the independent private `.xrbuild` repository at `<c
 ```text
 <workspace>/
   projects/<section>/<name>/    projects: a folder with an xrb-project.json, in a section folder
-  projects/Unsorted/<name>/     projects in no section (and new ones)
+  projects/unsorted/<name>/     projects in no section (and new ones)
   projects/archive/<name>/      archived projects
   plugins/<name>/               plugins: a native CMake project and/or a packager package; built files in bin/
   xrb-panel.json                the panel's project list layout
@@ -123,6 +123,16 @@ pnpm fetch-deps --update-lock
 
 JS dependencies (three.js, Vite, lucide, ...) come from the package registry through pnpm: `pnpm install`
 here (`packages/*`, `tools/*`), and in the workspace (the panel runs it there when needed).
+The core-owned `embedded/` package workspace stays separate. Root `setup:embedded`, `build:embedded` and `test:embedded`
+scripts take an explicit writable `--workspace` and install/build/test fresh snapshots without changing product sources.
+Root tests include that public lane; private packages are never enrolled. The current scaffold has no promoted modules.
+`check:types` validates public production TypeScript with an exact pinned strict no-emit toolchain; `test` runs it first.
+Private and embedded package workspaces stay independently installed and are not enrolled by this check.
+`setup:services` explicitly activates isolated public service dependencies/builds; discovery never installs them.
+All panel packagers receive checked runtime/app/selected-plugin snapshots. Bundled advanced run options bind actual
+provider schemas, and reviewed cleanup only reclaims obsolete owned working generations, not published runtimes or user data.
+`task:repos` supports owner routing and ignored tested-revision handoffs without staging/exporting/pushing source.
+See [embedded extension contracts](docs/embedded-extensions.md) for commands, component references and remaining distribution acceptance.
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/separator-dark.svg"><img src="docs/assets/readme/separator.svg" alt="" width="280"></picture></p>
 

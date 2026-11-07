@@ -35,7 +35,7 @@ test('sections are the folders under projects/, in the saved order; Unsorted is 
   await project('Demos/b');
   await project('Demos/a');
   await project('Checks/rig', 'test');
-  await project('Unsorted/loose');
+  await project('unsorted/loose');
   let l = await readLayout(ws, await discoverProjects(ws));
   assert.deepEqual(l.sections, [{ name: 'Checks', items: ['rig'] }, { name: 'Demos', items: ['a', 'b'] }], 'alphabetical without a saved layout');
   await fs.writeFile(path.join(ws, LAYOUT_FILE), JSON.stringify({ sections: [{ name: 'Demos', items: ['b', 'a'] }, { name: 'Checks', items: [] }], colors: { b: 'teal' } }));
@@ -68,21 +68,21 @@ test('saving a layout moves project folders: drag, new, renamed and deleted sect
   const { ws, project } = await workspace();
   await project('Demos/a');
   await project('Demos/b');
-  await project('Unsorted/c');
+  await project('unsorted/c');
   const apply = async (sections: { name: string; items: string[] }[]) => applyLayout(ws, { sections, colors: {} }, await discoverProjects(ws));
   const where = async () => Object.fromEntries((await discoverProjects(ws)).map((p) => [p.id, p.section]));
 
   await apply([{ name: 'Demos', items: ['a'] }, { name: 'Tours', items: ['c'] }]);
-  assert.deepEqual(await where(), { a: 'demos', b: 'Unsorted', c: 'tours' }, 'b left every section: Unsorted; c dragged into the new Tours');
+  assert.deepEqual(await where(), { a: 'demos', b: 'unsorted', c: 'tours' }, 'b left every section: Unsorted; c dragged into the new Tours');
 
   await apply([{ name: 'Showcase', items: ['a'] }, { name: 'Tours', items: ['c'] }]);
-  assert.deepEqual(await where(), { a: 'showcase', b: 'Unsorted', c: 'tours' }, 'renaming Demos moves its projects');
+  assert.deepEqual(await where(), { a: 'showcase', b: 'unsorted', c: 'tours' }, 'renaming Demos moves its projects');
   await assert.rejects(fs.access(path.join(ws, 'projects', 'Demos')), 'the old section folder is gone');
 
   await apply([{ name: 'Showcase', items: ['a', 'b', 'c'] }, { name: 'Empty', items: [] }]);
   assert.deepEqual(await where(), { a: 'showcase', b: 'showcase', c: 'showcase' });
   await assert.rejects(fs.access(path.join(ws, 'projects', 'tours')), 'a deleted, emptied section folder is removed');
-  await assert.rejects(fs.access(path.join(ws, 'projects', 'Unsorted')), 'an empty Unsorted folder is removed');
+  await assert.rejects(fs.access(path.join(ws, 'projects', 'unsorted')), 'an empty Unsorted folder is removed');
   await fs.access(path.join(ws, 'projects', 'empty', '.gitkeep'));
   assert.deepEqual((await readLayout(ws, await discoverProjects(ws))).sections.map((s) => s.name), ['showcase', 'empty'], 'the saved order (section folders are lower case)');
 });
@@ -105,7 +105,7 @@ test('a section holding other files renames as one folder and deletes completely
   await apply([]);
   assert.deepEqual(await sections(), [], 'deleted: no section shows up again');
   assert.deepEqual(recycled, ['checks'], 'its left-over files went to the Recycle Bin');
-  assert.deepEqual((await discoverProjects(ws)).map((p) => [p.id, p.section]), [['rig', 'Unsorted']], 'its project moved to Unsorted');
+  assert.deepEqual((await discoverProjects(ws)).map((p) => [p.id, p.section]), [['rig', 'unsorted']], 'its project moved to Unsorted');
 });
 
 test('the platform tab order is saved with the layout and kept by archive moves', async () => {
@@ -138,7 +138,7 @@ test('archive and delete cleanup remove a section after its final project leaves
   assert.deepEqual((await readLayout(ws, await discoverProjects(ws))).sections, []);
   const [archived] = await discoverArchived(ws);
   await unarchiveProject(ws, archived);
-  assert.equal((await discoverProjects(ws))[0].section, 'Unsorted', 'the removed section is not recreated on unarchive');
+  assert.equal((await discoverProjects(ws))[0].section, 'unsorted', 'the removed section is not recreated on unarchive');
 
   await project('solo/only');
   await applyLayout(ws, { sections: [{ name: 'solo', items: ['only'] }] }, await discoverProjects(ws));

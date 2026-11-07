@@ -159,9 +159,9 @@ test('the build job runs the packager with the app, identity, selection and the 
   assert.equal(done.state, 'done', done.error ?? '');
   const out = JSON.parse(await fs.readFile(path.join(repo, 'builds', 'fake', 'D1.pkg'), 'utf8'));
   assert.deepEqual(out, {
-    identity: { code: 'D1', version: '1.0.0' }, plugins: ['fake'], from: 'platform-fake', shipped: ['xrb_platform_fake.dll'],
+    identity: { code: 'D1', version: '1.0.0' }, plugins: ['fake'], from: 'plugins', shipped: ['xrb-runtime.json', 'xrb_platform_fake.dll'],
     selection: { input: 'none', inputs: ['mouse', 'keyboard'], display: 'desktop', platform: 'fake' }, projectName: 'Demo',
-    config: { input: 'none', inputs: ['mouse', 'keyboard'], display: 'desktop', platform: 'fake', plugins: { fake: { code: 'D1', version: '1.0.0' } } }, app: 'dist',
+    config: { input: 'none', inputs: ['mouse', 'keyboard'], display: 'desktop', platform: 'fake', plugins: { fake: { code: 'D1', version: '1.0.0' } } }, app: 'app',
   });
   const m = JSON.parse(await fs.readFile(path.join(repo, 'projects/Apps/demo/xrb-project.json'), 'utf8'));
   assert.deepEqual(m.plugins.fake, { code: 'D1', version: '1.0.1', lastPackaged: '1.0.0' }, 'version raised after the package');
@@ -272,7 +272,7 @@ test('a WebXR headset app is packaged without a host: the packager gets the app 
   const done = await finished(panel, job.id);
   assert.equal(done.state, 'done', done.error ?? '');
   const out = JSON.parse(await fs.readFile(path.join(repo, 'builds', 'headset', 'glasses.app'), 'utf8'));
-  assert.deepEqual(out, { identity: { id: 'glasses', version: '0.2.0' }, runtimeDir: '', plugins: [], hasPluginDirs: false, app: 'dist', platform: 'headset', launchUrl: 'https://example.test/apps/glasses/' });
+  assert.deepEqual(out, { identity: { id: 'glasses', version: '0.2.0' }, runtimeDir: '', plugins: [], hasPluginDirs: false, app: 'app', platform: 'headset', launchUrl: 'https://example.test/apps/glasses/' });
 });
 
 test('target and packager must match: a host app cannot use a headset packager', async () => {

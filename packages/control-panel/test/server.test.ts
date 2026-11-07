@@ -48,7 +48,7 @@ before(async () => {
   await write('projects/Apps/demo/xrb-project.json', JSON.stringify({ name: 'Demo', kind: 'app', entry: 'dist', platform: 'station', plugins: { station: { id: 'Demo', title: 'Demo', version: '0.1.0' } } }));
   await write('projects/Apps/demo/dist/index.html', '<h1>demo</h1>');
   await write('projects/Apps/demo/secret.txt', 'outside the entry folder');
-  await write('projects/Unsorted/plain/package.json', JSON.stringify({ scripts: { build: 'vite build' } }));
+  await write('projects/unsorted/plain/package.json', JSON.stringify({ scripts: { build: 'vite build' } }));
   await write('projects/Tests/rig-check/xrb-project.json', JSON.stringify({ name: 'Rig check', kind: 'test', entry: '.' }));
   await write('projects/Tests/rig-check/index.html', 'rig');
   port = await freePort();
@@ -137,9 +137,9 @@ test('checkRequest: loopback Host, same-origin writes', () => {
 
 test('rejects a foreign Host and cross-origin writes over HTTP', async () => {
   assert.equal((await request('GET', '/api/ping', { host: 'rebind.example' })).status, 403);
-  assert.equal((await request('POST', '/api/projects/create', { origin: 'https://evil.example', body: '{"id":"Unsorted/plain"}' })).status, 403);
-  assert.equal((await request('POST', '/api/projects/create', { origin: null, body: '{"id":"Unsorted/plain"}' })).status, 403);
-  await assert.rejects(fs.access(path.join(repo, 'projects/Unsorted/plain/xrb-project.json')), 'nothing created');
+  assert.equal((await request('POST', '/api/projects/create', { origin: 'https://evil.example', body: '{"id":"unsorted/plain"}' })).status, 403);
+  assert.equal((await request('POST', '/api/projects/create', { origin: null, body: '{"id":"unsorted/plain"}' })).status, 403);
+  await assert.rejects(fs.access(path.join(repo, 'projects/unsorted/plain/xrb-project.json')), 'nothing created');
 });
 
 test('browser previews use the project icon as their favicon', async () => {
@@ -677,7 +677,7 @@ test('lists projects and unregistered apps', async () => {
   const demo = r.json.projects[0];
   assert.equal(demo.entryExists, true);
   assert.equal(demo.icon.custom, false);
-  assert.deepEqual(r.json.unregistered, ['Unsorted/plain']);
+  assert.deepEqual(r.json.unregistered, ['unsorted/plain']);
 });
 
 test('serves the icon preview page with three.js and the SDK icon modules as browser JS', async () => {
@@ -734,10 +734,10 @@ test('saves multiple input methods and rejects duplicate providers', async () =>
 });
 
 test('creates a manifest for an app folder without one', async () => {
-  const r = await request('POST', '/api/projects/create', { body: JSON.stringify({ id: 'Unsorted/plain' }) });
+  const r = await request('POST', '/api/projects/create', { body: JSON.stringify({ id: 'unsorted/plain' }) });
   assert.equal(r.status, 200);
   assert.equal(r.json.manifest.kind, 'app');
-  assert.equal((await request('POST', '/api/projects/create', { body: JSON.stringify({ id: 'Unsorted/plain' }) })).status, 400, 'only once');
+  assert.equal((await request('POST', '/api/projects/create', { body: JSON.stringify({ id: 'unsorted/plain' }) })).status, 400, 'only once');
 });
 
 test('serves a project entry folder for the icon studio, nothing outside it', async () => {
@@ -891,7 +891,7 @@ test('separate project and integration roots keep project discovery out of the p
       body: JSON.stringify({ folder: 'split-app', name: 'Split app' }),
     });
     assert.equal(created.status, 200, await created.text());
-    await fs.access(path.join(projects, 'projects', 'Unsorted', 'split-app', 'xrb-project.json'));
+    await fs.access(path.join(projects, 'projects', 'unsorted', 'split-app', 'xrb-project.json'));
     const imported = await fetch(`http://127.0.0.1:${splitPort}/api/plugins/manage/private-plugin/samples/demo/import`, {
       method: 'POST', headers: { origin: `http://127.0.0.1:${splitPort}`, 'content-type': 'application/json' },
       body: JSON.stringify({ folder: 'private-demo', name: 'Private Demo Copy' }),

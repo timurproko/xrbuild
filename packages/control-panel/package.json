@@ -4,6 +4,9 @@
   "private": true,
   "description": "Local developer control panel: projects, builds, packages, runs on the display, debug views",
   "type": "module",
+  "dependencies": {
+    "yaml": "2.9.1"
+  },
   "scripts": {
     "start": "node src/server.ts --open",
     "test": "node --test \"test/**/*.test.ts\""

@@ -9,14 +9,14 @@ test('Apps cursor preference persists, rejects invalid writes and preserves unre
   await fs.mkdir(artifacts, { recursive: true });
   const workspace = await fs.mkdtemp(path.join(artifacts, 'app-settings-'));
   try {
-    assert.deepEqual(await readAppSettings(workspace), { cursor: 'ring-dot' });
+    assert.deepEqual(await readAppSettings(workspace), { cursor: 'system' });
     for (const cursor of ['system', 'ring', 'ring-dot']) {
       await saveAppSettings(workspace, { cursor });
       assert.equal((await readAppSettings(workspace)).cursor, cursor);
     }
     const file = path.join(workspace, '.xrb/app-settings.json');
     await fs.writeFile(file, JSON.stringify({ cursor: 'old-style', unrelated: 42 }));
-    assert.equal((await readAppSettings(workspace)).cursor, 'ring-dot');
+    assert.equal((await readAppSettings(workspace)).cursor, 'system');
     await saveAppSettings(workspace, { cursor: 'ring' });
     assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { cursor: 'ring', unrelated: 42 });
     for (const invalid of [null, [], {}, { cursor: 'bad' }, { cursor: 'system', another: 1 }]) await assert.rejects(saveAppSettings(workspace, invalid));

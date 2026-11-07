@@ -8,7 +8,7 @@ import { PanelFrame } from '../src/stereo.ts';
 import { CURSOR_STYLES, resolveCursorStyle } from '../src/cursor-style.ts';
 
 test('cursor parser defaults unknown styles safely', () => {
-  for (const value of [null, undefined, 'bad', {}, 1]) assert.equal(resolveCursorStyle(value), 'ring-dot');
+  for (const value of [null, undefined, 'bad', {}, 1]) assert.equal(resolveCursorStyle(value), 'system');
   for (const style of CURSOR_STYLES) assert.equal(resolveCursorStyle(style), style);
 });
 

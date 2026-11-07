@@ -2,7 +2,7 @@
 // viewer, so a 3D display shows it closer than everything behind it). The background shows through
 // blurred, in the style of visionOS panels. It carries a heading, a text and a Close button.
 import * as THREE from 'three';
-import { PokeTarget } from '@xr-build/sdk';
+import { PokeTarget, type Interactor } from '@xr-build/sdk';
 import { Button } from './button.ts';
 import { Control } from './control.ts';
 import { GlassEdge } from './glass-edge.ts';
@@ -71,9 +71,12 @@ export class Dialog extends Control {
     this.closeButton.setEnabled(false);
   }
 
-  attach(interactor: Parameters<Control['attach']>[0]): this {
-    super.attach(interactor);
-    this.closeButton.attach(interactor);
+  attach(object: THREE.Object3D): this;
+  attach(interactor: Interactor): this;
+  override attach(target: THREE.Object3D | Interactor): this {
+    if ('isObject3D' in target) return super.attach(target);
+    super.attach(target);
+    this.closeButton.attach(target);
     return this;
   }
 

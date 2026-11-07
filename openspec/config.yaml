@@ -8,8 +8,16 @@ context: |
   outside `.xrbuild/`, proposals, designs, specs, tasks, examples or scenario data. Describe roles instead
   ("a 3D display", "a hand tracker", "a station platform") and use made-up example names (`stereo-panel`, `tracker`,
   `station`). The entire private `.xrbuild/` workspace is exempt from the core name guard; its plugin, project and
-  pinned Git LFS dependency paths may use external names. Do not export it publicly. Concrete integrations live
-  only as separate plugins under `.xrbuild/plugins/`; core changes stay generic. `pnpm check:names` must pass.
+  pinned Git LFS dependency paths may use external names. Do not export that clone or its history publicly.
+  Audited, explicitly approved public integrations may live in core-owned `embedded/plugins/` and projects in
+  `embedded/projects/<section>/<id>/`; embedded is not another Git repository. Embedded and selected user
+  workspaces share manifest/layout contracts. The engine remains generic; concrete modules use neutral plugin
+  contracts. User configuration/state stays in the selected writable workspace. Public promotion requires an
+  exact reviewed source/asset allowlist, confidentiality/license checks and separate export approval; no private
+  ancestry is imported. `pnpm check:names` must pass. Task repository routing/provisioning and tested-revision
+  records use ignored local artifacts; core/embedded-only work needs no private clone, private-only work needs
+  no empty public PR, and paired work retains separate owners. Local checks grant no commit/push/hosting or
+  cleanup authority. Active predecessor spec deltas synchronize in their recorded order through the repo bot.
   A change ships in the PR that implements it, as the change-delivery skill describes
   (`.claude/skills/change-delivery/SKILL.md`): plan first as a draft PR linked to the change, implementation after
   approval, then the repo bot archives the change in that PR so main gets the code and the synced specs together.

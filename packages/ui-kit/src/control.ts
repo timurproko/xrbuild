@@ -35,10 +35,13 @@ export abstract class Control extends THREE.Group {
     this.add(this.title, this.status);
   }
 
-  /** Registers the control's targets with the interaction core (`xrb.interaction`). */
-  attach(interactor: Interactor): this {
-    this.interactor = interactor;
-    for (const t of this.targets) interactor.add(t);
+  /** Retains Group.attach for scene objects; an Interactor registers this control's targets. */
+  attach(object: THREE.Object3D): this;
+  attach(interactor: Interactor): this;
+  override attach(target: THREE.Object3D | Interactor): this {
+    if ('isObject3D' in target) return super.attach(target);
+    this.interactor = target;
+    for (const t of this.targets) target.add(t);
     return this;
   }
 

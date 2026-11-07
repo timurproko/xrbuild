@@ -1,10 +1,12 @@
 import fs from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type http from 'node:http';
-import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { log } from './env.ts';
 import { isManagedTool, readToolLinks, type ManagedToolLink, type ToolLink } from './navigation.ts';
+import { resolvePluginModule } from './component-resolver.ts';
+import { containedModule, resolvePluginCatalog } from './extension-catalog.ts';
+import { pluginServiceContext, type PluginServiceContext } from './plugin-service.ts';
 
 export interface WorkspaceToolContext {
   id: string;
@@ -15,6 +17,9 @@ export interface WorkspaceToolContext {
   projects: string;
   server: http.Server;
   signal: AbortSignal;
+  plugin?: PluginServiceContext['plugin'];
+  config?: PluginServiceContext['config'];
+  runtimeRoot?: string | null;
 }
 export interface WorkspaceToolInstance {
   handle(req: IncomingMessage, res: ServerResponse, next: (error?: unknown) => void): unknown;
@@ -22,31 +27,27 @@ export interface WorkspaceToolInstance {
 }
 interface WorkspaceToolModule { createWorkspaceTool?(context: WorkspaceToolContext): WorkspaceToolInstance | Promise<WorkspaceToolInstance> }
 type ToolState = 'idle' | 'starting' | 'ready' | 'error' | 'stopping';
-interface Runtime { tool: ManagedToolLink; state: ToolState; error: string; work: Promise<void> | null; instance: WorkspaceToolInstance | null; stop: AbortController }
+interface Runtime { tool: ManagedToolLink; state: ToolState; error: string; work: Promise<void> | null; instance: WorkspaceToolInstance | null; stop: AbortController; sourceChanged?: boolean }
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!);
 const owns = (prefix: string, pathname: string) => pathname === prefix.replace(/\/$/, '') || pathname.startsWith(prefix);
-const within = (root: string, file: string) => {
-  const relative = path.relative(root, file);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-};
 const bounded = (work: unknown, ms: number): Promise<void> => new Promise((resolve, reject) => {
   const timer = setTimeout(resolve, ms);
   Promise.resolve(work).then(() => { clearTimeout(timer); resolve(); }, (error) => { clearTimeout(timer); reject(error); });
 });
 
 export class ManagedTools {
-  private readonly options: { core: string; workspace: string; projects: string; port: number; server: () => http.Server; prepare?: () => Promise<void> };
+  private readonly options: { core: string; workspace: string; projects: string; port: number; server: () => http.Server; prepare?: () => Promise<void>; available?: () => string | null };
   private loaded: Promise<ToolLink[]> | null = null;
   private loadError = '';
   private runtimes = new Map<string, Runtime>();
   private prepareWork: Promise<void> | null = null;
   private closing = false;
 
-  constructor(options: { core: string; workspace: string; projects: string; port: number; server: () => http.Server; prepare?: () => Promise<void> }) { this.options = options; }
+  constructor(options: { core: string; workspace: string; projects: string; port: number; server: () => http.Server; prepare?: () => Promise<void>; available?: () => string | null }) { this.options = options; }
 
   private async tools(): Promise<ToolLink[]> {
-    if (!this.loaded) this.loaded = readToolLinks(this.options.workspace).catch((error) => {
+    if (!this.loaded) this.loaded = readToolLinks(this.options.workspace, this.options.core).catch((error) => {
       this.loadError = error instanceof Error ? error.message : 'Tool configuration is unavailable';
       return [];
     });
@@ -63,7 +64,12 @@ export class ManagedTools {
   async navigation(): Promise<{ tools: Array<ToolLink | { id: string; label: string; route: string }>; error?: string }> {
     this.loaded = null;
     this.loadError = '';
-    const tools = (await this.tools()).map((tool) => isManagedTool(tool) ? { id: tool.id, label: tool.label, route: tool.route } : tool);
+    const current = await this.tools();
+    for (const runtime of this.runtimes.values()) {
+      const selected = current.find(tool => tool.id === runtime.tool.id);
+      if (!selected || JSON.stringify(selected) !== JSON.stringify(runtime.tool)) this.invalidate(runtime);
+    }
+    const tools = current.map((tool) => isManagedTool(tool) ? { id: tool.id, label: tool.label, route: tool.route } : tool);
     return { tools, ...(this.loadError ? { error: this.loadError } : {}) };
   }
 
@@ -72,8 +78,32 @@ export class ManagedTools {
     return this.prepareWork ??= Promise.resolve().then(() => this.options.prepare!()).finally(() => { this.prepareWork = null; });
   }
 
+  invalidatePluginRuntimes(): void {
+    for (const [id, runtime] of this.runtimes) if (runtime.tool.owner) {
+      if (runtime.state === 'idle' && !runtime.instance && !runtime.work) this.runtimes.delete(id);
+      else this.invalidate(runtime);
+    }
+    this.loaded = null;
+  }
+
+  private invalidate(runtime: Runtime): void {
+    if (runtime.sourceChanged) return;
+    runtime.sourceChanged = true;
+    runtime.state = 'error';
+    runtime.error = 'Tool source or routes changed; restart the panel before using this tool';
+    runtime.stop.abort();
+    if (runtime.instance) {
+      const instance = runtime.instance;
+      runtime.instance = null;
+      void bounded(Promise.resolve().then(() => instance.close?.()), 5_000).catch(error => log(`[tools] ${runtime.tool.id} cleanup failed: ${error}`));
+    }
+  }
+
   private runtime(tool: ManagedToolLink): Runtime {
     let runtime = this.runtimes.get(tool.id);
+    if (runtime && JSON.stringify(runtime.tool) !== JSON.stringify(tool)) {
+      this.invalidate(runtime);
+    }
     if (!runtime) {
       runtime = { tool, state: 'idle', error: '', work: null, instance: null, stop: new AbortController() };
       this.runtimes.set(tool.id, runtime);
@@ -81,27 +111,35 @@ export class ManagedTools {
     return runtime;
   }
 
-  private async containedModule(relative: string): Promise<{ file: string; modified: number }> {
-    const root = await fs.realpath(this.options.workspace);
-    const file = await fs.realpath(path.resolve(this.options.workspace, relative));
-    if (!within(root.toLowerCase(), file.toLowerCase())) throw new Error('Managed tool module escapes the integration workspace');
-    const stat = await fs.stat(file);
-    if (!stat.isFile()) throw new Error('Managed tool module is not a file');
-    return { file, modified: stat.mtimeMs };
+  private async toolModule(tool: ManagedToolLink): Promise<{ file: string; modified: number; context?: PluginServiceContext }> {
+    let context: PluginServiceContext | undefined;
+    if (tool.owner) {
+      const catalog = await resolvePluginCatalog(this.options.workspace, this.options.core);
+      const plugin = catalog.selected.find(plugin => plugin.key === tool.owner!.key && plugin.sourceRoot === tool.owner!.root);
+      if (!plugin) throw new Error('Managed tool plugin is no longer selected');
+      const resolved = await resolvePluginModule(plugin, plugin.sourceRoot, tool.owner.module, this.options.workspace, this.options.core, catalog);
+      context = await pluginServiceContext(plugin, this.options.workspace, this.options.core, resolved.runtimeRoot);
+      return { file: resolved.file, modified: (await fs.stat(resolved.file)).mtimeMs, context };
+    }
+    const root = this.options.workspace;
+    const file = await containedModule(root, root, tool.module);
+    return { file, modified: (await fs.stat(file)).mtimeMs, context };
   }
 
   private start(runtime: Runtime): void {
-    if (this.closing || runtime.state === 'starting' || runtime.state === 'ready') return;
+    if (this.closing || this.options.available?.() || runtime.sourceChanged || runtime.state === 'starting' || runtime.state === 'ready') return;
     runtime.state = 'starting';
     runtime.error = '';
     if (runtime.stop.signal.aborted) runtime.stop = new AbortController();
     runtime.work = (async () => {
       try {
-        await this.prepare();
-        const { file, modified } = await this.containedModule(runtime.tool.module);
+        // A bundled tool must not install the user's/private package workspace as a dependency side effect.
+        if (!runtime.tool.owner?.key.startsWith('bundled:')) await this.prepare();
+        const { file, modified, context } = await this.toolModule(runtime.tool);
         const loaded = await import(`${pathToFileURL(file).href}?xrbTool=${modified}`) as WorkspaceToolModule;
         if (typeof loaded.createWorkspaceTool !== 'function') throw new Error('Managed tool module must export createWorkspaceTool(context)');
         const instance = await loaded.createWorkspaceTool({
+          ...(context ? { plugin: context.plugin, config: context.config, runtimeRoot: context.runtimeRoot } : {}),
           id: runtime.tool.id,
           route: runtime.tool.route,
           panelOrigin: `http://127.0.0.1:${this.options.port}`,
@@ -112,7 +150,7 @@ export class ManagedTools {
           signal: runtime.stop.signal,
         });
         if (!instance || typeof instance.handle !== 'function') throw new Error('Managed tool module returned no request handler');
-        if (this.closing) { await bounded(instance.close?.(), 5_000); return; }
+        if (this.closing || runtime.sourceChanged) { await bounded(instance.close?.(), 5_000); return; }
         runtime.instance = instance;
         runtime.state = 'ready';
         log(`[tools] ${runtime.tool.id} ready at ${runtime.tool.route}`);
@@ -137,6 +175,8 @@ export class ManagedTools {
   async status(id: string): Promise<{ state: ToolState; error: string } | null> {
     const tool = (await this.tools()).find((candidate): candidate is ManagedToolLink => isManagedTool(candidate) && candidate.id === id);
     if (!tool) return null;
+    const blocked = this.options.available?.();
+    if (blocked) return { state: 'error', error: blocked };
     const runtime = this.runtime(tool);
     return { state: runtime.state, error: runtime.error };
   }
@@ -144,6 +184,8 @@ export class ManagedTools {
   async retry(id: string): Promise<{ state: ToolState; error: string } | null> {
     const tool = (await this.tools()).find((candidate): candidate is ManagedToolLink => isManagedTool(candidate) && candidate.id === id);
     if (!tool) return null;
+    const blocked = this.options.available?.();
+    if (blocked) return { state: 'error', error: blocked };
     const runtime = this.runtime(tool);
     if (runtime.state === 'error' || runtime.state === 'idle') this.start(runtime);
     return { state: runtime.state, error: runtime.error };
@@ -154,6 +196,12 @@ export class ManagedTools {
       && (owns(candidate.route, pathname) || candidate.endpoints.some((endpoint) => owns(endpoint, pathname))));
     if (!tool) return false;
     const runtime = this.runtime(tool), isPage = owns(tool.route, pathname), rootPage = pathname === tool.route || pathname === `${tool.route}index.html`;
+    const blocked = this.options.available?.();
+    if (blocked) {
+      if (isPage) this.failurePage(res, { ...runtime, state: 'error', error: blocked });
+      else { res.writeHead(503, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ error: blocked })); }
+      return true;
+    }
     if (runtime.state !== 'ready' || !runtime.instance) {
       if (isPage && rootPage && ['GET', 'HEAD'].includes(req.method ?? 'GET')) {
         if (runtime.state === 'idle' || runtime.state === 'error') this.start(runtime);

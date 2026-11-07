@@ -64,10 +64,10 @@ export class Dial extends Control {
       if (e.type === 'start') {
         this.angle = a;
         play('grab');
-        this.emit('grab', { mode: e.source === 'mouse' ? 'mouse' : 'pinch' });
+        this.emit('grab', { mode: 'pinch' });
       } else if (e.type === 'move' && this.angle !== null) {
         // Near the centre the angle is noise: only turn when the pinch is out at the rim.
-        if (Math.hypot(e.local.x, e.local.y) > R * 0.3) this.turn(a - this.angle, e.source === 'mouse' ? 'mouse' : 'pinch');
+        if (Math.hypot(e.local.x, e.local.y) > R * 0.3) this.turn(a - this.angle, 'pinch');
         this.angle = a;
       } else if (e.type === 'end') {
         this.angle = null;

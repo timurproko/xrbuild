@@ -97,6 +97,8 @@ export function serveStatic(res: ServerResponse, root: string, urlPath: string):
     stat = fs.statSync(file, { throwIfNoEntry: false });
   }
   if (!stat?.isFile()) throw new HttpError(404, `not found: ${rel}`);
+  const realRoot = fs.realpathSync.native(root), realFile = fs.realpathSync.native(file);
+  if (!isInside(realRoot, realFile)) throw new HttpError(403, 'path outside the served folder');
   res.writeHead(200, {
     'content-type': MIME[path.extname(file).toLowerCase()] ?? 'application/octet-stream',
     'content-length': stat.size,
