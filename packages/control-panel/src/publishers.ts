@@ -1,8 +1,10 @@
-import { existsSync, readdirSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { effectiveSettings, pluginFolders, pluginMeta, readPluginPrefs } from './plugin-manager.ts';
+import { effectiveSettings } from './plugin-manager.ts';
+import { containedModule, containedPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, type ResolvedPlugin } from './extension-catalog.ts';
+import { resolvePluginModule } from './component-resolver.ts';
+import { pluginServiceContext, type PluginServiceContext } from './plugin-service.ts';
 
 export interface PublicationIdentity { id: string; slug: string }
 /**
@@ -126,13 +128,7 @@ export function normalizeReleaseCatalog(value: unknown): PublisherReleaseCatalog
   };
   return { revision: c.revision, releases, requestedReleaseId: ref(c.requestedReleaseId, 'request'), liveReleaseId: ref(c.liveReleaseId, 'live release'), legacyLive: c.legacyLive === true };
 }
-export interface PublisherDiscovery { found: Array<{ publisher: Publisher; dir: string }>; problems: string[] }
-
-function dirs(workspace: string, disabled: readonly string[]): string[] {
-  const children = (dir: string) => existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== 'node_modules').map((e) => path.join(dir, e.name)) : [];
-  const plugins = pluginFolders(workspace).filter((id) => !disabled.includes(id)).map((id) => path.join(workspace, 'plugins', id));
-  return [...plugins, ...plugins.flatMap(children)];
-}
+export interface PublisherDiscovery { found: Array<{ publisher: Publisher; dir: string; plugin?: ResolvedPlugin }>; problems: string[] }
 function isPublisherDeclaration(value: unknown): value is { module: string; setting?: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
@@ -147,14 +143,17 @@ function isPublisher(value: unknown): value is Publisher {
   } catch { return false; }
   return typeof p.validate === 'function' && typeof p.status === 'function' && typeof p.publish === 'function' && typeof p.unpublish === 'function';
 }
-export async function discoverPublishers(workspace: string): Promise<PublisherDiscovery> {
-  const found: PublisherDiscovery['found'] = [], problems: string[] = [], prefs = await readPluginPrefs(workspace);
-  for (const dir of dirs(workspace, prefs.disabled)) {
+export async function discoverPublishers(workspace: string, core?: string): Promise<PublisherDiscovery> {
+  const catalog = await resolvePluginCatalog(workspace, core);
+  const found: PublisherDiscovery['found'] = [], problems = [...catalog.problems], prefs = catalog.prefs;
+  const candidates = (await Promise.all(catalog.selected.map(async plugin => (await pluginPackageDirs(plugin)).map(dir => ({ plugin, dir }))))).flat();
+  const conflicts = new Set<string>();
+  for (const { plugin, dir } of candidates) {
     let config: { publisher?: unknown; publishers?: unknown };
-    try { config = (JSON.parse(await fs.readFile(path.join(dir, 'package.json'), 'utf8')) as { xrBuild?: { publisher?: unknown; publishers?: unknown } }).xrBuild ?? {}; }
+    try { config = (JSON.parse(await fs.readFile(await containedPath(dir, 'package.json'), 'utf8')) as { xrBuild?: { publisher?: unknown; publishers?: unknown } }).xrBuild ?? {}; }
     catch { continue; }
     if (config.publisher === undefined && config.publishers === undefined) continue;
-    const where = path.relative(workspace, dir);
+    const where = `${plugin.origin}:${path.relative(plugin.workspaceRoot, dir)}`;
     if (config.publisher !== undefined && config.publishers !== undefined) { problems.push(`${where}: declare publisher or publishers, not both`); continue; }
     let declarations: Array<{ module: string; setting?: string }>;
     if (config.publisher !== undefined) {
@@ -163,23 +162,28 @@ export async function discoverPublishers(workspace: string): Promise<PublisherDi
     } else if (!Array.isArray(config.publishers) || !config.publishers.length || config.publishers.length > 8 || !config.publishers.every(isPublisherDeclaration)) {
       problems.push(`${where}: xrBuild.publishers must contain 1–8 {module, setting?} entries`); continue;
     } else declarations = config.publishers;
-    const folder = path.relative(path.join(workspace, 'plugins'), dir).split(path.sep)[0];
-    const meta = await pluginMeta(workspace, folder).catch(() => ({}));
-    const settings = effectiveSettings(meta.settings ?? [], prefs.settings[folder]);
+    const settings = effectiveSettings(plugin.meta.settings ?? [], pluginPreferenceValues(plugin, prefs));
     for (const declaration of declarations) {
       if (declaration.setting && settings[declaration.setting] === false) continue;
       try {
-        const mod = await import(pathToFileURL(path.resolve(dir, declaration.module)).href) as { publisher?: unknown; default?: unknown };
-        const publisher = mod.publisher ?? mod.default;
+        const resolved = await resolvePluginModule(plugin, dir, declaration.module, workspace, core, catalog), file = resolved.file;
+        const mod = await import(pathToFileURL(file).href) as { publisher?: unknown; default?: unknown; createPublisher?: (context: PluginServiceContext) => unknown };
+        if (plugin.meta.config !== undefined && typeof mod.createPublisher !== 'function') throw new Error('a publisher with user config must export createPublisher(context)');
+        const legacy = mod.publisher ?? mod.default;
+        const useFactory = plugin.meta.config !== undefined || legacy === undefined;
+        const publisher = useFactory && typeof mod.createPublisher === 'function' ? await mod.createPublisher(await pluginServiceContext(plugin, workspace, core, resolved.runtimeRoot)) : legacy;
         if (!isPublisher(publisher)) throw new Error('the module does not export a publisher (name, HTTPS origin, validate, status, publish, unpublish)');
         const capability = releaseCapabilityProblem(publisher);
         if (capability) throw new Error(`${publisher.name}: ${capability}`);
-        if (found.some((item) => item.publisher.name === publisher.name)) throw new Error(`a publisher named "${publisher.name}" is already loaded`);
-        found.push({ publisher, dir });
+        if (found.some((item) => item.publisher.name === publisher.name) || conflicts.has(publisher.name)) {
+          conflicts.add(publisher.name);
+          throw new Error(`conflicting publishers named "${publisher.name}": all implementations are unavailable`);
+        }
+        found.push({ publisher, dir, plugin });
       } catch (error) { problems.push(`${where}: ${(error as Error).message}`); }
     }
   }
-  return { found, problems };
+  return { found: found.filter(item => !conflicts.has(item.publisher.name)), problems };
 }
 export const publisherFor = (discovery: PublisherDiscovery, name: string) => discovery.found.find((item) => item.publisher.name === name) ?? null;
 export function publicationUrl(publisher: Pick<Publisher, 'origin' | 'routePrefix'>, slug: string): string {

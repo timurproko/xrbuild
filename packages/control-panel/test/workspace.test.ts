@@ -13,24 +13,25 @@ test('a new workspace gets the standard layout and a starter app the panel lists
   const ws = await tmp();
   assert.equal(await isWorkspace(ws), false);
   const added = await createWorkspace(REPO, ws);
-  assert.ok(added.includes('.gitignore') && added.includes('pnpm-workspace.yaml') && added.includes(`projects/Unsorted/${STARTER_APP}/xrb-project.json`));
+  assert.ok(added.includes('.gitignore') && added.includes('pnpm-workspace.yaml') && added.includes(`projects/unsorted/${STARTER_APP}/xrb-project.json`));
+  assert.deepEqual(await fs.readdir(path.join(ws, 'projects')), ['.gitkeep', 'unsorted']);
   assert.equal(await isWorkspace(ws), true);
   for (const d of ['projects', 'plugins']) assert.ok((await fs.stat(path.join(ws, d))).isDirectory());
   const ignore = await fs.readFile(path.join(ws, '.gitignore'), 'utf8');
-  for (const d of ['plugins/*/bin/', 'third_party/', 'node_modules/', 'dist/', 'build/']) assert.ok(ignore.split(/\r?\n/).includes(d), d);
+  for (const d of ['plugins/*/bin/', 'third_party/', 'config/plugins/', 'node_modules/', 'dist/', 'build/']) assert.ok(ignore.split(/\r?\n/).includes(d), d);
   const projects = await discoverProjects(ws);
   assert.deepEqual(projects.map((p) => [p.id, p.manifest?.name, p.manifest?.kind]), [[STARTER_APP, 'Hello XR', 'app']]);
-  const pkg = JSON.parse(await fs.readFile(path.join(ws, 'projects', 'Unsorted', STARTER_APP, 'package.json'), 'utf8'));
+  const pkg = JSON.parse(await fs.readFile(path.join(ws, 'projects', 'unsorted', STARTER_APP, 'package.json'), 'utf8'));
   assert.equal(pkg.name, STARTER_APP);
   assert.equal(pkg.dependencies['@xr-build/sdk'], undefined, 'the SDK comes from the core, not a dependency');
-  const main = await fs.readFile(path.join(ws, 'projects', 'Unsorted', STARTER_APP, 'src', 'main.js'), 'utf8');
+  const main = await fs.readFile(path.join(ws, 'projects', 'unsorted', STARTER_APP, 'src', 'main.js'), 'utf8');
   assert.match(main, /createXrbApp/);
   assert.match(main, /iconTheme\.(?:main|ring|rim)/);
   assert.doesNotMatch(main, /new THREE\.(?:PerspectiveCamera|OrthographicCamera)|addEventListener\('resize'|setAnimationLoop|xrb\.render/);
-  const theme = await fs.readFile(path.join(ws, 'projects', 'Unsorted', STARTER_APP, 'src', 'icon-theme.js'), 'utf8');
+  const theme = await fs.readFile(path.join(ws, 'projects', 'unsorted', STARTER_APP, 'src', 'icon-theme.js'), 'utf8');
   assert.match(theme, /import manifest from '\.\.\/xrb-project\.json'/);
   assert.match(theme, /manifest\.iconColor/);
-  const vite = await fs.readFile(path.join(ws, 'projects', 'Unsorted', STARTER_APP, 'vite.config.js'), 'utf8');
+  const vite = await fs.readFile(path.join(ws, 'projects', 'unsorted', STARTER_APP, 'vite.config.js'), 'utf8');
   assert.doesNotMatch(vite, /XRB_CAMERA_PROJECTION|__XRB_CAMERA_PROJECTION__/);
 });
 
@@ -38,7 +39,7 @@ test('a separate project repository omits private integration folders', async ()
   const ws = await tmp();
   const added = await createProjectWorkspace(REPO, ws);
   assert.ok(added.includes('pnpm-workspace.yaml'));
-  assert.ok(added.includes(`projects/Unsorted/${STARTER_APP}/xrb-project.json`));
+  assert.ok(added.includes(`projects/unsorted/${STARTER_APP}/xrb-project.json`));
   await assert.rejects(fs.access(path.join(ws, 'plugins')));
   assert.deepEqual((await fs.readFile(path.join(ws, 'pnpm-workspace.yaml'), 'utf8')).trim().split(/\r?\n/), ['packages:', '  - projects/*/*', "  - '!projects/archive/**'"]);
 });
@@ -46,21 +47,21 @@ test('a separate project repository omits private integration folders', async ()
 test('creating into an existing folder only adds what is missing', async () => {
   const ws = await tmp();
   await fs.writeFile(path.join(ws, '.gitignore'), 'mine\n');
-  await fs.mkdir(path.join(ws, 'projects', 'Unsorted', STARTER_APP), { recursive: true });
-  await fs.writeFile(path.join(ws, 'projects', 'Unsorted', STARTER_APP, 'notes.txt'), 'keep');
+  await fs.mkdir(path.join(ws, 'projects', 'unsorted', STARTER_APP), { recursive: true });
+  await fs.writeFile(path.join(ws, 'projects', 'unsorted', STARTER_APP, 'notes.txt'), 'keep');
   const added = await createWorkspace(REPO, ws);
   assert.equal(await fs.readFile(path.join(ws, '.gitignore'), 'utf8'), 'mine\n');
   assert.ok(!added.includes('.gitignore'));
-  assert.ok(!added.some((f) => f.startsWith(`projects/Unsorted/${STARTER_APP}/`)), 'an existing starter folder is left alone');
-  assert.equal(await fs.readFile(path.join(ws, 'projects', 'Unsorted', STARTER_APP, 'notes.txt'), 'utf8'), 'keep');
+  assert.ok(!added.some((f) => f.startsWith(`projects/unsorted/${STARTER_APP}/`)), 'an existing starter folder is left alone');
+  assert.equal(await fs.readFile(path.join(ws, 'projects', 'unsorted', STARTER_APP, 'notes.txt'), 'utf8'), 'keep');
 });
 
 test('a new project takes its name, and an existing folder or a bad name is refused', async () => {
   const ws = await tmp();
   await createProject(REPO, ws, 'globe', 'Globe <Demo>');
-  const m = JSON.parse(await fs.readFile(path.join(ws, 'projects', 'Unsorted', 'globe', 'xrb-project.json'), 'utf8'));
+  const m = JSON.parse(await fs.readFile(path.join(ws, 'projects', 'unsorted', 'globe', 'xrb-project.json'), 'utf8'));
   assert.equal(m.name, 'Globe <Demo>');
-  assert.match(await fs.readFile(path.join(ws, 'projects', 'Unsorted', 'globe', 'index.html'), 'utf8'), /<title>Globe &lt;Demo&gt;<\/title>/);
+  assert.match(await fs.readFile(path.join(ws, 'projects', 'unsorted', 'globe', 'index.html'), 'utf8'), /<title>Globe &lt;Demo&gt;<\/title>/);
   await assert.rejects(createProject(REPO, ws, 'globe'), ProjectRefused);
   await assert.rejects(createProject(REPO, ws, '../out'), ProjectRefused);
 });
@@ -89,8 +90,8 @@ test('a plugin sample imports as an independent project in the plugins section',
   assert.equal(JSON.parse(await fs.readFile(path.join(source, 'xrb-project.json'), 'utf8')).name, 'Original Sample');
   assert.deepEqual((await discoverProjects(ws)).map((project) => [project.id, project.section]), [['tracker-lab', PLUGIN_PROJECTS_SECTION]]);
   await assert.rejects(importPluginSample(ws, source, 'tracker-lab', 'Duplicate'), ProjectRefused);
-  await fs.mkdir(path.join(ws, 'projects', 'Unsorted', 'Case-Sample'), { recursive: true });
-  await fs.writeFile(path.join(ws, 'projects', 'Unsorted', 'Case-Sample', 'xrb-project.json'), JSON.stringify({ name: 'Case sample', kind: 'test' }));
+  await fs.mkdir(path.join(ws, 'projects', 'unsorted', 'Case-Sample'), { recursive: true });
+  await fs.writeFile(path.join(ws, 'projects', 'unsorted', 'Case-Sample', 'xrb-project.json'), JSON.stringify({ name: 'Case sample', kind: 'test' }));
   await assert.rejects(importPluginSample(ws, source, 'case-sample', 'Case collision'), ProjectRefused);
   await fs.mkdir(path.join(ws, 'projects', 'archive', 'archived-sample'), { recursive: true });
   await fs.writeFile(path.join(ws, 'projects', 'archive', 'archived-sample', 'xrb-project.json'), JSON.stringify({ name: 'Archived sample', kind: 'test' }));

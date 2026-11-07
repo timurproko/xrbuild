@@ -15,6 +15,10 @@ Core entry-point instructions SHALL describe generic engine/library ownership, t
 - **WHEN** private changes are required but the selected repository cannot be independently provisioned or verified
 - **THEN** the agent reports the blocker and does not stage the private change in core or borrow another task's workspace
 
+#### Scenario: Verified local repository tooling
+- **WHEN** routing, opt-in provisioning or tested handoff commands run
+- **THEN** they verify the linked typed task branch and expected remotes, refuse existing/shared private stores, use independent Git/object/LFS storage, keep create-only records ignored, and never stage/export/push/create PRs/merge/clean repositories
+
 ### Requirement: Task-scoped delivery authorization
 Instructions SHALL distinguish implementation permission, task delivery authorization and separate operational permissions. An explicit request to deliver a task MAY authorize scoped commits, task-branch pushes and PR creation/updates across its affected repositories without repeated confirmation for each command. It SHALL NOT authorize main pushes, agent merges, auto-merge activation by agents, production publication, device operations or destructive cleanup. Substantial core changes SHALL retain plan-first review.
 
@@ -47,6 +51,17 @@ Cross-repository delivery SHALL record exact tested revisions and an explicit de
 #### Scenario: Candidate changes after tests
 - **WHEN** a candidate or required base changes after validation
 - **THEN** the handoff and automation require fresh validation for the new revision pair
+
+#### Scenario: Dirty work or repository identity changed
+- **WHEN** working bytes, untracked state, owner scope, canonical repositories/remotes or candidate HEAD changes after a local attestation
+- **THEN** handoff verification rejects the old evidence; a required core revision must be reachable from both observed origin/main and selected core, and local tracking evidence is not claimed as fresh remote CI acceptance
+
+### Requirement: Ordered prerequisite synchronization
+The active change SHALL record accepted predecessor synchronization order without overwriting older active deltas. Canonical synchronization/archive SHALL remain the repository bot's delivery operation, not an implementation-time claim of completion.
+
+#### Scenario: Pending predecessor deltas
+- **WHEN** implementation depends on accepted changes whose canonical specs remain unsynchronized
+- **THEN** the handoff records their order and unresolved delivery gate while preserving their active artifacts
 
 ### Requirement: Separately governed private app automation
 Public coordination tooling SHALL default to manual private delivery unless an independently approved private-repository policy and enforcement are available. A proposed private automation lane MAY allow trusted bot promotion/merge of opt-in same-repository app-source/test PRs only when exact-head required checks and compatibility pass. Workflow, agent-policy, governance, dependency, binary, signing/publication configuration, native/device and unclassified changes SHALL remain outside the initial automated lane. Public implementation PRs SHALL remain maintainer-merged; agents SHALL NOT merge or arm auto-merge.

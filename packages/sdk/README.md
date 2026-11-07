@@ -89,7 +89,7 @@ Set `xrb: { mouse: false }` to disable mouse binding and the cursor. Panel launc
 through `xrb-mouse=0|1`, including launcher destinations and returns. Input selection applies on the next run;
 it does not hot-swap native input providers. `pointer: false` separately disables hand-to-pointer emulation, not the mouse.
 
-Settings → Apps → Cursor selects `system`, `ring`, or `ring-dot` (default) for the next launch. The managed
+Settings → Apps → Cursor selects `system` (default), `ring`, or `ring-dot` for the next launch. The managed
 `xrb-cursor` preference overrides `xrb: { cursor: ... }` and survives launcher navigation. System hides the scene
 cursor; Ring has no dot; Ring with hover dot adds its center only over an enabled interaction target. Mouse disabled
 always wins. Ring modes hide the native/browser pointer in mono and stereo; disposal restores cursor styles.

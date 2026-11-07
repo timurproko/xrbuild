@@ -114,17 +114,17 @@ test('discovers projects by manifest, lists broken ones, finds unregistered apps
   const { repo, write } = await tempRepo();
   await write('projects/Demos/good/xrb-project.json', JSON.stringify({ name: 'Good', kind: 'app' }));
   await write('projects/Demos/good/package.json', '{}');
-  await write('projects/Unsorted/plain/package.json', JSON.stringify({ name: '@x/plain', scripts: { build: 'vite build', dev: 'vite' } }));
+  await write('projects/unsorted/plain/package.json', JSON.stringify({ name: '@x/plain', scripts: { build: 'vite build', dev: 'vite' } }));
   await write('projects/Demos/broken/xrb-project.json', '{ not json');
   await write('projects/Checks/rig-check/xrb-project.json', JSON.stringify({ name: 'Rig check', kind: 'test', entry: '.' }));
   await write('projects/Checks/bad-kind/xrb-project.json', JSON.stringify({ name: 'X', kind: 'demo' }));
   await write('projects/Checks/notes.txt', 'not a folder');
-  await write('projects/Unsorted/bom/xrb-project.json', '﻿' + JSON.stringify({ name: 'With BOM', kind: 'test', entry: '.' }));
+  await write('projects/unsorted/bom/xrb-project.json', '﻿' + JSON.stringify({ name: 'With BOM', kind: 'test', entry: '.' }));
   await write('projects/Checks/good/xrb-project.json', JSON.stringify({ name: 'Second good', kind: 'app' }));
   await write('projects/archive/old/xrb-project.json', JSON.stringify({ name: 'Old', kind: 'app' }));
 
   const projects = await discoverProjects(repo);
-  assert.deepEqual(projects.map((p) => [p.id, p.section]), [['bad-kind', 'Checks'], ['bom', 'Unsorted'], ['broken', 'Demos'], ['good', 'Checks'], ['good@Demos', 'Demos'], ['rig-check', 'Checks']]);
+  assert.deepEqual(projects.map((p) => [p.id, p.section]), [['bad-kind', 'Checks'], ['bom', 'unsorted'], ['broken', 'Demos'], ['good', 'Checks'], ['good@Demos', 'Demos'], ['rig-check', 'Checks']]);
   const byId = Object.fromEntries(projects.map((p) => [p.id, p]));
   assert.equal(byId['bom'].manifest?.name, 'With BOM', 'a UTF-8 byte-order mark is accepted');
   assert.equal(byId['good'].manifest?.name, 'Second good', 'sections are read in order; the first one of a name wins');
@@ -134,20 +134,20 @@ test('discovers projects by manifest, lists broken ones, finds unregistered apps
   assert.deepEqual(byId['bad-kind'].errors.map((e) => e.field), ['kind']);
   assert.ok(!projects.some((p) => p.id.includes('old')), 'archived projects are not live ones');
 
-  assert.deepEqual(await unregisteredApps(repo), ['Unsorted/plain']);
-  const plain = await defaultManifest(path.join(repo, 'projects/Unsorted/plain'));
+  assert.deepEqual(await unregisteredApps(repo), ['unsorted/plain']);
+  const plain = await defaultManifest(path.join(repo, 'projects/unsorted/plain'));
   assert.deepEqual(plain, { name: 'plain', kind: 'app', entry: 'dist', scripts: { build: 'build', dev: 'dev' } }, 'nothing to copy: standalone');
   // A new app runs like an existing one, with its own identity on the same platform.
   const like: Manifest = { name: 'Other', kind: 'app', input: 'tracker', display: 'stereo-panel', platform: 'station', plugins: { station: { id: 'Other', version: '2.0.0' }, tracker: { x: 1 } } };
-  const m = await defaultManifest(path.join(repo, 'projects/Unsorted/plain'), like);
+  const m = await defaultManifest(path.join(repo, 'projects/unsorted/plain'), like);
   assert.deepEqual(m, { ...plain, input: 'tracker', display: 'stereo-panel', platform: 'station', plugins: { station: { id: 'plain', title: 'plain', version: '0.1.0' } } });
-  assert.deepEqual(validateManifest(m, path.join(repo, 'projects/Unsorted/plain')), []);
+  assert.deepEqual(validateManifest(m, path.join(repo, 'projects/unsorted/plain')), []);
 });
 
 test('saves valid manifests and refuses stale or invalid ones', async () => {
   const { repo, write } = await tempRepo();
-  await write('projects/Unsorted/a/xrb-project.json', JSON.stringify({ name: 'A', kind: 'app' }));
-  const dir = path.join(repo, 'projects/Unsorted/a');
+  await write('projects/unsorted/a/xrb-project.json', JSON.stringify({ name: 'A', kind: 'app' }));
+  const dir = path.join(repo, 'projects/unsorted/a');
   // Windows file times move in ~16 ms ticks: date the file back so the save below surely changes it.
   const past = new Date(Date.now() - 60_000);
   await fs.utimes(path.join(dir, 'xrb-project.json'), past, past);

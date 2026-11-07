@@ -1,18 +1,18 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import {pluginFolders,pluginMeta,readPluginPrefs} from './plugin-manager.ts';
+import { resolvePluginCatalog } from './extension-catalog.ts';
 
 export const TOOLS_FILE = 'xrb-tools.json';
 const ID = /^[a-z][a-z0-9-]{0,47}$/;
 const MANAGED_ROUTE = /^\/(?:[a-z][a-z0-9-]*\/)+$/;
 const ENDPOINT = /^\/{1}__[a-z][a-z0-9-]*(?:\/[a-z0-9-]+)*\/?$/;
-const MODULE = /^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.mjs$/;
+const MODULE = /^(?:[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.mjs|#[a-z][a-z0-9-]{0,47})$/;
 const RESERVED_IDS = new Set(['projects', 'plugins', 'settings', 'rebuild', 'restart']);
 const RESERVED_PATHS = ['/api/', '/plugins/', '/settings/', '/preview/', '/vendor/', '/sdk/'];
 
 interface ToolBase { id: string; label: string }
 export interface ExternalToolLink extends ToolBase { url: string; passPanelOrigin?: boolean }
-export interface ManagedToolLink extends ToolBase { route: string; module: string; endpoints: string[] }
+export interface ManagedToolLink extends ToolBase { route: string; module: string; endpoints: string[]; owner?: { key: string; root: string; module: string } }
 export type ToolLink = ExternalToolLink | ManagedToolLink;
 export const isManagedTool = (tool: ToolLink): tool is ManagedToolLink => 'route' in tool;
 
@@ -49,6 +49,7 @@ function validateItems(tools: unknown[], source: string, modulePrefix = '', mana
     if (typeof tool.route !== 'string' || !MANAGED_ROUTE.test(tool.route)) throw new Error(`${source}: managed tool route must be a lower-case absolute directory path`);
     if (typeof tool.module !== 'string' || !MODULE.test(tool.module) || tool.module.split('/').includes('..') || path.isAbsolute(tool.module))
       throw new Error(`${source}: managed tool module must be a contained .mjs path`);
+    if (tool.module.startsWith('#') && !managedOnly) throw new Error(`${source}: component aliases require a plugin owner`);
     const module = modulePrefix ? `${modulePrefix}/${tool.module}` : tool.module;
     if (module.length > 256 || !MODULE.test(module)) throw new Error(`${source}: managed tool module path is too long`);
     const endpoints = tool.endpoints === undefined ? [] : tool.endpoints;
@@ -93,13 +94,16 @@ async function readWorkspaceTools(workspace: string): Promise<ToolLink[]> {
 }
 
 /** Read-only tool registration; process/device lifecycle remains in the panel's managed-tool service. */
-export async function readToolLinks(workspace: string): Promise<ToolLink[]> {
-  const tools = await readWorkspaceTools(workspace), prefs = await readPluginPrefs(workspace), disabled = new Set(prefs.disabled);
-  for (const id of pluginFolders(workspace)) {
-    if (disabled.has(id)) continue;
-    const meta = await pluginMeta(workspace,id);
-    if (!meta.panelTools?.length) continue;
-    tools.push(...validateItems(meta.panelTools,`${id}: xrb-plugin.json`,`plugins/${id}`,true));
+export async function readToolLinks(workspace: string, core?: string): Promise<ToolLink[]> {
+  const tools = await readWorkspaceTools(workspace), catalog = await resolvePluginCatalog(workspace, core);
+  if (catalog.problems.length) throw new Error(catalog.problems.join('; '));
+  for (const plugin of catalog.selected) {
+    if (!plugin.meta.panelTools?.length) continue;
+    const declarations = validateItems(plugin.meta.panelTools, `${plugin.key}: xrb-plugin.json`, '', true);
+    tools.push(...declarations.map(tool => {
+      if (!isManagedTool(tool)) return tool;
+      return { ...tool, module: `plugins/${plugin.id}/${tool.module}`, owner: { key: plugin.key, root: plugin.sourceRoot, module: tool.module } };
+    }));
   }
   return validateInventory(tools);
 }

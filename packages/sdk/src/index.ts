@@ -61,7 +61,7 @@ export interface XrbOptions {
   pointer?: boolean;
   /** Enable mouse interaction and the managed app's round cursor; default true, subject to launch input selection. */
   mouse?: boolean;
-  /** Mouse cursor appearance; managed launch preference takes precedence. Default: ring-dot. */
+  /** Mouse cursor appearance; managed launch preference takes precedence. Default: system. */
   cursor?: CursorStyle;
   hands?: HandInputOptions;
   /** shared interaction core: tuning overrides (see DEFAULT_TUNING) */

@@ -91,11 +91,24 @@ export function installTooltips(root=document){
 }
 export function installTabs(root=document){
  const selector='.xrb-tabs[role="tablist"],.activity-tabs[role="tablist"],.xrb-tabs[data-xrb-tabs-search]',mounted=new Map(),positions=new Map();
- const selection=list=>{if(list.hasAttribute('data-xrb-tabs-search'))return{left:0,width:list.clientWidth,value:'search'};const tab=list.querySelector('[role="tab"][aria-selected="true"]');return tab&&!tab.hidden?{left:tab.offsetLeft,width:tab.offsetWidth,value:tab.dataset.view??tab.id}:null;};
+ const selection=list=>{if(!list.clientWidth)return null;if(list.hasAttribute('data-xrb-tabs-search'))return{left:0,width:list.clientWidth,value:'search'};const tab=list.querySelector('[role="tab"][aria-selected="true"]');return tab&&!tab.hidden?{left:tab.offsetLeft,width:tab.offsetWidth,value:tab.dataset.view??tab.id}:null;};
  const remember=list=>{const current=selection(list),key=list.dataset.xrbTabsId;if(current&&key&&list.isConnected&&current.width)positions.set(key,current);};
  const mount=list=>{if(mounted.has(list))return;const indicator=document.createElement('span');indicator.className='xrb-tab-indicator';indicator.setAttribute('aria-hidden','true');list.append(indicator);const key=list.dataset.xrbTabsId,previous=key?positions.get(key):null;
-  const sync=()=>{const current=selection(list);if(!current){indicator.hidden=true;return;}indicator.hidden=false;indicator.style.width=`${current.width}px`;indicator.style.transform=`translateX(${current.left}px)`;if(key)positions.set(key,current);};
-  const current=selection(list),transitioning=!!(previous&&current&&previous.value!==current.value);let entering=transitioning;if(transitioning){indicator.style.width=`${previous.width}px`;indicator.style.transform=`translateX(${previous.left}px)`;void indicator.offsetWidth;requestAnimationFrame(()=>{indicator.classList.add('is-ready');entering=false;sync();});}else{sync();requestAnimationFrame(()=>indicator.classList.add('is-ready'));}
+  let selectedValue=previous?.value??null;
+  const sync=()=>{
+   const current=selection(list);
+   if(!current){if(!indicator.hidden)indicator.hidden=true;indicator.classList.remove('is-ready');selectedValue=null;if(key)positions.delete(key);return;}
+   const changed=selectedValue!==null&&selectedValue!==current.value;
+   const width=`${current.width}px`,transform=`translateX(${current.left}px)`;
+   if(indicator.hidden||indicator.style.width!==width||indicator.style.transform!==transform){
+    // Layout/re-entry is not a tab change: snap before enabling subsequent selection transitions.
+    if(!changed)indicator.classList.remove('is-ready');
+    indicator.hidden=false;indicator.style.width=width;indicator.style.transform=transform;
+    if(!changed){void indicator.offsetWidth;indicator.classList.add('is-ready');}
+   }
+   selectedValue=current.value;if(key)positions.set(key,current);
+  };
+  const current=selection(list),transitioning=!!(previous&&current&&previous.value!==current.value);let entering=transitioning;if(transitioning){indicator.style.width=`${previous.width}px`;indicator.style.transform=`translateX(${previous.left}px)`;void indicator.offsetWidth;requestAnimationFrame(()=>{indicator.classList.add('is-ready');entering=false;sync();});}else{sync();}
   const observedSync=()=>{if(!entering)sync();};const mutation=new MutationObserver(observedSync);mutation.observe(list,{subtree:true,attributes:true,attributeFilter:['aria-selected','hidden','disabled']});const resize=new ResizeObserver(observedSync);resize.observe(list);list.querySelectorAll('[role="tab"]').forEach(item=>resize.observe(item));const dispose=()=>{remember(list);mutation.disconnect();resize.disconnect();indicator.remove();mounted.delete(list);};mounted.set(list,dispose);
  };
  const apply=node=>{if(node instanceof Element&&node.matches(selector))mount(node);node.querySelectorAll?.(selector).forEach(mount);};

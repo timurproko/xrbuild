@@ -10,6 +10,21 @@ The process for every change to the core. Rules it relies on: `.claude/CLAUDE.md
 Workspace-only changes belong to the independent private clone at ignored `.xrbuild/`, not this core PR.
 The maintainer uses ordinary Git there; agents never push `main` in either repository.
 
+Route engine and approved `embedded/` changes to the core PR; embedded is part of core Git, not a nested repository.
+Route private-only work to its independent private PR without an empty public PR. Paired tasks use separate PRs and
+one private/local handoff recording tested revisions and dependencies. Public artifacts must not include private
+repository/PR links, source inventories, client details or credentials. A plan approval permits implementation, not
+private-source export: each public snapshot needs an audited allowlist and explicit export approval, without importing
+private ancestry. Commit/push/merge permissions and worktree protections below remain unchanged.
+
+Use `pnpm task:repos` with bounded ignored `.artifacts/repositories.json` for explicit owner routing, opt-in independent
+private provisioning and create-only tested-revision records. Core/embedded-only work needs no private clone; never
+create an empty public PR for private-only work. Paired records bind both HEAD and dirty/untracked content state,
+canonical repositories/remotes and required core ancestry; reverify after every change. This is a local handoff, not
+trusted remote CI or delivery authorization. The helper never stages, exports, pushes, creates PRs, merges or cleans.
+Follow `docs/embedded-extensions.md` and the active change's `prerequisites.md`; predecessor synchronization/archive
+belongs to the bot's ordered delivery gate, never manual overwriting of an older active change.
+
 ## 1. Preflight
 
 - From the primary checkout (it stays on `main`): `pnpm worktree sweep` and relay its lines. `--apply` only removes

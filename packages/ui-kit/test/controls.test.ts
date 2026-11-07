@@ -53,6 +53,17 @@ function board<T extends { attach(i: Interactor): T; update(dt: number): void; p
   return { ix, frame };
 }
 
+test('control and dialog retain Group.attach without treating scene objects as interactors', () => {
+  for (const control of [new Button({ title: 'Attach', text: '' }), new Dialog({ title: 'Attach', text: '' })]) {
+    const scene = new THREE.Scene(), child = new THREE.Group();
+    child.position.set(1, 2, 3); control.position.set(0.2, 0.3, 0.4); scene.add(child, control); scene.updateMatrixWorld(true);
+    const before = child.getWorldPosition(new THREE.Vector3());
+    assert.equal(control.attach(child), control); scene.updateMatrixWorld(true);
+    assert.equal(child.parent, control); assert.ok(child.getWorldPosition(new THREE.Vector3()).distanceTo(before) < 1e-9);
+    const interactor = new Interactor(); assert.equal(control.attach(interactor), control); control.detach();
+  }
+});
+
 test('button: the cap follows the fingertip in, clicks at the press depth, keeps the press through a 1.5 cm drift, releases on retract', () => {
   const b = new Button({ title: 'b', shape: 'round', text: '', icon: ArrowRight });
   const { frame } = board(b, [0.1, 0.05, 0]);

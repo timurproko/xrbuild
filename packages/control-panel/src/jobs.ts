@@ -3,7 +3,7 @@
 import { spawn, type SpawnOptions } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 
-export type JobKind = 'web-build' | 'package' | 'packager-setup' | 'tool-setup' | 'publication' | 'host-rebuild' | 'icon-render';
+export type JobKind = 'web-build' | 'package' | 'packager-setup' | 'tool-setup' | 'publication' | 'host-rebuild' | 'icon-render' | 'cache-cleanup';
 export type JobState = 'queued' | 'running' | 'done' | 'failed';
 export type JobOperation = 'publish' | 'update' | 'activate' | 'delete-release' | 'unpublish';
 
@@ -141,11 +141,14 @@ export class JobRunner extends EventEmitter {
    */
   conflict(kind: JobKind, projectId: string | null): string | null {
     for (const j of this.active()) {
+      if (kind === 'cache-cleanup' || j.kind === 'cache-cleanup') return `${j.title} is active: cache maintenance cannot overlap other jobs`;
       if (j.kind === kind) {
         if (kind === 'publication') continue;
         return `a ${kind} job is already running (${j.title})`;
       }
       const pair = new Set([j.kind, kind]);
+      if (pair.has('host-rebuild') && (pair.has('package') || pair.has('icon-render')))
+        return `${j.title} is running: native rebuild cannot overlap packaging or icon rendering`;
       if (pair.has('packager-setup') && pair.has('package')) return `${j.title} is running: wait for toolchain setup or packaging to finish`;
       if (j.projectId && j.projectId === projectId && (
         (pair.has('package') && pair.has('web-build')) ||

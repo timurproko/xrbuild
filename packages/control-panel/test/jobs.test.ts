@@ -77,8 +77,8 @@ test('concurrency: one job per kind; publication, package and web build exclude 
   assert.throws(() => jobs.start('publication', 'apps/a', 'publish: A', async () => {}), JobRefused, 'publication of the packaged project');
   assert.throws(() => jobs.start('packager-setup', 'apps/b', 'setup: B', async () => {}), JobRefused, 'setup cannot race another package');
   const other = jobs.start('web-build', 'apps/b', 'web build: B', async () => {});
-  const rebuild = jobs.start('host-rebuild', null, 'rebuild', async () => {});
-  await Promise.all([jobs.wait(other), jobs.wait(rebuild)]);
+  assert.throws(() => jobs.start('host-rebuild', null, 'rebuild', async () => {}), JobRefused, 'rebuild cannot replace packaged native binaries');
+  await jobs.wait(other);
   release();
   await jobs.wait(pkg);
   const setup = jobs.start('packager-setup', 'apps/a', 'setup: A', () => gate);
@@ -87,6 +87,21 @@ test('concurrency: one job per kind; publication, package and web build exclude 
   const again = jobs.start('package', 'apps/a', 'package: A', async () => {});
   await jobs.wait(again);
   assert.equal(again.state, 'done');
+});
+
+test('native rebuild and package/icon jobs exclude each other in either order', async () => {
+  for (const kind of ['package', 'icon-render'] as const) {
+    const jobs = new JobRunner();
+    let release!: () => void;
+    let gate = new Promise<void>(resolve => { release = resolve; });
+    const rebuild = jobs.start('host-rebuild', null, 'rebuild', () => gate);
+    assert.throws(() => jobs.start(kind, 'app', kind, async () => {}), JobRefused);
+    release(); await jobs.wait(rebuild);
+    gate = new Promise<void>(resolve => { release = resolve; });
+    const other = jobs.start(kind, 'app', kind, () => gate);
+    assert.throws(() => jobs.start('host-rebuild', null, 'rebuild', async () => {}), JobRefused);
+    release(); await jobs.wait(other);
+  }
 });
 
 test('clearing forgets finished jobs and keeps running ones', async () => {

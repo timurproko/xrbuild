@@ -1,6 +1,8 @@
 // Workspace plugin metadata and preferences. Never move or delete a plugin to disable it:
 // a disabled folder remains available to rebuild, but is not loaded for runs or packaging.
 import { existsSync, readdirSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { assertWritablePath } from './project-access.ts';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { MANIFEST, validateManifest, type ProjectKind } from './projects.ts';
@@ -31,8 +33,8 @@ export const PLUGIN_TYPES = ['display', 'input', 'platform', 'publisher', 'plugi
 export type PluginType = typeof PLUGIN_TYPES[number];
 export const PLUGIN_PANEL_TARGETS = ['webxr'] as const;
 export type PluginPanelTarget = typeof PLUGIN_PANEL_TARGETS[number];
-export interface PluginMeta { title?: string; type?: PluginType; version?: string; hidden?: boolean; /** legacy display title */ name?: string; description?: string; settingsDescription?: string; icon?: string; glyph?: string; screenName?: string; displayMode?: string; settings?: PluginSetting[]; panelSettings?: PluginSetting[]; panelTools?: unknown[]; panelTargets?: PluginPanelTarget[]; panelProviderNames?: Record<string, string>; panelHiddenProviders?: string[]; panelSamples?: PluginSample[] }
-export interface PluginPrefs { disabled: string[]; settings: Record<string, Record<string, SettingValue>>; panelSettings: Record<string, Record<string, SettingValue>> }
+export interface PluginMeta { title?: string; type?: PluginType; version?: string; hidden?: boolean; /** legacy display title */ name?: string; description?: string; settingsDescription?: string; icon?: string; glyph?: string; screenName?: string; displayMode?: string; settings?: PluginSetting[]; panelSettings?: PluginSetting[]; panelTools?: unknown[]; panelTargets?: PluginPanelTarget[]; panelProviderNames?: Record<string, string>; panelHiddenProviders?: string[]; panelSamples?: PluginSample[]; /** User-owned config/plugins/<id>/config.json schema. */ config?: PluginSetting[]; exports?: Record<string, string>; references?: Record<string, { plugin: string; export: string }> }
+export interface PluginPrefs { disabled: string[]; settings: Record<string, Record<string, SettingValue>>; panelSettings: Record<string, Record<string, SettingValue>>; origins?: Record<string, 'bundled' | 'workspace'> }
 const empty = (): PluginPrefs => ({ disabled: [], settings: {}, panelSettings: {} });
 
 export function pluginFolders(workspace: string): string[] {
@@ -40,27 +42,71 @@ export function pluginFolders(workspace: string): string[] {
   return existsSync(root) ? readdirSync(root, { withFileTypes: true }).filter((e) => e.isDirectory() && ID.test(e.name) && existsSync(path.join(root, e.name, 'xrb-plugin.json'))).map((e) => e.name).sort() : [];
 }
 
+async function preferenceBytes(workspace: string): Promise<Buffer | null> {
+  const file = path.join(workspace, PLUGIN_PREFS);
+  const stat = await fs.lstat(file).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
+  if (!stat) return null;
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 65536) throw new Error('Plugin preferences are unsafe or oversized; review the user preferences file');
+  const handle = await fs.open(file, 'r');
+  try {
+    const opened = await handle.stat();
+    if (opened.ino !== stat.ino || opened.dev !== stat.dev || opened.nlink !== 1) throw new Error('Plugin preferences changed while reading');
+    const buffer = Buffer.alloc(65537); let size = 0;
+    while (size < buffer.length) { const read = await handle.read(buffer, size, buffer.length - size, null); if (!read.bytesRead) break; size += read.bytesRead; }
+    if (size > 65536) throw new Error('Plugin preferences are oversized');
+    return buffer.subarray(0, size);
+  } finally { await handle.close(); }
+}
+export async function pluginPrefsRevision(workspace: string): Promise<string> {
+  return createHash('sha256').update(await preferenceBytes(workspace) ?? 'missing').digest('hex');
+}
+function parsePreferences(data: Buffer | null): Record<string, any> {
+  let parsed: unknown;
+  try { parsed = JSON.parse(data?.toString('utf8') ?? '{}'); }
+  catch { throw new Error('Plugin preferences contain invalid JSON; review the user preferences file'); }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(`${PLUGIN_PREFS} must contain an object`);
+  return parsed as Record<string, any>;
+}
 export async function readPluginPrefs(workspace: string): Promise<PluginPrefs> {
-  const data = await fs.readFile(path.join(workspace, PLUGIN_PREFS), 'utf8').catch((e: NodeJS.ErrnoException) => {
-    if (e.code === 'ENOENT') return '{}';
-    throw e;
-  });
-  const parsed: unknown = JSON.parse(data);
+  const parsed: unknown = parsePreferences(await preferenceBytes(workspace));
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(`${PLUGIN_PREFS} must contain an object`);
   const raw = parsed as Partial<PluginPrefs>;
+  if (raw.origins !== undefined && (!raw.origins || typeof raw.origins !== 'object' || Array.isArray(raw.origins)
+    || Object.entries(raw.origins).some(([id, origin]) => !ID.test(id) || id !== id.toLowerCase() || !['bundled', 'workspace'].includes(origin))))
+    throw new Error(`${PLUGIN_PREFS}: origins must map lowercase plugin IDs to bundled or workspace`);
   return {
-    disabled: Array.isArray(raw.disabled) ? raw.disabled.filter((id): id is string => typeof id === 'string' && ID.test(id)) : [],
+    ...(raw.origins ? { origins: raw.origins } : {}),
+    disabled: Array.isArray(raw.disabled) ? raw.disabled.filter((id): id is string => typeof id === 'string' && (ID.test(id) || /^(bundled|workspace):[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(id))) : [],
     settings: raw.settings && typeof raw.settings === 'object' && !Array.isArray(raw.settings) ? raw.settings : {},
     panelSettings: raw.panelSettings && typeof raw.panelSettings === 'object' && !Array.isArray(raw.panelSettings) ? raw.panelSettings : {},
   };
 }
 
-export async function savePluginPrefs(workspace: string, prefs: PluginPrefs): Promise<void> {
-  const file = path.join(workspace, PLUGIN_PREFS);
+export async function updatePluginPrefs(workspace: string, change: (prefs: PluginPrefs) => void | Promise<void>, core = workspace, afterWrite?: () => Promise<void>): Promise<void> {
+  const file = path.join(workspace, PLUGIN_PREFS), lockFile = `${file}.lock`, temp = `${file}.${randomUUID()}.tmp`;
+  assertWritablePath(core, workspace, file); assertWritablePath(core, workspace, lockFile);
   await fs.mkdir(workspace, { recursive: true });
-  const temp = `${file}.${process.pid}.tmp`;
-  await fs.writeFile(temp, `${JSON.stringify(prefs, null, 2)}\n`);
-  await fs.rename(temp, file);
+  const lock = await fs.open(lockFile, 'wx', 0o600).catch((error: NodeJS.ErrnoException) => { if (error.code === 'EEXIST') throw new Error('Plugin preference lock exists; verify the previous writer stopped before recovery'); throw error; });
+  try {
+    await lock.writeFile(JSON.stringify({ pid: process.pid, started: new Date().toISOString() }));
+    const before = await pluginPrefsRevision(workspace), raw = parsePreferences(await preferenceBytes(workspace)), prefs = await readPluginPrefs(workspace);
+    await change(prefs);
+    const text = `${JSON.stringify({ ...raw, ...prefs }, null, 2)}\n`;
+    if (Buffer.byteLength(text) > 65536) throw new Error('Plugin preferences are oversized');
+    if (before !== await pluginPrefsRevision(workspace)) throw new Error('Plugin preferences changed; reload before saving');
+    const handle = await fs.open(temp, 'wx', 0o600);
+    try { await handle.writeFile(text); await handle.sync(); } finally { await handle.close(); }
+    assertWritablePath(core, workspace, file);
+    if (before !== await pluginPrefsRevision(workspace)) throw new Error('Plugin preferences changed; reload before saving');
+    await fs.rename(temp, file);
+    await afterWrite?.();
+  } finally {
+    await fs.unlink(temp).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+    await lock.close(); await fs.unlink(lockFile);
+  }
+}
+export async function savePluginPrefs(workspace: string, prefs: PluginPrefs): Promise<void> {
+  await updatePluginPrefs(workspace, current => { Object.assign(current, prefs); });
 }
 
 async function sampleProject(workspace: string, pluginId: string, value: unknown): Promise<PluginSample> {
@@ -81,10 +127,10 @@ async function sampleProject(workspace: string, pluginId: string, value: unknown
   const dirReal = await fs.realpath(dir), relative = path.relative(rootReal, dirReal);
   if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error(`${pluginId}: panel sample ${sample.id} escapes its plugin`);
   const manifestFile = path.join(dirReal, MANIFEST), manifestStat = await fs.lstat(manifestFile).catch(() => null);
-  if (!manifestStat?.isFile() || manifestStat.isSymbolicLink()) throw new Error(`${pluginId}: panel sample ${sample.id} has no regular ${MANIFEST}`);
+  if (!manifestStat?.isFile() || manifestStat.isSymbolicLink() || manifestStat.nlink !== 1 || manifestStat.size > 65536) throw new Error(`${pluginId}: panel sample ${sample.id} has no regular ${MANIFEST}`);
   let manifest: unknown;
   try { manifest = JSON.parse((await fs.readFile(manifestFile, 'utf8')).replace(/^﻿/, '')); }
-  catch (error) { throw new Error(`${pluginId}: panel sample ${sample.id} has invalid ${MANIFEST}: ${(error as Error).message}`); }
+  catch { throw new Error(`${pluginId}: panel sample ${sample.id} has invalid ${MANIFEST}`); }
   const problems = validateManifest(manifest, dirReal);
   if (problems.length) throw new Error(`${pluginId}: panel sample ${sample.id} has invalid ${MANIFEST}: ${problems.map((problem) => `${problem.field}: ${problem.message}`).join('; ')}`);
   const project = manifest as { name: string; kind: ProjectKind };
@@ -143,8 +189,19 @@ function settingFields(pluginId: string, source: string, value: unknown): Plugin
 
 export async function pluginMeta(workspace: string, id: string): Promise<PluginMeta> {
   if (!pluginFolders(workspace).includes(id)) throw new Error(`no plugin ${id}`);
-  const data = await fs.readFile(path.join(workspace, 'plugins', id, 'xrb-plugin.json'), 'utf8');
-  const raw = JSON.parse(data) as PluginMeta;
+  const file = path.join(workspace, 'plugins', id, 'xrb-plugin.json'), stat = await fs.lstat(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 65536) throw new Error(`${id}: plugin metadata must be a bounded regular unlinked file`);
+  const handle = await fs.open(file, 'r'); let data: string;
+  try {
+    const opened = await handle.stat();
+    if (opened.ino !== stat.ino || opened.dev !== stat.dev || opened.nlink !== 1) throw new Error(`${id}: plugin metadata changed while opening`);
+    const bytes = Buffer.alloc(65537); let size = 0;
+    while (size < bytes.length) { const read = await handle.read(bytes, size, bytes.length - size, null); if (!read.bytesRead) break; size += read.bytesRead; }
+    if (size > 65536) throw new Error(`${id}: plugin metadata is oversized`);
+    data = bytes.subarray(0, size).toString('utf8');
+  } finally { await handle.close(); }
+  let raw: PluginMeta;
+  try { raw = JSON.parse(data); } catch { throw new Error(`${id}: invalid xrb-plugin.json`); }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`${id}: invalid xrb-plugin.json`);
   if (raw.title === undefined) throw new Error(`${id}: xrb-plugin.json requires title`);
   if (raw.type === undefined) throw new Error(`${id}: xrb-plugin.json requires type`);
@@ -181,6 +238,23 @@ export async function pluginMeta(workspace: string, id: string): Promise<PluginM
     throw new Error(`${id}: panel.samples must be a list of at most 8 samples`);
   const panelSamples = await Promise.all((panelSampleValues as unknown[] | undefined ?? []).map((sample) => sampleProject(workspace, id, sample)));
   if (new Set(panelSamples.map((sample) => sample.id)).size !== panelSamples.length) throw new Error(`${id}: panel sample IDs must be distinct`);
+  const exports: Record<string, string> = {}, references: Record<string, { plugin: string; export: string }> = {};
+  for (const kind of ['exports', 'references'] as const) {
+    const values = raw[kind];
+    if (values === undefined) continue;
+    if (!values || typeof values !== 'object' || Array.isArray(values) || Object.keys(values).length > 32) throw new Error(`${id}: invalid component declarations`);
+    for (const [key, value] of Object.entries(values)) {
+      if (!/^[a-z][a-z0-9-]{0,47}$/.test(key)) throw new Error(`${id}: invalid component alias`);
+      if (kind === 'exports') {
+        if (typeof value !== 'string' || value.length > 256 || !/^\.\/(?:[a-zA-Z0-9_-][a-zA-Z0-9._-]*\/)*[a-zA-Z0-9_-][a-zA-Z0-9._-]*\.(?:mjs|js|ts)$/.test(value) || value.split('/').includes('..')) throw new Error(`${id}: component exports must be contained module paths`);
+        exports[key] = value;
+      } else {
+        const target = value as Record<string, unknown>;
+        if (!target || typeof target !== 'object' || Array.isArray(target) || Object.keys(target).some(key => !['plugin', 'export'].includes(key)) || typeof target.plugin !== 'string' || !/^(bundled|workspace):[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(target.plugin) || typeof target.export !== 'string' || !/^[a-z][a-z0-9-]{0,47}$/.test(target.export)) throw new Error(`${id}: component references require a qualified plugin and export`);
+        references[key] = { plugin: target.plugin, export: target.export };
+      }
+    }
+  }
   const settings = settingFields(id, 'settings', raw.settings);
   if (new Set([...settings, ...panelSettings].map((field) => field.key)).size !== settings.length + panelSettings.length)
     throw new Error(`${id}: runtime and panel setting keys must be distinct`);
@@ -202,6 +276,9 @@ export async function pluginMeta(workspace: string, id: string): Promise<PluginM
     panelProviderNames: panelProviderNames as Record<string, string> | undefined,
     panelHiddenProviders: panelHiddenProviders as string[] | undefined,
     panelSamples,
+    ...(raw.config === undefined ? {} : { config: settingFields(id, 'config', raw.config) }),
+    ...(raw.exports === undefined ? {} : { exports }),
+    ...(raw.references === undefined ? {} : { references }),
     settings,
   };
 }
@@ -211,9 +288,11 @@ export async function pluginIcon(workspace: string, id: string): Promise<string 
   const meta = await pluginMeta(workspace, id);
   if (!meta.icon || path.isAbsolute(meta.icon) || !/\.png$/i.test(meta.icon)) return null;
   const root = await fs.realpath(path.join(workspace, 'plugins', id));
-  const file = await fs.realpath(path.resolve(root, meta.icon)).catch(() => null);
-  if (!file || path.relative(root, file).startsWith('..') || path.isAbsolute(path.relative(root, file))) return null;
-  return file;
+  const { containedPath } = await import('./extension-catalog.ts');
+  const file = await containedPath(root, meta.icon).catch(() => null);
+  if (!file) return null;
+  const stat = await fs.lstat(file);
+  return stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1 ? file : null;
 }
 
 export function validateSettings(fields: PluginSetting[], values: unknown): Record<string, SettingValue> {
