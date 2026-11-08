@@ -13,6 +13,10 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   and no "Generated with Claude Code" lines in commits or PR descriptions.
 - Commit only when asked.
 - Keep commit messages concise: a short subject line, then a few bullets only if needed.
+- Keep draft Implementation outcomes truthful: check them when code/tests and detailed pre-ready bookkeeping are
+  written, add plain Acceptance before the final item, and leave post-ready CI/integration pending until observed.
+  Only trusted automation promotes completed exact snapshots; do not invoke ready or mark unfinished tasks done.
+  Run focused changed-code checks rather than broad repeated validation loops before pushing.
 
 ## Changes and pull requests
 
@@ -24,7 +28,10 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   squash commit on `main`.
 - Core changes reach `main` only through a PR: the `protect-main` ruleset (squash only, required check "CI required")
   and the other repository settings are declared in `config/github-repository-governance.json`; change them there and
-  apply with `pnpm governance apply --confirm apply-xr-build-governance`.
+  inspect `pnpm governance preflight`, then apply an explicitly approved `protect`, `activate-ci` or `activate` mode
+  with `--confirm apply-xr-build-governance`. No administrator/bot bypass is allowed. Unsupported account protection
+  and missing bot setup are owner prerequisites, never reasons to change visibility, billing or required checks.
+  See `docs/pr-delivery-governance.md`; repository policy files alone do not certify live activation.
 - Workspace-only changes belong exclusively to the independent private repository: the maintainer uses ordinary
   Git inside `.xrbuild/`. There is no workspace main-push exception or workspace-push command in core. Agents
   never push to `main` in either repository and never use an admin bypass to merge a PR.

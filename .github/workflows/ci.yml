@@ -60,7 +60,7 @@ jobs:
           echo "$files"
           # A change to CI itself selects all PR-eligible jobs; the host lane remains nightly/manual.
           match() { echo "$files" | grep -qE "$1" && echo true || echo false; }
-          echo "node=$(match '^(packages/|tools/|templates/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.github/workflows/ci\.yml$)')" >> "$GITHUB_OUTPUT"
+          echo "node=$(match '^(packages/|tools/|templates/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.github/)')" >> "$GITHUB_OUTPUT"
 
   names:
     name: Name guard
@@ -149,13 +149,18 @@ jobs:
 
   required:
     name: CI required
-    if: always()
+    if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     needs: [readiness, changes, names, openspec, delivery, node, native]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
       - env:
-          RESULTS: ${{ toJSON(needs.*.result) }}
-        run: |
-          echo "$RESULTS"
-          # A skipped host job on a PR is intentional, not proof of a native build. Fail on any failed/cancelled job.
-          if echo "$RESULTS" | grep -qE '"(failure|cancelled)"'; then exit 1; fi
+          NEEDS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
+        run: node tools/pr-automation/required.mjs

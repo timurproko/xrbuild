@@ -25,3 +25,20 @@ Policy changes SHALL begin as isolated plan-only drafts, receive maintainer appr
 #### Scenario: Existing pushes predate activation
 - **WHEN** automation is activated after eligible drafts were last updated
 - **THEN** an approved bounded reconciliation inspects their current exact snapshots rather than assuming old events will replay or promoting incomplete candidates
+
+## MODIFIED Requirements
+
+### Requirement: Documentation auto-merge
+When explicitly enabled by the reviewed workflow activation policy, a ready same-repo PR to `main` that changes only documentation (`docs/`, `openspec/`, Markdown outside `.claude/` and `.github/`), does not link a change, touches no active change folder and has no `no-auto-merge` label SHALL get squash auto-merge armed with the App's token, so its merge starts CI on `main`. Auto-merge armed by the automation SHALL be removed when the PR stops qualifying; auto-merge armed by a person SHALL be kept. Delivery activation MAY leave this auxiliary workflow disabled and SHALL not imply that documentation auto-merge is active. Implementation PRs SHALL never become eligible through this path.
+
+#### Scenario: Docs fix
+- **WHEN** the documentation workflow is explicitly enabled and a ready qualifying PR changes only `README.md`
+- **THEN** it merges by itself once `CI required` passes and starts CI on `main`
+
+#### Scenario: Auxiliary workflow is disabled
+- **WHEN** the reviewed activation profile leaves documentation auto-merge disabled
+- **THEN** no automatic merge is claimed and enabling delivery CI alone does not arm it
+
+#### Scenario: Plan only
+- **WHEN** a PR adds only an active change folder
+- **THEN** it is not auto-merged

@@ -1,9 +1,6 @@
 name: OpenSpec finalization
 
-# A complete linked draft is promoted by the App; a ready PR gets its change archived in its own branch (specs
-# synced) once every task in tasks.md is done. See tools/pr-automation/promote.mjs and finalize.mjs. Runs main's copy of
-# this workflow and its scripts (pull_request_target); the PR head is only checked out as files for the pinned
-# OpenSpec CLI, nothing from it is installed or run.
+# Only main's policy executes. PR-head files are data, never installed or run with the App token.
 on:
   pull_request_target:
     branches: [main]
@@ -11,57 +8,87 @@ on:
   workflow_dispatch:
     inputs:
       pr:
-        description: PR number to finalize
+        description: PR number to inspect or reconcile
         required: true
+      dry_run:
+        description: Inspect without readiness, branch or body mutations
+        type: boolean
+        default: true
 
 permissions: {}
-
 concurrency:
   group: openspec-finalization-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: false
 
 jobs:
   promote:
-    name: Promote completed draft
+    name: Inspect completed draft
     if: >-
-      github.event_name == 'pull_request_target' && github.event.pull_request.draft &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      contains(github.event.pull_request.body, 'openspec-implementation')
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.body, 'openspec-implementation'))
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - name: Check out main's scripts
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
           path: base
           persist-credentials: false
+      - id: candidate
+        name: Resolve immutable candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+        run: |
+          [[ "$PR" =~ ^[1-9][0-9]*$ ]] || exit 1
+          head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha)
+          [[ "$head" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+      - name: Check out exact PR head as data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.candidate.outputs.head }}
+          path: head
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - id: inspect
+        name: Inspect with read-only credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+        run: node base/tools/pr-automation/promote.mjs --repo head --pr "$PR" --inspect
       - id: bot
+        if: steps.inspect.outputs.status == 'complete' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run)
         uses: ./base/.github/actions/app-token
         with:
           app-id: ${{ vars.XRB_BOT_APP_ID }}
           private-key: ${{ secrets.XRB_BOT_PRIVATE_KEY }}
-      - name: Check out exact PR head as data
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          path: head
-          persist-credentials: false
-      - name: Promote if complete
+      - name: Recheck and promote with event-producing identity
+        if: steps.inspect.outputs.status == 'complete' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run)
         env:
           GH_TOKEN: ${{ steps.bot.outputs.token }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
         run: node base/tools/pr-automation/promote.mjs --repo head --pr "$PR"
 
   finalize:
     name: Finalize
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event_name == 'workflow_dispatch' && !inputs.dry_run) ||
+      (github.event_name == 'pull_request_target' && !github.event.pull_request.draft &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
        contains(github.event.pull_request.body, 'openspec-implementation'))
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - name: Check out main's scripts
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,6 +106,7 @@ jobs:
           GH_TOKEN: ${{ steps.bot.outputs.token }}
           PR: ${{ github.event.pull_request.number || inputs.pr }}
         run: |
+          [[ "$PR" =~ ^[1-9][0-9]*$ ]] || exit 1
           echo "number=$PR" >> "$GITHUB_OUTPUT"
           echo "ref=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.ref)" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -87,16 +115,16 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      - name: Install the pinned OpenSpec CLI (main's lockfile)
+      - name: Install pinned trusted tooling without lifecycle scripts
         working-directory: base
-        run: pnpm install --frozen-lockfile --filter @xr-build/pr-automation
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter @xr-build/pr-automation
       - name: Check out the PR branch as the App
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.pr.outputs.ref }}
           path: head
           token: ${{ steps.bot.outputs.token }}
-      - name: Finalize
+      - name: Finalize exact candidate
         env:
           GH_TOKEN: ${{ steps.bot.outputs.token }}
           AUTHOR: ${{ steps.bot.outputs.author }}

@@ -20,7 +20,7 @@
       "target": "branch",
       "enforcement": "active",
       "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
-      "bypass_actors": [{ "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }],
+      "bypass_actors": [],
       "rules": [
         { "type": "deletion" },
         { "type": "non_fast_forward" },
@@ -46,6 +46,18 @@
       ]
     }
   ],
+  "automation": {
+    "bot": { "app_id_variable": "XRB_BOT_APP_ID", "private_key_secret": "XRB_BOT_PRIVATE_KEY" },
+    "trusted_files": ["tools/pr-automation/promote.mjs", "tools/pr-automation/finalize.mjs", ".github/actions/app-token/action.yml"],
+    "workflows": {
+      ".github/workflows/ci.yml": "ci",
+      ".github/workflows/openspec-finalization.yml": "promotion",
+      ".github/workflows/bot-probe.yml": "probe",
+      ".github/workflows/docs-auto-merge.yml": "disabled",
+      ".github/workflows/nightly-triage.yml": "disabled",
+      ".github/workflows/openspec-reconcile.yml": "disabled"
+    }
+  },
   "labels": [
     { "name": "no-auto-merge", "color": "bfd4f2", "description": "Keep a docs-only PR from merging by itself" },
     { "name": "openspec-in-progress", "color": "c5def5", "description": "Edits an OpenSpec change delivered over several PRs" },

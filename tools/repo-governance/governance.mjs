@@ -13,6 +13,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runActivation } from './activation.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const CONFIG_PATH = path.resolve(HERE, '../../config/github-repository-governance.json');
@@ -107,8 +108,9 @@ function ghApi(method, p, body) {
 export const REPO_NAME = 'xrbuild';
 
 function repoName() {
-  if (process.env.GITHUB_REPOSITORY) return process.env.GITHUB_REPOSITORY;
-  return execFileSync('gh', ['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'], { encoding: 'utf8', cwd: path.resolve(HERE, '../..') }).trim();
+  const canonical = execFileSync('gh', ['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'], { encoding: 'utf8', cwd: path.resolve(HERE, '../..') }).trim();
+  if (process.env.GITHUB_REPOSITORY && process.env.GITHUB_REPOSITORY !== canonical) throw new Error('Repository environment does not match this checkout');
+  return canonical;
 }
 
 /** Runs a command; returns the exit code. `api` and `out` are injectable for tests. */
@@ -117,6 +119,13 @@ export function run(argv, { api = ghApi, repo = repoName(), config = JSON.parse(
   if (repo.split('/').pop() !== REPO_NAME) {
     out(`refusing: the repository is ${repo}, not ${REPO_NAME}; this file declares ${REPO_NAME}'s settings only`);
     return 2;
+  }
+  if (['preflight', 'protect', 'activate-ci', 'activate'].includes(cmd)) {
+    return runActivation(cmd, { api, repo, config, out, confirmed: flag === '--confirm' && value === CONFIRM,
+      planSettings: planApply, readSettings: readLive, checkSettings: check });
+  }
+  if (cmd === 'apply' && config.rulesets.some(rule => rule.bypass_actors?.length !== 0)) {
+    out('refusing: administrator and bot bypass actors are forbidden'); return 2;
   }
   if (cmd === 'check') {
     const diffs = check(config, readLive(api, repo));
@@ -137,7 +146,7 @@ export function run(argv, { api = ghApi, repo = repoName(), config = JSON.parse(
     for (const w of writes) api(w.method, w.path, w.body);
     return run(['check'], { api, repo, config, out });
   }
-  out(`usage: governance check | governance apply [--confirm ${CONFIRM}]`);
+  out(`usage: governance check | preflight | protect | activate-ci | activate | apply [--confirm ${CONFIRM}]`);
   return 2;
 }
 
