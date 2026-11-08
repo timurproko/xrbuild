@@ -41,7 +41,7 @@ plugin, and each plugin lists the hardware and runtimes it needs.
 
 ## Workspace
 
-The core is the engine: the host, plugin ABI, SDK, ui-kit and control panel. Projects and integrations live outside it. By default they share one **workspace** at `%USERPROFILE%\.xrbuild`, or the folder in `XRB_HOME`. `--projects=<path>` or `XRB_PROJECTS_HOME` can instead select a separate project repository while plugins, dependencies, package output, and runtime state remain in the integration workspace.
+The core engine is the host, plugin ABI, SDK, ui-kit and control panel. Approved public projects/integrations live in the separate core-owned `embedded/` workspace; custom/private source stays in the selected user workspace. By default they share one **workspace** at `%USERPROFILE%\.xrbuild`, or the folder in `XRB_HOME`. `--projects=<path>` or `XRB_PROJECTS_HOME` can instead select a separate project repository while plugins, dependencies, package output, and runtime state remain in the integration workspace.
 
 Authorized developers clone the independent private `.xrbuild` repository at `<checkout>/.xrbuild/`. Core ignores the whole folder, including its own `.git`; it is not a submodule or symlink. Ordinary users need neither private access nor Git LFS for the core. The separate public [`timurproko/xrbuild.dev`](https://github.com/timurproko/xrbuild.dev) repository receives only selected built app output for the site. Explicit repository-development commands or the **XR Build Dev** shortcut select the private workspace. See [migration and recovery](docs/workspace-split.md); detaching current files does not sanitize old Git history, and licensing/public release remain separate gates.
 
@@ -69,7 +69,7 @@ this repo's sources: the panel sets `XRB_CORE` and the app's Vite config maps `@
 
 The core talks to providers for three roles, display, input and platform, and to packagers; it names no
 device, tracker or platform. Built-in providers: display `desktop`; inputs `none`, `replay`, `simulated`.
-Everything else is a plugin in the workspace's `plugins/`:
+Everything else is a plugin in the selected workspace's or product `embedded/` workspace's `plugins/`:
 
 - **Native part:** a DLL built against the C ABI in
   [`native/plugin-sdk/include/xrb_plugin.h`](native/plugin-sdk/include/xrb_plugin.h). The panel configures
@@ -125,7 +125,14 @@ JS dependencies (three.js, Vite, lucide, ...) come from the package registry thr
 here (`packages/*`, `tools/*`), and in the workspace (the panel runs it there when needed).
 The core-owned `embedded/` package workspace stays separate. Root `setup:embedded`, `build:embedded` and `test:embedded`
 scripts take an explicit writable `--workspace` and install/build/test fresh snapshots without changing product sources.
-Root tests include that public lane; private packages are never enrolled. The current scaffold has no promoted modules.
+Root tests include that public lane; private packages are never enrolled. Bundled modules include consolidated
+WebXR publisher in `embedded/plugins/publisher-webxr/` and the authored hand implementation/diagnostic in
+`embedded/plugins/input-hands/`, plus the explicitly configured launcher packager in `embedded/plugins/platform-headset/`.
+Eight product project groups under `embedded/projects/` include the launcher, UI showcase, starter and archived diagnostics.
+Their defaults are desktop/no input, without publication/signing/machine identity. Rebuild uses user cache; editing needs Copy to workspace.
+Publisher has local and explicitly configured production destinations. Optional headset tools and existing signing keys are user-provisioned, never global discoveries or automatic downloads.
+User configuration, certificates, history, hand calibration/preferences and recordings stay in the selected workspace.
+Hand defaults are synthetic; optional models/device runtimes are not shipped or implicitly downloaded/started.
 `check:types` validates public production TypeScript with an exact pinned strict no-emit toolchain; `test` runs it first.
 Private and embedded package workspaces stay independently installed and are not enrolled by this check.
 `setup:services` explicitly activates isolated public service dependencies/builds; discovery never installs them.

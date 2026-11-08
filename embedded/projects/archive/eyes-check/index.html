@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>XR Build host channel check</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0f14; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<p id="capability" style="position:fixed;bottom:0;z-index:1;color:#c8d0d8;background:#0b0f14;font:14px system-ui">Archived diagnostic: a compatible host/provider must be selected explicitly. No capture starts from this page.</p>
+<canvas id="c"></canvas>
+<script>
+// Checks window.__XRB_HOST__ and the host channel. Logs HOSTINFO synchronously
+// (before the first animation frame), then plots the eye X position over the
+// last 10 s, in both eye halves. Move your head sideways in front of the XR Build:
+// the trace should follow within a frame or two.
+const host = window.__XRB_HOST__;
+let firstFrameSeen = false;
+console.log(`HOSTINFO sync=${!firstFrameSeen} ${host ? JSON.stringify({ stereo: host.stereo, display: host.display, eye: host.eye, frozen: Object.isFrozen(host) || !Object.getOwnPropertyDescriptor(window, '__XRB_HOST__').writable }) : 'missing'}`);
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const trace = [];  // [pageTimeMs, eyeCenterX, stale]
+let eyes = null, messages = 0, latencies = [];
+
+if (host) {
+  const ws = new WebSocket(host.channel.url);
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => console.log('CHANNEL open');
+  ws.onmessage = (e) => {
+    if (!(e.data instanceof ArrayBuffer) || e.data.byteLength < 41) return;
+    const v = new DataView(e.data);
+    if (v.getUint8(0) !== 1) return;                // EYES
+    const sentAt = v.getFloat64(8, true);
+    const f = (i) => v.getFloat32(16 + i * 4, true);
+    eyes = { l: [f(0), f(1), f(2)], r: [f(3), f(4), f(5)], stale: v.getUint8(40) === 1 };
+    latencies.push(host.hostNow() - sentAt);
+    messages++;
+    trace.push([performance.now(), (eyes.l[0] + eyes.r[0]) / 2, eyes.stale]);
+    while (trace.length && trace[0][0] < performance.now() - 10000) trace.shift();
+  };
+  // Heartbeat to the host: PAGE_FRAME = header + f64 pageTime + f32 fps
+  let frames = 0, last = performance.now(), fps = 0;
+  setInterval(() => {
+    const now = performance.now();
+    fps = frames * 1000 / (now - last); frames = 0; last = now;
+    if (ws.readyState !== 1) return;
+    const b = new ArrayBuffer(16 + 12), d = new DataView(b);
+    d.setUint8(0, 100); d.setUint8(1, 1); d.setFloat64(8, host.hostNow(), true);
+    d.setFloat64(16, now, true); d.setFloat32(24, fps, true);
+    ws.send(b);
+  }, 500);
+  (function count() { frames++; requestAnimationFrame(count); })();
+  setInterval(() => {
+    latencies.sort((a, b) => a - b);
+    const p50 = latencies[Math.floor(latencies.length / 2)] ?? NaN;
+    const p95 = latencies[Math.floor(latencies.length * 0.95)] ?? NaN;
+    console.log(`CHANNEL eyes ${messages} msgs/5s, delivery p50 ${p50.toFixed(2)} ms p95 ${p95.toFixed(2)} ms, ` +
+      `eye center ${eyes ? eyes.l.map((x, i) => ((x + eyes.r[i]) / 2).toFixed(3)).join(' ') : '-'} m, stale ${eyes?.stale}`);
+    messages = 0; latencies = [];
+  }, 5000);
+}
+
+function resize() { canvas.width = innerWidth; canvas.height = innerHeight; }
+addEventListener('resize', resize); resize();
+
+function drawEye(x0, w, h) {
+  ctx.save(); ctx.beginPath(); ctx.rect(x0, 0, w, h); ctx.clip();
+  ctx.fillStyle = '#0b0f14'; ctx.fillRect(x0, 0, w, h);
+  ctx.strokeStyle = '#2a3542'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x0, h / 2); ctx.lineTo(x0 + w, h / 2); ctx.stroke();  // x = 0
+  const now = performance.now();
+  ctx.lineWidth = Math.max(2, w / 400);
+  ctx.beginPath();
+  trace.forEach(([t, x, stale], i) => {
+    const px = x0 + w * (1 - (now - t) / 10000), py = h / 2 - x * h * 2;  // 0.25 m = quarter height
+    i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+  });
+  ctx.strokeStyle = eyes?.stale ? '#d9534f' : '#5bd18b'; ctx.stroke();
+  ctx.fillStyle = '#c8d0d8'; ctx.font = `${Math.round(w / 45)}px system-ui`;
+  const d = host?.display;
+  ctx.fillText(host ? `panel ${(d.widthM * 1000).toFixed(0)} x ${(d.heightM * 1000).toFixed(0)} mm, tilt ${(d.tiltRad * 57.3).toFixed(0)} deg, eye ${host.eye.width}x${host.eye.height}` : 'no __XRB_HOST__', x0 + 20, 50);
+  ctx.fillText(eyes ? `eye centre x ${(((eyes.l[0] + eyes.r[0]) / 2) * 100).toFixed(1)} cm, z ${(((eyes.l[2] + eyes.r[2]) / 2) * 100).toFixed(1)} cm${eyes.stale ? '  (stale)' : ''}` : 'waiting for eyes...', x0 + 20, 50 + w / 35);
+  ctx.restore();
+}
+function frame() {
+  firstFrameSeen = true;
+  const W = canvas.width, H = canvas.height;
+  if (host?.stereo) { drawEye(0, W / 2, H); drawEye(W / 2, W / 2, H); } else drawEye(0, W, H);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

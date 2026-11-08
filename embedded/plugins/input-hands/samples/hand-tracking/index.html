@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>XR Build · Hands</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cstyle%3Etext%7Bfilter%3Abrightness(0)%20saturate(100%25)%20invert(31%25)%20sepia(78%25)%20saturate(1794%25)%20hue-rotate(213deg)%20brightness(85%25)%20contrast(90%25)%7D%40media(prefers-color-scheme%3Adark)%7Btext%7Bfilter%3Abrightness(0)%20saturate(100%25)%20invert(70%25)%20sepia(39%25)%20saturate(1071%25)%20hue-rotate(194deg)%20brightness(101%25)%20contrast(103%25)%7D%7D%3C%2Fstyle%3E%3Ctext%20y%3D%2250%22%20x%3D%2232%22%20text-anchor%3D%22middle%22%20font-size%3D%2250%22%3E%F0%9F%91%8B%3C%2Ftext%3E%3C%2Fsvg%3E">
+  <style>
+    html { background: #f4f6f9; color: #1a2230; color-scheme: light; }
+    @media (prefers-color-scheme: dark) { html { background: #0f131a; color: #e3e8ef; color-scheme: dark; } }
+    body { margin: 0; }
+    body.workspace-pending .top, body.workspace-pending main { visibility: hidden; }
+    #boot-error { position: fixed; inset: 25vh 24px auto; text-align: center; font: 15px/1.5 system-ui, sans-serif; }
+  </style>
+  <link rel="stylesheet" href="/src/theme.css">
+  <script>
+    // A failed module must not leave an indefinitely blank window. No acquisition is started here.
+    window.handTrackingBootFailure = function () {
+      if (document.body && document.body.classList.contains('workspace-pending')) document.getElementById('boot-error').hidden = false;
+    };
+    window.handTrackingBootTimer = setTimeout(window.handTrackingBootFailure, 20000);
+    addEventListener('error', window.handTrackingBootFailure);
+  </script>
+</head>
+<body class="workspace-pending">
+  <p id="boot-error" role="alert" hidden>Hand tracking could not finish loading. Reload the page or check the local server.</p>
+  <noscript>Hand tracking requires JavaScript.</noscript>
+  <header class="top xrb-app-bar">
+    <h1 class="xrb-brand">XR Build <button id="panel-menu-button" class="panel-menu-button xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Hands</button></h1>
+    <span id="host-chip" class="chip rebuild" hidden>rebuild available</span>
+    <span id="panel-chip" class="chip warn" hidden>restart available</span>
+    <span class="spacer"></span><div id="stats-dock" class="stats-dock" hidden><span id="csv-header-recording" class="stat bad" hidden><span class="csv-rec-dot" aria-hidden="true"></span><strong>Rec</strong><time id="csv-header-recording-time">00:00</time></span><span id="render-stat" class="stat good" title="Viewport render rate, not camera rate"></span><span id="tracking-stat" class="stat good" title="Measured hand-tracking results per second; Fusion shows the average camera rate"></span></div><button id="capture-header-stop" class="danger-solid action-button" hidden>Stop capture</button>
+  </header>
+  <div id="panel-menu" class="menu panel-menu" role="menu" aria-label="XR Build navigation" hidden></div>
+  <p id="error" class="tracking-error xrb-error-banner" role="alert"></p>
+  <main id="workspace" class="xrb-workspace-layout" aria-label="Hand tracking workspace">
+    <div class="tracking-column">
+      <aside id="controls" class="card tracking-panel">
+        <div class="activity-tabs" role="tablist" aria-label="Controls" data-tab-state="controls">
+          <button class="activity-tab" role="tab" id="capture-tab" aria-controls="capture-pane" aria-selected="true">Capture</button>
+          <button class="activity-tab" role="tab" id="record-tab" aria-controls="record-pane" aria-selected="false" tabindex="-1">Record</button>
+        </div>
+        <div id="capture-pane" class="panel-content xrb-sidebar-content xrb-stack" role="tabpanel" aria-labelledby="capture-tab">
+          <div id="capture-primary-actions"><button id="camera-toggle" class="primary capture-wide" disabled>Start capture</button><button id="rgbd-toggle" class="primary capture-wide" disabled hidden>Start capture</button><button id="mv-toggle" class="primary capture-wide" disabled hidden>Loading…</button></div>
+          <label id="capture-camera-field">Camera<select id="capture-camera"><option value="">Select camera</option></select></label>
+          <label id="capture-mode-field" hidden>Mode<select id="capture-backend"><option value="camera">RGB</option><option value="rgbd">RGB + Depth</option></select></label>
+          <button id="capture-camera-refresh" hidden>Refresh cameras</button><button id="capture-camera-authorize" hidden>Allow browser cameras</button>
+          <div id="rgbd-actions" class="capture-actions xrb-stack" hidden>
+            <label hidden>Camera<select id="rgbd-device"><option value="">Select camera</option></select></label>
+            <button id="rgbd-add-camera" class="small capture-wide" hidden>Add camera</button>
+            <div id="rgbd-second-camera" aria-hidden="true"><label>Camera 2<select id="rgbd-device-b"><option value="">Select camera</option></select></label><button id="rgbd-remove-b" class="small capture-wide">Remove camera</button></div>
+            <label id="rgbd-profile-field" hidden>Resolution · FPS<select id="rgbd-profile" aria-label="RGB + Depth resolution and frame rate"></select></label>
+            <button id="rgbd-refresh" class="small capture-wide" title="Refresh cameras" disabled hidden>Refresh cameras</button>
+            <label id="rgbd-model-setting" class="toggle" hidden><input id="rgbd-infer" type="checkbox" checked>Track hands</label>
+            <p id="rgbd-start-help" class="hint xrb-supporting-text" role="status" hidden></p>
+            <p id="rgbd-service-status" class="hint xrb-supporting-text" role="status" hidden>Connecting locally…</p>
+            <button id="rgbd-retry" class="small capture-wide" hidden>Retry connection</button>
+          </div>
+          <div id="mv-actions" class="capture-actions xrb-stack" hidden>
+            <label>Camera 1<select id="mv-device-a"><option value="">Select camera</option></select></label>
+            <label>Camera 2<select id="mv-device-b"><option value="">Select camera</option></select></label>
+            <button id="mv-remove-b" class="small capture-wide">Remove camera</button>
+            <label id="mv-profile-a-field" hidden>Resolution · FPS<select id="mv-profile-a"></select></label>
+            <select id="mv-profile-b" aria-label="Camera 2 resolution and FPS" hidden aria-hidden="true" tabindex="-1"></select>
+            <button id="mv-refresh" class="small capture-wide" hidden>Refresh cameras</button>
+            <label id="mv-model-setting" class="toggle" hidden><input id="mv-infer" type="checkbox" checked>Track hands on both cameras</label>
+            <button id="mv-connect" class="small capture-wide" hidden>Retry camera services</button>
+            <p id="mv-capture-status" class="hint xrb-supporting-text" role="status" hidden>Two independent RGB + Depth streams · capture off</p>
+            <button id="mv-calibrate" class="small capture-wide" hidden>Calibrate cameras…</button>
+          </div>
+          <div id="live-actions" class="capture-actions xrb-stack">
+            <label hidden>Camera<select id="camera-device"><option value="">Select camera</option></select></label>
+            <label id="camera-profile-field" hidden>Resolution · FPS<select id="camera-profile"><option value="424x240@30">424×240 · 30 FPS</option><option value="640x480@30" selected>640×480 · 30 FPS</option><option value="1280x720@30">1280×720 · 30 FPS</option><option value="1920x1080@30">1920×1080 · 30 FPS</option></select></label>
+            <button id="camera-refresh" class="small capture-wide" hidden>Refresh cameras</button>
+          </div>
+          <div id="synthetic-controls" hidden>
+            <label>Delivery<select id="delivery"><option value="host">Native provider</option><option value="local">Local fixture</option></select></label>
+            <label>Fixture<select id="scenario"><option value="configured" disabled>Provider configuration</option><option value="stationary">Stationary</option><option value="motion">Motion + pinch</option><option value="teleport">Teleport</option><option value="dropout">Dropout</option><option value="invalid">Invalid poses</option></select></label>
+            <div class="button-row xrb-button-row"><button id="running">Pause</button><button id="restart">Restart</button></div>
+          </div>
+        </div>
+        <div id="record-pane" class="panel-content xrb-sidebar-content" role="tabpanel" aria-labelledby="record-tab" hidden>
+          <section id="csv-record-panel" class="control-group xrb-sidebar-section xrb-control-group"><button id="csv-record-toggle" class="primary" disabled>Start recording</button><div id="csv-recording-live" class="csv-recording-live" hidden><strong>Recording</strong><span id="csv-recording-size">0 B</span><time id="csv-recording-time" aria-label="Elapsed and remaining recording time">00:00 / 02:00</time></div><div class="csv-recordings-heading"><h2>Recordings</h2><button id="csv-open-folder" class="xrb-icon-button" data-xrb-icon="folder" data-tooltip="Open recordings folder" aria-label="Open recordings folder"></button></div><div id="csv-recordings"><div class="empty-note">No recordings yet.</div></div><p id="csv-recording-error" class="field-error" role="alert"></p></section>
+          <section id="mv-record-controls" class="control-group recording-internal xrb-control-group" hidden><h2>Paired clip</h2>
+            <div class="button-row xrb-button-row"><button id="mv-record" class="primary" disabled>Record both</button><button id="mv-record-stop" disabled>Stop recording</button></div>
+            <p id="mv-record-status" class="hint xrb-supporting-text" role="status">No paired clip · one shared 128 MiB / 600-frame / 20 s limit</p>
+            <div class="button-row xrb-button-row"><button id="mv-replay" disabled>Replay paired clip</button><button id="mv-export" disabled>Export pair</button><button id="mv-delete" disabled>Delete pair</button></div>
+            <label class="file-field">Import paired clip<input id="mv-import" type="file" accept=".handpair,application/octet-stream"></label>
+            <div id="mv-playback" hidden>
+              <div class="button-row xrb-button-row"><button id="mv-play">Play</button><button id="mv-pause">Pause</button><button id="mv-prev" aria-label="Previous paired frame">‹</button><button id="mv-next" aria-label="Next paired frame">›</button></div>
+              <label>Paired timeline<input id="mv-seek" type="range" class="xrb-range" min="0" max="0" step="1" value="0"></label>
+              <label>Speed<select id="mv-speed"><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label>
+              <button id="mv-compare" class="small">Rebuild Best View vs Fused</button>
+              <p id="mv-playback-status" class="hint xrb-supporting-text" role="status"></p>
+              <p class="hint xrb-supporting-text">Benchmark A = Best View; B = Fused. Identical matched input pairs, fresh independent histories. Annotate visibility; accuracy and improvement are not assumed.</p>
+            </div>
+            <p id="mv-error" class="field-error" role="alert"></p>
+          </section>
+          <section id="single-record-controls" class="control-group recording-internal xrb-control-group"><h2>Local clip</h2>
+            <div class="button-row xrb-button-row"><button id="record-start" class="primary" disabled>Record RGB</button><button id="record-stop" disabled>Stop</button></div>
+            <p id="record-status" class="hint xrb-supporting-text" role="status">No clip · local memory only</p>
+            <p id="record-unsupported" class="hint xrb-supporting-text" hidden>Start an RGB or RGB-D camera to record. Generated fixtures are not camera media.</p>
+            <div class="button-row xrb-button-row"><button id="record-open" disabled>Replay</button><button id="record-export" disabled>Export</button><button id="record-delete" disabled>Delete</button></div>
+            <label class="file-field">Import clip<input id="record-import" type="file" accept=".handtracking,.handlab,application/octet-stream"></label>
+            <p class="hint xrb-supporting-text">Local memory · export to keep · 20 s limit</p><p id="record-error" class="field-error" role="alert"></p>
+          </section>
+          <section id="replay-controls" class="control-group recording-internal xrb-control-group" hidden><h2>Playback</h2>
+            <label>Observations<select id="replay-mode"><option value="captured">Original observations</option><option value="rerun">Re-run model</option></select></label>
+            <div class="button-row xrb-button-row"><button id="replay-play" disabled>Play</button><button id="replay-pause" disabled>Pause</button><button id="replay-prev" title="Previous frame" aria-label="Previous frame" disabled>‹</button><button id="replay-next" title="Next frame" aria-label="Next frame" disabled>›</button></div>
+            <label>Frame<input id="replay-seek" type="range" class="xrb-range" min="0" max="0" step="1" value="0" disabled></label>
+            <label>Speed<select id="replay-speed"><option value="0.25">¼×</option><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+            <div class="button-row xrb-button-row"><button id="replay-run" disabled>Run comparison</button><button id="replay-cancel" disabled>Cancel</button></div>
+            <p id="replay-progress" class="hint xrb-supporting-text" role="status">No clip loaded</p>
+            <div id="depth-comparison-controls" hidden>
+              <h2>Depth comparison</h2>
+              <label>View<select id="depth-replay-view"><option value="a">A · recorded sampling</option><option value="b">B · comparison sampling</option><option value="overlay">A + B · camera metres</option><option value="raw">Raw model · separate relative frame</option></select></label>
+              <label>B radius<select id="depth-b-radius"><option value="1">1 px</option><option value="2" selected>2 px</option><option value="3">3 px</option></select></label>
+              <div class="field-grid xrb-field-grid"><label>B coverage<input id="depth-b-coverage" type="number" min="0.5" max="1" step="0.05" value="0.72"></label><label>B spread (m)<input id="depth-b-spread" type="number" min="0.001" max="0.15" step="0.005" value="0.04"></label></div>
+              <p class="hint xrb-supporting-text">Run comparison applies B settings sequentially to all saved frames. Select Re-run model for a fresh B model; original data stays unchanged.</p>
+              <p id="depth-comparison-status" class="hint xrb-supporting-text" role="status">No completed depth comparison.</p>
+              <button id="depth-report-export" class="small" disabled>Export comparison report</button>
+            </div>
+          </section>
+          <section id="bench-controls" class="control-group recording-internal xrb-control-group" hidden><h2>Benchmark</h2>
+            <label id="bench-layout-field">Comparison view<select id="bench-layout"><option value="single">Single / overlay viewport</option><option value="raw-processed">Raw vs processed · side by side</option><option value="ab">A vs B · side by side</option></select></label>
+            <div class="field-grid xrb-field-grid"><label>Start frame (inclusive)<input id="bench-start" type="number" min="0" step="1" value="0"></label><label>End frame (inclusive)<input id="bench-end" type="number" min="0" step="1" value="0"></label></div>
+            <div class="button-row xrb-button-row"><button id="bench-start-here" class="small">Start here</button><button id="bench-end-here" class="small">End here</button></div>
+            <label>Visibility<select id="bench-visibility"><option value="visible">Known visible</option><option value="occluded">Known occluded</option></select></label>
+            <label>Expected hand count<select id="bench-expected"><option value="1">1</option><option value="2">2</option></select></label>
+            <label class="toggle"><input id="bench-stationary" type="checkbox">Stationary interval</label><label>Note<input id="bench-note" maxlength="256" placeholder="Gesture, lighting, placement"></label>
+            <button id="bench-add" class="small" disabled>Add interval</button><p id="bench-annotation-status" class="hint xrb-supporting-text">Visibility unknown until annotated</p>
+            <label>Intervals<select id="bench-intervals" size="3" aria-label="Annotated intervals"></select></label>
+            <div class="button-row xrb-button-row"><button id="bench-remove" class="small">Remove selected</button><button id="bench-clear" class="small">Clear intervals</button></div>
+            <div class="field-grid xrb-field-grid"><label>Maximum hold/gap (ms)<input id="bench-gap" type="number" min="1" max="1000" value="100"></label><label>Valid joints / hand<input id="bench-valid" type="number" min="1" max="21" value="15"></label></div>
+            <label>Stationary landmark<select id="bench-joint"></select></label><button id="bench-apply" class="small">Apply metric options</button>
+            <div class="button-row xrb-button-row"><button id="bench-show-metrics" class="small">Metrics</button><button id="bench-report-export" class="small" disabled>Export benchmark</button><button id="bench-annotations-export" class="small" disabled>Export intervals</button></div>
+            <label class="file-field">Import intervals for this clip<input id="bench-annotations-import" type="file" accept=".json,application/json" disabled></label>
+            <p id="bench-error" class="field-error" role="alert"></p>
+          </section>
+        </div>
+        <div id="settings-pane" class="panel-content xrb-sidebar-content" aria-hidden="true" hidden>
+          <section id="live-settings" class="control-group xrb-sidebar-section xrb-control-group"><h2>Hand landmarks</h2>
+            <label>Processor<select id="delegate"><option value="CPU">CPU · WASM</option><option value="GPU">GPU · WebGL</option></select></label>
+            <div class="xrb-field-grid three"><label>Detection<input id="threshold-detection" type="number" min="0" max="1" step="0.05" value="0.5"></label><label>Presence<input id="threshold-presence" type="number" min="0" max="1" step="0.05" value="0.5"></label><label>Tracking<input id="threshold-tracking" type="number" min="0" max="1" step="0.05" value="0.5"></label></div>
+          </section>
+          <div id="rgbd-probe-controls" hidden aria-hidden="true"><p id="rgbd-probe-status"></p><button id="rgbd-probe-clear" type="button"></button><input id="rgbd-reference-z" type="number" value=""><input id="rgbd-probe-window" type="checkbox"><p id="rgbd-probe-window-status"></p></div>
+          <section id="recording-settings" class="control-group xrb-sidebar-section xrb-control-group"><h2>Recording</h2>
+            <label>Maximum duration (seconds)<input id="csv-recording-limit" type="number" min="1" max="120" step="1" value="120"><span class="xrb-help">Recordings stop automatically at this limit.</span></label>
+            <label class="toggle"><input id="csv-recording-autostart" type="checkbox" checked>Start capture automatically</label>
+          </section>
+          <section id="mv-settings" class="control-group xrb-control-group" hidden><h2>Two-view setup</h2>
+            <button id="mv-marker-open" class="primary">Calibrate cameras…</button>
+            <details class="xrb-disclosure"><summary>Calibration files and diagnostics</summary><div class="button-row xrb-button-row"><button id="mv-marker-download" class="small">Download marker</button><button id="mv-marker-license" class="small">Detector license</button></div><pre id="mv-marker-result" class="readout xrb-code-block"></pre></details>
+            <p class="hint xrb-supporting-text">Spatial calibration below stays spatial-only. Fusion additionally requires this fixed-rig confirmation and measured common-event timing for the current two capture runs.</p>
+            <div class="button-row xrb-button-row"><button id="mv-use-spatial" class="small">Use spatial result below</button><button id="mv-setup-export" class="small">Export fusion setup</button></div>
+            <label class="file-field">Import fusion setup (scalar JSON)<input id="mv-setup-import" type="file" accept=".json,application/json"></label>
+            <label class="toggle"><input id="mv-rig" type="checkbox">I verified the spatial survey applies to these unchanged fixed camera poses</label>
+            <p id="mv-setup-status" class="hint xrb-supporting-text" role="status">No qualified fusion setup</p>
+            <details class="xrb-disclosure"><summary>Common-event timing</summary>
+              <p class="hint xrb-supporting-text">Use ≥3 distinct visible events spanning ≥200 ms (e.g. a flashing target visible to both cameras). Freeze the two RGB frames depicting the same event, confirm, then Add. For a saved pair use independent frame indices below. Evidence is valid only for these capture runs, within the event interval ±60 s. Merely equal SDK clock labels do not establish exposure synchronization.</p>
+              <label>Event description<input id="mv-event-description" maxlength="256" placeholder="Shared flashing target, event identification and uncertainty method"></label>
+              <label>Per-view event uncertainty (ms)<input id="mv-event-uncertainty" type="number" min="0.1" max="25" step="0.1" placeholder="Must be measured; not zero"></label>
+              <label class="toggle"><input id="mv-event-confirm" type="checkbox">These two selected RGB frames depict the same physical event</label>
+              <div class="button-row xrb-button-row"><button id="mv-freeze-a" class="small">Freeze A</button><button id="mv-freeze-b" class="small">Freeze B</button><button id="mv-unfreeze" class="small">Resume views</button></div>
+              <label class="toggle"><input id="mv-event-inspect" type="checkbox">Select independent saved source frames (no combined pose)</label>
+              <div class="field-grid xrb-field-grid"><label>Saved A index<input id="mv-event-a" type="number" min="0" step="1" value="0"></label><label>Saved B index<input id="mv-event-b" type="number" min="0" step="1" value="0"></label></div>
+              <div class="button-row xrb-button-row"><button id="mv-event-add" class="small">Add common event</button><button id="mv-time-fit" class="small">Fit timing</button><button id="mv-time-clear" class="small">Clear timing</button></div>
+              <p id="mv-time-status" class="hint xrb-supporting-text" role="status">No timing evidence; no assumed zero offset</p>
+            </details>
+            <details class="xrb-disclosure"><summary>Fusion rejection budgets</summary>
+              <label>Effective time budget (ms)<input id="mv-skew" type="number" min="1" max="100" value="75"></label>
+              <label>Joint agreement (m)<input id="mv-agreement" type="number" min="0.005" max="0.06" step="0.005" value="0.04"></label>
+              <p class="hint xrb-supporting-text">The time budget includes event uncertainty and both reported RGB/depth skews. Disagreeing joints are rejected, not blindly averaged. Depth-quality weights are not confidence. No filtering, prediction or anatomical fitting.</p>
+            </details>
+            <details class="xrb-disclosure"><summary>Developer connection override</summary>
+              <label class="toggle"><input id="mv-manual" type="checkbox">Use two manual local bridges</label>
+              <label>A URL<input id="mv-url-a" type="url" value="ws://127.0.0.1:5191/bridge" autocomplete="off"></label><label>A token<input id="mv-token-a" type="password" autocomplete="off" spellcheck="false"></label>
+              <label>B URL<input id="mv-url-b" type="url" value="ws://127.0.0.1:5192/bridge" autocomplete="off"></label><label>B token<input id="mv-token-b" type="password" autocomplete="off" spellcheck="false"></label>
+            </details>
+          </section>
+          <div hidden aria-hidden="true"><input id="camera-mirror" type="checkbox" checked><input id="joints" type="checkbox" checked><input id="bones" type="checkbox" checked><input id="axes" type="checkbox"><input id="wireframe" type="checkbox"></div>
+          <section id="rgbd-processing" class="control-group xrb-control-group" hidden><details class="xrb-disclosure"><summary>Depth sampling</summary>
+            <label>Sample radius<select id="rgbd-sample-radius"><option value="1">1 px · 3 × 3</option><option value="2" selected>2 px · 5 × 5</option><option value="3">3 px · 7 × 7</option></select></label>
+            <div class="field-grid xrb-field-grid"><label>Coverage<input id="rgbd-coverage" type="number" min="0.5" max="1" step="0.05" value="0.72"></label><label>Spread (m)<input id="rgbd-spread" type="number" min="0.001" max="0.15" step="0.005" value="0.04"></label><label>Min Z (m)<input id="rgbd-z-min" type="number" min="0.05" max="9" step="0.05" value="0.15"></label><label>Max Z (m)<input id="rgbd-z-max" type="number" min="0.1" max="10" step="0.1" value="3"></label></div>
+          </details></section>
+          <section id="calibration-settings" class="control-group xrb-control-group"><details class="xrb-disclosure"><summary>Camera-to-camera spatial setup</summary>
+            <p class="hint xrb-supporting-text">Use fixed cameras and matching static target IDs, not hand/model poses. Measure ≥6 fit pairs plus ≥3 held-out checks. Sequential captures are allowed for static targets only. Temporal alignment remains unqualified.</p>
+            <label>Current camera role<select id="cal-role"><option value="a">A · reference optical frame</option><option value="b">B · second serial</option></select></label>
+            <div class="field-grid xrb-field-grid"><label>Target ID<input id="cal-id" maxlength="32" value="p1"></label><label>Target use<select id="cal-use"><option value="fit">Fit</option><option value="check">Held-out check</option></select></label></div>
+            <button id="cal-add" class="small" disabled>Add current RGB surface probe</button><p id="cal-sources" class="hint xrb-supporting-text"></p>
+            <label>Targets<select id="cal-targets" size="4" aria-label="Matched spatial targets"></select></label>
+            <div class="button-row xrb-button-row"><button id="cal-remove" class="small">Remove selected target</button><button id="cal-clear" class="small">Clear setup</button></div>
+            <label>Setup / target description<input id="cal-description" maxlength="256" placeholder="Known fixed fiducials, placement and reference"></label>
+            <label>Reference/setup uncertainty (m)<input id="cal-uncertainty" type="number" min="0.0001" max="0.1" step="0.001" placeholder="Unknown until measured"></label>
+            <label class="toggle"><input id="cal-static" type="checkbox">I verified fixed camera poses and matching static targets</label>
+            <div class="button-row xrb-button-row"><button id="cal-fit" class="small" disabled>Fit spatial transform</button><button id="cal-export" class="small" disabled>Export calibration</button></div>
+            <label class="file-field">Import spatial calibration<input id="cal-import" type="file" accept=".json,application/json"></label>
+            <p id="cal-status" class="hint xrb-supporting-text" role="status">No measured inter-camera transform</p><p id="cal-error" class="field-error" role="alert"></p><pre id="cal-result" class="readout xrb-code-block"></pre>
+          </details></section>
+          <section class="control-group xrb-control-group"><details class="xrb-disclosure" id="developer-settings"><summary>Developer</summary>
+            <button id="debug-synthetic" class="small">Use generated fixture</button><label class="toggle"><input id="rejected" type="checkbox" checked>Show rejected fixtures</label>
+            <div id="rgbd-connection-settings" hidden><details class="xrb-disclosure" id="rgbd-manual"><summary>Connection override</summary>
+              <label class="toggle"><input id="rgbd-manual-mode" type="checkbox">Use manual bridge</label>
+              <label>URL<input id="rgbd-url" type="url" value="ws://127.0.0.1:5191/bridge" autocomplete="off"></label>
+              <label>Token<input id="rgbd-token" type="password" autocomplete="off" spellcheck="false"></label>
+              <div class="button-row xrb-button-row"><button id="rgbd-connect" class="small">Connect</button><button id="rgbd-disconnect" class="small" disabled>Disconnect</button></div>
+            </details></div>
+          </details></section>
+        </div>
+      </aside>
+    </div>
+    <div class="tracking-column viewport-column">
+      <section id="viewport" class="card viewport-card" aria-label="3D hand tracking viewport">
+        <div class="viewport-tools xrb-controls-compact">
+          <div id="viewport-view-menu" class="dropdown" data-multi="true" data-summary="View" data-options="mirror|joints|bones|axes|wireframe" data-labels='{"mirror":"Mirror preview","joints":"Joints","bones":"Bones","axes":"Axes","wireframe":"Wireframe"}'><input id="viewport-view-options" type="hidden" value='["mirror","joints","bones"]'><button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="View options">View</button></div>
+          <div id="rgbd-view-tools" hidden aria-hidden="true"><select id="rgbd-3d-view" hidden aria-hidden="true" tabindex="-1"><option value="metric" selected>Camera-space depth</option></select><button id="rgbd-frame-measured" hidden aria-hidden="true" tabindex="-1">Fit</button></div>
+          <div id="hand-view-tools" class="row" hidden><select id="hand-view" aria-label="Hands shown"><option value="both" selected>Both Hands</option><option value="left">Left Hand</option><option value="right">Right Hand</option></select><button id="fit-view" class="small">Fit</button><select id="mv-mode" aria-label="Two-view output" hidden aria-hidden="true" tabindex="-1"><option value="camera-a">Camera A</option><option value="camera-b">Camera B</option><option value="best">Best View</option><option value="fused" selected>Fused</option></select></div>
+          <span class="spacer"></span><button id="reset" class="small" data-tooltip="Reset view · right-drag to orbit, scroll to zoom">Reset</button><button id="viewport-fullscreen" class="small xrb-icon-button" data-xrb-icon="fullscreen" data-tooltip="Enter fullscreen" aria-label="Enter fullscreen"></button>
+        </div>
+        <div id="viewport-stage"><canvas id="view" aria-label="3D hand skeleton"></canvas><div id="bench-viewport" hidden><canvas id="bench-view" aria-label="Synchronized independent-coordinate 3D comparison"></canvas><div class="bench-view-labels"><span id="bench-view-label-a">A</span><span id="bench-view-label-b">B</span></div></div><div id="viewport-empty" class="viewport-empty xrb-overlay-empty"><span>Start capture</span></div></div>
+        <div id="bench-timeline-wrap" hidden><canvas id="bench-timeline" tabindex="0" role="slider" aria-label="Benchmark timeline, click or arrow keys to seek" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></canvas><p id="bench-timeline-status" class="hint xrb-supporting-text"></p></div>
+      </section>
+    </div>
+    <div class="tracking-column">
+      <aside id="diagnostics" class="card tracking-panel">
+        <div class="activity-tabs" role="tablist" aria-label="Inspection" data-tab-state="inspection">
+          <button class="activity-tab" role="tab" id="preview-tab" aria-controls="preview-pane" aria-selected="true">Output</button>
+          <button class="activity-tab" role="tab" id="inspect-tab" aria-controls="inspect-pane" aria-selected="false" tabindex="-1" data-rgbd-tab hidden>Points</button>
+          <button class="activity-tab" role="tab" id="stats-tab" aria-controls="stats-pane" aria-selected="false" tabindex="-1">Stats</button>
+        </div>
+        <div id="preview-pane" class="panel-content xrb-sidebar-content" role="tabpanel" aria-labelledby="preview-tab">
+          <section id="mv-previews" class="xrb-sidebar-section" hidden><p id="mv-pair-status" class="hint xrb-supporting-text" role="status" hidden></p><div class="output-media-tabs xrb-segmented xrb-segmented-fill" data-output-tabs="multiview"><button type="button" data-output-kind="rgb" aria-pressed="true">RGB</button><button type="button" data-output-kind="depth" aria-pressed="false">Depth</button></div><div class="mv-preview-grid"><div class="output-camera"><p id="mv-label-a" class="hint xrb-supporting-text">Camera 1</p><div class="output-camera-stage xrb-media-stage"><canvas id="mv-rgb-a" width="640" height="480" aria-label="Camera 1 RGB landmarks"></canvas><canvas id="mv-depth-a" width="640" height="480" aria-label="Camera 1 aligned depth" hidden></canvas><div id="mv-preview-empty-a" class="xrb-media-empty">No camera feed</div></div></div><div class="output-camera"><p id="mv-label-b" class="hint xrb-supporting-text">Camera 2</p><div class="output-camera-stage xrb-media-stage"><canvas id="mv-rgb-b" width="640" height="480" aria-label="Camera 2 RGB landmarks"></canvas><canvas id="mv-depth-b" width="640" height="480" aria-label="Camera 2 aligned depth" hidden></canvas><div id="mv-preview-empty-b" class="xrb-media-empty">No camera feed</div></div></div></div></section>
+          <section id="single-output" class="xrb-sidebar-section"><div id="single-output-tabs" class="output-media-tabs xrb-segmented xrb-segmented-fill" data-output-tabs="single" hidden><button type="button" data-output-side="single" data-output-kind="rgb" aria-pressed="true">RGB</button><button type="button" data-output-side="single" data-output-kind="depth" aria-pressed="false">Depth</button></div><p id="single-output-label" class="hint xrb-supporting-text">Camera</p><section id="live-preview-section"><div id="preview-stage" class="xrb-media-stage"><video id="camera-video" muted playsinline aria-hidden="true"></video><canvas id="camera-overlay" aria-label="Processed RGB with hand landmarks"></canvas><div id="preview-empty" class="xrb-media-empty">No camera feed</div></div><p id="live-camera-name" class="hint xrb-supporting-text" hidden></p><p id="live-hand-info" class="hint xrb-supporting-text" hidden></p></section><section id="rgbd-depth-section" hidden><div id="rgbd-depth-stage" class="xrb-media-stage"><canvas id="rgbd-depth" width="640" height="480" aria-label="Depth heatmap or invalid mask" data-tooltip="Hover to inspect the unmirrored pixel and depth Z. Magenta marks missing depth."></canvas><div id="rgbd-depth-empty" class="xrb-media-empty">No camera feed</div></div><label>Depth plane<select id="rgbd-space"><option value="aligned">Aligned to RGB</option><option value="native">Original depth</option></select></label><label class="toggle"><input id="rgbd-mask" type="checkbox">Invalid-depth mask</label><div class="field-grid xrb-field-grid"><label>Near (m)<input id="rgbd-near" type="number" min="0" max="19" step="0.05" value="0.15"></label><label>Far (m)<input id="rgbd-far" type="number" min="0.05" max="20" step="0.1" value="2"></label></div><p id="rgbd-cursor" class="hint xrb-supporting-text" hidden></p><p id="rgbd-depth-note" class="hint xrb-supporting-text" hidden></p></section></section>
+          <div id="bench-previews" class="bench-preview-grid" hidden><div><p class="hint xrb-supporting-text">A · same saved RGB</p><canvas id="bench-rgb-a" aria-label="A same-frame RGB overlay"></canvas></div><div><p class="hint xrb-supporting-text">B · same saved RGB</p><canvas id="bench-rgb-b" aria-label="B same-frame RGB overlay"></canvas></div></div>
+          <section id="synthetic-interactions" hidden><p class="hint xrb-supporting-text">Generated fixture · pinch the left target or drag the right target.</p></section>
+        </div>
+        <div id="inspect-pane" class="panel-content xrb-sidebar-content" role="tabpanel" aria-labelledby="inspect-tab" hidden>
+          <section id="mv-inspection" class="xrb-sidebar-section" hidden><label class="toggle"><input id="mv-show-sources" type="checkbox">Overlay raw source</label><label>Landmark<select id="mv-joint"></select></label><div id="mv-joint-status" class="point-hand-readout is-empty xrb-empty-state">No output</div></section>
+          <section id="single-inspection" class="xrb-sidebar-section" hidden><label class="toggle"><input id="single-show-sources" type="checkbox" checked>Overlay raw source</label><label>Landmark<select id="single-joint"></select></label><div id="single-joint-status" class="point-hand-readout is-empty xrb-empty-state">No output</div></section>
+          <section id="rgbd-reconstruction-section" class="xrb-sidebar-section" hidden aria-hidden="true">
+            <div id="rgbd-points-empty" class="point-hand-readout is-empty xrb-empty-state">No output</div>
+            <div id="rgbd-points-content" hidden><h2>Surface points</h2><p id="rgbd-coverage-status" class="hint xrb-supporting-text"></p>
+              <label>Landmark<select id="rgbd-joint"></select></label><pre id="rgbd-joint-status" class="readout xrb-code-block">No selected point</pre><p id="rgbd-geometry-status" class="hint xrb-supporting-text" role="status"></p>
+            </div>
+          </section>
+        </div>
+        <div id="stats-pane" class="panel-content xrb-sidebar-content" role="tabpanel" aria-labelledby="stats-tab" hidden>
+          <section id="bench-dashboard" class="control-group xrb-control-group" hidden><h2>Benchmark · A / B</h2><p class="hint xrb-supporting-text">Visibility is operator-annotated. Stationary statistics include residual motion; censored durations are lower bounds. Different coordinate frames are not accuracy equivalents.</p>
+            <table class="bench-table"><thead><tr><th>Metric</th><th>A</th><th>B</th></tr></thead><tbody id="bench-summary"></tbody></table>
+            <details class="xrb-disclosure"><summary>Interruptions, reacquisition, jitter & rejection details</summary><pre id="bench-detail" class="readout xrb-code-block"></pre></details>
+            <details class="xrb-disclosure"><summary>Timing components (ms), counts, median & p95</summary><pre id="bench-timing" class="readout xrb-code-block"></pre></details>
+          </section>
+          <section id="mv-stats-section" class="control-group xrb-control-group" hidden><h2>Two-camera acquisition / pairing</h2><pre id="mv-stats" class="readout xrb-code-block"></pre><p class="hint xrb-supporting-text">Common visual-event alignment is an operator measurement, not hardware exposure synchronization or accuracy certification. Latest source previews may be newer than the named live matched pair. Saved-pair replay shows the exact matched source frames.</p></section>
+          <section class="control-group pipeline-summary xrb-sidebar-section xrb-control-group"><h2>Pipeline</h2><dl class="xrb-key-value-list"><dt>View</dt><dd id="mode">—</dd><dt>Render</dt><dd id="fps">—</dd><dt>Results</dt><dd id="rate">—</dd><dt>Hands</dt><dd id="counts">—</dd><dt>Processor</dt><dd id="pipeline-backend">—</dd><dt>Inference</dt><dd id="pipeline-inference">—</dd><dt>Skipped</dt><dd id="pipeline-skipped">—</dd></dl></section>
+          <section id="live-metrics" class="control-group xrb-control-group"><details class="xrb-disclosure"><summary>RGB diagnostics</summary><dl class="xrb-key-value-list"><dt>Backend</dt><dd id="live-backend">—</dd><dt>Inference</dt><dd id="live-inference">—</dd><dt>Ready → render</dt><dd id="live-ready">—</dd><dt>Skipped</dt><dd id="live-skipped">0</dd></dl><pre id="live-events" class="readout xrb-code-block"></pre></details></section>
+          <section class="control-group xrb-control-group"><details class="xrb-disclosure"><summary>Calibration & timing</summary><p id="rgbd-calibration" class="hint xrb-supporting-text"></p><pre id="rgbd-calibration-json" class="readout xrb-code-block">No calibration</pre><pre id="rgbd-timing" class="readout xrb-code-block"></pre><p id="rgbd-transfer" class="hint xrb-supporting-text"></p><pre id="rgbd-profiles" class="readout xrb-code-block"></pre></details></section>
+          <section class="control-group xrb-control-group"><details class="xrb-disclosure"><summary>Clip provenance</summary><p id="replay-provenance" class="hint xrb-supporting-text">No clip loaded</p></details></section>
+          <section class="control-group xrb-control-group"><details class="xrb-disclosure"><summary>Fixture counters</summary><dl class="xrb-key-value-list"><dt>Button</dt><dd id="presses">0</dd><dt>Drags</dt><dd id="drags">0</dd></dl></details></section>
+          <p id="status" class="hint xrb-supporting-text" role="status">Ready</p>
+        </div>
+      </aside>
+    </div>
+  </main>
+  <select id="input" hidden aria-hidden="true" tabindex="-1"><option value="camera">RGB</option><option value="synthetic">Fixture</option><option value="rgbd">RGB-D</option><option value="recording">Replay</option><option value="multiview">Two views</option></select>
+  <select id="model" hidden aria-hidden="true" tabindex="-1"><option value="none">None</option><option value="mediapipe">MediaPipe</option><option value="recorded">Recorded</option></select>
+  <dialog id="mv-marker-dialog" class="marker-dialog xrb-dialog" aria-labelledby="mv-marker-title">
+    <div class="marker-dialog-header xrb-dialog-header"><h2 id="mv-marker-title" class="xrb-dialog-title">Camera calibration</h2><button id="mv-marker-close" class="marker-dialog-close xrb-dialog-close" aria-label="Close calibration" title="Close">×</button></div>
+    <p id="mv-marker-instruction" class="marker-dialog-status xrb-visually-hidden" role="status" aria-live="polite">Place marker in both camera views</p>
+    <div class="marker-dialog-previews"><div><p id="mv-marker-label-a" class="hint xrb-supporting-text">Camera 1</p><div class="marker-preview-frame"><canvas id="mv-marker-preview-a" width="640" height="480" aria-label="Calibration camera 1"></canvas><div id="mv-marker-state-a" class="marker-preview-state viewport-empty xrb-overlay-empty"><span>Starting camera…</span></div></div><p id="mv-marker-seen-a" class="hint xrb-supporting-text"></p></div><div><p id="mv-marker-label-b" class="hint xrb-supporting-text">Camera 2</p><div class="marker-preview-frame"><canvas id="mv-marker-preview-b" width="640" height="480" aria-label="Calibration camera 2"></canvas><div id="mv-marker-state-b" class="marker-preview-state viewport-empty xrb-overlay-empty"><span>Starting camera…</span></div></div><p id="mv-marker-seen-b" class="hint xrb-supporting-text"></p></div></div>
+    <div class="marker-progress-slot"><progress id="mv-marker-progress" max="1" value="0" aria-label="Calibration progress" hidden></progress></div>
+    <div class="marker-dialog-actions xrb-dialog-actions"><button id="mv-marker-cancel">Cancel</button><button id="mv-marker-next" class="primary" disabled>Done</button></div>
+  </dialog>
+  <script type="module" src="/src/main.ts"></script>
+<div id="camera-context-menu" class="camera-context-menu menu xrb-menu" role="menu" hidden><button id="camera-context-refresh" type="button" role="menuitem">Refresh cameras</button><button id="camera-context-authorize" type="button" role="menuitem" hidden>Allow browser cameras…</button><button id="camera-context-recalibrate" type="button" role="menuitem" hidden>Calibrate cameras…</button></div>
+</body>
+</html>

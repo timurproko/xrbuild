@@ -81,7 +81,14 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   build code is trusted, not sandboxed. `setup:embedded`, `build:embedded` and `test:embedded` use explicit writable
   workspaces and fresh `build/embedded/e-<core-key>/` snapshots. Local package graphs and frozen lockfile links must
   agree; prerequisite builds precede tests/project builds. Root test and public Node CI invoke this lane explicitly.
-  The scaffold has no promoted modules; validation snapshots are not activated runtimes or distributable packages.
+  Approved embedded modules include consolidated Publisher, the authored hand implementation/diagnostic with its
+  plugin-owned nested sample package (`plugins/*/samples/*`), and the explicitly configured headset packager.
+  Eight public project groups preserve core/unsorted/archive sections with desktop/no-input defaults and no deployment identity.
+  Headset tools/signing are explicitly provisioned user state, never global discovery/downloads or bundled binary payloads.
+  Hand source/build descriptors use public reviewed dependencies, user-owned state and synthetic default validation;
+  unverified model/device payloads remain external and never start/download implicitly. Publisher local/production
+  service IDs remain stable, production defaults disabled/unconfigured, and persistent local history lives outside build
+  caches in user `.xrb/publication/publisher-webxr/local`. Validation snapshots are not activated runtimes or distributable packages.
   Plugins source selection is available in the UI with revision-checked, locked preference updates and paired idle
   publisher/packager refresh. Out-of-band catalog/preferences/runtime changes refresh coherently when idle; new actions
   recheck state, busy refresh blocks new consumers, and changed already-executed module/dependency code or tool identity

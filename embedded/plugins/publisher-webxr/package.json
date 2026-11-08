@@ -1,0 +1,13 @@
+{
+  "name": "xrb-publisher",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test --test-concurrency=1 test/*.test.mjs" },
+  "xrBuild": {
+    "publishers": [
+      { "module": "./src/local-service.mjs", "setting": "localhost" },
+      { "module": "./src/production-service.mjs", "setting": "production" }
+    ]
+  }
+}

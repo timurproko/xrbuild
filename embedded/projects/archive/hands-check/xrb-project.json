@@ -1,0 +1,8 @@
+{
+  "name": "Hands check",
+  "kind": "test",
+  "entry": ".",
+  "display": "desktop",
+  "inputs": [],
+  "fullscreen": false
+}

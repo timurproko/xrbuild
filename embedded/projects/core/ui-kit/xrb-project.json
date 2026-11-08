@@ -1,0 +1,15 @@
+{
+  "name": "UI Kit",
+  "kind": "app",
+  "description": "Library of spatial UI controls.",
+  "entry": "dist",
+  "scripts": {
+    "build": "build",
+    "dev": "dev"
+  },
+  "icon": "icon.png",
+  "iconColor": "green",
+  "display": "desktop",
+  "inputs": [],
+  "fullscreen": false
+}

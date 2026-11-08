@@ -1,0 +1,12 @@
+{
+  "name": "Hello Cube",
+  "kind": "app",
+  "entry": "dist",
+  "scripts": {
+    "build": "build",
+    "dev": "dev"
+  },
+  "display": "desktop",
+  "inputs": [],
+  "fullscreen": false
+}

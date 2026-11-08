@@ -46,6 +46,11 @@ async function fixture(t: TestContext) {
     const cwd = String(options?.cwd); calls.push({ args, cwd });
     assert.ok(cwd.startsWith(path.join(user, 'build'))); assert.equal(options?.env?.XRB_CORE, core);
     assert.equal(options?.env?.npm_config_enable_pre_post_scripts, 'false');
+    const testRoot = String(options?.env?.XRB_TEST_ROOT);
+    assert.equal(path.basename(path.dirname(testRoot)), 'tests');
+    assert.match(path.basename(testRoot), /^[a-f0-9]{16}$/);
+    assert.ok(testRoot.startsWith(path.join(user, 'build')));
+    assert.ok(!testRoot.startsWith(core));
     const code = await runProcess(command, args, line => lines.push(line), options);
     assert.equal(code, 0, lines.join('\n'));
   } };
@@ -72,6 +77,19 @@ test('real frozen setup/build/test uses a separate graph, builds prerequisites a
   assert.equal(JSON.parse(await fs.readFile(path.join(result.root, EMBEDDED_RECEIPT), 'utf8')).status, 'complete');
   await assert.rejects(fs.access(path.join(result.root, EMBEDDED_LOCK)));
   t.diagnostic(f.lines.join('\n'));
+});
+
+test('canonical plugin-owned samples register independently without a plugin-root package or arbitrary deep glob', async t => {
+  const f = await fixture(t), declaration = path.join(f.embedded, 'pnpm-workspace.yaml'), lock = path.join(f.embedded, 'pnpm-lock.yaml');
+  const original = await fs.readFile(declaration, 'utf8');
+  await fs.writeFile(declaration, original + "  - 'plugins/*/samples/*'\n");
+  await f.write('core/embedded/plugins/owner/samples/diagnostic/package.json', { name: '@fixture/diagnostic', private: true });
+  await fs.appendFile(lock, '  plugins/owner/samples/diagnostic: {}\n');
+  const plan = await embeddedWorkspacePlan(f.core);
+  assert.equal(plan.packages.find(pkg => pkg.name === '@fixture/diagnostic')!.relative, 'plugins/owner/samples/diagnostic');
+  assert.equal(plan.packages.length, 5);
+  await fs.writeFile(declaration, original + "  - 'plugins/**'\n");
+  await assert.rejects(embeddedWorkspacePlan(f.core), /Canonical/);
 });
 
 test('project rebuild uses shared graph/install helpers and builds only transitive local prerequisites', { timeout: 60000 }, async t => {

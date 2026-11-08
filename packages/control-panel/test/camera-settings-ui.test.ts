@@ -79,8 +79,8 @@ test('project 2D mode replaces global camera settings and keeps the remaining co
   assert.match(app, /api\('POST', '\/api\/run\/view', \{ flat: e\.target\.checked \}\)/);
 
   assert.match(app, /const filters = new Set\(\[\.\.\.\(plugins\.length \? \['all'\] : \[\]\), 'control-panel', \.\.\.plugins\.map/);
-  assert.match(app, /\{ id: 'all', name: 'All', meta: 'all settings'/);
-  assert.match(app, /\{ id: 'control-panel', name: 'Apps', meta: 'built in'/);
+  assert.match(app, /\{ id: 'all', name: 'All', meta: 'settings'/);
+  assert.match(app, /\{ id: 'control-panel', name: 'Apps', meta: 'core'/);
   assert.match(app, /field\('Cursor', 'cursor', state\.appSettings\.cursor/);
   assert.match(app, /requestedFilter && !filters\.has\(requestedFilter\)[\s\S]*searchParams\.delete\('module'\)/);
   assert.match(app, /data-plugin-settings/);

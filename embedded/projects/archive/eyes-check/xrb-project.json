@@ -1,0 +1,8 @@
+{
+  "name": "Eyes check",
+  "kind": "test",
+  "entry": ".",
+  "display": "desktop",
+  "inputs": [],
+  "fullscreen": false
+}

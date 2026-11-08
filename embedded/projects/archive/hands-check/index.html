@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>XR Build hand tracking check</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0f14; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<p id="capability" style="position:fixed;bottom:0;z-index:1;color:#c8d0d8;background:#0b0f14;font:14px system-ui">Archived diagnostic: a compatible host/provider must be selected explicitly. No capture starts from this page.</p>
+<canvas id="c"></canvas>
+<script>
+// Draws the raw HANDS stream (21 keypoints per hand, panel frame) without any
+// filtering, as the panel would see it from straight ahead: x/y on the glass,
+// z as stereo disparity. Logs rate, hand count and the wrist position every 2 s.
+const host = window.__XRB_HOST__;
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+let hands = [], status = { state: -1, hz: 0, text: 'waiting for host' }, trackingHz = 0, latency = [];
+let handMsgs = 0;
+
+function readHands(v) {
+  const n = v.getUint8(16 + 12);
+  const capture = v.getFloat64(16, true);
+  trackingHz = v.getFloat32(16 + 8, true);
+  latency.push(host.hostNow() - capture);
+  const out = [];
+  for (let h = 0; h < n; h++) {
+    const b = 32 + h * 456;
+    const kp = [];
+    for (let k = 0; k < 21; k++) {
+      const o = b + 12 + k * 16;
+      kp.push([v.getFloat32(o, true), v.getFloat32(o + 4, true), v.getFloat32(o + 8, true), v.getFloat32(o + 12, true)]);
+    }
+    const pinch = [0, 1, 2, 3].map((f) => v.getUint8(b + 6 + f));
+    out.push({ id: v.getInt32(b, true), handedness: v.getInt8(b + 4), grab: (v.getUint8(b + 5) & 1) === 1, pinch, kp });
+  }
+  return out;
+}
+
+if (host) {
+  const ws = new WebSocket(host.channel.url);
+  ws.binaryType = 'arraybuffer';
+  ws.onmessage = (e) => {
+    if (!(e.data instanceof ArrayBuffer) || e.data.byteLength < 32) return;
+    const bounds = new DataView(e.data);
+    if (bounds.getUint8(0) === 2 && e.data.byteLength < 32 + bounds.getUint8(28) * 456) return;
+    if (bounds.getUint8(0) === 3 && e.data.byteLength < 26 + bounds.getUint16(24, true)) return;
+    const v = new DataView(e.data);
+    const type = v.getUint8(0);
+    if (type === 2) { hands = readHands(v); handMsgs++; }
+    if (type === 3) {
+      const len = v.getUint16(16 + 8, true);
+      status = { state: v.getUint8(16), hz: v.getFloat32(16 + 4, true),
+        text: new TextDecoder().decode(new Uint8Array(e.data, 16 + 10, len)) };
+      console.log(`HANDS status ${status.state}: ${status.text}`);
+    }
+  };
+  setInterval(() => {
+    latency.sort((a, b) => a - b);
+    const p50 = latency[Math.floor(latency.length / 2)], p95 = latency[Math.floor(latency.length * 0.95)];
+    const w = hands[0]?.kp[0];
+    console.log(`HANDS ${handMsgs / 2} msg/s, tracking ${trackingHz.toFixed(0)} Hz, ${hands.length} hand(s)` +
+      (hands.length ? ` ids ${hands.map((h) => h.id).join(',')}, wrist0 ${w.slice(0, 3).map((x) => (x * 100).toFixed(1)).join(' ')} cm,` +
+        ` pinch ${hands.map((h) => h.pinch.join('')).join('/')}` : '') +
+      `, capture->page p50 ${p50?.toFixed(1)} ms p95 ${p95?.toFixed(1)} ms`);
+    handMsgs = 0; latency = [];
+  }, 2000);
+}
+
+function resize() { canvas.width = innerWidth; canvas.height = innerHeight; }
+addEventListener('resize', resize); resize();
+
+function drawEye(x0, w, h, eye) {
+  const d = host?.display ?? { widthM: 0.597, heightM: 0.336 };
+  const sx = w / d.widthM, sy = h / d.heightM;
+  // Point in panel metres -> eye pixels; z (toward the viewer) as crossed disparity.
+  const px = ([x, y, z]) => [x0 + w / 2 + x * sx - eye * z * sx * 0.06, h / 2 - y * sy];
+  ctx.save(); ctx.beginPath(); ctx.rect(x0, 0, w, h); ctx.clip();
+  ctx.fillStyle = '#0b0f14'; ctx.fillRect(x0, 0, w, h);
+  ctx.strokeStyle = '#26313d'; ctx.lineWidth = 2; ctx.strokeRect(x0 + 4, 4, w - 8, h - 8);
+  for (const hand of hands) {
+    const color = hand.grab ? '#f0c419' : hand.pinch[0] ? '#f08a24' : (hand.handedness === 0 ? '#5bd18b' : '#5b9bd1');
+    ctx.strokeStyle = color; ctx.lineWidth = Math.max(2, w / 500);
+    for (const [a, b] of BONES) {
+      const [ax, ay] = px(hand.kp[a]), [bx, by] = px(hand.kp[b]);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    }
+    ctx.fillStyle = color;
+    for (const k of hand.kp) { const [x, y] = px(k); ctx.beginPath(); ctx.arc(x, y, w / 250, 0, Math.PI * 2); ctx.fill(); }
+    const [lx, ly] = px(hand.kp[0]);
+    ctx.font = `${Math.round(w / 60)}px system-ui`;
+    ctx.fillText(`#${hand.id} z ${(hand.kp[8][2] * 100).toFixed(1)} cm`, lx + 10, ly + 30);
+  }
+  ctx.fillStyle = '#c8d0d8'; ctx.font = `${Math.round(w / 50)}px system-ui`;
+  ctx.fillText(`tracking ${trackingHz.toFixed(0)} Hz, ${hands.length} hand(s) - ${status.text}`, x0 + 20, 45);
+  ctx.restore();
+}
+
+function frame() {
+  const W = canvas.width, H = canvas.height;
+  if (host?.stereo) { drawEye(0, W / 2, H, -1); drawEye(W / 2, W / 2, H, 1); } else drawEye(0, W, H, 0);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

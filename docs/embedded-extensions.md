@@ -4,14 +4,16 @@
 
 The initial implementation supplies a shared plugin resolver, qualified project catalog records, origin-aware plugin
 management, publisher/packager factories, managed-tool loading and selected native binary paths. It also standardizes
-`projects/unsorted/` without migration logic. No private source or binary has been promoted by this implementation.
+`projects/unsorted/` without migration logic. Approved source includes consolidated Publisher, the authored hand
+implementation/diagnostic, the explicitly configured headset packager and eight public project groups, including archives.
+No private configuration, deployment identity, credentials, model weights, prebuilt device payloads or Git history accompany those snapshots.
 
 The panel now lists bundled projects alongside editable projects, serves/runs packaged output without product writes,
 and offers personal run settings, explicit cached rebuilds and an editable copy. Cached rebuilds install the frozen public
 embedded workspace in a writable snapshot. General embedded setup/build/test commands now validate the separate package
 graph in retained writable snapshots. Explicit installed-service activation, adapter-neutral package staging, declared
 component references, safe automatic discovery, schema-bound advanced run choices and reviewed working-cache cleanup
-are implemented. Audited modules and full distribution/license/device acceptance remain pending. Existing workspace
+are implemented. Further module promotions and full distribution/device acceptance remain pending. Existing workspace
 project APIs retain their IDs.
 Native plugin build/freshness follow resolved origins. Managed full/core-only host rebuilds now use a user-owned cache
 and immutable runtime snapshots; product-side host sources and build artifacts are not changed.
@@ -46,7 +48,7 @@ plugin. A disabled logical ID disables that integration; a qualified disabled ke
 Publisher/packager service-name collisions make the affected services unavailable rather than keeping whichever
 loaded first. Tool IDs and routes must be unique across the selected plugins and workspace tool declarations.
 After changing the source or routes of a running tool, restart the panel: it will not reuse the previous source's runtime.
-Plugins now labels Bundled/User workspace sources and offers **Plugin source → Use selected source** when sources conflict
+Plugins labels sources with lowercase **embedded/custom** badges alongside build/version, not sidebar suffixes, and offers **Plugin source → Use selected source** when sources conflict
 or a preference no longer resolves. The selection uses an origin/preference/declaration-bound revision, preserves unrelated
 settings, and refreshes publisher/packager services as one pair without restarting the panel. Stop apps/jobs first: launch,
 settings and service-action preparation also reserve their state, so a source cannot change between validation and job start.
@@ -66,7 +68,7 @@ Project workflow tabs hide Publish when the installed publisher list is empty, i
 An installed but unconfigured publisher still exposes its configuration workflow. Workflow switches preserve the mounted
 project identity/title while updating fields and actions. Global Settings hides the redundant All filter when Apps is the
 only settings module, selecting Apps instead; All remains available when another settings-owning module exists.
-Apps cursor preferences and unset SDK cursor options default to System; explicit saved choices are preserved.
+Settings sidebar subtitles are lowercase **settings** (All) and **core** (Apps). Apps cursor preferences and unset SDK cursor options default to System; explicit saved choices are preserved.
 Tab underlines snap to their selected position on section entry, hidden-list reveal and layout/font resizing; only
 actual visible selection changes animate, so returning to Apps does not slide the Develop/Build underline from the left.
 
@@ -158,11 +160,26 @@ cleanup and generation-pinned assets without native device execution.
 
 ### Embedded package setup, build and test
 
-The core-owned `embedded/` currently contains an empty package/workspace/lockfile scaffold, **not promoted modules**.
+The core-owned `embedded/` registers **seven packages**: WebXR publisher under `plugins/publisher-webxr` (local/production destinations,
+no external npm dependencies), the hand diagnostic under `plugins/input-hands/samples/hand-tracking`, the headset packager under
+`plugins/platform-headset/packager`, and four buildable projects. Four additional archived static diagnostics need no package installation.
+Publisher production defaults disabled/unconfigured; local TLS setup is explicit. The hand plugin owns authored native
+provider/diagnostic/tests/build descriptors; default use is synthetic and requires no private source, cameras or model.
+The exact public vision runtime and marker source have reviewed pins/notices; explicit preparation places assets in core
+`third_party`. User configuration/calibration/preferences, recordings and caches remain in the selected workspace.
+Unverified device SDK inputs and model weights are optional external contracts, not shipped/fetched payloads.
+Eight standalone project groups retain core/unsorted/archive membership, portable desktop/no-input defaults and no live deployment/device identity.
+The launcher has no ambient production catalog or sibling/private workspace traversal; external catalog selection is explicit. The starter source
+is checked against the canonical template and retains the font license. The hand diagnostic remains a plugin-owned sample.
+The headset factory discovers safely as unconfigured. Its source/provenance/version/license/file-inventory descriptor, native tools and existing
+signing identities are explicitly user-provisioned. No global package lookup, PATH mutation, automatic tool/key installation or hosting exists.
+Explicit builds use exclusive user-owned generations/locks/receipts, offline build options, bounded loopback icon serving, password redaction,
+existing key preservation and exclusive version output. Optional licensed tools and actual installable/device/distribution acceptance remain separate.
 Core pnpm globs remain `packages/*` and `tools/*`; they never enroll embedded or private packages implicitly.
 The root scripts `setup:embedded`, `build:embedded` and `test:embedded` accept an explicit `--workspace=<writable-root>`;
 `--core=<product-root>` is optional. Setup installs a fresh snapshot; Build installs and builds declared packages;
-Test installs, builds prerequisites and then runs available package tests. Root lifecycle/build/test scripts are not
+Test installs, builds prerequisites and then runs available package tests with an isolated writable `XRB_TEST_ROOT` outside
+product source. Root lifecycle/build/test scripts are not
 implicitly run. Missing build/test scripts are reported, not fabricated as passes. Zero registered packages are reported
 as zero. Only explicit `--if-present` skips an absent embedded directory; partial/malformed workspaces still fail.
 
@@ -171,7 +188,8 @@ implicit local resolution and dependency cycles fail before commands. Builds fol
 build-script names override the standard package `build` script; ordinary package tests use `test`. Default scripts must
 be public/credential-free and require no hardware; native/device acceptance remains a separate lane.
 
-The bounded package contract uses canonical packages-only globs and pnpm v9-format frozen locks. Lock importers must
+The bounded package contract uses canonical packages-only globs (including explicit `plugins/*/samples/*`, never `**`)
+and pnpm v9-format frozen locks. Lock importers must
 match the declared workspace exactly, and local lockfile links must resolve to their declared package locations, not a
 surrounding repository. Filesystem resolutions, unsupported lock configuration, duplicate YAML keys and aliases are
 rejected. SSH dependencies, embedded URL credentials and direct loopback/unencrypted dependency URLs are rejected;
@@ -194,12 +212,15 @@ against the real public ABI header. Embedded manifests/source/tests/lockfiles, c
 helpers and compiler configuration select the required checks. Full host tests and actual selected public native rebuilds
 use managed user caches on the existing nightly/manual lane, never private checkout/credentials/devices. This does not enable repository hosting/CI settings.
 A fresh public-source installation with no Git/private clone, read-only source files and a separate writable cache passes
-setup/build/test; generated multi-package fixtures exercise real installs and prerequisite builds. Actual promoted-module,
-distribution and hardware acceptance are not implied by the empty scaffold.
+setup/build/test; generated multi-package fixtures exercise real installs and prerequisite builds. The real Publisher tests
+exercise simulated destinations, source/config ownership and preserved legacy history. Hand checks include full strict
+types, authored/mocked algorithm/lifecycle fixtures, user-state/link/revision isolation and actual synthetic native CTest.
+Public-only, read-only-source installation validates the product graph without a private clone, model/toolchain download, cameras or
+inference. Distribution and physical-device/model acceptance remain separate from local graph/module validation.
 
 ### Explicit installed public services
 
-`pnpm setup:services --workspace=<writable-root>` (optional `--core=<product-root>`) or Plugins → **Set up bundled services**
+`pnpm setup:services --workspace=<writable-root>` (optional `--core=<product-root>`) or Plugins → **Setup embedded services**
 installs/builds the public embedded graph in a fresh writable snapshot and explicitly activates that completed generation.
 Discovery never installs. This does not install user/private packages or build native/device runtimes. Bundled managed
 tools do not run ordinary user-package preparation as a side effect.
@@ -402,8 +423,7 @@ Inventory and tested records are create-only ignored files (`--record=` chooses 
 both HEAD and dirty/untracked work fingerprints; changed work or an unmet required core revision fails verification.
 `requiredCore` must be reachable from both the observed `origin/main` tracking ref and the selected task core HEAD;
 private-only dependencies also bind that tested core. This is a local handoff, not proof of fresh remote CI/PR policy. Public summaries omit private identifiers; private policy/delivery stays manual. Delivery still
-requires explicit authorization and actual remote dependency checks. No real task private clone was provisioned for this
-public-only implementation; the matrix uses disposable synthetic repositories.
+requires explicit authorization and actual remote dependency checks. Task-private compatibility is tested separately in its independently provisioned clone; the public routing/provisioning matrix uses disposable synthetic repositories.
 
 `openspec/changes/bundled-extensions/prerequisites.md` records predecessor synchronization order. Canonical synchronization/
 archive remains the repository bot's delivery gate; older active changes are not overwritten or manually finalized.

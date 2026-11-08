@@ -2,3 +2,4 @@ packages:
   - 'projects/*/*'
   - 'plugins/*'
   - 'plugins/*/*'
+  - 'plugins/*/samples/*'

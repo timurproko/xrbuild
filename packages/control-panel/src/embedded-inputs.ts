@@ -45,8 +45,9 @@ export async function embeddedDeclaration(core: string) {
   if (!lockStat.isFile() || lockStat.nlink !== 1) throw new Error('Embedded lockfile must be a plain file');
   const yaml = await metadataText(await containedPath(root, 'pnpm-workspace.yaml'));
   const lines = yaml.split(/\r?\n/).map(line => line.replace(/\s+#.*$/, '').trim()).filter(line => line && !line.startsWith('#'));
-  const patterns = lines.slice(1).map(line => /^-\s+(?:'((?:projects|plugins)\/\*(?:\/\*)?)'|"((?:projects|plugins)\/\*(?:\/\*)?)"|((?:projects|plugins)\/\*(?:\/\*)?))$/.exec(line)?.slice(1).find(Boolean));
-  if (lines[0] !== 'packages:' || patterns.some(value => !value) || !patterns.includes('projects/*/*') || new Set(patterns).size !== patterns.length) throw new Error('Canonical packages-only embedded workspace required');
+  const allowedPatterns = new Set(['projects/*', 'projects/*/*', 'plugins/*', 'plugins/*/*', 'plugins/*/samples/*']);
+  const patterns = lines.slice(1).map(line => /^-\s+(?:'([^']+)'|"([^"]+)"|([^\s]+))$/.exec(line)?.slice(1).find(Boolean));
+  if (lines[0] !== 'packages:' || patterns.some(value => !value || !allowedPatterns.has(value)) || !patterns.includes('projects/*/*') || new Set(patterns).size !== patterns.length) throw new Error('Canonical packages-only embedded workspace required');
   return { root, declaration, packageManager: declaration.packageManager as string, patterns: patterns as string[] };
 }
 
@@ -127,7 +128,7 @@ export async function prepareEmbeddedSnapshot(core: string, workspace: string, r
   const config = path.join(work, 'user.npmrc'), globalConfig = path.join(work, 'global.npmrc');
   await fs.writeFile(config, '', { flag: 'wx' }); await fs.writeFile(globalConfig, '', { flag: 'wx' });
   const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(?:npm_|pnpm_|git_|node_(?:options|path|auth_token)$|ssh_(?:auth_sock|askpass)$|corepack_npm_)/i.test(key)));
-  const env = { ...inherited, GIT_CEILING_DIRECTORIES: snapshot, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1', COREPACK_ENABLE_PROJECT_SPEC: '1', COREPACK_ENABLE_STRICT: '1', XRB_CORE: canonicalFuturePath(core), XRB_HOME: snapshot, XRB_PROJECTS_HOME: snapshot,
+  const env = { ...inherited, GIT_CEILING_DIRECTORIES: snapshot, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1', COREPACK_ENABLE_PROJECT_SPEC: '1', COREPACK_ENABLE_STRICT: '1', XRB_CORE: canonicalFuturePath(core), XRB_HOME: snapshot, XRB_PROJECTS_HOME: snapshot, XRB_TEST_ROOT: path.join(workspace, 'build', 'tests', inputHash(work).slice(0, 16)),
     npm_config_userconfig: config, npm_config_globalconfig: globalConfig, npm_config_store_dir: path.join(work, 'store'), npm_config_enable_pre_post_scripts: 'false' };
   const pnpm = async (ctx: JobContext, args: string[], cwd: string) => {
     assertWritablePath(core, workspace, cwd);

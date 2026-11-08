@@ -1,0 +1,14 @@
+{
+  "name": "Test",
+  "kind": "app",
+  "description": "",
+  "entry": "dist",
+  "scripts": {
+    "build": "build",
+    "dev": "dev"
+  },
+  "iconColor": "amber",
+  "display": "desktop",
+  "inputs": [],
+  "fullscreen": false
+}

@@ -70,6 +70,8 @@ test('Activity header and Settings remain accessible in narrow/wide and light/da
       await navigate(panel.url, `document.querySelector('#activity-jobs-tab')?.getAttribute('aria-selected')==='true'`);
       const appsFavicon = await evaluate(`document.querySelector('link[rel=icon]').href`);
       await navigate(`${panel.url}settings`, `!!document.querySelector('#app-preferences') && !!document.querySelector('[data-settings-filter="all"]')`);
+      assert.equal(await evaluate(`document.querySelector('[data-settings-filter="all"] .meta').textContent`), 'settings');
+      assert.equal(await evaluate(`document.querySelector('[data-settings-filter="control-panel"] .meta').textContent`), 'core');
       const appsEmoji = await evaluate(`document.querySelector('[data-settings-filter="control-panel"] .plugin-symbol-emoji').textContent`);
       assert.ok(decodeURIComponent(appsFavicon).includes(appsEmoji), 'Settings Apps shares the favicon emoji');
       let previousFavicon = '', previousAppsFavicon = '';

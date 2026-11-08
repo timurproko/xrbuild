@@ -1,0 +1,9 @@
+{
+  "library": "AprilRobotics/apriltag",
+  "version": "3.4.5",
+  "url": "https://codeload.github.com/AprilRobotics/apriltag/tar.gz/refs/tags/v3.4.5",
+  "sha256": "3749f48220db78c29c375a373861f4e1f4138e5dbae3c298584e96cfcc556515",
+  "license": "BSD-2-Clause",
+  "family": "tag36h11",
+  "notes": "Public upstream detector/family data only; no code or binaries from the operator's calibration executable."
+}

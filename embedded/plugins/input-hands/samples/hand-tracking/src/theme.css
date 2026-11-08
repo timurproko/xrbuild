@@ -1,0 +1,3 @@
+/* Render-blocking entry stylesheet: do not wait for the application module graph. */
+@import '@xr-build/design-system.css';
+@import './style.css';

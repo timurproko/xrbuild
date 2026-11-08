@@ -3130,6 +3130,7 @@ const managerIcon = (p) => p.icon ? `<img src="${esc(p.icon)}" alt="">` : p.glyp
 const titleCasePluginName = (value) => String(value).replace(/^publisher-/, '').split(/[-_\s]+/).filter(Boolean).map((word) => word.toLowerCase() === 'webxr' ? 'WebXR' : word[0].toUpperCase() + word.slice(1)).join(' ');
 const managerName = (p) => p.title || titleCasePluginName(p.packager && p.name === p.id ? p.id.replace(/^platform-/, '') : p.name);
 const managerType = (p) => p.type || [...new Set([...p.providers.map((v) => v.role), ...(p.packager ? ['platform'] : [])])].join(', ') || 'plugin';
+const pluginOriginLabels = { bundled: 'embedded', workspace: 'custom' };
 
 async function importPluginSample(plugin, sample) {
   let imported = null;
@@ -3183,9 +3184,9 @@ function renderManagedPlugins() {
   nav.innerHTML = `<div class="nav-tabs xrb-section-label"><span>Plugins</span></div>
     <div class="nav-list">${empty ? '<div class="empty-note">No plugins installed yet.</div>' : state.managedPlugins.map((p) =>
       `<button type="button" class="proj ${p.id === state.managedId ? 'selected' : ''} ${p.enabled ? '' : 'plugin-disabled'}" data-plugin="${esc(p.id)}" aria-current="${p.id === state.managedId}" ${p.enabled ? '' : `aria-label="${esc(`${managerName(p)}, disabled`)}"`}>
-        <span class="stripe"></span>${managerIcon(p)}<span class="text"><span class="name">${esc(managerName(p))}</span><span class="meta">${esc(managerType(p))}${p.origin ? ` · ${p.origin === 'bundled' ? 'Bundled' : 'Workspace'}` : ''}</span></span></button>`).join('')}</div>`;
+        <span class="stripe"></span>${managerIcon(p)}<span class="text"><span class="name">${esc(managerName(p))}</span><span class="meta">${esc(managerType(p))}</span></span></button>`).join('')}</div>`;
   if (state.managedPlugins.some(plugin => plugin.origin === 'bundled')) {
-    const setup = document.createElement('button'); setup.type = 'button'; setup.className = 'action-button'; setup.textContent = 'Setup bundled services'; setup.id = 'setup-bundled-services';
+    const setup = document.createElement('button'); setup.type = 'button'; setup.className = 'action-button'; setup.textContent = 'Setup embedded services'; setup.id = 'setup-bundled-services';
     setup.addEventListener('click', action(async () => {
       setup.disabled = true;
       try { const job = await api('POST', '/api/plugins/setup-bundled', {}); state.jobs.set(job.id, { ...job, lines: [] }); }
@@ -3219,7 +3220,8 @@ function renderManagedPlugins() {
         <label class="xrb-switch plugin-toggle-action" title="Disabled plugins remain installed, but cannot run or package apps. Stop running apps and jobs before changing this setting.">
           <input type="checkbox" class="plugin-enable" role="switch" aria-label="Enable ${esc(managerName(p))}" ${p.enabled ? 'checked' : ''} ${p.selected === false ? 'disabled' : ''}><span>${p.enabled ? 'Enabled' : 'Disabled'}</span>
         </label>
-        <div class="plugin-roles">${p.built ? '' : '<span class="state rebuild">needs build</span>'}
+        <div class="plugin-roles">${pluginOriginLabels[p.origin] ? `<span class="state neutral plugin-origin">${esc(pluginOriginLabels[p.origin])}</span>` : ''}
+          ${p.built ? '' : '<span class="state rebuild">needs build</span>'}
           ${p.problem ? `<span class="state err">${p.selected === false ? 'source not selected' : 'invalid metadata'}</span>` : ''}
           ${version ? `<span class="state ok">${esc(version)}</span>` : ''}</div>
       </div>
@@ -3227,7 +3229,7 @@ function renderManagedPlugins() {
     ${p.problem ? `<p class="xrb-help">${esc(p.problem)}</p>` : ''}
   </div>
   ${(p.availableOrigins?.length > 1 || p.selected === false) ? `<form class="card" id="plugin-source-form">
-    ${field('Plugin source', 'origin', p.selectedOrigin ?? (p.selected ? p.origin : ''), { options: p.availableOrigins ?? [], optionLabels: { bundled: 'Bundled product', workspace: 'User workspace' }, defaultLabel: 'Choose a source', raw: true })}
+    ${field('Plugin source', 'origin', p.selectedOrigin ?? (p.selected ? p.origin : ''), { options: p.availableOrigins ?? [], optionLabels: pluginOriginLabels, defaultLabel: 'Choose a source', raw: true })}
     <p class="xrb-help">Selects the whole plugin: services, settings, tools and native providers. Stop running apps and jobs first. Changed tool sources still require a panel restart.</p>
     <button type="submit" class="action-button">Use selected source</button>
   </form>` : ''}
@@ -3328,8 +3330,8 @@ function renderGlobalSettings() {
   }
   const nav = $('#settings-nav');
   const rows = [
-    ...(plugins.length ? [{ id: 'all', name: 'All', meta: 'all settings', icon: settingsGlyph('⚙️') }] : []),
-    { id: 'control-panel', name: 'Apps', meta: 'built in', icon: settingsGlyph(APPS_GLYPH, true) },
+    ...(plugins.length ? [{ id: 'all', name: 'All', meta: 'settings', icon: settingsGlyph('⚙️') }] : []),
+    { id: 'control-panel', name: 'Apps', meta: 'core', icon: settingsGlyph(APPS_GLYPH, true) },
     ...plugins.map((plugin) => ({ id: plugin.id, name: managerName(plugin), meta: managerType(plugin), icon: managerIcon(plugin), enabled: plugin.enabled })),
   ];
   nav.innerHTML = `<div class="nav-tabs xrb-section-label settings-module-heading"><span>Module</span></div><div class="nav-list">${rows.map((row) => `<button type="button" class="proj xrb-focus-inset ${row.id === state.settingsFilter ? 'selected' : ''} ${row.enabled === false ? 'plugin-disabled' : ''}" data-settings-filter="${esc(row.id)}" aria-current="${row.id === state.settingsFilter}"><span class="stripe"></span>${row.icon}<span class="text"><span class="name">${esc(row.name)}</span><span class="meta">${esc(row.meta)}</span></span></button>`).join('')}</div>`;

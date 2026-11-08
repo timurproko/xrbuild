@@ -173,6 +173,11 @@ test('real plugin-source form resolves conflict and switches services without re
   await withBrowser(async ({ navigate, evaluate }) => {
     await navigate(`${f.server.url}plugins/`, `!!document.querySelector('#plugin-source-form')`);
     assert.equal(await evaluate(`document.querySelector('.plugin-enable').disabled`), true);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('#plugin-nav .proj .meta')].map(el => el.textContent)`), ['publisher', 'publisher']);
+    await evaluate(`document.querySelector('#plugin-source-form .dropdown-btn').click()`);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('.dropdown-list [role="option"]')].map(el => el.textContent)`), ['embedded', 'custom']);
+    await evaluate(`document.querySelector('#plugin-source-form .dropdown-btn').click()`);
+    assert.equal(await evaluate(`document.querySelector('#setup-bundled-services').textContent`), 'Setup embedded services');
     for (const origin of ['bundled', 'workspace']) {
       await evaluate(`(() => { const form=document.querySelector('#plugin-source-form'); const select=form.querySelector('[name="origin"]'); select.value='${origin}'; form.requestSubmit(); })()`);
       for (let n = 0; n < 100 && f.panel.publishers.found[0]?.plugin?.origin !== origin; n++) await sleep(50);
@@ -180,6 +185,9 @@ test('real plugin-source form resolves conflict and switches services without re
       assert.equal(f.panel.packagers.found[0]?.plugin?.origin, origin);
       for (let n = 0; n < 100 && !await evaluate(`!!document.querySelector('.proj[data-plugin="${origin}:shared"][aria-current="true"]') && !document.querySelector('.plugin-enable').disabled`); n++) await sleep(50);
       assert.equal(await evaluate(`document.querySelector('.proj[data-plugin="${origin}:shared"]').getAttribute('aria-current')`), 'true');
+      assert.equal(await evaluate(`document.querySelector('#plugin-detail .plugin-roles .plugin-origin').textContent`), origin === 'bundled' ? 'embedded' : 'custom');
+      assert.equal(await evaluate(`document.querySelector('#plugin-detail .plugin-roles .state.ok').textContent`), '1.0.0');
+      assert.equal(await evaluate(`document.querySelector('.proj[data-plugin="${origin}:shared"] .meta').textContent`), 'publisher');
     }
     assert.equal(f.panel.instanceId, instance);
   });
