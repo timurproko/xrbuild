@@ -513,10 +513,10 @@ function renderProjects() {
   const item = (p) => {
     const m = p.manifest;
     const kind = m?.kind ?? 'app';
-    const meta = !m ? 'manifest has errors' : p.readOnly ? 'Bundled · read-only' : '';
+    const meta = !m ? 'manifest has errors' : p.readOnly ? 'embedded' : '';
     const pill = !m ? '<span class="state err">error</span>' : projectRunning(p) || p.running ? runPill() : searching && p.archived ? '<span class="state busy">archived</span>' : '';
     const published = m ? publishedMark(p) : '';
-    return `<button class="proj ${kind} ${p.id === state.selected ? 'selected' : ''}" data-id="${esc(p.id)}" aria-current="${p.id === state.selected}" ${searching || p.readOnly ? '' : 'draggable="true"'}>
+    return `<button class="proj xrb-focus-inset ${kind} ${p.id === state.selected ? 'selected' : ''}" data-id="${esc(p.id)}" aria-current="${p.id === state.selected}" ${searching || p.readOnly ? '' : 'draggable="true"'}>
       <span class="stripe"></span>
       <img src="${iconSrc(p)}" alt="" draggable="false">
       <div class="text"><div class="name">${esc(m?.name ?? p.id)}</div>${meta ? `<div class="meta">${meta}</div>` : ''}</div>${pill ? `<div class="pill">${pill}</div>` : ''}${published ? `<div class="published">${published}</div>` : ''}
@@ -551,7 +551,7 @@ function renderProjects() {
         <h2 class="sec-head" data-tooltip="Double-click to rename"><span class="sec-name" data-tooltip-anchor>${esc(s.name)}</span></h2>
         <div class="sec-items">${s.items.map(item).join('') || '<div class="empty-note">Drag projects here.</div>'}</div>
       </section>`).join('') +
-      [...new Set(state.projects.filter(p => p.readOnly).map(p => p.section))].map(section => `<section class="bundled-sec"><h2>Bundled · ${esc(section)}</h2>${state.projects.filter(p => p.readOnly && p.section === section).map(item).join('')}</section>`).join('') +
+      [...new Set(state.projects.filter(p => p.readOnly).map(p => p.section))].map(section => `<section class="bundled-sec"><h2>embedded · ${esc(section)}</h2>${state.projects.filter(p => p.readOnly && p.section === section).map(item).join('')}</section>`).join('') +
       '<button type="button" class="xrb-add-action" id="new-project">+ New project</button>' +
       (state.unregistered.length ? `<h2>Without manifest</h2>` + state.unregistered.map((id) =>
         `<div class="unregistered row">${esc(id)}<span class="spacer"></span><button class="small" data-create="${esc(id)}">Create manifest</button></div>`).join('') : '');
@@ -3183,19 +3183,8 @@ function renderManagedPlugins() {
   $('#plugin-details').hidden = empty;
   nav.innerHTML = `<div class="nav-tabs xrb-section-label"><span>Plugins</span></div>
     <div class="nav-list">${empty ? '<div class="empty-note">No plugins installed yet.</div>' : state.managedPlugins.map((p) =>
-      `<button type="button" class="proj ${p.id === state.managedId ? 'selected' : ''} ${p.enabled ? '' : 'plugin-disabled'}" data-plugin="${esc(p.id)}" aria-current="${p.id === state.managedId}" ${p.enabled ? '' : `aria-label="${esc(`${managerName(p)}, disabled`)}"`}>
+      `<button type="button" class="proj xrb-focus-inset ${p.id === state.managedId ? 'selected' : ''} ${p.enabled ? '' : 'plugin-disabled'}" data-plugin="${esc(p.id)}" aria-current="${p.id === state.managedId}" ${p.enabled ? '' : `aria-label="${esc(`${managerName(p)}, disabled`)}"`}>
         <span class="stripe"></span>${managerIcon(p)}<span class="text"><span class="name">${esc(managerName(p))}</span><span class="meta">${esc(managerType(p))}</span></span></button>`).join('')}</div>`;
-  if (state.managedPlugins.some(plugin => plugin.origin === 'bundled')) {
-    const setup = document.createElement('button'); setup.type = 'button'; setup.className = 'action-button'; setup.textContent = 'Setup embedded services'; setup.id = 'setup-bundled-services';
-    setup.addEventListener('click', action(async () => {
-      setup.disabled = true;
-      try { const job = await api('POST', '/api/plugins/setup-bundled', {}); state.jobs.set(job.id, { ...job, lines: [] }); }
-      finally { if (setup.isConnected) setup.disabled = false; }
-    }));
-    nav.append(setup);
-    const cache = document.createElement('section'); cache.className = 'card'; cache.innerHTML = '<button type="button" class="action-button">Review service/build working cache</button><div></div>';
-    nav.append(cache); wireWorkingCacheReview(cache.querySelector('button'), cache.querySelector('div'), '/api/plugins/cache');
-  }
   nav.querySelector('.nav-list').scrollTop = scroll;
   nav.querySelectorAll('[data-plugin]').forEach((b) => b.addEventListener('click', () => {
     state.managedId = b.dataset.plugin;

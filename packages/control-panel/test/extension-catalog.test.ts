@@ -288,9 +288,11 @@ test('embedded managed tools receive user config and cannot reuse a runtime from
     assert.deepEqual(await fetch(base + '/fixture/').then(r => r.json()), { key: 'bundled:tool', enabled: false });
     await savePluginPrefs(f.workspace, { ...prefs, origins: { tool: 'workspace' } });
     await fetch(base + '/api/navigation');
-    assert.equal((await fetch(base + '/fixture/')).status, 503);
+    const stale = await fetch(base + '/fixture/', { redirect: 'manual' });
+    assert.equal(stale.status, 303); assert.equal(stale.headers.get('location'), '/tool-recovery.html?tool=fixture');
+    assert.equal(await stale.text(), '', 'neither old nor newly selected tool code executes before restart');
     const status = await fetch(base + '/api/tools/fixture/status').then(r => r.json());
-    assert.match(status.error, /restart the panel/);
+    assert.equal(status.restartRequired, true); assert.match(status.error, /restart the panel/);
   } finally { await panel.close(); }
 });
 

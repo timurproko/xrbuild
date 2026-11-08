@@ -62,12 +62,20 @@ are detected automatically; idle refresh publishes publisher/packager discoverie
 implementations, but new consumers are blocked until refresh. New actions recheck discovery rather than trusting the UI
 poll interval. Changed already-executed JS/TS/package code requires an actual restart: imports cannot safely unload its
 transitive state. Tool source/route/runtime changes invalidate executing tools and require restart, never old-source fallback.
+Unrelated preference refreshes retain unchanged tools. Stale tool documents redirect to non-modal recovery, which refuses
+embedded-frame activation and waits
+for idle runs, queued/running jobs, preparation, tool cleanup and in-flight writes; it requests an instance-bound restart
+without confirmation override and returns only to the registered route in the same repository/workspace. Recovery permits
+one automatic restart per tool/workspace in 60 seconds and has a bounded wait plus a Back to Apps link. Failed genuine
+startup still supports ordinary retry. Shutdown stops accepting reconnects before draining owned streams/tools.
 Arbitrary JSON runtime-state writes are not executable-code changes.
 
 Project workflow tabs hide Publish when the installed publisher list is empty, including stale saved Publish selections.
 An installed but unconfigured publisher still exposes its configuration workflow. Workflow switches preserve the mounted
 project identity/title while updating fields and actions. Global Settings hides the redundant All filter when Apps is the
 only settings module, selecting Apps instead; All remains available when another settings-owning module exists.
+Project origin badges and section headings use **embedded**, without the redundant read-only suffix; source remains
+read-only. Sidebar focus outlines are inset and following section headings do not overlap preceding row borders.
 Settings sidebar subtitles are lowercase **settings** (All) and **core** (Apps). Apps cursor preferences and unset SDK cursor options default to System; explicit saved choices are preserved.
 Tab underlines snap to their selected position on section entry, hidden-list reveal and layout/font resizing; only
 actual visible selection changes animate, so returning to Apps does not slide the Develop/Build underline from the left.
@@ -220,7 +228,7 @@ inference. Distribution and physical-device/model acceptance remain separate fro
 
 ### Explicit installed public services
 
-`pnpm setup:services --workspace=<writable-root>` (optional `--core=<product-root>`) or Plugins → **Setup embedded services**
+`pnpm setup:services --workspace=<writable-root>` (optional `--core=<product-root>`) or the explicit `POST /api/plugins/setup-bundled`
 installs/builds the public embedded graph in a fresh writable snapshot and explicitly activates that completed generation.
 Discovery never installs. This does not install user/private packages or build native/device runtimes. Bundled managed
 tools do not run ordinary user-package preparation as a side effect.
@@ -297,8 +305,8 @@ consume one settings snapshot; neither writes back to the bundled manifest.
 
 ## Explicit conservative working-cache maintenance
 
-Bundled details and Plugins offer **Review working cache**. GET `/api/projects/<bundled-id>/cache` or
-`/api/plugins/bundled-cache` lists candidates and protected reasons without deleting anything. DELETE requires the exact
+Bundled project details offer **Review working cache**. The Plugins sidebar has no global setup/cache controls or maintenance-status panel.
+Explicit GET `/api/projects/<bundled-id>/cache` or `/api/plugins/cache` lists candidates and protected reasons without deleting anything. DELETE requires the exact
 review revision, selected `generations` and `confirm: true`; the UI also asks for confirmation and starts an exclusive job.
 Only obsolete, closed, explicitly owned `w-<generation>` working directories are eligible. Builder locks, receipt/marker
 scope and complete-tree membership/stamps are rechecked, then an exclusive quarantine rename is revalidated before deletion.

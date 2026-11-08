@@ -1249,16 +1249,24 @@ test('restart and panel launchers create no terminal process', async () => {
 
 test('restart and ping identify the old panel instance before invoking restart', async () => {
   let restarted = false;
+  const previous = panel.panel.onRestart;
   panel.panel.onRestart = () => { restarted = true; };
-  const ping = await request('GET', '/api/ping');
-  assert.equal(ping.status, 200, ping.body);
-  assert.equal(ping.json.instanceId, panel.panel.instanceId);
-  assert.match(ping.json.instanceId, /^[0-9a-f-]{36}$/);
-  const r = await request('POST', '/api/restart', { body: '{}' });
-  assert.equal(r.status, 200, r.body);
-  assert.deepEqual(r.json, { restarting: true, pid: process.pid, instanceId: panel.panel.instanceId });
-  await new Promise((resolve) => setTimeout(resolve, 75));
-  assert.equal(restarted, true);
+  try {
+    const ping = await request('GET', '/api/ping');
+    assert.equal(ping.status, 200, ping.body);
+    assert.equal(ping.json.instanceId, panel.panel.instanceId);
+    assert.match(ping.json.instanceId, /^[0-9a-f-]{36}$/);
+    const r = await request('POST', '/api/restart', { body: '{}' });
+    assert.equal(r.status, 200, r.body);
+    assert.deepEqual(r.json, { restarting: true, pid: process.pid, instanceId: panel.panel.instanceId, repo: ping.json.repo, workspace: ping.json.workspace, projects: ping.json.projects });
+    assert.equal((await request('GET', '/api/panel')).status, 503, 'pending restart blocks new work');
+    await new Promise((resolve) => setTimeout(resolve, 75));
+    assert.equal(restarted, true);
+  } finally {
+    // This mock deliberately does not replace the process; restore its shared fixture.
+    panel.panel.restartPending = false;
+    panel.panel.onRestart = previous;
+  }
 });
 
 test('panel freshness reports server code changed after the process started', async () => {

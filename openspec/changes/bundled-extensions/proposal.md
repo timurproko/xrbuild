@@ -11,6 +11,7 @@ The repository split remains intact: public product code and private/user materi
 - Add a tracked `embedded/` workspace in the public repository with the same root-relative structure and manifest schemas as a user workspace: `plugins/<id>/`, `projects/<section>/<id>/`, `third_party/`, package/workspace manifests and default panel/plugin configuration. Both plugins and projects have embedded and user-defined origins. Projects may be product apps, examples, diagnostics or tests. Keep SDK/UI libraries in core `packages/` and project templates in core `templates/`. Identical structure does not mean shared contents, Git history, installed packages or mutable user state.
 - Preserve external extensions in the selected workspace's `plugins/` and `projects/` trees. Repository development may select an independently cloned, ignored `.xrbuild/`; ordinary user workspaces need not be Git repositories and retain existing resolution.
 - Introduce shared origin-aware discovery for native providers, packagers, publishers, tools, samples and apps. Define identity, collision handling, build/output ownership, preferences and catalog behavior consistently across both origins.
+- Keep extension navigation minimal: lowercase embedded/custom origin labels, unclipped sidebar selection/focus, explicit maintenance through CLI/API rather than global Plugins buttons, and bounded same-workspace idle-only recovery for genuinely stale managed tools without a dead-end Retry card. Unrelated preference refreshes retain unchanged tool implementations.
 - Consolidate local and production publication into one embedded publisher plugin. Embedded publisher/headset configuration lives in the selected user's workspace and is created from safe defaults only when missing, never overwriting existing settings.
 - Fetch reviewed public hand-tracking dependencies into core `third_party/` with reproducible pins and required notices; do not equate open-source intent with approval to copy current opaque binary payloads.
 - Use lowercase `projects/unsorted/` consistently in both roots and related code, templates, tests and documentation; no migration or legacy-compatibility logic.
@@ -27,7 +28,7 @@ The repository split remains intact: public product code and private/user materi
 
 ### Modified
 
-- `plugin-host`: distinguish generic engine sources from separately built bundled plugin modules while preserving existing ABI and standalone host discovery behavior.
+- `plugin-host`: distinguish generic engine sources from separately built bundled plugin modules while preserving existing ABI and standalone host discovery behavior; define bounded, same-panel managed-tool recovery without forced interruption of active work.
 
 ## Impact and boundaries
 

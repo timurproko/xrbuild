@@ -177,7 +177,8 @@ test('real plugin-source form resolves conflict and switches services without re
     await evaluate(`document.querySelector('#plugin-source-form .dropdown-btn').click()`);
     assert.deepEqual(await evaluate(`[...document.querySelectorAll('.dropdown-list [role="option"]')].map(el => el.textContent)`), ['embedded', 'custom']);
     await evaluate(`document.querySelector('#plugin-source-form .dropdown-btn').click()`);
-    assert.equal(await evaluate(`document.querySelector('#setup-bundled-services').textContent`), 'Setup embedded services');
+    assert.equal(await evaluate(`document.querySelector('#setup-bundled-services')`), null);
+    assert.equal(await evaluate(`document.querySelectorAll('#plugin-nav > .card, #plugin-nav > .action-button').length`), 0);
     for (const origin of ['bundled', 'workspace']) {
       await evaluate(`(() => { const form=document.querySelector('#plugin-source-form'); const select=form.querySelector('[name="origin"]'); select.value='${origin}'; form.requestSubmit(); })()`);
       for (let n = 0; n < 100 && f.panel.publishers.found[0]?.plugin?.origin !== origin; n++) await sleep(50);

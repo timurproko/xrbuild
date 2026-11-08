@@ -86,7 +86,10 @@ test('installed bundled tools use declared components without user-package insta
     assert.deepEqual(await response.json(), { runtime: first.runtime, owner: 'bundled:publisher' }); assert.equal(userInstalls, 0);
     await fs.writeFile(path.join(serviceStateRoot(f.core, f.user), SERVICE_RECEIPT), '{malformed');
     server.panel.discoveryMaxAgeMs = 0;
-    assert.equal((await fetch(server.url + 'service-fixture/')).status, 503);
+    const stale = await fetch(server.url + 'service-fixture/', { redirect: 'manual' });
+    assert.equal(stale.status, 303); assert.equal(stale.headers.get('location'), '/tool-recovery.html?tool=service-fixture');
+    assert.equal(await stale.text(), '', 'failed snapshots never serve the previously loaded implementation');
+    assert.equal((await fetch(server.url + 'api/tools/service-fixture/status').then(response => response.json())).restartRequired, true);
     assert.equal((await fetch(server.url + 'api/ping')).status, 200);
     assert.equal(userInstalls, 0);
   } finally { await server.close(); }

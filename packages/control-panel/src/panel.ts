@@ -209,7 +209,9 @@ export class Panel {
   private servicesCheckedMs = 0;
   private readonly executedPluginCode = new Map<string, string>();
   discoveryMaxAgeMs = 1000;
-  onPluginSourcesChanged: () => Promise<void> = async () => {};
+  onPluginSourcesChanged: (restartRequired?: boolean) => Promise<void> = async () => {};
+  restartPending = false;
+  restartWorkPending: () => boolean = () => false;
   private readonly settingsWrites = new Set<string>();
   readonly runner = new HostRunner();
   readonly packages: PackageList;
@@ -272,13 +274,13 @@ export class Panel {
 
   private async withPluginServices<T>(work: () => Promise<T>): Promise<T> {
     await this.synchronizePluginServices(true);
-    if (this.changingPlugins || this.maintainingCache || this.servicesPending) throw new HttpError(409, this.servicesProblem ?? 'Plugin services are changing; retry after the update');
+    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending) throw new HttpError(409, this.servicesProblem ?? 'Plugin services are changing; retry after the update');
     this.pluginConsumers++;
     try { return await work(); } finally { this.pluginConsumers--; }
   }
 
   private async withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
-    if (this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
+    if (this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop running apps and jobs and wait for launch/settings preparation before changing plugins');
     this.changingPlugins = true;
     try { return await work(); } finally { this.changingPlugins = false; }
@@ -334,8 +336,9 @@ export class Panel {
         if (snapshot.revision === this.servicesRevision && !snapshot.problem) return;
         this.servicesPending = true;
         this.servicesProblem = snapshot.problem ?? 'Plugin discovery changed; wait for running work to finish';
-        await this.onPluginSourcesChanged();
-        if (snapshot.problem || this.codeChanged(snapshot)) {
+        const restartRequired = this.codeChanged(snapshot);
+        await this.onPluginSourcesChanged(restartRequired);
+        if (snapshot.problem || restartRequired) {
           this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel before using plugins';
           this.packagers = { found: [], problems: [this.servicesProblem] }; this.publishers = { found: [], problems: [this.servicesProblem] };
           this.publicationStatuses.clear(); clearProviderCache(); return;
@@ -375,6 +378,7 @@ export class Panel {
   }
 
   private startJob(...args: Parameters<JobRunner['start']>): Job {
+    if (this.restartPending) throw new HttpError(409, 'The panel is restarting');
     if (this.servicesPending) throw new HttpError(409, this.servicesProblem ?? 'Plugin discovery is awaiting refresh');
     if (this.changingPlugins) throw new HttpError(409, 'Plugin services are changing; retry after the update');
     try {
@@ -1149,7 +1153,7 @@ export class Panel {
   /** Starts one panel-owned standalone WebXR browser preview and returns its app URL. */
   async preview(p: Project, mode: RunMode, flat: boolean | undefined, token: string, options: { fullscreen?: boolean; monitor?: number; clientPort: number }): Promise<string> {
     await this.synchronizePluginServices(true);
-    if (this.changingPlugins || this.maintainingCache || this.servicesPending || this.preparingPreview || this.preparingNativeRun || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
+    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending || this.preparingPreview || this.preparingNativeRun || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
     if (p.readOnly) this.refuseIfBusy(p.id);
     this.preparingPreview = true;
     try { return await this.preparePreview(p, mode, flat, token, options); }
@@ -1209,7 +1213,7 @@ export class Panel {
   /** flat: Orthographic managed camera; non-desktop displays also start mono and may switch live. */
   async run(p: Project, mode: RunMode, flat?: boolean, cameraView?: boolean, desktop?: { fullscreen?: boolean; monitor?: number }): Promise<void> {
     await this.synchronizePluginServices(true);
-    if (this.changingPlugins || this.maintainingCache || this.servicesPending || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
+    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
     if (this.preparingNativeRun) throw new HttpError(409, 'another native launch is being prepared');
     if (this.jobs.active().some(job => job.kind === 'host-rebuild')) throw new HttpError(409, 'wait for the native rebuild to finish before running');
     if (p.readOnly) this.refuseIfBusy(p.id);
@@ -1654,12 +1658,18 @@ export class Panel {
         return true;
       }
       case 'POST restart': {
-        const { confirm } = await readJson<{ confirm?: boolean }>(req);
-        const busy = [this.runner.busy ? `${this.runner.projectId} is running` : '', ...this.jobs.active().map((j) => `${j.title} is ${j.state}`)].filter(Boolean);
-        if (busy.length && !confirm) throw new HttpError(409, `${busy.join('; ')}. Restart anyway? The host is stopped cleanly first.`, { needsConfirm: 'restart' });
-        sendJson(res, 200, { restarting: true, pid: process.pid, instanceId: this.instanceId });
-        log('[panel] restart requested');
-        setTimeout(() => this.onRestart(), 50);
+        const { confirm, ifIdle, expectedInstanceId } = await readJson<{ confirm?: boolean; ifIdle?: boolean; expectedInstanceId?: string }>(req);
+        if ((confirm !== undefined && typeof confirm !== 'boolean') || (ifIdle !== undefined && typeof ifIdle !== 'boolean')) throw new HttpError(400, 'Restart flags must be boolean');
+        if (ifIdle && (confirm !== false || expectedInstanceId !== this.instanceId)) throw new HttpError(409, 'Automatic restart requires the current panel instance and cannot force active work');
+        const busy = [this.runner.busy ? `${this.runner.projectId} is running` : '', ...this.jobs.active().map((j) => `${j.title} is ${j.state}`),
+          this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.settingsWrites.size || this.changingPlugins || this.maintainingCache || this.restartWorkPending() ? 'Panel work is preparing or changing' : ''].filter(Boolean);
+        if (busy.length && !confirm) throw new HttpError(409, ifIdle ? 'Waiting for the panel to become idle' : `${busy.join('; ')}. Restart anyway? The host is stopped cleanly first.`, ifIdle ? { retryWhenIdle: true } : { needsConfirm: 'restart' });
+        sendJson(res, 200, { restarting: true, pid: process.pid, instanceId: this.instanceId, repo: this.repo, workspace: this.workspace, projects: this.projects });
+        if (!this.restartPending) {
+          this.restartPending = true;
+          log('[panel] restart requested');
+          setTimeout(() => this.onRestart(), 50);
+        }
         return true;
       }
       case 'POST quit': {

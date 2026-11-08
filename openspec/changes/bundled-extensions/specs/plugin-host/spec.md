@@ -14,3 +14,20 @@ The generic host, SDK and control panel SHALL build, start and run an app withou
 #### Scenario: Reviewed embedded plugin
 - **WHEN** a public module is built under the embedded workspace
 - **THEN** it integrates through the existing plugin ABI or applicable neutral service contract without embedding its implementation into the host or requiring private workspace contents
+
+## ADDED Requirements
+
+### Requirement: Managed tool navigation recovery
+A managed tool document invalidated by source or route changes SHALL enter non-modal automatic recovery rather than offer a retry that cannot clear invalidation. Recovery SHALL refuse embedded-frame activation, use only a currently registered same-panel tool route, verify the panel instance and repository/workspace identity, wait for idle runs/jobs/preparation, and bound automatic restart attempts. It SHALL NOT force active work to stop, install dependencies implicitly, bypass source-containment checks, or redirect into a different workspace. Unrelated preference refreshes SHALL NOT invalidate unchanged tool implementations. Panel shutdown SHALL stop accepting connections before draining its owned event streams and tools.
+
+#### Scenario: Changed tool recovers safely
+- **WHEN** a selected managed tool requires restart and its owning panel is idle
+- **THEN** navigation performs at most one automatic restart within the recovery window and resumes the current registered route only after the replacement instance matches the original repository and workspace
+
+#### Scenario: Busy or mismatched panel
+- **WHEN** work is active or another panel identity occupies the origin during recovery
+- **THEN** recovery does not force restart or follow an untrusted destination and presents bounded non-modal status with a route back to Apps
+
+#### Scenario: Unchanged tool survives preferences refresh
+- **WHEN** unrelated plugin preferences change without changing a tool declaration or executed module code
+- **THEN** the existing tool remains usable rather than entering a permanent restart-required state

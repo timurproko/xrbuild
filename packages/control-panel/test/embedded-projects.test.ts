@@ -624,9 +624,9 @@ test('bundled details offer personal run settings but no source editing, publica
   const p = { id: 'bundled:demo', manifest: { name: '<Demo>', description: 'Example', target: 'webxr' }, entryExists: true, archived: true, errors: [],
     runSettings: { values: { inputs: ['mouse'], display: 'desktop', flat: true, fullscreen: false, monitor: 0, cameraView: false } } };
   const html = bundledProjectDetails(p, { icon: '/icon.png', busy: false, running: false });
-  assert.match(html, /&lt;Demo&gt;/); assert.match(html, /Bundled · read-only · archived/);
+  assert.match(html, /&lt;Demo&gt;/); assert.match(html, /embedded · archived/);
   assert.match(html, /Copy to workspace/); assert.match(html, /Run in browser/);
-  assert.match(html, /id="bundled-run-settings"/); assert.match(html, /Restore bundled defaults/);
+  assert.match(html, /id="bundled-run-settings"/); assert.match(html, /Restore embedded defaults/);
   assert.doesNotMatch(html, /name="(?:display|cameraView)"/);
   assert.match(bundledProjectDetails({ ...p, manifest: { ...p.manifest, target: 'host' } }, { icon: '', busy: false, running: false }), /name="cameraView"/);
   assert.match(bundledProjectDetails({ ...p, runSettings: null, runSettingsProblem: 'Invalid saved settings' }, { icon: '', busy: false, running: false }), /id="bundled-run"[^>]*disabled/);

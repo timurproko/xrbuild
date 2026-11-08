@@ -275,8 +275,10 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
   panel.panelUrl = url;
   const uiDir = path.join(PANEL_DIR, 'ui');
   let server: http.Server;
+  let closing = false, activeMutations = 0;
+  panel.restartWorkPending = () => activeMutations > 0 || managedTools.pendingWork();
   const managedTools = new ManagedTools({ core, workspace, projects, port, server: () => server, prepare: () => panel.prepareManagedTools(), available: () => { const status = panel.pluginServiceStatus(); return status.pending ? status.problem ?? 'Plugin services are changing; wait for setup/refresh to finish' : null; } });
-  panel.onPluginSourcesChanged = async () => { managedTools.invalidatePluginRuntimes(); await managedTools.navigation(); };
+  panel.onPluginSourcesChanged = async (restartRequired) => { if (restartRequired) managedTools.invalidatePluginRuntimes(); await managedTools.navigation(); };
   const autoRoute = opts.autoRoute;
   let autoRouteWork: Promise<string | null> | null = null;
 
@@ -303,6 +305,10 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
     if (reject) throw new HttpError(403, reject);
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     const parts = url.pathname.split('/').filter(Boolean);
+    if (closing || panel.restartPending && !['/api/ping', '/api/restart'].includes(url.pathname)) {
+      res.setHeader('connection', 'close');
+      return sendJson(res, 503, { error: 'The panel is restarting' });
+    }
 
     if (autoRoute && isDocumentRefresh(method, req, url.pathname) && !['api', 'preview', 'vendor', 'sdk'].includes(parts[0])) {
       try {
@@ -417,6 +423,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       return sendJson(res, 200, await describeProject(projects, await findProject(folder), panel));
     }
     if (is('GET', 'events')) {
+      if (closing || panel.restartPending) { res.setHeader('connection', 'close'); return sendJson(res, 503, { error: 'The panel is restarting' }); }
       hub.attach(res);
       hub.send('run', panel.runner.state());
       return;
@@ -563,6 +570,8 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
   }
 
   server = http.createServer((req, res) => {
+    const mutation = !['GET', 'HEAD', 'OPTIONS'].includes(req.method ?? 'GET') && !/^\/api\/(?:restart|quit)\/?(?:\?|$)/.test(req.url ?? '');
+    if (mutation) activeMutations++;
     const localRead = req.url === '/api/projects' || /^\/api\/projects\/(?:[^/?]+\/){1,2}icon(?:\?|$)/.test(req.url ?? '')
       || /^\/preview\//.test(req.url ?? '');
     const previewProjectionRead = /^\/api\/preview\/projection(?:\?|$)/.test(req.url ?? '');
@@ -581,18 +590,21 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       if (status >= 500) log(`[http] ${req.method} ${req.url}: ${(e as Error).stack ?? e}`);
       if (res.headersSent) return res.end();
       sendJson(res, status, { error: (e as Error).message, details: e instanceof HttpError ? e.details : undefined });
-    });
+    }).finally(() => { if (mutation) activeMutations--; });
   });
   panel.onQuit = () => void closeServer();
   panel.onRestart = () => void closeServer();
   let closeWork: Promise<void> | null = null;
   function closeServer(): Promise<void> {
     return closeWork ??= (async () => {
+      closing = true;
+      // Stop accepting reconnects BEFORE draining event streams and tool startup.
+      const closed = new Promise<void>((resolve) => server.close(() => resolve()));
       hub.closeAll();
       await managedTools.close();
       await panel.dispose();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-      server.closeAllConnections();
+      server.closeIdleConnections();
+      await closed;
     })();
   }
   return { server, panel, managedTools, hub, port, url, close: closeServer };

@@ -13,20 +13,20 @@ export function bundledProjectDetails(project, { icon, busy, running, providers 
     return `<div data-provider-setting><label><input type="checkbox" data-provider-override name="${esc(prefix)}.override" ${overridden ? 'checked' : ''}> Override ${esc(field.label)}</label><label>${esc(field.label)} ${control}</label><small>Inherited: ${esc(schema.defaults[field.key] ?? 'provider runtime default')}</small></div>`;
   }).join('')}</fieldset>`).join('')}</details>` : '';
   const choices = values ? `<form id="bundled-run-settings" class="xrb-stack"><h4>Personal run settings</h4>
-    <p>Saved in your workspace, not in the bundled project. Applies on the next run.</p>
+    <p>Saved in your workspace, not in the embedded project. Applies on the next run.</p>
     <fieldset class="xrb-stack" ${busy ? 'disabled' : ''}>
       <label>Input methods (comma-separated IDs)<input name="inputs" value="${esc(values.inputs.join(', '))}" maxlength="1050" autocomplete="off"></label>
       ${manifest?.target === 'webxr' ? '' : `<label>Display<select name="display">${displays.map(name => `<option value="${esc(name)}" ${name === values.display ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select></label>`}
       <label>Monitor index<input type="number" name="monitor" min="0" max="255" step="1" value="${values.monitor}" required></label>
       ${[['fullscreen', 'Fullscreen'], ['flat', 'Orthographic view'], ...(manifest?.target === 'webxr' ? [] : [['cameraView', 'Native camera view']])].map(([key, label]) => `<label><input type="checkbox" name="${key}" ${values[key] ? 'checked' : ''}> ${label}</label>`).join('')}
       ${advanced}
-      <div class="row"><button type="submit" class="action-button">Save run settings</button><button type="button" id="bundled-reset-settings" class="action-button">Restore bundled defaults</button></div>
+      <div class="row"><button type="submit" class="action-button">Save run settings</button><button type="button" id="bundled-reset-settings" class="action-button">Restore embedded defaults</button></div>
     </fieldset></form>` : '';
   const base = project.id.split('/').at(-1).replace(/^bundled:/, '').toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 58);
   return `<section class="card hero project-hero">
     <div class="hero-top project-hero-top"><img src="${esc(icon)}" width="64" height="64" alt="">
       <div class="project-hero-main"><h3>${esc(manifest?.name ?? project.id)}</h3>
-      <span class="state">Bundled · read-only${project.archived ? ' · archived' : ''}</span></div></div>
+      <span class="state">embedded${project.archived ? ' · archived' : ''}</span></div></div>
     <p>${esc(manifest?.description ?? '')}</p>
     ${project.errors?.length ? `<ul class="errors">${project.errors.map(error => `<li>${esc(error.message)}</li>`).join('')}</ul>` : ''}
     <p>Runs use packaged or successfully rebuilt cached output without modifying product sources. Copy to your project repository to edit source, develop, generate icons, package or publish.</p>

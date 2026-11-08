@@ -70,7 +70,7 @@ Containment is checked against each resolved extension's authorized root, includ
 
 Catalog instances use origin-qualified keys, with stable logical/plugin/provider IDs retained for existing project manifests. Unique existing unqualified references continue to work. Built-in provider identities remain reserved.
 
-The Plugins detail view exposes available origins and an explicit source-selection action, including when a conflict disables both instances. Selection requires a revision of user preferences plus catalog source identities/metadata. Preference mutations use exclusive cooperating-writer locks and atomic replacement, preserving unrelated/unknown saved fields. An origin change reserves panel plugin mutation, refuses active jobs/native/browser runs or launch/settings preparation, then stages publisher/packager discoveries and publishes the pair together. Concurrent launch/job starts are refused during this reservation. Stale revisions, unknown origins and malformed/linked preferences fail without overwriting state. Source-dependent provider/status/setup caches are invalidated after a successful update. Tool runtime source/route changes still invalidate that tool and require restart under the existing tool identity contract; this action does not pretend to hot-reload arbitrary executing tool code. Direct out-of-band source/preferences edits still require restart until automatic coherent discovery is separately implemented.
+The Plugins detail view exposes available origins and an explicit source-selection action, including when a conflict disables both instances. Selection requires a revision of user preferences plus catalog source identities/metadata. Preference mutations use exclusive cooperating-writer locks and atomic replacement, preserving unrelated/unknown saved fields. An origin change reserves panel plugin mutation, refuses active jobs/native/browser runs or launch/settings preparation, then stages publisher/packager discoveries and publishes the pair together. Concurrent launch/job starts are refused during this reservation. Stale revisions, unknown origins and malformed/linked preferences fail without overwriting state. Source-dependent provider/status/setup caches are invalidated after a successful update. Tool runtime source/route changes still invalidate that tool and require restart under the existing tool identity contract; this action does not pretend to hot-reload arbitrary executing tool code. Out-of-band preferences/declarations refresh coherently when safe; unchanged tool identities survive unrelated preference changes. Changed executed module/dependency code still requires a real process restart.
 
 When bundled and external plugins claim the same identity, do not silently override or merge them. Report the conflict and disable the ambiguous integration until the selected workspace explicitly chooses an origin. That choice selects the whole plugin consistently across metadata, tools, provider binaries, packagers and publishers; it cannot select metadata from one copy and execute the other. Preferences and cached results include the resolved origin.
 
@@ -218,6 +218,22 @@ System is the shared default cursor for unset/unknown preferences and SDK option
 unchanged. Apps workflow tabs must appear already selected when returning from Settings/Plugins, without an underline
 moving from hidden zero-width geometry. Hidden tab lists must not supply remembered layout, and becoming visible snaps
 the indicator before transitions resume. Deliberate visible tab changes keep their normal animation.
+
+## Manual UI feedback: minimal origins and managed-tool recovery
+
+Project badges and headings say lowercase `embedded`; read-only source/copy-to-workspace enforcement is unchanged.
+Use shared inset focus styling for sidebar rows and non-overlapping section heading margins. Remove global Plugins
+setup/cache controls without removing CLI/API maintenance, project cache review, stored data or locks.
+
+Compare managed tool declarations, resolved module/runtime identity and effective configuration rather than invalidating
+every tool after unrelated preference refreshes. Genuine invalidation redirects document navigation to non-modal recovery;
+ordinary startup errors retain a real retry. Recovery refuses embedded-frame activation, derives its destination only from
+the current registered tool, pins
+repository/workspace/projects and instance identity, and waits for idle runs/jobs/preparation/owned cleanup and in-flight
+writes. An automatic restart cannot force confirmation; accepted requests coalesce and block new work. Stop accepting HTTP
+connections before draining owned event streams/tools, including reconnects racing asynchronous discovery. A per-tool,
+workspace-bound session budget permits only one automatic restart per 60 seconds; bounded status always offers Back to Apps.
+No recovery path downloads optional payloads, changes source ownership, deletes caches/locks, or follows arbitrary return URLs.
 
 ## Open decisions for the maintainer
 
