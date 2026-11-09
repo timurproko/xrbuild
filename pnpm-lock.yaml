@@ -51,6 +51,8 @@ importers:
 
   tools/name-guard: {}
 
+  tools/panel-bootstrap: {}
+
   tools/pr-automation:
     devDependencies:
       '@fission-ai/openspec':
