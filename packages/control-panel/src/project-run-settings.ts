@@ -30,7 +30,9 @@ const MAX_BYTES = 8192;
 const PROVIDER = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const digest = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
-const scopeOf = (core: string, p: Project) => ({ core: canonicalFuturePath(core), source: canonicalFuturePath(p.dir), key: p.key ?? `workspace:${p.id}` });
+export const projectStorageKey = (p: Project) => p.origin === 'bundled' && !p.workingRoot
+  ? `bundled:${path.basename(path.dirname(p.dir)) === 'archive' ? 'archive/' : ''}${path.basename(p.dir)}` : p.key ?? `workspace:${p.id}`;
+const scopeOf = (core: string, p: Project) => ({ core: canonicalFuturePath(core), source: canonicalFuturePath(p.dir), key: projectStorageKey(p) });
 export function projectStateKey(core: string, p: Project): string {
   const scope = scopeOf(core, p);
   return digest(`${scope.core}\0${scope.source}\0${scope.key}`).slice(0, 24);

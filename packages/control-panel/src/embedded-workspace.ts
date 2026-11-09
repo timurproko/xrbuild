@@ -89,8 +89,8 @@ function packageScript(pkg: any, name: string): string | null {
   if (!scriptName(name) || typeof value !== 'string' || !value.trim()) throw new Error('Invalid embedded package script');
   return name;
 }
-export async function embeddedWorkspacePlan(core: string) {
-  const declaration = await embeddedDeclaration(core), { root, packageManager, patterns } = declaration;
+export async function embeddedWorkspacePlan(core: string, workspaceRoot?: string) {
+  const declaration = await embeddedDeclaration(core, workspaceRoot), { root, packageManager, patterns } = declaration;
   const initial = await buildInventory(root, true);
   if (initial.files.some(name => name.endsWith('/pnpm-workspace.yaml') || name.endsWith('/pnpm-workspace.yml'))) throw new Error('Nested package workspaces require an editable copy');
   const excluded: string[] = [], builds = new Map<string, string>();

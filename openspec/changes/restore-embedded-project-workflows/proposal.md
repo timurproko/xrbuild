@@ -25,6 +25,6 @@ The workspace split routes embedded projects into a separate read-only detail sc
 
 - Core-owned control-panel discovery, access checks, effective project state, development/build/icon preparation, packaging/publication adapters and layout/lifecycle routes.
 - Browser project rendering, drag/drop, menus and workflow settings; shared design-system components remain authoritative.
-- Focused API, state, build and browser tests plus documentation/instruction updates during implementation.
+- Focused API, state, build and browser tests plus documentation/instruction updates during implementation. Add the real public launcher workflow smoke fixture to the existing Windows public-boundary lane and ignore local embedded state/scratch in new workspace/project templates.
 - Core-only delivery; no private clone, private edits or source promotion. Existing plugin contracts remain neutral.
 - This plan follows the active bundled-extensions predecessor; bot synchronization remains ordered and is not performed by this task.

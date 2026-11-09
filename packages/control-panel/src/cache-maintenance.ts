@@ -9,13 +9,14 @@ import { canonicalFuturePath } from './plugin-artifacts.ts';
 import { containedPath, withinRoot } from './extension-catalog.ts';
 import { assertWritablePath } from './project-access.ts';
 import type { Project } from './projects.ts';
+import { projectStorageKey } from './project-run-settings.ts';
 import { HttpError } from './http.ts';
 
 export interface CacheScope { core: string; workspace: string; project?: Project }
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 function location(scope: CacheScope) {
   const { core, workspace, project } = scope;
-  if (project && (!project.readOnly || project.origin !== 'bundled')) throw new HttpError(409, 'Cache maintenance requires a bundled project');
+  if (project && project.origin !== 'bundled') throw new HttpError(409, 'Cache maintenance requires a bundled project');
   return project ? { root: projectBuildRoot(core, workspace, project), lock: PROJECT_BUILD_LOCK, receipt: PROJECT_BUILD_RECEIPT } : { root: embeddedStateRoot(core, workspace), lock: EMBEDDED_LOCK, receipt: EMBEDDED_RECEIPT };
 }
 async function exists(file: string) { return fs.lstat(file).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; }); }
@@ -64,7 +65,7 @@ async function inspect(scope: CacheScope, ownLock = false): Promise<CacheReview 
     const receipt = await buildJson(await containedPath(target.root, target.receipt));
     if (receipt.version !== 1 || receipt.core !== canonicalFuturePath(scope.core) || !['complete', 'failed'].includes(receipt.status)
       || typeof receipt.working !== 'string' || !/^w-[a-zA-Z0-9]{6}$/.test(receipt.working)) throw new Error('Cache has unknown/incomplete ownership or current-generation state; retained for review');
-    if (scope.project && (receipt.source !== canonicalFuturePath(scope.project.dir) || receipt.key !== (scope.project.key ?? scope.project.id))) throw new Error('Cache belongs to another project');
+    if (scope.project && (receipt.source !== canonicalFuturePath(scope.project.dir) || receipt.key !== projectStorageKey(scope.project))) throw new Error('Cache belongs to another project');
     if (!scope.project && receipt.source !== canonicalFuturePath(path.join(scope.core, 'embedded'))) throw new Error('Cache belongs to another product workspace');
     for (const name of (await fs.readdir(target.root)).sort()) {
       if (!/^w-[a-zA-Z0-9]{6}$/.test(name)) continue;

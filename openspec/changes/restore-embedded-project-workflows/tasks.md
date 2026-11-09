@@ -1,26 +1,42 @@
 ## 1. Plan approval
 
-- [ ] 1.1 Review and approve the successor contract and draft PR before implementation; verify maintainer approval is recorded and predecessor bot synchronization is explicitly tracked.
+- [x] 1.1 Review and approve the successor contract and draft PR before implementation; verify maintainer approval is recorded and predecessor bot synchronization is explicitly tracked. Maintainer approved implementation after draft PR #4; ordered bot synchronization remains tracked in prerequisites.md.
 
 ## 2. Effective embedded project state
 
-- [ ] 2.1 Separate origin/source immutability from normal project capabilities and deletion permission; verify direct-method and HTTP tests reject embedded deletion but allow ordinary same-name deletion without product writes.
-- [ ] 2.2 Implement durable contained effective manifests and working sources with stable scoped identity, revision checks and locked atomic updates; verify restart, concurrent save, read-only installation, alias/link, malformed-state and separate-project-repository fixtures.
-- [ ] 2.3 Preserve existing personal settings and define update/conflict handling for installed source and local edits; verify deterministic override precedence, no lost edits/identity, failed initialization recovery and cleanup exclusion without deleting prior state.
+- [x] 2.1 Separate origin/source immutability from normal project capabilities and deletion permission; verify direct-method and HTTP tests reject embedded deletion but allow ordinary same-name deletion without product writes.
+- [x] 2.2 Implement durable contained effective manifests and working sources with stable scoped identity, revision checks and locked atomic updates; verify restart, concurrent save, read-only installation, alias/link, malformed-state and separate-project-repository fixtures.
+- [x] 2.3 Preserve existing personal settings and define update/conflict handling for installed source and local edits; verify deterministic override precedence, no lost edits/identity, failed initialization recovery and cleanup exclusion without deleting prior state.
 
 ## 3. Normal action pipelines
 
-- [ ] 3.1 Resolve dev/native/browser runs, web builds and icon actions through effective projects without a required independent copy; verify public dependency-graph preparation, user-owned writes, explicit action-only installation, dev behavior and matching finalized icons/output.
-- [ ] 3.2 Enable packaging, package setup, publishing and release actions through the existing neutral adapters and normal settings UI; verify fixture packagers/publishers consume checked output and scoped identity, including required-configuration failures without embedded-origin bans.
-- [ ] 3.3 Retain checked generation receipts, active-use exclusions and non-destructive failure behavior across the new pipelines; verify stale/failed builds never auto-fallback, overlapping processes cannot overwrite state, and existing consumers keep their reserved output.
+- [x] 3.1 Resolve dev/native/browser runs, web builds and icon actions through effective projects without a required independent copy; verify public dependency-graph preparation, user-owned writes, explicit action-only installation, dev behavior and matching finalized icons/output.
+- [x] 3.2 Enable packaging, package setup, publishing and release actions through the existing neutral adapters and normal settings UI; verify fixture packagers/publishers consume checked output and scoped identity, including required-configuration failures without embedded-origin bans.
+- [x] 3.3 Retain checked generation receipts, active-use exclusions and non-destructive failure behavior across the new pipelines; verify stale/failed builds never auto-fallback, overlapping processes cannot overwrite state, and existing consumers keep their reserved output.
 
 ## 4. Organization and user interface
 
-- [ ] 4.1 Add durable logical embedded section/order/archive state and coherent mixed-origin layout handling; verify move, reorder, rename/delete section, default archive, archive/unarchive, counts, last-item section pruning, restart and same-name origin isolation without embedded folder moves.
-- [ ] 4.2 Restore one compact normal project view, tabs, settings, menus and drag/drop for both origins, suppressing only embedded Delete; verify browser interaction tests exercise Develop / Publish / Build where supported, action jobs, mixed sections and archive, and measure layout against ordinary-project geometry.
+- [x] 4.1 Add durable logical embedded section/order/archive state and coherent mixed-origin layout handling; verify move, reorder, rename/delete section, default archive, archive/unarchive, counts, last-item section pruning, restart and same-name origin isolation without embedded folder moves.
+- [x] 4.2 Restore one compact normal project view, tabs, settings, menus and drag/drop for both origins, suppressing only embedded Delete; verify browser interaction tests exercise Develop / Publish / Build where supported, action jobs, mixed sections and archive, and measure layout against ordinary-project geometry.
 
 ## 5. Acceptance and handoff
 
-- [ ] 5.1 Update current docs/instructions for normal embedded workflows and user-state ownership without rewriting predecessors; verify documentation no longer requires Copy to workspace for normal actions and the ordered prerequisite ledger remains accurate.
-- [ ] 5.2 Run focused changed-code/API/browser tests, type checking, name guard and strict OpenSpec validation; verify recorded results are truthful, product fixtures remain unchanged, and any manual native/device/signing gaps have an explicit follow-up owner rather than a passing claim.
+- [x] 5.1 Update current docs/instructions for normal embedded workflows and user-state ownership without rewriting predecessors; verify documentation no longer requires Copy to workspace for normal actions and the ordered prerequisite ledger remains accurate.
+- [x] 5.2 Run focused changed-code/API/browser tests, type checking, name guard and strict OpenSpec validation; verify recorded results are truthful, product fixtures remain unchanged, and any manual native/device/signing gaps have an explicit follow-up owner rather than a passing claim.
 - [ ] 5.3 Record implementation outcomes and exact tested revision in the authorized PR/worktree handoff; verify no private content is included, no unfinished outcome is checked and bot finalization/CI/maintainer merge remain pending until actually observed.
+
+## Local verification evidence
+
+- New embedded workflow suite: 12 passing checks, including real headless browser platform/publication saves, compact tabs, mixed sections/archive, same-timestamp stale saves, normal same-name deletion on Windows, package setup/publication/packaging fixture adapters, source-update reconciliation, independent-process locks, native-run leases and non-destructive cache handling.
+- Focused UI/state/layout/cache regression selection: 75 passed with browser checks enabled; subsequent final state/layout selection: 22 passed. The latest expanded embedded workflow suite passed all 12 checks.
+- Normal project/host/publication/package regression selection: 90 passed, one existing file-symlink case skipped because the local symlink privilege is unavailable (directory-junction and hard-link guards ran). Additional UI/publication/server/catalog/CI-policy selection: 78 passed. This is targeted evidence, not a claim that every repository suite was rerun.
+- Explicit real public launcher fixture: passed using frozen public dependencies and checked immutable finalized output; installed embedded inventory unchanged. Added to the existing Windows public-boundary lane.
+- Explicit synthetic native compiler/provider/browser fixture: passed. No physical integration was activated.
+- Strict production type check, browser module syntax check, all 23 strict OpenSpec validations, name guard and whitespace check: passed.
+
+## Remaining acceptance and delivery prerequisites
+
+- CI/maintainer owns rerunning the skipped file-symlink negative case in a privileged test environment.
+- Maintainer owns physical display/input validation, actual signing/package installation and any live-destination publication acceptance after provisioning those resources. Synthetic adapters/compiler checks do not certify those environments or authorize deployment.
+- Trusted automation owns exact-final-head CI and ordered predecessor/successor spec finalization. The active prerequisite chain remains in prerequisites.md; no predecessor artifact or task completion was rewritten.
+- Only the maintainer may merge. No worktree/private data cleanup is part of this task.

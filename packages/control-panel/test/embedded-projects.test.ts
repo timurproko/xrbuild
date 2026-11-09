@@ -10,12 +10,12 @@ import { createServer } from '../src/server.ts';
 import { freePort } from '../src/host-runner.ts';
 import { discoverProjectCatalog } from '../src/extension-catalog.ts';
 import { copyBundledProject } from '../src/embedded-projects.ts';
+import { effectiveProjectOutput } from '../src/embedded-project-output.ts';
 import { rebuildBundledProject, resolveProjectOutput, projectBuildRoot, PROJECT_BUILD_RECEIPT, PROJECT_BUILD_LOCK, projectPreviewRoute } from '../src/project-build.ts';
 import { runProcess, type JobContext } from '../src/jobs.ts';
 import { projectRunSettingsFile, readProjectRunSettings, saveProjectRunSettings } from '../src/project-run-settings.ts';
 import { createProject, createWorkspace } from '../src/workspace.ts';
 import { assertWritablePath } from '../src/project-access.ts';
-import { bundledProjectDetails } from '../ui/bundled-project.js';
 import type { Manifest } from '../src/projects.ts';
 import { withBrowser, sleep } from './browser-fixture.ts';
 import { defaultIcon } from '../../app-icon/src/icon.ts';
@@ -46,7 +46,7 @@ async function fixture(t: TestContext) {
     return { status: response.status, text, json };
   };
   t.after(async () => { await server.close(); await fs.rm(root, { recursive: true, force: true, maxRetries: 3 }); });
-  const bundled = async (id: string) => (await discoverProjectCatalog(core, workspace, projects)).projects.find(p => p.key === `bundled:${id}`)!.project;
+  const bundled = async (id: string) => (await discoverProjectCatalog(core, workspace, projects)).projects.find(p => p.project.id === `bundled:${id}`)!.project;
   return { root, core, workspace, projects, embedded, write, project, request, panel: server.panel, url: server.url, bundled };
 }
 
@@ -81,7 +81,7 @@ async function cacheFixture(t: TestContext, target: 'host' | 'webxr' = 'host') {
   const ctx: JobContext = { line() {}, async run(_command, args, options) {
     const cwd = String(options!.cwd); calls.push({ args, cwd });
     assert.equal(String(options!.env!.XRB_CORE), f.core);
-    assert.ok(cwd.startsWith(projectBuildRoot(f.core, f.workspace, p)));
+    assert.ok(cwd.startsWith(projectBuildRoot(f.core, f.workspace, p)) || cwd.startsWith(path.join(f.projects, '.xrb/embedded-projects')));
     if (args.join(' ').includes(' run ')) {
       await fs.mkdir(path.join(cwd, 'dist'));
       await fs.writeFile(path.join(cwd, 'dist/index.html'), '<html><head></head><body>cached output<script src="asset.js"></script></body></html>');
@@ -179,7 +179,7 @@ test('bundled rebuild API reserves jobs and blocks launches/settings until compl
   await assert.rejects(f.panel.saveRunSettings(f.p, {}, settings.revision), /running/);
   release(); const job = f.panel.jobs.active().find(job => job.id === response.json.id)!; await f.panel.jobs.wait(job);
   assert.equal(job.state, 'done', job.error ?? '');
-  assert.equal((await resolveProjectOutput(f.core, f.workspace, f.p)).problem, null);
+  assert.equal((await effectiveProjectOutput(f.core, f.workspace, await f.bundled('demo'))).problem, null);
 });
 
 test('real frozen pnpm workspace install and declared build execute only inside the bundled cache', { timeout: 60000 }, async t => {
@@ -266,7 +266,7 @@ test('cache identities separate archived projects, core installations and user w
   assert.equal((await resolveProjectOutput(otherCore, f.workspace, archived)).entry, null);
 });
 
-test('browser rebuilds from bundled details and loads generation-pinned cached assets', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
+test('browser rebuilds through the normal project menu and loads generation-pinned assets', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
   const f = await cacheFixture(t, 'webxr'), before = await snapshot(f.core);
   let launched = '';
   f.panel.runner.startPreview = async (_request, _mode, launch) => { await launch(null); };
@@ -275,14 +275,15 @@ test('browser rebuilds from bundled details and loads generation-pinned cached a
   await withBrowser(async ({ navigate, evaluate }) => {
     await navigate(f.url, `document.querySelector('.proj[data-id="bundled:demo"]')`);
     await evaluate(`document.querySelector('.proj[data-id="bundled:demo"]').click()`);
-    for (let i = 0; i < 100 && !await evaluate(`!!document.querySelector('#bundled-rebuild')`); i++) await sleep(50);
-    await evaluate(`document.querySelector('#bundled-rebuild').click()`);
-    for (let i = 0; i < 200 && (await resolveProjectOutput(f.core, f.workspace, f.p)).origin !== 'cache'; i++) await sleep(50);
-    for (let i = 0; i < 200 && !(await resolveProjectOutput(f.core, f.workspace, f.p)).entry; i++) await sleep(50);
-    const output = await resolveProjectOutput(f.core, f.workspace, f.p);
-    assert.equal(output.problem, null); assert.ok(output.generation);
-    for (let i = 0; i < 100 && !await evaluate(`!!document.querySelector('#bundled-run:not(:disabled)')`); i++) await sleep(50);
-    await evaluate(`document.querySelector('#bundled-run').click()`);
+    await evaluate(`document.querySelector('.proj[data-id="bundled:demo"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:80,clientY:300}));document.querySelector('#ctx-menu [data-act="rebuild-app"]').click()`);
+    let output;
+    for (let i = 0; i < 200; i++) {
+      output = await effectiveProjectOutput(f.core, f.workspace, await f.bundled('demo')).catch(() => null);
+      if (output) break; await sleep(50);
+    }
+    assert.ok(output); assert.ok(output.generation);
+    for (let i = 0; i < 100 && !await evaluate(`!!document.querySelector('#act-run:not(:disabled)')`); i++) await sleep(50);
+    await evaluate(`document.querySelector('#act-run').click()`);
     for (let i = 0; i < 100 && !launched; i++) await sleep(50);
     assert.ok(new URL(launched).pathname.includes(`@${output.generation}/`));
     await navigate(launched, `document.body.dataset.cached === 'yes'`);
@@ -302,26 +303,22 @@ test('HTTP catalog distinguishes both origins and archives without changing edit
   const product = response.json.projects.find((p: any) => p.id === 'bundled:demo');
   assert.equal(product.readOnly, true); assert.equal(product.origin, 'bundled'); assert.equal(product.section, 'core');
   assert.equal(product.icon.model, '/preview/bundled%3Ademo/icon.js');
-  assert.equal(JSON.stringify(response.json.layout).includes('bundled:'), false);
+  assert.deepEqual(response.json.layout.sections.find((section: any) => section.name === 'core').items, ['bundled:demo']);
   assert.equal((await f.request('GET', '/api/projects/workspace%3Ademo')).json.id, 'demo');
   assert.equal((await f.request('GET', '/api/projects/bundled%3Aarchive/old')).json.archived, true);
   assert.equal((await f.request('GET', '/api/projects/product-only')).status, 404);
   assert.equal((await f.request('GET', '/api/projects/integration-only')).status, 404);
 });
 
-test('all embedded mutations fail before jobs, services or product writes, including forged layout membership', async t => {
+test('embedded deletion is blocked while layout and archive use user metadata without product writes', async t => {
   const f = await fixture(t); await f.project(f.embedded, 'core', 'demo');
-  const before = await snapshot(f.core);
-  for (const action of ['archive', 'unarchive', 'delete', 'open-manifest', 'open-folder', 'build-web', 'rebuild-app', 'render-icon', 'package', 'package-setup', 'publish', 'activate', 'delete-release', 'unpublish']) {
-    const result = await f.request('POST', `/api/projects/bundled%3Ademo/${action}`, {});
-    assert.equal(result.status, 409, `${action}: ${result.text}`);
-  }
-  for (const [method, action] of [['PUT', 'manifest'], ['PUT', 'icon'], ['DELETE', 'icon']])
-    assert.equal((await f.request(method, `/api/projects/bundled%3Ademo/${action}`, {})).status, 409);
-  assert.equal((await f.request('PUT', '/api/layout', { sections: [{ name: 'examples', items: ['bundled:demo'] }] })).status, 409);
-  const p = await f.bundled('demo');
-  for (const action of [() => f.panel.webBuild(p), () => f.panel.rebuildApp(p), () => f.panel.renderIcon(p)]) assert.throws(action, /read-only/);
-  for (const action of [() => f.panel.deleteProject(p), () => f.panel.packageBuild(p, {}), () => f.panel.publish(p), () => f.panel.packageSetup(p, true)]) await assert.rejects(action(), /read-only/);
+  const before = await snapshot(f.core), p = await f.bundled('demo');
+  assert.equal((await f.request('POST', '/api/projects/bundled%3Ademo/delete', {})).status, 409);
+  await assert.rejects(f.panel.deleteProject(p), /cannot be deleted/);
+  assert.equal((await f.request('PUT', '/api/layout', { ...(await f.request('GET', '/api/projects')).json.layout, sections: [{ name: 'examples', items: ['bundled:demo'] }] })).status, 200);
+  assert.equal((await f.request('POST', '/api/projects/bundled%3Ademo/archive', {})).status, 200);
+  assert.equal((await f.request('POST', '/api/projects/bundled%3Aarchive/demo/delete', {})).status, 409);
+  assert.equal((await f.request('POST', '/api/projects/bundled%3Aarchive/demo/unarchive', {})).status, 200);
   assert.equal(f.panel.jobs.list().length, 0);
   assert.deepEqual(await snapshot(f.core), before);
 });
@@ -371,7 +368,7 @@ test('native bundled run uses packaged entry and user-owned scoped config, icons
   assert.deepEqual(await snapshot(f.core), before);
   assert.equal((await f.request('POST', '/api/projects/bundled%3Ademo/run', { mode: 'dev' })).status, 409);
   const p = await f.bundled('demo');
-  await assert.rejects(f.panel.hostArgs(p, { ...p.manifest!, host: { args: ['--render-icon=icon.png'] } }), /editable copy/);
+  await assert.rejects(f.panel.hostArgs(p, { ...p.manifest!, host: { args: ['--render-icon=icon.png'] } }), /Prepare embedded/);
 });
 
 test('copy strips deployment, signing, machine and generated state and belongs only to the selected project root', async t => {
@@ -600,36 +597,21 @@ test('browser selects duplicate origins and copies a bundled project into editab
   await withBrowser(async ({ evaluate, navigate }) => {
     await navigate(f.url, `!document.body.classList.contains('workspace-pending') && document.querySelectorAll('.proj').length === 2`);
     await evaluate(`document.querySelector('.proj[data-id="bundled:demo"]').click()`);
-    assert.equal(await evaluate(`!!document.querySelector('#bundled-copy') && !document.querySelector('#settings') && !document.querySelector('#build-settings')`), true);
-    assert.equal(await evaluate(`document.querySelector('.proj[data-id="bundled:demo"]').draggable`), false);
+    assert.equal(await evaluate(`!!document.querySelector('#settings') && !document.querySelector('#bundled-copy')`), true);
+    assert.equal(await evaluate(`document.querySelector('.proj[data-id="bundled:demo"]').draggable`), true);
     assert.equal(await evaluate(`document.querySelector('.proj[data-id="demo"]').draggable`), true);
-    await evaluate(`const form = document.querySelector('#bundled-run-settings'); form.querySelector('[name="flat"]').checked = true; form.querySelector('[name="monitor"]').value = '2'; form.dispatchEvent(new Event('input', {bubbles:true})); form.requestSubmit()`);
-    for (let i = 0; i < 100 && !(await f.request('GET', '/api/projects/bundled%3Ademo/run-settings')).json.values.flat; i++) await sleep(50);
-    await navigate(f.url, `document.querySelector('#bundled-run-settings [name="monitor"]')?.value === '2'`);
-    assert.equal(await evaluate(`document.querySelector('#bundled-run-settings [name="flat"]').checked`), true);
-    await evaluate(`document.querySelector('#bundled-reset-settings').click()`);
-    for (let i = 0; i < 100 && await evaluate(`document.querySelector('#bundled-run-settings [name="flat"]').checked`); i++) await sleep(50);
-    assert.equal(await evaluate(`document.querySelector('#bundled-run-settings [name="monitor"]').value`), '0');
-    await evaluate(`const copy = document.querySelector('#bundled-copy'); copy.querySelector('input').value = 'custom-demo'; copy.requestSubmit()`);
-    for (let i = 0; i < 100 && !await evaluate(`!!document.querySelector('.proj[data-id="custom-demo"][aria-current="true"]') && !!document.querySelector('#settings')`); i++) await sleep(100);
+    const legacy = await f.request('GET', '/api/projects/bundled%3Ademo/run-settings');
+    assert.equal((await f.request('PUT', '/api/projects/bundled%3Ademo/run-settings', { revision: legacy.json.revision, overrides: { flat: true, monitor: 2 } })).status, 200);
+    await navigate(f.url, `!!document.querySelector('#act-flat:checked')`);
+    assert.equal(await evaluate(`!!document.querySelector('#act-flat:checked')`), true);
+    const copied = await f.request('POST', '/api/projects/bundled%3Ademo/copy', { folder: 'custom-demo' });
+    assert.equal(copied.status, 201, copied.text);
+    for (let i = 0; i < 100 && !await evaluate(`!!document.querySelector('.proj[data-id="custom-demo"]')`); i++) await sleep(100);
+    await evaluate(`document.querySelector('.proj[data-id="custom-demo"]').click()`);
     assert.equal(await evaluate(`!!document.querySelector('.proj[data-id="custom-demo"][aria-current="true"]') && !!document.querySelector('#settings')`), true);
     assert.equal(await evaluate(`!!document.querySelector('#bundled-copy')`), false);
     await navigate(`${f.url}preview/bundled%3Ademo/`, `document.querySelector('h1')?.textContent === 'demo'`);
     assert.equal(await evaluate(`!!document.querySelector('[data-xrb-app-icon]')`), false);
   });
   assert.deepEqual(await snapshot(f.core), before);
-});
-
-test('bundled details offer personal run settings but no source editing, publication or package forms', () => {
-  const p = { id: 'bundled:demo', manifest: { name: '<Demo>', description: 'Example', target: 'webxr' }, entryExists: true, archived: true, errors: [],
-    runSettings: { values: { inputs: ['mouse'], display: 'desktop', flat: true, fullscreen: false, monitor: 0, cameraView: false } } };
-  const html = bundledProjectDetails(p, { icon: '/icon.png', busy: false, running: false });
-  assert.match(html, /&lt;Demo&gt;/); assert.match(html, /embedded · archived/);
-  assert.match(html, /Copy to workspace/); assert.match(html, /Run in browser/);
-  assert.match(html, /id="bundled-run-settings"/); assert.match(html, /Restore embedded defaults/);
-  assert.doesNotMatch(html, /name="(?:display|cameraView)"/);
-  assert.match(bundledProjectDetails({ ...p, manifest: { ...p.manifest, target: 'host' } }, { icon: '', busy: false, running: false }), /name="cameraView"/);
-  assert.match(bundledProjectDetails({ ...p, runSettings: null, runSettingsProblem: 'Invalid saved settings' }, { icon: '', busy: false, running: false }), /id="bundled-run"[^>]*disabled/);
-  assert.doesNotMatch(html, /id="(?:settings|build-settings|act-publish|act-package|open-manifest|open-studio)"/);
-  assert.match(bundledProjectDetails({ ...p, entryExists: false }, { icon: '', busy: false, running: false }), /id="bundled-run"[^>]*disabled/);
 });

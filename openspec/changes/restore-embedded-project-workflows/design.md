@@ -48,6 +48,16 @@ Use shared design-system controls and geometry. Browser coverage must check actu
 
 Read existing personal run choices and successful bundled build receipts without deleting or silently overwriting them. Define deterministic precedence between saved run overrides and new effective manifest edits, bind it in revisions, and test it. Existing malformed/linked/foreign state remains a diagnostic rather than being reset during initialization. Existing publication identity and ordinary workspace layout must survive upgrades. No automatic worktree, private repository or cache cleanup is part of this change.
 
+## Implementation choices
+
+- Durable trees live in the selected project repository's `.xrb/embedded-projects/<scope>/w-<id>/workspace/`; cooperating operations use sibling `.xrb/embedded-locks/<scope>.lock` files. Neither lives in a build-cleanup root. Active managed runs retain the operation lease until idle.
+- Scope binds canonical core, integration workspace, project repository and qualified logical project identity. Installed section paths are recorded as provenance, not hashed into persistent identity, so upstream default-section relocation preserves edits and user organization. Effective path authorization uses the checked original snapshot-relative location.
+- Embedded manifest saves carry `manifestRevision`, bound to complete parsed settings/errors, timestamp and unmaterialized personal-setting revision. Normal UI saves pass this revision; locked pre-save content checks reject same-timestamp edits. Manifest replacement uses exclusive temporary files, flush and atomic rename. Layout HTTP saves require the returned layout revision.
+- Legacy raw run/cache storage keys continue to use installed source/archive identity for compatibility; effective logical keys and scoped browser preferences remain stable through user archive/section changes.
+- Existing personal choices seed the effective manifest/run defaults once. The original legacy record is retained; normal manifest edits then win, using the same ordinary provider-configuration rules as user projects. Legacy API validation remains for unmaterialized projects rather than becoming a competing settings editor.
+- Installed input drift exposes a normal-card reconciliation warning. Explicit Keep my working sources revalidates the local graph, preserves every editable file, accepts the installed baseline and invalidates only the current built-output pointer. Reserved immutable generations survive.
+- The normal row menu retains optional explicit build-cache review in a shared modal, not a second embedded detail screen. Cleanup cannot select durable source-tree generations.
+
 ## Risks and verification
 
 - Broad access-check changes could expose product writes: test direct and HTTP operations with a byte-for-byte immutable product fixture and linked-path attacks.
@@ -55,6 +65,10 @@ Read existing personal run choices and successful bundled build receipts without
 - Persistent working sources could be mistaken for disposable cache: test cleanup exclusions, failed initialization and source-update conflicts.
 - Publication/package paths could diverge from run output: use neutral fixture adapters to assert matching checked source/output/icon/identity snapshots and state isolation.
 - The current personal-settings and explicit rebuild contracts need successor changes, not disabling their validation. Preserve receipt/locking protections and test concurrent writers and existing consumers.
+
+## Validation implementation
+
+The new explicit `embedded-workflows.fixture.ts` builds the real public launcher through the normal panel action in a fresh separate user/project root, checks immutable finalized output and byte-identical installed inputs, and joins the existing Windows public-boundary lane. No private workspace is provisioned. The native compiler/browser fixture uses synthetic providers only. New project/workspace ignore templates cover local `.xrb/` state, operation/layout locks and atomic manifest/layout scratch; existing user ignore files are not rewritten.
 
 ## Non-goals
 

@@ -7,7 +7,7 @@ import { buildJson as json, buildInventory as inventory, embeddedDeclaration, em
 import { embeddedWorkspacePlan, embeddedPrerequisites } from './embedded-workspace.ts';
 import { containedPath } from './extension-catalog.ts';
 import { assertWritablePath } from './project-access.ts';
-import { projectStateKey } from './project-run-settings.ts';
+import { projectStateKey, projectStorageKey } from './project-run-settings.ts';
 import { packagedProjectEntry, projectFile } from './embedded-projects.ts';
 import { defaultEntry, type Project } from './projects.ts';
 import { HttpError } from './http.ts';
@@ -16,7 +16,7 @@ import { finalizeBrowserBuild } from './browser-build.ts';
 
 export const PROJECT_BUILD_RECEIPT = 'build.json';
 export const PROJECT_BUILD_LOCK = 'build.lock';
-const scope = (core: string, p: Project) => ({ core: canonicalFuturePath(core), source: canonicalFuturePath(p.dir), key: p.key ?? p.id });
+const scope = (core: string, p: Project) => ({ core: canonicalFuturePath(core), source: canonicalFuturePath(p.dir), key: projectStorageKey(p) });
 export function projectBuildRoot(core: string, workspace: string, p: Project): string {
   return path.join(canonicalFuturePath(workspace), 'build', 'projects', projectStateKey(core, p));
 }

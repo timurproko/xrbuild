@@ -29,13 +29,16 @@ import {
   unregisteredApps,
   type Manifest,
   type Project,
+  readProject,
 } from './projects.ts';
 import { Panel } from './panel.ts';
+import { projectWritableRoot, withEmbeddedProjectLock, keepEmbeddedWorkingSources, embeddedProjectRoot, embeddedManifestRevision } from './embedded-project-state.ts';
+import { effectiveProjectOutput, effectiveOutputRoot } from './embedded-project-output.ts';
 import { discoverProjectCatalog } from './extension-catalog.ts';
 import { bundledBuildPlan, resolveProjectOutput, requireProjectOutput, projectPreviewRoute, projectBuildRoot } from './project-build.ts';
 import { copyBundledProject, projectFile, projectPath } from './embedded-projects.ts';
 import { assertEditableProject, assertUserRoot, assertWritablePath } from './project-access.ts';
-import { projectRunSettingsFile, readProjectRunSettings } from './project-run-settings.ts';
+import { projectRunSettingsFile, readProjectRunSettings, withRunSettings } from './project-run-settings.ts';
 import { publicationCard } from './publication.ts';
 import { ManagedTools } from './managed-tools.ts';
 import { applyLayout, readLayout, validateLayout, type Layout } from './layout.ts';
@@ -176,9 +179,9 @@ function sendAutoRouteError(res: ServerResponse, message: string): void {
 }
 
 /** Project for an id ("x", or "archive/x" when archived), or a 404. */
-async function resolveProject(core: string, projects: string, id: string): Promise<Project> {
-  const catalog = await discoverProjectCatalog(core, projects);
-  const p = catalog.projects.find(record => record.key === id || record.origin === 'workspace' && record.project.id === id)?.project;
+async function resolveProject(core: string, workspace: string, projects: string, id: string): Promise<Project> {
+  const catalog = await discoverProjectCatalog(core, workspace, projects);
+  const p = catalog.projects.find(record => record.key === id || record.project.id === id)?.project;
   if (!p) throw new HttpError(404, `no project ${id}`);
   return p;
 }
@@ -203,24 +206,26 @@ async function mtime(file: string | null): Promise<number | null> {
 
 /** A project as the UI sees it (`projects`: the project repository root). */
 export async function describeProject(projects: string, p: Project, panel: Panel) {
-  const m = p.manifest;
-  const runSettings = p.readOnly && m ? await readProjectRunSettings(panel.repo, panel.workspace, p)
+  const runSettings = p.readOnly && p.manifest ? await readProjectRunSettings(panel.repo, panel.workspace, p)
     .then(value => ({ value, problem: null as string | null }), error => ({ value: null, problem: (error as Error).message })) : null;
-  const output = p.readOnly && m ? await resolveProjectOutput(panel.repo, panel.workspace, p) : null;
+  const m = runSettings?.value ? withRunSettings(p, runSettings.value).manifest : p.manifest;
+  const output = p.workingRoot && m ? await effectiveProjectOutput(panel.repo, panel.workspace, p).catch(error => ({ entry: null, origin: 'cache' as const, generation: null, problem: (error as Error).message }))
+    : p.readOnly && m ? await resolveProjectOutput(panel.repo, panel.workspace, p) : null;
   const buildPlan = p.readOnly && m ? await bundledBuildPlan(panel.repo, p).then(() => ({ available: true, reason: null as string | null }), error => ({ available: false, reason: (error as Error).message })) : null;
   const entry = output ? output.entry : m ? entryDir(p, m) : null;
   const assetTime = async (relative: string) => projectFile(p, relative).then(mtime, () => null);
   const relativeEntry = m?.entry ?? (m ? defaultEntry(m.kind) : '.');
-  const webBuildMs = entry ? output ? await mtime(path.join(entry, 'index.html')) : await assetTime(`${relativeEntry}/index.html`) : null;
+  const staticReady = p.workingRoot && m && !m.scripts?.build ? await assetTime(`${relativeEntry}/index.html`) : null;
+  const webBuildMs = entry ? output ? await mtime(path.join(entry, 'index.html')) : await assetTime(`${relativeEntry}/index.html`) : staticReady;
   // The build's 3D icon (icon.js next to index.html), which a launcher imports from the preview route.
   const iconModelMs = entry ? output ? await mtime(path.join(entry, 'icon.js')) : await assetTime(`${relativeEntry}/icon.js`) : null;
   const iconMs = m?.icon ? await assetTime(m.icon) : null;
-  const packageId = !p.readOnly && m ? identityOf(m)?.id : undefined;
+  const packageId = m ? identityOf(m)?.id : undefined;
   const zipMs = typeof packageId === 'string' ? await mtime(path.join(panel.workspace, 'builds', `${packageId}.zip`)) : null;
-  const publicationPromise = panel.publicationOf(p.readOnly ? null : m);
-  let standalone = p.readOnly ? null : m;
+  const publicationPromise = panel.publicationOf(m);
+  let standalone = m;
   let publicationStandalonePromise = publicationPromise;
-  if (!p.readOnly && m && (m.target !== 'webxr' || m.platform)) {
+  if (m && (m.target !== 'webxr' || m.platform)) {
     standalone = { ...m, target: 'webxr' };
     delete standalone.platform;
     publicationStandalonePromise = panel.publicationOf(standalone);
@@ -232,6 +237,11 @@ export async function describeProject(projects: string, p: Project, panel: Panel
     key: p.key ?? `workspace:${p.id}`,
     origin: p.origin ?? 'workspace',
     readOnly: p.readOnly ?? false,
+    canDelete: p.origin !== 'bundled',
+    preferenceKey: p.origin === 'bundled' ? `bundled:${path.basename(embeddedProjectRoot(panel.repo, panel.workspace, projects, p))}` : p.id,
+    stateProblem: p.stateProblem ?? null,
+    sourceUpdate: p.sourceUpdate ?? null,
+    runDefaults: p.runDefaults ?? runSettings?.value?.values ?? null,
     build: output ? { path: path.relative(panel.workspace, projectBuildRoot(panel.repo, panel.workspace, p)).split(path.sep).join('/'), origin: output.origin, generation: output.generation, problem: output.problem, canRebuild: buildPlan?.available ?? false, reason: buildPlan?.reason ?? null } : null,
     runSettings: runSettings?.value ?? null,
     runSettingsProblem: runSettings?.problem ?? null,
@@ -239,8 +249,9 @@ export async function describeProject(projects: string, p: Project, panel: Panel
     section: p.section,
     dir: path.relative(await fs.realpath(p.readOnly ? panel.repo : projects), p.dir).split(path.sep).join('/'),
     manifest: m,
-    errors: p.errors,
+    errors: [...p.errors, ...(p.stateProblem ? [{ field: '', message: p.stateProblem }] : []), ...(runSettings?.problem ? [{ field: '', message: `${runSettings.problem} (${projectRunSettingsFile(panel.repo, panel.workspace, p)})` }] : [])],
     manifestMtimeMs: p.manifestMtimeMs,
+    manifestRevision: p.origin === 'bundled' ? embeddedManifestRevision(p, runSettings?.value?.revision) : undefined,
     entryExists: webBuildMs !== null,
     webBuildMs,
     icon: {
@@ -250,10 +261,10 @@ export async function describeProject(projects: string, p: Project, panel: Panel
     running: panel.runner.projectId === p.id,
     // The launcher card this project presents everywhere: the same contract a publisher records with a deployment.
     card: m ? publicationCard(m, iconModelMs !== null) : null,
-    canDev: !p.readOnly && !!m?.scripts?.dev,
+    canDev: !!m?.scripts?.dev,
     archived: isArchivedId(p.id),
-    packaging: panel.packagingOf(p.readOnly ? null : m),
-    packagingChoices: panel.packagingChoicesOf(p.readOnly ? null : m),
+    packaging: panel.packagingOf(m),
+    packagingChoices: panel.packagingChoicesOf(m),
     publication,
     publicationStandalone,
     publicationDestinations,
@@ -266,7 +277,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
   const projects = opts.projects ?? opts.panel?.projects ?? workspace;
   assertUserRoot(core, workspace);
   assertUserRoot(core, projects);
-  const findProject = (id: string) => resolveProject(core, projects, id);
+  const findProject = (id: string) => resolveProject(core, workspace, projects, id);
   const port = opts.port ?? DEFAULT_PORT;
   const url = `http://127.0.0.1:${port}/`;
   const workspaceKind = opts.workspaceKind ?? 'explicit';
@@ -329,26 +340,42 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       if (!['GET', 'HEAD'].includes(method)) throw new HttpError(405, 'method not allowed');
       const decoded = parts.slice(1).map(decodeURIComponent);
       const n = /^(?:(?:bundled|workspace):)?archive$/.test(decoded[0]) ? 2 : 1;
-      const p = await findProject(decoded.slice(0, n).join('/'));
+      let p = await findProject(decoded.slice(0, n).join('/'));
       let file = parts.slice(1 + n).join('/');
       let bundledEntry: string | null = null;
-      if (p.readOnly) {
+      if (p.origin === 'bundled') {
         const marker = decodeURIComponent(parts[1 + n] ?? '');
         const generation = marker.startsWith('@r-') ? marker.slice(1) : undefined;
-        if (generation !== undefined) file = parts.slice(2 + n).join('/');
-        const output = await requireProjectOutput(core, workspace, p, generation);
+        if (generation !== undefined) {
+          if (!/^r-[a-zA-Z0-9]{6}$/.test(generation)) throw new HttpError(409, 'Invalid project output generation');
+          file = parts.slice(2 + n).join('/');
+        }
+        if (!generation && p.workingRoot) {
+          const done = await panel.jobs.wait(panel.webBuild(p));
+          if (done.state === 'failed') throw new HttpError(409, done.error ?? 'Project build failed');
+          p = await findProject(p.id);
+        }
+        let output;
+        const effectiveGeneration = p.workingRoot && generation ? path.join(effectiveOutputRoot(core, workspace, p), generation) : null;
+        if (effectiveGeneration) assertWritablePath(core, workspace, effectiveGeneration);
+        const oldGeneration = effectiveGeneration && !await fs.lstat(effectiveGeneration).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
+        if (oldGeneration && p.productDir) {
+          const source = await readProject(p.productDir, p.id, p.section);
+          if (!source) throw new HttpError(409, 'Installed project is unavailable');
+          output = await requireProjectOutput(core, workspace, { ...source, origin: 'bundled', readOnly: true, key: p.key }, generation);
+        } else output = p.workingRoot ? await effectiveProjectOutput(core, workspace, p, generation) : await requireProjectOutput(core, workspace, p, generation);
         bundledEntry = output.entry;
         if (!generation && output.generation) {
           res.writeHead(302, { location: `${projectPreviewRoute(p, output)}${file}${url.search}`, 'cache-control': 'no-store' }); res.end(); return;
         }
       }
-      if (!p.readOnly && (!file || file === 'index.html')) {
+      if (p.origin !== 'bundled' && (!file || file === 'index.html')) {
         const job = panel.webBuild(p);
         const done = await panel.jobs.wait(job);
         if (done.state === 'failed') throw new HttpError(400, done.error ?? 'the app build failed');
       }
       const entry = bundledEntry ?? await projectPath(p, usable(p).entry ?? defaultEntry(usable(p).kind));
-      if (p.readOnly) {
+      if (p.origin === 'bundled') {
         const relative = decodeURIComponent(file || 'index.html'), owner = { ...p, dir: entry };
         const asset = await projectPath(owner, relative);
         if ((await fs.stat(asset)).isDirectory()) await projectFile(owner, `${relative}/index.html`);
@@ -435,7 +462,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       return sendJson(res, 200, {
         projects: await Promise.all(liveProjects.map((p) => describeProject(projects, p, panel))),
         archived: await Promise.all(archived.map((p) => describeProject(projects, p, panel))),
-        layout: await readLayout(projects, liveProjects.filter(p => !p.readOnly)),
+        layout: await readLayout(projects, liveProjects),
         problems: catalog.problems,
         unregistered: await unregisteredApps(projects),
       });
@@ -446,16 +473,21 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       if (problem) throw new HttpError(400, problem);
       assertWritablePath(core, projects, path.join(projects, 'xrb-panel.json'));
       assertWritablePath(core, projects, path.join(projects, PROJECTS, UNSORTED));
-      if (Object.keys(l.colors ?? {}).some(id => id.startsWith('bundled:'))) throw new HttpError(409, 'Bundled layout is read-only');
+      if (typeof l.revision !== 'string' || !/^[a-f0-9]{64}$/.test(l.revision)) throw new HttpError(400, 'The current project layout revision is required');
       for (const section of l.sections) {
-        if (section.items.some(id => id.startsWith('bundled:'))) throw new HttpError(409, 'Bundled layout is read-only');
         assertWritablePath(core, projects, path.join(projects, PROJECTS, section.name.trim().toLowerCase()));
         if (section.from) assertWritablePath(core, projects, path.join(projects, PROJECTS, section.from));
       }
-      const editable = await discoverProjects(projects);
-      for (const project of editable) assertEditableProject(core, projects, project);
+      const editable = (await discoverProjectCatalog(core, workspace, projects)).projects.map(record => record.project).filter(p => !isArchivedId(p.id));
+      const known = new Set(editable.map(p => p.id));
+      if (l.sections.some(section => section.items.some(id => !known.has(id)))) throw new HttpError(409, 'Unknown or archived project in layout');
+      for (const project of editable) if (project.origin !== 'bundled') assertEditableProject(core, projects, project);
+      if (panel.runner.busy || panel.jobs.active().length) throw new HttpError(409, 'Stop active runs and jobs before rearranging projects');
       try {
-        await applyLayout(projects, l, editable);
+        const bundled = editable.filter(p => p.origin === 'bundled').sort((a, b) => a.id.localeCompare(b.id));
+        const apply = (index: number): Promise<void> => index === bundled.length ? applyLayout(projects, l, editable)
+          : withEmbeddedProjectLock(core, projects, bundled[index], () => apply(index + 1));
+        await apply(0);
       } catch (e) {
         if (e instanceof MoveRefused) throw new HttpError(409, e.message);
         throw e;
@@ -480,28 +512,65 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       const n = /^(?:(?:bundled|workspace):)?archive$/.test(api[1]) ? 2 : 1;
       const id = api.slice(1, 1 + n).join('/');
       const rest = api.slice(1 + n);
-      const p = await findProject(id);
+      let p = await findProject(id);
+      let writeRevision = p.manifestMtimeMs;
+      let writeManifestRevision = embeddedManifestRevision(p);
       if (rest.length === 1 && rest[0] === 'run-settings') {
+        if (p.workingRoot) throw new HttpError(409, 'Personal choices were imported into normal project settings; use the normal controls or Open JSON');
         if (method === 'GET') return sendJson(res, 200, await readProjectRunSettings(core, workspace, p));
         if (method === 'PUT' || method === 'DELETE') {
           const body = await readJson<{ overrides?: unknown; revision?: unknown }>(req);
           return sendJson(res, 200, await panel.saveRunSettings(p, method === 'DELETE' ? {} : body?.overrides, body?.revision));
         }
       }
+      if (method === 'POST' && rest.length === 1 && rest[0] === 'keep-working-sources') {
+        if (p.origin !== 'bundled' || !p.workingRoot) throw new HttpError(409, 'Only prepared embedded projects have working sources');
+        panel.assertProjectIdle(p);
+        const body = await readJson<{ revision?: unknown; confirm?: unknown }>(req);
+        await keepEmbeddedWorkingSources(core, workspace, projects, p, body.revision, body.confirm);
+        hub.send('projects-changed', {});
+        return sendJson(res, 200, await describeProject(projects, await findProject(id), panel));
+      }
       if (method === 'POST' && rest.length === 1 && rest[0] === 'copy') {
         const body = await readJson<{ folder: string; name?: string }>(req);
-        const copied = await copyBundledProject(core, projects, p, body.folder, body.name);
+        const copied = await withEmbeddedProjectLock(core, projects, p, () => copyBundledProject(core, projects, p, body.folder, body.name));
         hub.send('projects-changed', {});
         return sendJson(res, 201, await describeProject(projects, await findProject(copied), panel));
       }
-      if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && !(p.readOnly && rest.length === 1 && ['run', 'preview', 'rebuild-app', 'cache'].includes(rest[0])))
-        assertEditableProject(core, projects, p);
+      if (p.origin === 'bundled' && rest[0] === 'delete') throw new HttpError(409, 'Embedded projects cannot be deleted; archive instead');
+      if (p.origin === 'bundled' && (method === 'PUT' && rest[0] === 'icon' || method === 'DELETE' && rest[0] === 'icon'
+        || method === 'POST' && ['open-folder', 'open-manifest'].includes(rest[0]))) {
+        panel.assertProjectIdle(p);
+        p = await panel.prepareProject(p);
+        writeRevision = p.manifestMtimeMs;
+        writeManifestRevision = embeddedManifestRevision(p);
+      }
+      if (p.origin !== 'bundled' && !['GET', 'HEAD', 'OPTIONS'].includes(method)) assertEditableProject(core, projects, p);
+      let writable = projectWritableRoot(projects, p);
+      const checkWriteRevision = async () => {
+        const current = p.origin === 'bundled' ? await readProject(p.dir, p.id, p.section) : null;
+        if (p.origin === 'bundled' && (!current || embeddedManifestRevision({ ...p, ...current }) !== writeManifestRevision)) throw new HttpError(409, 'Project settings changed; reload before saving');
+        if ((await fs.stat(path.join(p.dir, MANIFEST))).mtimeMs !== writeRevision) throw new ManifestConflictError('Project settings changed; reload before saving');
+      };
       if (method === 'GET' && rest.length === 0) return sendJson(res, 200, await describeProject(projects, p, panel));
       if (method === 'PUT' && rest[0] === 'manifest' && rest.length === 1) {
-        const body = await readJson<{ manifest?: Manifest; mtimeMs?: number; confirm?: string[] }>(req);
+        const body = await readJson<{ manifest?: Manifest; mtimeMs?: number; revision?: string; confirm?: string[] }>(req);
         if (!body.manifest) throw new HttpError(400, 'manifest missing');
         const publicationErrors = panel.publicationErrors(body.manifest);
         if (publicationErrors.length) return sendJson(res, 400, { error: 'invalid publication settings', fields: publicationErrors });
+        const editTime = p.manifestMtimeMs;
+        if (p.origin === 'bundled') {
+          const legacy = p.readOnly && p.manifest ? await readProjectRunSettings(core, workspace, p) : null;
+          if (typeof body.revision !== 'string') throw new HttpError(400, 'The current project manifest revision is required');
+          if (body.revision !== embeddedManifestRevision(p, legacy?.revision)) throw new HttpError(409, 'Project settings changed; reload before saving');
+          const wasRaw = p.readOnly;
+          panel.assertProjectIdle(p);
+          p = await panel.prepareProject(p);
+          if (wasRaw && legacy && p.importedRunRevision !== legacy.revision) throw new HttpError(409, 'Personal settings changed during preparation; reload before saving');
+          writeRevision = p.manifestMtimeMs;
+          writeManifestRevision = embeddedManifestRevision(p);
+          writable = projectWritableRoot(projects, p);
+        }
         const before = p.manifest?.publication, after = body.manifest.publication;
         const selectsAnotherPublisher = !!before && !!after && before.publisher !== after.publisher;
         const changesSelectedRoute = !!before && (!after || (!selectsAnotherPublisher && before.slug !== after.slug));
@@ -511,8 +580,13 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
             throw new HttpError(409, 'Changing an active publication route may strand installed packages.', { needsConfirm: 'publication-route', previousUrl: state.status?.selectedUrl });
         }
         try {
-          assertWritablePath(core, projects, path.join(p.dir, MANIFEST));
-          const r = await saveManifest(p.dir, body.manifest, body.mtimeMs);
+          assertEditableProject(core, projects, p);
+          assertWritablePath(core, writable, path.join(p.dir, MANIFEST));
+          if (body.mtimeMs !== undefined && body.mtimeMs !== editTime) throw new ManifestConflictError('Project settings changed; reload before saving');
+          const r = await withEmbeddedProjectLock(core, projects, p, async () => {
+            await checkWriteRevision();
+            return saveManifest(p.dir, body.manifest!, writeRevision);
+          });
           if (r.errors.length) return sendJson(res, 400, { error: 'invalid settings', fields: r.errors });
         } catch (e) {
           if (e instanceof ManifestConflictError) throw new HttpError(409, e.message);
@@ -536,10 +610,13 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
           const rel = m.icon ?? 'icon.png';
           const file = path.resolve(p.dir, rel);
           if (!isInside(p.dir, rel)) throw new HttpError(400, 'icon path outside the project');
-          assertWritablePath(core, projects, file);
-          assertWritablePath(core, projects, path.join(p.dir, MANIFEST));
-          await fs.writeFile(file, png);
-          if (!m.icon) await saveManifest(p.dir, { ...m, icon: rel }, p.manifestMtimeMs);
+          assertWritablePath(core, writable, file);
+          assertWritablePath(core, writable, path.join(p.dir, MANIFEST));
+          await withEmbeddedProjectLock(core, projects, p, async () => {
+            await checkWriteRevision();
+            await fs.writeFile(file, png);
+            if (!m.icon) await saveManifest(p.dir, { ...m, icon: rel }, writeRevision);
+          });
           log(`[projects] icon of ${id} written (${png.length} bytes)`);
           const d = await describeProject(projects, await findProject(id), panel);
           hub.send('project', d);
@@ -549,12 +626,15 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
           const m = usable(p);
           if (m.icon) {
             const file = path.resolve(p.dir, m.icon);
-            assertWritablePath(core, projects, file);
-            assertWritablePath(core, projects, path.join(p.dir, MANIFEST));
+            assertWritablePath(core, writable, file);
+            assertWritablePath(core, writable, path.join(p.dir, MANIFEST));
             const next = { ...m };
             delete next.icon;
-            await saveManifest(p.dir, next, p.manifestMtimeMs);
-            await fs.unlink(file).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+            await withEmbeddedProjectLock(core, projects, p, async () => {
+              await checkWriteRevision();
+              await saveManifest(p.dir, next, writeRevision);
+              await fs.unlink(file).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+            });
             log(`[projects] custom icon of ${id} removed`);
           }
           const d = await describeProject(projects, await findProject(id), panel);

@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import path from 'node:path';
 import { containedPath } from './extension-catalog.ts';
 import { HttpError } from './http.ts';
-import { assertWritablePath } from './project-access.ts';
+import { assertEditableProject, assertWritablePath } from './project-access.ts';
 import { defaultEntry, discoverAll, liveId, MANIFEST, UNSORTED, validateManifest, type Manifest, type Project } from './projects.ts';
 import { PROJECT_FOLDER } from './workspace.ts';
 
@@ -60,11 +60,12 @@ export function portableProjectManifest(source: Manifest, name: string): Manifes
 
 /** An explicit new live copy; never replaces a destination, even an empty directory. */
 export async function copyBundledProject(core: string, projects: string, p: Project, folder: string, name = p.manifest?.name ?? folder): Promise<string> {
-  if (!p.readOnly || p.origin !== 'bundled' || !p.manifest) throw new HttpError(409, 'Only valid bundled projects can be copied');
+  if (p.origin !== 'bundled' || !p.manifest) throw new HttpError(409, 'Only valid bundled projects can be copied');
+  if (p.workingRoot) assertEditableProject(core, projects, p);
   if (typeof folder !== 'string' || !PROJECT_FOLDER.test(folder) || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i.test(folder)) throw new HttpError(400, 'Choose a project folder using lowercase letters, digits and dashes');
   if (typeof name !== 'string' || !name.trim() || name.length > 200) throw new HttpError(400, 'A project name is required (at most 200 characters)');
-  const embedded = await fs.realpath(path.join(core, 'embedded'));
-  const source = await containedPath(embedded, path.relative(embedded, p.dir).split(path.sep).join('/'));
+  const owner = p.workingRoot ?? await fs.realpath(path.join(core, 'embedded'));
+  const source = await containedPath(owner, path.relative(owner, p.dir).split(path.sep).join('/'));
   const destination = path.join(projects, 'projects', UNSORTED, folder);
   assertWritablePath(core, projects, destination);
   if ((await discoverAll(projects)).some(project => liveId(project.id).toLowerCase() === folder)) throw new HttpError(409, 'That project folder name is already in use');

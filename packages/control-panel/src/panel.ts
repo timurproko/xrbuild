@@ -11,12 +11,14 @@ import { fileURLToPath } from 'node:url';
 import { defaultIcon } from '../../app-icon/src/icon.ts';
 import { APP_FAVICON_FILE, finalizeBrowserBuild } from './browser-build.ts';
 import { projectFile } from './embedded-projects.ts';
+import { prepareEmbeddedProject, prepareEmbeddedDependencies, projectWritableRoot, embeddedProjectEnvironment, withEmbeddedProjectLock, runEmbeddedProjectScript } from './embedded-project-state.ts';
+import { effectiveInputFingerprint, effectiveProjectOutput, publishEffectiveOutput, markEffectiveBuildFailed } from './embedded-project-output.ts';
 import { metadataText } from './embedded-inputs.ts';
 import { stagePackagerInputs } from './package-staging.ts';
 import { setupEmbeddedServices, embeddedServiceRuntime } from './service-artifacts.ts';
 import { pluginDiscoverySnapshot, type DiscoverySnapshot } from './plugin-discovery.ts';
 import { cleanWorkingCache, reviewWorkingCache } from './cache-maintenance.ts';
-import { rebuildBundledProject, requireProjectOutput, projectPreviewRoute } from './project-build.ts';
+import { requireProjectOutput, projectPreviewRoute } from './project-build.ts';
 import { assertEditableProject, assertUserRoot, assertWritablePath } from './project-access.ts';
 import { projectStateKey, readProjectRunSettings, saveProjectRunSettings, validateRunOverrides, withRunSettings } from './project-run-settings.ts';
 import { log } from './env.ts';
@@ -24,12 +26,12 @@ import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHos
 import { panelFreshness, panelSourceRoots, type PanelFreshness } from './panel-freshness.ts';
 import { HostRunner, type RunMode } from './host-runner.ts';
 import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings } from './plugin-manager.ts';
-import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, containedPath, type PluginCatalog } from './extension-catalog.ts';
+import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, discoverProjectCatalog, containedPath, type PluginCatalog } from './extension-catalog.ts';
 import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
 import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
 import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatus, type BuildTarget, type IdentityField, type PackagerDiscovery, type PackagerSetupStatus, type RoleSelection } from './packagers.ts';
 import { PackageList } from './packages.ts';
-import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, discoverAll, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
+import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
 import { archiveProject, readLayout, removeEmptyProjectSection, unarchiveProject } from './layout.ts';
 import { discoverPublishers, normalizeReleaseCatalog, publicationUrl, publisherFor, releaseIdProblem, type PublicationCard, type PublicationIdentity, type Publisher, type PublisherDiscovery, type PublisherReleaseCatalog, type PublisherStatus } from './publishers.ts';
 import { compareVersions as compareReleaseVersions, highestVersion, publicationCard, publicationIdentity, receiptMatchesOutput, suggestedVersion, verifyBuildReceipt, versionProblem, writeBuildReceipt, type PublicationConfig } from './publication.ts';
@@ -382,6 +384,17 @@ export class Panel {
     if (this.servicesPending) throw new HttpError(409, this.servicesProblem ?? 'Plugin discovery is awaiting refresh');
     if (this.changingPlugins) throw new HttpError(409, 'Plugin services are changing; retry after the update');
     try {
+      const [kind, projectId, , work] = args;
+      if (projectId?.startsWith('bundled:') && kind !== 'cache-cleanup') {
+        args[3] = async ctx => {
+          const p = (await discoverProjectCatalog(this.repo, this.workspace, this.projects)).projects.find(record => record.project.id === projectId)?.project;
+          if (!p) throw new HttpError(409, 'Project organization changed before the job started');
+          return withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
+            await this.prepareProject(p);
+            return work(ctx);
+          });
+        };
+      }
       const job = this.jobs.start(...args);
       log(`[job ${job.id}] ${job.title}`);
       void this.jobs.wait(job).then((j) => log(`[job ${j.id}] ${j.state}${j.error ? `: ${j.error}` : ''}`));
@@ -397,11 +410,17 @@ export class Panel {
     return p.manifest;
   }
 
+  async prepareProject(p: Project): Promise<Project> {
+    return prepareEmbeddedProject(this.repo, this.workspace, this.projects, p);
+  }
+
+  private writableRoot(p: Project): string { return projectWritableRoot(this.projects, p); }
+
   private editableManifest(p: Project): Manifest {
     assertEditableProject(this.repo, this.projects, p);
     const m = this.manifestOf(p);
     for (const file of [MANIFEST, m.icon, m.entry ?? defaultEntry(m.kind)].filter((value): value is string => !!value))
-      assertWritablePath(this.repo, this.projects, path.resolve(p.dir, file));
+      assertWritablePath(this.repo, this.writableRoot(p), path.resolve(p.dir, file));
     return m;
   }
 
@@ -411,7 +430,7 @@ export class Panel {
 
   /** Re-reads the project (its manifest may have changed during a job) and applies `change`. */
   private async updateManifest(projectId: string, change: (m: Manifest) => Manifest): Promise<void> {
-    const p = (await discoverAll(this.projects)).find((x) => x.id === projectId);
+    const p = (await discoverProjectCatalog(this.repo, this.workspace, this.projects)).projects.find(({ project }) => project.id === projectId)?.project;
     if (!p?.manifest) return;
     const next = change(p.manifest);
     if (validateManifest(next, p.dir).length) return;
@@ -465,7 +484,7 @@ export class Panel {
    */
   async hostArgs(p: Project, m: Manifest, desktop?: { fullscreen: boolean; monitor: number }, effective?: RoleSelection): Promise<string[]> {
     const h = m.host ?? {};
-    if (p.readOnly && h.args?.length) throw new HttpError(409, 'Custom bundled host arguments require an editable copy');
+    if (p.readOnly && h.args?.length) throw new HttpError(409, 'Prepare embedded working state before using custom host arguments');
     const key = projectStateKey(this.repo, p);
     const state = path.join(this.workspace, 'build', 'project-state', key);
     const config = path.join(state, `${this.instanceId}.json`);
@@ -479,7 +498,7 @@ export class Panel {
     const args: string[] = [`--config=${config}`, ...(providers.pluginBins ?? []).map((d) => `--plugin-dir=${d}`)];
     if (h.recordHands) {
       const file = p.readOnly ? path.join(state, 'recordings', path.basename(h.recordHands)) : path.resolve(p.dir, h.recordHands);
-      assertWritablePath(this.repo, p.readOnly ? this.workspace : this.projects, file);
+      assertWritablePath(this.repo, p.readOnly ? this.workspace : this.writableRoot(p), file);
       await fs.mkdir(path.dirname(file), { recursive: true });
       args.push(`--record-hands=${file}`);
     }
@@ -499,7 +518,7 @@ export class Panel {
 
   private async finalizeBrowserOutput(p: Project, m: Manifest): Promise<boolean> {
     this.editableManifest(p);
-    for (const name of ['index.html', APP_FAVICON_FILE]) assertWritablePath(this.repo, this.projects, path.join(this.entryOf(p, m), name));
+    for (const name of ['index.html', APP_FAVICON_FILE]) assertWritablePath(this.repo, this.writableRoot(p), path.join(this.entryOf(p, m), name));
     return (await finalizeBrowserBuild(this.entryOf(p, m), {
       file: m.icon ? path.resolve(p.dir, m.icon) : undefined,
       color: m.iconColor,
@@ -511,10 +530,12 @@ export class Panel {
   private async executeBrowserBuild(p: Project, m: Manifest, ctx: JobContext): Promise<void> {
     const script = m.scripts?.build;
     if (!script) throw new Error(`${p.id} has no build script`);
-    await this.ensureInstalled(ctx);
+    if (p.workingRoot) await prepareEmbeddedDependencies(this.repo, this.projects, p, ctx);
+    else await this.ensureInstalled(ctx);
     // Corepack ships with Node and provides the workspace's pinned pnpm version without requiring
     // a global pnpm command. It runs through cmd.exe; script names are plain names (manifest rules).
-    await ctx.run('cmd.exe', ['/d', '/s', '/c', `corepack pnpm run ${script}`], { cwd: p.dir, env: { ...process.env, ...this.appEnv() } });
+    if (p.workingRoot) await runEmbeddedProjectScript(this.repo, this.projects, p, ctx, script);
+    else await ctx.run('cmd.exe', ['/d', '/s', '/c', `corepack pnpm run ${script}`], { cwd: p.dir, env: { ...process.env, ...this.appEnv() } });
     if (await this.finalizeBrowserOutput(p, m)) ctx.line('Applied the project icon as the browser favicon.');
   }
 
@@ -522,10 +543,21 @@ export class Panel {
     const file = path.join(this.workspace, '.xrb', 'state', 'builds', `${p.id.replace(/[^a-zA-Z0-9_.-]/g, '_')}.json`);
     assertWritablePath(this.repo, this.workspace, file);
     await writeBuildReceipt(this.workspace, p.id, p.manifestMtimeMs, entry);
+    if (p.workingRoot) await publishEffectiveOutput(this.repo, this.workspace, p);
+  }
+
+  private async checkEffectiveManifest(p: Project): Promise<void> {
+    if (!p.workingRoot) return;
+    const current = await readProject(p.dir, p.id, p.section);
+    if (!current || current.manifestMtimeMs !== p.manifestMtimeMs || JSON.stringify(current.manifest) !== JSON.stringify(p.manifest)) throw new HttpError(409, 'Project settings changed before Build');
   }
 
   private async rebuildBrowserOutput(p: Project, m: Manifest, ctx: JobContext): Promise<void> {
+    await this.checkEffectiveManifest(p);
+    const before = p.workingRoot ? await effectiveInputFingerprint(p) : null;
+    if (p.workingRoot) await markEffectiveBuildFailed(this.repo, this.workspace, p);
     await this.executeBrowserBuild(p, m, ctx);
+    if (before && before !== await effectiveInputFingerprint(p)) throw new HttpError(409, 'Project source changed during Build; try again');
     const currentMtimeMs = (await fs.stat(path.join(p.dir, MANIFEST))).mtimeMs;
     if (currentMtimeMs !== p.manifestMtimeMs) throw new Error('Project settings changed during Build. Review them and try again.');
     const entry = this.entryOf(p, m);
@@ -534,10 +566,12 @@ export class Panel {
   }
 
   private async ensureBrowserBuild(p: Project, m: Manifest, ctx: JobContext, requireScriptOnStale = false): Promise<void> {
+    await this.checkEffectiveManifest(p);
     const entry = this.entryOf(p, m);
     let receiptError: Error | null = null;
     try {
       await verifyBuildReceipt(this.workspace, p.id, p.manifestMtimeMs, entry);
+      if (p.workingRoot) await effectiveProjectOutput(this.repo, this.workspace, p);
     } catch (error) {
       receiptError = error as Error;
     }
@@ -563,18 +597,22 @@ export class Panel {
   }
 
   webBuild(p: Project): Job {
-    const m = this.editableManifest(p);
-    return this.startJob('web-build', p.id, `build: ${m.name}`, (ctx) => this.ensureBrowserBuild(p, m, ctx));
+    const m = p.origin === 'bundled' ? this.manifestOf(p) : this.editableManifest(p);
+    return this.startJob('web-build', p.id, `build: ${m.name}`, async ctx => {
+      const effective = await this.prepareProject(p);
+      return this.ensureBrowserBuild(effective, this.editableManifest(effective), ctx);
+    });
   }
 
   rebuildApp(p: Project): Job {
-    if (p.readOnly) {
-      if (!p.manifest?.scripts?.build) throw new HttpError(409, 'Bundled source is read-only and has no cache build script');
+    if (p.origin === 'bundled') {
+      const m = this.manifestOf(p);
+      if (!m.scripts?.build) throw new HttpError(409, `${p.id} has no build script`);
       if (this.preparingNativeRun || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
       this.refuseIfBusy(p.id);
-      return this.startJob('web-build', p.id, `rebuild cached: ${p.manifest.name}`, async ctx => {
-        try { await rebuildBundledProject(this.repo, this.workspace, p, ctx); }
-        finally { this.hub.send('projects-changed', { projectId: p.id }); }
+      return this.startJob('web-build', p.id, `rebuild: ${m.name}`, async ctx => {
+        const effective = await this.prepareProject(p);
+        await this.rebuildBrowserOutput(effective, this.editableManifest(effective), ctx);
       });
     }
     const m = this.editableManifest(p);
@@ -871,7 +909,7 @@ export class Panel {
    * rechecked by the publisher before it mutates anything. Legacy publishers keep their unversioned publish.
    */
   async publish(p: Project, body: { version?: unknown; expectedRevision?: unknown } = {}): Promise<Job> {
-    return this.withPluginServices(() => this.preparePublish(p, body));
+    return this.withPluginServices(async () => this.preparePublish(await this.prepareProject(p), body));
   }
   private async preparePublish(p: Project, body: { version?: unknown; expectedRevision?: unknown }): Promise<Job> {
     const { m, publisher, identity, snapshot } = this.publicationTarget(p);
@@ -888,7 +926,7 @@ export class Panel {
       if (body.version !== undefined) throw new HttpError(409, `publisher "${publisher.name}" has no versioned release support`);
       return this.startJob('publication', p.id, `build and publish (${publisher.name}): ${m.name}`, async (ctx) => {
         await build(ctx);
-        return publisher.publish({ app: entry, publication: identity, card: await this.cardOf(p, m), log: ctx.line });
+        return publisher.publish({ app: p.workingRoot ? (await effectiveProjectOutput(this.repo, this.workspace, p)).entry : entry, publication: identity, card: await this.cardOf(p, m), log: ctx.line });
       }, 'publish', snapshot);
     }
     const version = body.version;
@@ -905,13 +943,13 @@ export class Panel {
     const release = { version: version as string, expectedRevision: catalog.revision };
     return this.startJob('publication', p.id, `build and ${operation} ${version} (${publisher.name}): ${m.name}`, async (ctx) => {
       await build(ctx);
-      return releases.publish({ app: entry, publication: identity, version: release.version, expectedRevision: release.expectedRevision, card: await this.cardOf(p, m), log: ctx.line });
+      return releases.publish({ app: p.workingRoot ? (await effectiveProjectOutput(this.repo, this.workspace, p)).entry : entry, publication: identity, version: release.version, expectedRevision: release.expectedRevision, card: await this.cardOf(p, m), log: ctx.line });
     }, operation, snapshot, release);
   }
 
   /** Make a retained release live: exact retained bytes at the canonical route, no rebuild, after confirmation. */
   async activate(p: Project, body: { releaseId?: unknown; expectedRevision?: unknown; confirm?: unknown }): Promise<Job> {
-    return this.withPluginServices(() => this.prepareActivate(p, body));
+    return this.withPluginServices(async () => this.prepareActivate(await this.prepareProject(p), body));
   }
   private async prepareActivate(p: Project, body: { releaseId?: unknown; expectedRevision?: unknown; confirm?: unknown }): Promise<Job> {
     const { m, publisher, identity, snapshot } = this.publicationTarget(p);
@@ -931,6 +969,7 @@ export class Panel {
     const releases = publisher.releases;
     const release = { releaseId, expectedRevision: catalog.revision };
     return this.startJob('publication', p.id, `make ${target.version ?? 'legacy release'} live (${publisher.name}): ${m.name}`, async (ctx) => {
+      await this.checkEffectiveManifest(p);
       ctx.line(`Activating retained release ${target.version ?? 'legacy'} without rebuilding current source.`);
       return releases.activate({ publication: identity, releaseId: release.releaseId, expectedRevision: release.expectedRevision, card: await this.cardOf(p, m), log: ctx.line });
     }, 'activate', snapshot, release);
@@ -938,7 +977,7 @@ export class Panel {
 
   /** Remove a retained release that is not live or requested, after confirmation: history shrinks, the live route is untouched. */
   async deleteRelease(p: Project, body: { releaseId?: unknown; expectedRevision?: unknown; confirm?: unknown }): Promise<Job> {
-    return this.withPluginServices(() => this.prepareDeleteRelease(p, body));
+    return this.withPluginServices(async () => this.prepareDeleteRelease(await this.prepareProject(p), body));
   }
   private async prepareDeleteRelease(p: Project, body: { releaseId?: unknown; expectedRevision?: unknown; confirm?: unknown }): Promise<Job> {
     const { m, publisher, identity, snapshot } = this.publicationTarget(p);
@@ -960,18 +999,22 @@ export class Panel {
     const releases = publisher.releases;
     const release = { releaseId, expectedRevision: catalog.revision };
     return this.startJob('publication', p.id, `delete ${label} (${publisher.name}): ${m.name}`, async (ctx) => {
+      await this.checkEffectiveManifest(p);
       ctx.line(`Deleting retained release ${label}; the live route is not changed.`);
       return releases.delete({ publication: identity, releaseId: release.releaseId, expectedRevision: release.expectedRevision, log: ctx.line });
     }, 'delete-release', snapshot, release);
   }
 
   async unpublish(p: Project, body: { confirm?: boolean }): Promise<Job> {
-    return this.withPluginServices(() => this.prepareUnpublish(p, body));
+    return this.withPluginServices(async () => this.prepareUnpublish(await this.prepareProject(p), body));
   }
   private async prepareUnpublish(p: Project, body: { confirm?: boolean }): Promise<Job> {
     if (!body.confirm) throw new HttpError(409, 'unpublish requires confirmation', { needsConfirm: 'unpublish' });
     const { m, publisher, identity, snapshot } = this.publicationTarget(p);
-    return this.startJob('publication', p.id, `unpublish (${publisher.name}): ${m.name}`, async (ctx) => publisher.unpublish({ publication: identity, log: ctx.line }), 'unpublish', snapshot);
+    return this.startJob('publication', p.id, `unpublish (${publisher.name}): ${m.name}`, async (ctx) => {
+      await this.checkEffectiveManifest(p);
+      return publisher.unpublish({ publication: identity, log: ctx.line });
+    }, 'unpublish', snapshot);
   }
 
   packagingOf(m: Manifest | null): Packaging {
@@ -1015,7 +1058,9 @@ export class Panel {
     return this.withPluginServices(() => this.checkPackageSetupStatus(p));
   }
   private async checkPackageSetupStatus(p: Project): Promise<PackagerSetupStatus> {
-    const packager = this.selectedPackager(p);
+    const packaging = this.packagingOf(this.manifestOf(p));
+    if (!packaging.available) throw new HttpError(409, `packaging unavailable: ${packaging.reason}`);
+    const packager = packagerFor(this.packagers, packaging.platform)!.packager;
     if (!packager.setupStatus) return { state: 'ready' };
     let status: unknown;
     try { status = await packager.setupStatus(); }
@@ -1025,7 +1070,7 @@ export class Panel {
   }
 
   async packageSetup(p: Project, acceptTerms: boolean): Promise<Job> {
-    return this.withPluginServices(() => this.preparePackageSetup(p, acceptTerms));
+    return this.withPluginServices(async () => this.preparePackageSetup(await this.prepareProject(p), acceptTerms));
   }
   private async preparePackageSetup(p: Project, acceptTerms: boolean): Promise<Job> {
     const packager = this.selectedPackager(p);
@@ -1034,6 +1079,7 @@ export class Panel {
     if (status.state !== 'setup-required') throw new HttpError(409, status.reason ?? `packager is ${status.state}; setup is not available`);
     if (status.termsUrl && !acceptTerms) throw new HttpError(409, 'acknowledge the packager terms before setup', { termsUrl: status.termsUrl });
     return this.startJob('packager-setup', p.id, `set up package tools (${packager.name})`, async (ctx) => {
+      await this.checkEffectiveManifest(p);
       await packager.setup!({ log: ctx.line, acceptTerms });
       const ready = await this.packageSetupStatus(p);
       if (ready.state !== 'ready') throw new Error(ready.reason ?? 'packager prerequisites are not ready after setup');
@@ -1043,7 +1089,7 @@ export class Panel {
   }
 
   async packageBuild(p: Project, body: { version?: string; confirm?: string[] }): Promise<Job> {
-    return this.withPluginServices(() => this.preparePackageBuild(p, body));
+    return this.withPluginServices(async () => this.preparePackageBuild(await this.prepareProject(p), body));
   }
   private async preparePackageBuild(p: Project, body: { version?: string; confirm?: string[] }): Promise<Job> {
     const m = this.editableManifest(p);
@@ -1102,7 +1148,7 @@ export class Panel {
       assertWritablePath(this.repo, this.workspace, inputRoot); await fs.mkdir(inputRoot, { recursive: true });
       const inputGeneration = await fs.mkdtemp(path.join(inputRoot, 'p-'));
       const staged = await stagePackagerInputs({
-        app: entry, runtimeDir, ...(headset ? {} : { pluginDirs }), plugins, selection, projectName: m.name, identity, config, launchUrl,
+        app: p.workingRoot ? (await effectiveProjectOutput(this.repo, this.workspace, p)).entry : entry, runtimeDir, ...(headset ? {} : { pluginDirs }), plugins, selection, projectName: m.name, identity, config, launchUrl,
         icon: packageIcon, iconColor: m.iconColor,
         out: path.join(this.workspace, 'builds', packaging.channel), workDir: path.join(this.workspace, 'build', packaging.channel), log: (msg) => ctx.line(msg),
       }, path.join(inputGeneration, 'inputs'), path.resolve(entry) === path.resolve(p.dir));
@@ -1114,17 +1160,27 @@ export class Panel {
   }
 
   renderIcon(p: Project): Job {
-    const m = this.editableManifest(p);
-    const entry = this.entryOf(p, m);
-    const rel = m.icon ?? 'icon.png', output = path.resolve(p.dir, rel);
-    assertWritablePath(this.repo, this.projects, output);
-    return this.startJob('icon-render', p.id, `icon render: ${m.name}`, async (ctx) => {
+    const initial = p.origin === 'bundled' ? this.manifestOf(p) : this.editableManifest(p);
+    if (p.origin !== 'bundled') assertWritablePath(this.repo, this.projects, path.resolve(p.dir, initial.icon ?? 'icon.png'));
+    return this.startJob('icon-render', p.id, `icon render: ${initial.name}`, async (ctx) => {
+      p = await this.prepareProject(p);
+      const m = this.editableManifest(p), entry = this.entryOf(p, m);
+      const rel = m.icon ?? 'icon.png', output = path.resolve(p.dir, rel);
+      assertWritablePath(this.repo, this.writableRoot(p), output);
+      if (p.workingRoot) await this.ensureBrowserBuild(p, m, ctx);
       const fresh = await resolvedHostFreshness(this.repo, this.workspace);
       if (!fresh.exists) throw new HttpError(409, fresh.hostProblem ?? 'xrb-host.exe is not built: rebuild the host first');
-      assertWritablePath(this.repo, this.projects, output);
+      assertWritablePath(this.repo, this.writableRoot(p), output);
       await ctx.run(process.execPath, [APP_ICON, 'render', '--app', entry, '--out', output, '--runtime', fresh.runtimeDir], { cwd: this.repo });
       if (!m.icon) await this.updateManifest(p.id, (cur) => ({ ...cur, icon: rel }));
     });
+  }
+
+  private async ensureEffectiveDevInstalled(p: Project): Promise<void> {
+    await prepareEmbeddedDependencies(this.repo, this.projects, p, { line: line => log(`[panel] ${line}`), run: async (cmd, args, options) => {
+      const code = await runProcess(cmd, args, line => log(`[panel] ${line}`), options);
+      if (code !== 0) throw new HttpError(409, `Embedded dependency preparation failed (${code})`);
+    } } as JobContext);
   }
 
   private async ensureDevInstalled(): Promise<void> {
@@ -1150,13 +1206,30 @@ export class Panel {
     } finally { this.settingsWrites.delete(p.id); }
   }
 
+  private holdProjectRun(release: () => Promise<void>): boolean {
+    if (!this.runner.busy) return false;
+    const idle = (state: { phase: string }) => {
+      if (state.phase !== 'idle') return;
+      this.runner.off('state', idle);
+      void release().catch(error => log(`[panel] Could not release project lock: ${(error as Error).message}`));
+    };
+    this.runner.on('state', idle);
+    return true;
+  }
+
   /** Starts one panel-owned standalone WebXR browser preview and returns its app URL. */
   async preview(p: Project, mode: RunMode, flat: boolean | undefined, token: string, options: { fullscreen?: boolean; monitor?: number; clientPort: number }): Promise<string> {
+    if (mode === 'dev' && !p.manifest?.scripts?.dev) throw new HttpError(409, `${p.id} has no dev script`);
     await this.synchronizePluginServices(true);
     if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending || this.preparingPreview || this.preparingNativeRun || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
     if (p.readOnly) this.refuseIfBusy(p.id);
     this.preparingPreview = true;
-    try { return await this.preparePreview(p, mode, flat, token, options); }
+    try {
+      return await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
+        const effective = mode === 'dev' || p.workingRoot ? await this.prepareProject(p) : p;
+        return this.preparePreview(effective, mode, flat ?? effective.runDefaults?.flat, token, options);
+      }, release => this.holdProjectRun(release));
+    }
     finally { this.preparingPreview = false; }
   }
 
@@ -1166,12 +1239,14 @@ export class Panel {
     flat ??= settings?.values.flat ?? false;
     const browser = { ...options, fullscreen: options.fullscreen ?? settings?.values.fullscreen ?? false, monitor: options.monitor ?? settings?.values.monitor ?? 0 };
     const m = this.manifestOf(p);
-    if (p.readOnly && mode !== 'built') throw new HttpError(409, 'Bundled development requires an editable copy');
-    const bundledOutput = p.readOnly ? await requireProjectOutput(this.repo, this.workspace, p) : null;
+    if (p.readOnly && mode !== 'built') throw new HttpError(409, 'Embedded working sources are not prepared');
+    const bundledOutput = p.workingRoot && mode === 'built' ? await effectiveProjectOutput(this.repo, this.workspace, p) : p.readOnly ? await requireProjectOutput(this.repo, this.workspace, p) : null;
     if (!p.readOnly && mode === 'dev') this.editableManifest(p);
     if (buildTargetOf(m) !== 'webxr' || selectionOf(m).platform) throw new HttpError(409, `${p.id} is not a standalone WebXR preview`);
     if (!this.panelUrl) throw new HttpError(500, 'the panel preview address is unavailable');
-    if (mode === 'dev') await this.ensureDevInstalled();
+    if (mode === 'dev') {
+      if (p.workingRoot) await this.ensureEffectiveDevInstalled(p); else await this.ensureDevInstalled();
+    }
     const route = projectPreviewRoute(p, bundledOutput ?? undefined);
     if (this.runner.busy) throw new HttpError(409, 'stop the running app first');
     const cursor = (await readAppSettings(this.workspace)).cursor;
@@ -1183,7 +1258,7 @@ export class Panel {
     this.previewProjection = { route, token, session, fullscreen: browser.fullscreen, monitor: browser.monitor, projection };
     let href = '';
     try {
-      await this.runner.startPreview({ projectId: p.id, projectDir: p.dir, devScript: m.scripts?.dev, devEnv: this.appEnv(), flat }, mode, async (devUrl) => {
+      await this.runner.startPreview({ projectId: p.id, projectDir: p.dir, devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, flat }, mode, async (devUrl) => {
         const url = devUrl ? new URL(devUrl) : new URL(route, this.panelUrl!);
         if (devUrl) url.searchParams.set('xrb-resume', '1');
         url.searchParams.set('xrb-preview-token', token);
@@ -1212,6 +1287,7 @@ export class Panel {
 
   /** flat: Orthographic managed camera; non-desktop displays also start mono and may switch live. */
   async run(p: Project, mode: RunMode, flat?: boolean, cameraView?: boolean, desktop?: { fullscreen?: boolean; monitor?: number }): Promise<void> {
+    if (mode === 'dev' && !p.manifest?.scripts?.dev) throw new HttpError(409, `${p.id} has no dev script`);
     await this.synchronizePluginServices(true);
     if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
     if (this.preparingNativeRun) throw new HttpError(409, 'another native launch is being prepared');
@@ -1219,17 +1295,24 @@ export class Panel {
     if (p.readOnly) this.refuseIfBusy(p.id);
     this.preparingNativeRun = true;
     try {
-      const settings = p.readOnly ? await readProjectRunSettings(this.repo, this.workspace, p) : null;
-      const screen = desktop || settings ? { fullscreen: desktop?.fullscreen ?? settings?.values.fullscreen ?? false, monitor: desktop?.monitor ?? settings?.values.monitor ?? 0 } : undefined;
-      await this.runNative(settings ? withRunSettings(p, settings) : p, mode, flat ?? settings?.values.flat ?? false, cameraView ?? settings?.values.cameraView ?? false, screen);
+      await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
+        if (mode === 'built' && p.readOnly && p.manifest?.host?.args?.length) {
+          p = await this.prepareProject(p);
+          const done = await this.jobs.wait(this.webBuild(p));
+          if (done.state === 'failed') throw new HttpError(409, done.error ?? 'Project build failed');
+        } else if (mode === 'dev' || p.workingRoot) p = await this.prepareProject(p);
+        const settings = p.readOnly ? await readProjectRunSettings(this.repo, this.workspace, p) : null;
+        const screen = desktop || settings ? { fullscreen: desktop?.fullscreen ?? settings?.values.fullscreen ?? false, monitor: desktop?.monitor ?? settings?.values.monitor ?? 0 } : undefined;
+        await this.runNative(settings ? withRunSettings(p, settings) : p, mode, flat ?? settings?.values.flat ?? p.runDefaults?.flat ?? false, cameraView ?? settings?.values.cameraView ?? p.runDefaults?.cameraView ?? false, screen);
+      }, release => this.holdProjectRun(release));
     }
     finally { this.preparingNativeRun = false; }
   }
 
   private async runNative(p: Project, mode: RunMode, flat: boolean, cameraView: boolean, desktop?: { fullscreen: boolean; monitor: number }): Promise<void> {
     const m = this.manifestOf(p);
-    if (p.readOnly && mode !== 'built') throw new HttpError(409, 'Bundled development requires an editable copy');
-    const bundledOutput = p.readOnly ? await requireProjectOutput(this.repo, this.workspace, p) : null;
+    if (p.readOnly && mode !== 'built') throw new HttpError(409, 'Embedded working sources are not prepared');
+    const bundledOutput = p.workingRoot && mode === 'built' ? await effectiveProjectOutput(this.repo, this.workspace, p) : p.readOnly ? await requireProjectOutput(this.repo, this.workspace, p) : null;
     if (!p.readOnly && mode === 'dev') this.editableManifest(p);
     if (buildTargetOf(m) === 'webxr') throw new HttpError(409, `${p.id} is a WebXR headset app: open it in a browser, or build a package for the headset`);
     const fresh = await resolvedHostFreshness(this.repo, this.workspace);
@@ -1239,7 +1322,9 @@ export class Panel {
     const chosen = [...selection.inputs ?? [], selection.display, selection.platform].filter((n) => n && !BUILTIN_PROVIDERS.has(n));
     const missing = await this.missingPlugins(chosen);
     if (missing.length) throw new HttpError(409, `plugin ${missing.join(', ')} is not built in the workspace: rebuild the host first`, { needsRebuild: true });
-    if (mode === 'dev') await this.ensureDevInstalled();
+    if (mode === 'dev') {
+      if (p.workingRoot) await this.ensureEffectiveDevInstalled(p); else await this.ensureDevInstalled();
+    }
     const attemptedAt = Date.now();
     const cursor = (await readAppSettings(this.workspace)).cursor;
     try {
@@ -1247,7 +1332,7 @@ export class Panel {
         projectId: p.id, mode, hostExe: fresh.exe, projectDir: p.dir, entryDir: bundledOutput?.entry ?? this.entryOf(p, m),
         builtUrl: mode === 'built' && this.panelUrl
           ? `https://app.local/index.html?xrb-panel=${encodeURIComponent(this.panelUrl)}&xrb-mouse=${selection.inputs?.includes('mouse') ? '1' : '0'}&xrb-cursor=${cursor}` : undefined,
-        devScript: m.scripts?.dev, devEnv: this.appEnv(), panelUrl: this.panelUrl ?? undefined, mouseEnabled: selection.inputs?.includes('mouse') ?? true, cursor, flat, switchView: selection.display !== 'desktop', cameraView,
+        devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, panelUrl: this.panelUrl ?? undefined, mouseEnabled: selection.inputs?.includes('mouse') ?? true, cursor, flat, switchView: selection.display !== 'desktop', cameraView,
         cameraAvailable: (selection.inputs ?? []).some((name) => !BUILTIN_PROVIDERS.has(name)),
         hostArgs: [`--title=${m.name}`, `--camera-projection=${flat ? 'orthographic' : 'perspective'}`, ...(await this.hostArgs(p, m, desktop, selection)), ...(flat && selection.display !== 'desktop' ? ['--view=2d'] : [])],
       });
@@ -1258,11 +1343,12 @@ export class Panel {
     }
   }
 
-  /**
-   * Moves a project folder to the Recycle Bin (recoverable). node_modules is removed first and
-   * for good: it is pnpm links into the shared store (recycling them is slow and could reach the
-   * store), and the next workspace install recreates it.
-   */
+  /** Settings and organization cannot overlap launch preparation or that project's active work. */
+  assertProjectIdle(p: Project): void {
+    if (this.preparingNativeRun || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for project launch/settings preparation');
+    this.refuseIfBusy(p.id);
+  }
+
   private refuseIfBusy(id: string): void {
     if (this.runner.projectId === id) throw new HttpError(409, `${id} is running: stop it first`);
     const busy = this.jobs.active().find((j) => j.projectId === id);
@@ -1271,21 +1357,26 @@ export class Panel {
 
   /** Archive (projects/<section>/x -> projects/archive/x) or unarchive (back to its section). */
   private async move(p: Project, toArchive: boolean): Promise<void> {
-    assertEditableProject(this.repo, this.projects, p);
+    if (p.origin !== 'bundled') assertEditableProject(this.repo, this.projects, p);
     assertWritablePath(this.repo, this.projects, path.join(this.projects, 'xrb-panel.json'));
     const from = (await readLayout(this.projects, [])).archivedFrom?.[liveId(p.id)];
     for (const section of [ARCHIVE, UNSORTED, ...(from ? [from] : [])])
       assertWritablePath(this.repo, this.projects, path.join(this.projects, PROJECTS, section, path.basename(p.dir)));
     try {
-      const to = toArchive ? await archiveProject(this.projects, p) : await unarchiveProject(this.projects, p);
-      log(`[projects] ${p.id} ${toArchive ? 'archived' : 'unarchived'}: ${path.relative(this.projects, to)}`);
+      await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
+        const live = (await discoverProjectCatalog(this.repo, this.workspace, this.projects)).projects.map(record => record.project).filter(project => !isArchivedId(project.id));
+        const to = toArchive ? await archiveProject(this.projects, p, live) : await unarchiveProject(this.projects, p);
+        log(`[projects] ${p.id} ${toArchive ? 'archived' : 'unarchived'}: ${path.relative(this.projects, to)}`);
+      });
     } catch (e) {
       if (e instanceof MoveRefused) throw new HttpError(409, e.message);
       throw e;
     }
   }
 
+  /** Recycle an ordinary project; never remove its embedded counterpart or durable working state. */
   async deleteProject(p: Project): Promise<void> {
+    if (p.origin === 'bundled' || p.id.startsWith('bundled:')) throw new HttpError(409, 'Embedded projects cannot be deleted; archive instead');
     assertEditableProject(this.repo, this.projects, p);
     assertWritablePath(this.repo, this.projects, path.join(this.projects, 'xrb-panel.json'));
     this.refuseIfBusy(p.id);
@@ -1298,7 +1389,8 @@ export class Panel {
       execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', RECYCLE, '-Path', p.dir],
         { windowsHide: true }, (err, _out, stderr) => (err ? reject(new HttpError(500, `could not move ${rel} to the Recycle Bin: ${stderr.trim() || err.message}`)) : resolve()));
     });
-    await removeEmptyProjectSection(this.projects, p.section);
+    const remaining = (await discoverProjectCatalog(this.repo, this.workspace, this.projects)).projects.map(record => record.project);
+    await removeEmptyProjectSection(this.projects, p.section, remaining);
     log(`[projects] ${rel} moved to the Recycle Bin`);
   }
 
@@ -1314,12 +1406,11 @@ export class Panel {
 
   /** Routes under /api/projects/<id>/... ; true when handled. */
   async projectRoute(method: string, p: Project, rest: string[], req: IncomingMessage, res: ServerResponse): Promise<boolean> {
-    if (rest.length === 1 && rest[0] === 'cache' && p.readOnly) {
+    if (rest.length === 1 && rest[0] === 'cache' && p.origin === 'bundled') {
       if (method === 'GET') { sendJson(res, 200, await reviewWorkingCache({ core: this.repo, workspace: this.workspace, project: p })); return true; }
       if (method === 'DELETE') { sendJson(res, 202, jobSummary(this.cleanupWorkingCache(p, await readJson(req)))); return true; }
     }
-    if (p.readOnly && !(method === 'POST' && rest.length === 1 && ['run', 'preview', 'rebuild-app'].includes(rest[0])))
-      throw new HttpError(409, 'Bundled projects are read-only; copy to workspace first');
+    if (p.origin === 'bundled' && rest.length === 1 && rest[0] === 'delete') throw new HttpError(409, 'Embedded projects cannot be deleted; archive instead');
     if (rest.length === 2 && rest[0] === 'package' && rest[1] === 'setup-status' && method === 'GET') {
       sendJson(res, 200, await this.packageSetupStatus(p));
       return true;
@@ -1364,7 +1455,7 @@ export class Panel {
         if (isArchivedId(p.id)) throw new HttpError(409, `${p.id} is already archived`);
         this.refuseIfBusy(p.id);
         await this.move(p, true);
-        sendJson(res, 200, { archived: p.id, id: `${ARCHIVE}/${p.id}` });
+        sendJson(res, 200, { archived: p.id, id: p.origin === 'bundled' ? `bundled:archive/${p.id.replace(/^bundled:/, '')}` : `${ARCHIVE}/${p.id}` });
         return true;
       case 'unarchive':
         if (!isArchivedId(p.id)) throw new HttpError(409, `${p.id} is not archived`);
@@ -1385,6 +1476,11 @@ export class Panel {
         if (p.readOnly) validateRunOverrides(Object.fromEntries(Object.entries({ flat, fullscreen, monitor }).filter(([, value]) => value !== undefined)));
         if (mode !== 'dev' && mode !== 'built') throw new HttpError(400, 'standalone preview mode must be built or dev');
         const runMode: RunMode = mode;
+        if (runMode === 'built' && p.origin === 'bundled' && (!p.readOnly || !(await requireProjectOutput(this.repo, this.workspace, p).catch(() => null)))) {
+          const done = await this.jobs.wait(this.webBuild(p));
+          if (done.state === 'failed') throw new HttpError(409, done.error ?? 'Project build failed');
+          p = await this.prepareProject(p);
+        }
         const previewToken = typeof token === 'string' && /^[a-zA-Z0-9-]{16,80}$/.test(token) ? token : randomUUID();
         const screen = Number.isInteger(monitor) && monitor! >= 0 && monitor! <= 255 ? monitor! : 0;
         const url = await this.preview(p, runMode, p.readOnly && flat === undefined ? undefined : flat === true, previewToken, {
@@ -1398,10 +1494,11 @@ export class Panel {
         const { mode, flat, cameraView, fullscreen, monitor } = await readJson<{ mode?: RunMode; flat?: boolean; cameraView?: boolean; fullscreen?: boolean; monitor?: number }>(req);
         if (p.readOnly) validateRunOverrides(Object.fromEntries(Object.entries({ flat, cameraView, fullscreen, monitor }).filter(([, value]) => value !== undefined)));
         const runMode = mode === 'dev' ? 'dev' : 'built';
-        if (runMode === 'built' && !p.readOnly) {
+        if (runMode === 'built' && (!p.readOnly || !(await requireProjectOutput(this.repo, this.workspace, p).catch(() => null)))) {
           const build = this.webBuild(p);
           const done = await this.jobs.wait(build);
           if (done.state === 'failed') throw new HttpError(400, done.error ?? 'the app build failed');
+          if (p.origin === 'bundled') p = await this.prepareProject(p);
         }
         const screen = Number.isInteger(monitor) && monitor! >= 0 && monitor! <= 255 ? monitor! : 0;
         await this.run(p, runMode, p.readOnly && flat === undefined ? undefined : flat === true, p.readOnly && cameraView === undefined ? undefined : cameraView === true,

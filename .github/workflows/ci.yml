@@ -145,7 +145,7 @@ jobs:
       - run: pnpm check:types
       - run: pnpm test:embedded --workspace=.artifacts/embedded-boundary-ci
       # Compiles both synthetic origins against the public ABI header without CEF, devices or private assets.
-      - run: node --test --test-concurrency=1 packages/control-panel/test/native-build.fixture.ts packages/control-panel/test/service-artifacts.test.ts packages/control-panel/test/package-staging.test.ts packages/control-panel/test/project-provider-settings.test.ts packages/control-panel/test/cache-maintenance.test.ts
+      - run: node --test --test-concurrency=1 packages/control-panel/test/native-build.fixture.ts packages/control-panel/test/embedded-workflows.fixture.ts packages/control-panel/test/service-artifacts.test.ts packages/control-panel/test/package-staging.test.ts packages/control-panel/test/project-provider-settings.test.ts packages/control-panel/test/cache-maintenance.test.ts
 
   native:
     name: Host build and tests

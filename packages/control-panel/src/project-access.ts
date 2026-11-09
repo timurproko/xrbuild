@@ -1,9 +1,10 @@
 // Project ownership checks shared by HTTP routes, jobs and workspace creation.
-import { lstatSync } from 'node:fs';
+import { lstatSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { canonicalFuturePath } from './plugin-artifacts.ts';
 import { HttpError } from './http.ts';
-import type { Project } from './projects.ts';
+import { liveId, type Project } from './projects.ts';
+import { embeddedProjectRoot } from './embedded-project-state.ts';
 
 const inside = (root: string, file: string) => {
   const rel = path.relative(root, file);
@@ -35,8 +36,26 @@ export function assertWritablePath(core: string, root: string, file = root): voi
   }
 }
 export function assertEditableProject(core: string, projects: string, project: Project): void {
+  if (project.origin === 'bundled' && !project.readOnly && project.workingRoot && project.productDir && project.integrationWorkspace) {
+    const root = embeddedProjectRoot(core, project.integrationWorkspace, projects, project);
+    assertWritablePath(core, projects, path.join(root, 'state.json'));
+    try {
+      if (lstatSync(path.join(root, 'state.json')).size > 65536) throw new Error('Oversized state');
+      const record = JSON.parse(readFileSync(path.join(root, 'state.json'), 'utf8'));
+      const relative = record.scope?.relative;
+      if (record.version !== 1 || record.scope?.core !== canonicalFuturePath(core) || record.scope?.projects !== canonicalFuturePath(projects)
+        || record.scope?.workspace !== canonicalFuturePath(project.integrationWorkspace) || record.scope?.key !== liveId(project.key ?? project.id)
+        || typeof relative !== 'string' || !/^projects\/[^/]+\/[^/]+$/.test(relative) || relative.split('/').some(segment => segment === '.' || segment === '..')
+        || path.posix.basename(relative) !== path.basename(project.productDir) || typeof record.working !== 'string' || !/^w-[a-zA-Z0-9]{6}$/.test(record.working)) throw new Error('Invalid state');
+      const expected = path.join(root, record.working, 'workspace');
+      if (canonicalFuturePath(project.workingRoot) !== canonicalFuturePath(expected)
+        || canonicalFuturePath(project.dir) !== canonicalFuturePath(path.join(expected, relative))) throw new Error('Invalid owner');
+      assertWritablePath(core, projects, project.dir);
+    } catch { throw new HttpError(409, `Invalid effective embedded project owner; review ${root}`); }
+    return;
+  }
   if (project.readOnly || project.origin === 'bundled' || project.id.startsWith('bundled:'))
-    throw new HttpError(409, 'Bundled projects are read-only; copy to workspace first');
+    throw new HttpError(409, 'Embedded project must be prepared in user-owned working state');
   const root = canonicalFuturePath(path.join(projects, 'projects')), dir = canonicalFuturePath(project.dir);
   const relative = path.relative(root, dir);
   if (relative.split(path.sep).length !== 2 || !inside(root, dir))

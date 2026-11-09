@@ -19,7 +19,8 @@ test('empty capability UI hides Publish/All and workflow switches retain the tit
   const workspace = await fs.mkdtemp(path.join(REPO, '.artifacts/workflow-ui-'));
   const project = path.join(workspace, 'projects/unsorted/sample'); await fs.mkdir(project, { recursive: true });
   await fs.writeFile(path.join(project, 'xrb-project.json'), JSON.stringify({ name: 'Stable Sample', kind: 'app', entry: 'dist' }));
-  const port = await freePort(), panel = createServer({ repo: REPO, workspace, port });
+  const core = path.join(workspace, 'core'); await fs.mkdir(core);
+  const port = await freePort(), panel = createServer({ repo: core, workspace, port });
   await new Promise<void>(resolve => panel.server.listen(port, '127.0.0.1', resolve));
   t.after(async () => { await panel.close(); await fs.rm(workspace, { recursive: true, force: true }); });
   const publisher = { dir: workspace, publisher: { name: 'fixture', origin: 'https://example.test', validate: () => [], status: async () => ({ state: 'unpublished' as const, selectedUrl: '' }), publish: async () => ({}) } };

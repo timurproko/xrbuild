@@ -8,9 +8,10 @@ management, publisher/packager factories, managed-tool loading and selected nati
 implementation/diagnostic, the explicitly configured headset packager and eight public project groups, including archives.
 No private configuration, deployment identity, credentials, model weights, prebuilt device payloads or Git history accompany those snapshots.
 
-The panel now lists bundled projects alongside editable projects, serves/runs packaged output without product writes,
-and offers personal run settings, explicit cached rebuilds and an editable copy. Cached rebuilds install the frozen public
-embedded workspace in a writable snapshot. General embedded setup/build/test commands now validate the separate package
+The panel lists embedded and ordinary projects in one normal Develop / Publish / Build workflow. Both support runs,
+development, builds, icons, packaging, publication and user sections/archive; only embedded deletion is forbidden.
+Mutable embedded sources/settings use durable user-owned working trees without requiring a separately listed copy.
+Build preparation installs the frozen public graph outside product sources. General embedded setup/build/test commands validate the separate package
 graph in retained writable snapshots. Explicit installed-service activation, adapter-neutral package staging, declared
 component references, safe automatic discovery, schema-bound advanced run choices and reviewed working-cache cleanup
 are implemented. Further module promotions and full distribution/device acceptance remain pending. Existing workspace
@@ -74,8 +75,8 @@ Project workflow tabs hide Publish when the installed publisher list is empty, i
 An installed but unconfigured publisher still exposes its configuration workflow. Workflow switches preserve the mounted
 project identity/title while updating fields and actions. Global Settings hides the redundant All filter when Apps is the
 only settings module, selecting Apps instead; All remains available when another settings-owning module exists.
-Project origin badges and section headings use **embedded**, without the redundant read-only suffix; source remains
-read-only. Sidebar focus outlines are inset and following section headings do not overlap preceding row borders.
+Project row provenance uses **embedded** without separate embedded-only section headings or a read-only detail screen.
+Installed source remains immutable; normal controls edit persistent user state. Sidebar focus outlines are inset and following section headings do not overlap preceding row borders.
 Settings sidebar subtitles are lowercase **settings** (All) and **core** (Apps). Apps cursor preferences and unset SDK cursor options default to System; explicit saved choices are preserved.
 Tab underlines snap to their selected position on section entry, hidden-list reveal and layout/font resizing; only
 actual visible selection changes animate, so returning to Apps does not slide the Develop/Build underline from the left.
@@ -133,25 +134,40 @@ and uses `#helper` as its publisher/packager/tool module. The target must be the
 export must be a contained owner module. This declaration is a component API, not source-export approval. Factories
 retain the declaring plugin's configuration/identity. Containment is not a sandbox for arbitrary plugin code.
 
-## Projects: packaged use and editable copies
+## Projects: normal embedded workflows
 
-The project inventory includes both origins. Bundled projects have IDs such as `bundled:example` or
-`bundled:archive/example`, visible read-only ownership, product sections and preserved archive membership. Editable
-projects retain `example` / `archive/example` IDs and also expose qualified `workspace:` keys. API lookup accepts those
-workspace keys as aliases. An unqualified reference always addresses the editable root; it never falls back to a bundled
-project. URL-encode each ID segment when constructing API or preview paths. A separate project repository still owns
-all editable projects; the integration workspace is not scanned for projects when another project root is selected.
+Both origins use the same compact project card, capability-based Develop / Publish / Build tabs, settings and menus.
+Embedded project route IDs remain `bundled:example` / `bundled:archive/example`; the logical `key` is `bundled:example`
+independent of archive placement. Ordinary projects retain `example` / `archive/example` and `workspace:` aliases.
+Unqualified references never fall back to embedded projects. URL-encode each ID segment in API/preview routes.
+A separately selected project repository owns app working state and layout; integration-only projects are not scanned.
 
-Before an explicit cached rebuild, bundled preview, icons and built-mode runs read packaged files only: no dependency installation, script execution,
-favicon finalization or successful-build receipt is triggered. Missing packaged output is reported rather than built in
-place. Assets reject traversal/link escapes. Host launch config and generated default icons live under
-`<integration-workspace>/build/project-state/<core-and-project-key>/`; bundled recording requests use its `recordings/`
-subdirectory. Raw bundled host arguments are refused because they could redirect output into product sources.
+Embedded projects support normal development, native/browser runs, web builds, icons, settings/name edits, packaging,
+publication/release actions and section/archive organization. Ordinary kind, target, provider, signing and tool prerequisites
+still apply. **Only Delete is disabled because of embedded origin**, with server/direct-method enforcement even for archived
+or uninitialized entries. Users may drag both origins into the same sections, reorder them, rename/remove sections,
+archive/unarchive, and unarchive product-supplied archived entries. Source-scoped placement in `xrb-panel.json` overlays
+product defaults; embedded folders never move. Layout revisions and cooperating-writer locks prevent lost updates.
+`PUT /api/layout` requires the current `layout.revision` returned by `GET /api/projects`. Embedded manifest saves use
+`{ "manifest": { ... }, "mtimeMs": 0, "revision": "<manifestRevision>" }` with the actual metadata values from the project
+response. The revision covers complete settings, timestamps and any not-yet-imported personal choices, so equal
+Windows file timestamps cannot hide a changed settings snapshot. Manifest files are replaced atomically.
 
-The read-only detail view offers Run, personal run settings, supported cached rebuilds and Copy to workspace, not source editing, publication, packaging or icon tools.
-Bundled projects cannot be dragged into editable sections, renamed, archived, deleted or opened for editing through
-panel actions. These restrictions also apply to direct API calls and job entry points; hiding controls is not the boundary.
-Normal project mutations reject writable links into embedded sources, including layout files, icons and build receipts.
+Discovery remains read-only. Explicit actions needing writable files create/reuse a durable working tree under
+`<project-repository>/.xrb/embedded-projects/<scope>/w-<id>/workspace/`. Scope includes canonical core, integration workspace,
+selected project repository and product identity. This is not another project in the list. Open Folder/JSON addresses
+these editable files; installed defaults remain unchanged. Mutable manifests, source edits, icons and deployment identity
+survive restart/rebuild and live outside disposable build generations. Normal mutations reject linked/hard-linked paths.
+The first materialization imports existing personal run choices once; subsequent normal manifest edits take precedence.
+
+Valid packaged output can still run/preview without installation, scripts or finalization before working state is needed.
+Missing compiled output can be built through the normal explicit Run/Build path, never in installed sources. Managed
+built consumers share validated immutable finalized generations. Host launch configuration/default icons remain in
+integration-workspace `build/project-state/`; effective recording paths are relative to user-owned working sources.
+Project execution is trusted code, not a sandbox preventing a user-authored script or host argument from accessing files.
+New project/workspace templates ignore `.xrb/`, layout locks and atomic layout scratch; existing ignore files are not
+rewritten automatically. Keep durable working trees backed up separately before deleting a workspace, and never stage
+local credentials/signing state or treat a working tree as an approved public source export.
 
 `POST /api/projects/<bundled-id>/copy` takes `{ "folder": "my-example", "name": "My example" }` (`name` is optional).
 It creates a new live project in the selected project repository's `projects/unsorted/`. Portable manifest fields survive;
@@ -162,9 +178,10 @@ is no build script; script-built output is rebuilt in the editable copy instead.
 including concurrent requests. The manifest is written last; an interrupted copy leaves its incomplete folder for review
 rather than deleting potentially concurrent user data. Known-state filtering is not a substitute for the export audit.
 
-Development, publication, packaging and custom icon generation still require an editable copy. HTTP and opt-in
-headless-browser fixtures cover origin selection, advanced settings, Copy, cached Rebuild, confirmed working-cache
-cleanup and generation-pinned assets without native device execution.
+Copy is optional: it creates an independent ordinary project, not a prerequisite for embedded workflows. For a prepared
+project it copies current working sources through the same portable-field/identity-reset rules. HTTP and headless-browser
+fixtures cover normal tabs/actions, mixed sections/archive, persistent edits, frozen builds, publication/packaging adapters,
+legacy run-choice import, Copy and generation-pinned assets without native device execution.
 
 ### Embedded package setup, build and test
 
@@ -241,23 +258,24 @@ working-cache cleanup. The panel remains available for explicit setup/recovery i
 consumers retain prior snapshots; new service/tool requests do not execute the previous source while refresh is pending.
 Input digests and installed-output membership/stamps have different integrity semantics; neither is a sandbox or license audit.
 
-### Rebuild in user cache
+### Normal development and builds
 
-When the product declares a supported build, bundled details offer **Rebuild in user cache**. The API is
-`POST /api/projects/<bundled-id>/rebuild-app`. This is explicit; preview and Run never trigger an installation or rebuild.
+Embedded apps use the normal Run, Dev server, Rebuild and Build/Publish actions. The existing
+`POST /api/projects/<bundled-id>/rebuild-app` and `build-web` routes use their persistent effective sources.
+Already-valid packaged output does not require setup; actions needing current source/builds prepare user-owned inputs.
 The product's `embedded/package.json` must have `private: true` and an exact `pnpm@<version>` package manager, alongside
 `pnpm-lock.yaml` and a packages-only `pnpm-workspace.yaml` containing `projects/*/*` and optional canonical projects/plugins
 globs. Package manager configuration/hooks, nested workspace declarations, inconsistent package-manager versions and
-external file/link dependencies require an editable copy. Internal dependencies use `workspace:*`, `workspace:^` or
+external file/link dependencies fail preparation with a corrective diagnostic rather than installing an ambient workspace. Internal dependencies use `workspace:*`, `workspace:^` or
 `workspace:~`. The project's declared package script must build a dedicated relative entry directory, not its source root.
-Static projects continue to use packaged output.
+Static projects need no build script; their user-owned output can be finalized into a checked generation.
 
-Each rebuild makes a fresh working generation under `<integration-workspace>/build/projects/<core-and-project-key>/`.
-It copies public embedded inputs, excludes installed/generated/Git/common credential state, installs using frozen pnpm
-with dependency lifecycle hooks disabled, then builds its transitive local package prerequisites before running the declared project build script. `XRB_CORE` selects the
-read-only core; workspace environment points to the snapshot. Inherited npm/pnpm/Git configuration is not reused and
-Git discovery cannot climb into the surrounding user repository. No user/private workspace packages are installed.
-These are cooperating-tool ownership guards, not an execution sandbox or a confidentiality/export audit.
+The first writable action copies validated public inputs, excluding installed/generated/Git/common credential state,
+into the durable tree described above. Later builds reuse it without discarding source edits. Frozen installation disables
+dependency lifecycle hooks, validates installed link ownership and builds transitive local prerequisites before the selected
+script. `XRB_CORE` selects core sources; workspace/package-manager/Git configuration is isolated to the working tree.
+No user/private workspace packages are enrolled. Unsupported changes to package declarations/locks must be corrected
+explicitly. These are cooperating-tool ownership guards, not an execution sandbox or confidentiality/export audit.
 
 Successful output is finalized and copied into an exclusive immutable `r-<generation>/out` directory. Only that declared
 output tree is served, not the working workspace or receipt. Receipts bind canonical core/project identity, embedded and
@@ -268,17 +286,23 @@ fallback. The metadata and detail view show the problem and relative recovery di
 Cached browser URLs include `@r-<generation>/`; native launches pin the same output. Already-open cached pages keep their
 assets during later rebuilds. Retained valid generation URLs remain explicitly readable even after a failed newer build;
 they are never selected automatically as fallback. Product defaults and personal settings remain outside these caches.
-The panel refuses overlapping project work or launch/settings preparation; independent builders use an exclusive
-`build.lock` recording PID/time. A leftover lock requires verifying that the builder stopped before manual recovery.
-Old working generations, runtime generations and failed state are retained; there is no automatic deletion or reset.
+Managed operations serialize through `<project-repository>/.xrb/embedded-locks/<scope>.lock`; active managed runs retain
+the lease until idle. Legacy disposable snapshot builders retain their separate `build.lock`. Leftover locks require
+verifying their writer stopped before manual recovery; they are never removed automatically. Durable working trees,
+retained runtime generations and failed state are not automatically deleted.
+
+Installed input changes report a reconciliation warning while preserving all working edits. After reviewing them, **Keep
+my working sources** explicitly accepts the current installed baseline without replacing the editable tree and invalidates
+current built output for rebuilding. The API is `POST /api/projects/<id>/keep-working-sources` with the displayed
+`{ "revision": "<sourceUpdate.revision>", "confirm": true }`. Invalid state is diagnosed, never silently reset.
 
 ### Personal run settings
 
-Bundled details allow input provider IDs (comma-separated, empty for none), display, monitor index (0–255), fullscreen,
-orthographic view and native camera view. WebXR details hide native-only display/camera controls. Provider selection
-still follows the ordinary enabled/available-provider checks; saving a provider name does not install or enable it.
-Save applies on the next run. Run stays disabled while the form has unsaved edits; Restore bundled defaults clears
-personal overrides. Copy to workspace uses portable product defaults, never these personal choices.
+Normal project controls now own input/display/monitor/fullscreen/projection/camera choices. Provider selection still follows
+ordinary enabled/available checks; saving a name does not install or enable it. Existing legacy personal settings remain
+readable/validated before materialization and seed the effective manifest and run defaults exactly once. Afterward, edit
+normal project settings (or Open JSON); the old run-settings API is not a second editor for an effective manifest.
+The following legacy API/storage contract remains available for unmaterialized projects and retained user records.
 
 Settings live in `<integration-workspace>/config/projects/<core-and-project-key>/run.json`, outside product source,
 the separately selected project repository and disposable build caches. Missing fields inherit current product defaults
@@ -304,6 +328,10 @@ Changes are refused while the project runs/has an active job or while a launch i
 consume one settings snapshot; neither writes back to the bundled manifest.
 
 ## Explicit conservative working-cache maintenance
+
+An embedded project's normal row menu offers **Review build cache** in a shared dialog. This does not change its workflow
+card or require a copy. Durable `.xrb/embedded-projects/` sources are outside cleanup roots and cannot be selected as
+obsolete build working generations; unknown effective runtime generations remain conservatively retained.
 
 Bundled project details offer **Review working cache**. The Plugins sidebar has no global setup/cache controls or maintenance-status panel.
 Explicit GET `/api/projects/<bundled-id>/cache` or `/api/plugins/cache` lists candidates and protected reasons without deleting anything. DELETE requires the exact
