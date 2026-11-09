@@ -23,7 +23,7 @@
 
 - [x] 5.1 Update current docs/instructions for normal embedded workflows and user-state ownership without rewriting predecessors; verify documentation no longer requires Copy to workspace for normal actions and the ordered prerequisite ledger remains accurate.
 - [x] 5.2 Run focused changed-code/API/browser tests, type checking, name guard and strict OpenSpec validation; verify recorded results are truthful, product fixtures remain unchanged, and any manual native/device/signing gaps have an explicit follow-up owner rather than a passing claim.
-- [ ] 5.3 Record implementation outcomes and exact tested revision in the authorized PR/worktree handoff; verify no private content is included, no unfinished outcome is checked and bot finalization/CI/maintainer merge remain pending until actually observed.
+- [x] 5.3 Record implementation outcomes and exact tested revision in the authorized PR/worktree handoff; verify no private content is included, no unfinished outcome is checked and bot finalization/CI/maintainer merge remain pending until actually observed. Implementation commit 95eb3d6 was pushed to PR #4 after the maintainer requested the push; the local handoff preserves targeted test evidence and the tested source-state record. Exact-final-head CI, ordered bot finalization and maintainer merge remain separate pending gates.
 
 ## Local verification evidence
 
