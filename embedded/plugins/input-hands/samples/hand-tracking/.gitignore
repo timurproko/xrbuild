@@ -1,0 +1,2 @@
+# Prepared from the pinned manifest; never commit runtime binaries or model weights here.
+/public/vendor/

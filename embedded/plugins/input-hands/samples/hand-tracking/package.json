@@ -1,0 +1,20 @@
+{
+  "name": "@xr-build/hand-tracking-input",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "assets": "node prepare-assets.mjs",
+    "bridge:build": "node bridge/build.mjs",
+    "bridge:stage": "node bridge/build.mjs --stage-runtime",
+    "bridge:verify": "node bridge/verify-runtime.mjs",
+    "bridge": "node bridge/server.mjs",
+    "typecheck": "node typecheck.mjs",
+    "typecheck:live": "node typecheck.mjs --live",
+    "test": "node typecheck.mjs && node --test test/*.test.ts"
+  },
+  "dependencies": { "@mediapipe/tasks-vision": "1.2.0", "three": "0.170.0", "ws": "8.22.1" },
+  "devDependencies": { "@types/three": "0.170.0", "typescript": "5.9.3", "vite": "6.4.3" }
+}

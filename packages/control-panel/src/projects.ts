@@ -1,5 +1,5 @@
 // Project convention: a project is a folder holding an xrb-project.json manifest, in a section folder of the
-// workspace's projects/ (projects/<section>/<project>; projects/Unsorted/ for none), or archived in
+// workspace's projects/ (projects/<section>/<project>; projects/unsorted/ for none), or archived in
 // projects/archive/<project>. There is no central registry; the folders are the list and the sections.
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -55,6 +55,10 @@ export interface FieldError {
 }
 
 export interface Project {
+  /** Catalog ownership; legacy editable discovery may omit these fields. */
+  key?: string;
+  origin?: 'bundled' | 'workspace';
+  readOnly?: boolean;
   /** the project's folder name, e.g. "demo"; "archive/demo" when archived */
   id: string;
   dir: string;
@@ -173,8 +177,8 @@ export function identityOf(m: Manifest): Record<string, unknown> | null {
 export const PROJECTS = 'projects';
 /** projects/archive/<project>: archived projects (flat). Not a section name. */
 export const ARCHIVE = 'archive';
-/** projects/Unsorted/<project>: projects in no section, and new ones. Shown last; not a section of the layout. */
-export const UNSORTED = 'Unsorted';
+/** projects/unsorted/<project>: projects in no section, and new ones. Shown last; not a section of the layout. */
+export const UNSORTED = 'unsorted';
 /** Folder names that are not sections. */
 export const RESERVED_SECTIONS = [ARCHIVE, UNSORTED];
 
@@ -183,10 +187,12 @@ async function readProject(dir: string, id: string, section: string | null): Pro
   const file = path.join(dir, MANIFEST);
   let stat;
   try {
-    stat = await fs.stat(file);
+    stat = await fs.lstat(file);
   } catch {
     return null;  // not a project
   }
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink > 1)
+    return { id, dir, section, manifest: null, errors: [{ field: '', message: 'Manifest must be a regular, unlinked file' }], manifestMtimeMs: stat.mtimeMs };
   let manifest: unknown;
   try {
     // Windows tools (PowerShell 5, older Notepad) write UTF-8 with a byte-order mark.
@@ -201,7 +207,7 @@ async function readProject(dir: string, id: string, section: string | null): Pro
 const subdirs = async (dir: string) =>
   (await fs.readdir(dir, { withFileTypes: true }).catch(() => [] as import('node:fs').Dirent[])).filter((e) => e.isDirectory()).map((e) => e.name);
 
-/** The section folders under projects/ (Unsorted included, archive not), sorted. */
+/** The section folders under projects/ (unsorted included, archive not), sorted. */
 export async function sectionFolders(ws: string): Promise<string[]> {
   return (await subdirs(path.join(ws, PROJECTS))).filter((n) => n.toLowerCase() !== ARCHIVE).sort((a, b) => a.localeCompare(b));
 }
@@ -245,9 +251,9 @@ export async function discoverAll(ws: string): Promise<Project[]> {
   return [...(await discoverProjects(ws)), ...(await discoverArchived(ws))];
 }
 
-export const isArchivedId = (id: string) => id.startsWith(`${ARCHIVE}/`);
+export const isArchivedId = (id: string) => /^(?:(?:bundled|workspace):)?archive\//.test(id);
 /** "archive/x" -> "x" (the id it has when live). */
-export const liveId = (id: string) => (isArchivedId(id) ? id.slice(ARCHIVE.length + 1) : id);
+export const liveId = (id: string) => id.replace(/^((?:bundled|workspace):)?archive\//, '$1');
 
 export class MoveRefused extends Error {}
 

@@ -5,9 +5,12 @@ export function requiredProblems(needs, event) {
   expect('readiness', 'success');
   if (needs.readiness?.outputs?.ready !== 'true') problems.push('candidate is not ready');
   for (const name of ['changes', 'names', 'openspec']) expect(name, 'success');
-  if (!['true', 'false'].includes(needs.changes?.outputs?.node)) problems.push('node selection is missing');
   expect('delivery', event === 'pull_request' ? 'success' : 'skipped');
-  expect('node', needs.changes?.outputs?.node === 'true' ? 'success' : 'skipped');
+  for (const name of ['node', 'embedded']) {
+    const selected = needs.changes?.outputs?.[name];
+    if (!['true', 'false'].includes(selected)) problems.push(`${name} selection is missing`);
+    expect(name, selected === 'true' ? 'success' : 'skipped');
+  }
   expect('native', ['schedule', 'workflow_dispatch'].includes(event) ? 'success' : 'skipped');
   return problems;
 }

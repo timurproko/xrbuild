@@ -43,6 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       node: ${{ steps.select.outputs.node }}
+      embedded: ${{ steps.select.outputs.embedded }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,13 +55,14 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           if [ "$EVENT" != "pull_request" ]; then
-            echo "node=true" >> "$GITHUB_OUTPUT"; exit 0
+            echo "node=true" >> "$GITHUB_OUTPUT"; echo "embedded=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           files=$(git diff --name-only "$BASE...$HEAD")
           echo "$files"
           # A change to CI itself selects all PR-eligible jobs; the host lane remains nightly/manual.
           match() { echo "$files" | grep -qE "$1" && echo true || echo false; }
-          echo "node=$(match '^(packages/|tools/|templates/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.github/)')" >> "$GITHUB_OUTPUT"
+          echo "node=$(match '^(packages/|tools/|templates/|embedded/|native/plugin-sdk/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig\.json$|\.github/)')" >> "$GITHUB_OUTPUT"
+          echo "embedded=$(match '^(embedded/|native/host/|native/plugin-sdk/|packages/(control-panel|desktop-package|sdk|ui-kit|app-icon)/|tools/(embedded|fetch-deps)/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig\.json$|\.github/)')" >> "$GITHUB_OUTPUT"
 
   names:
     name: Name guard
@@ -121,8 +123,29 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm check:types
       # --no-bail: every suite reports, not only the first that fails.
       - run: pnpm -r --no-bail --if-present test
+      # Separate public workspace; frozen installs/builds/tests stay in the job-owned cache.
+      - run: pnpm test:embedded --if-present --workspace=.artifacts/embedded-ci
+
+  embedded:
+    name: Embedded public boundaries
+    needs: [readiness, changes]
+    if: needs.readiness.outputs.ready == 'true' && needs.changes.outputs.embedded == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm check:types
+      - run: pnpm test:embedded --workspace=.artifacts/embedded-boundary-ci
+      # Compiles both synthetic origins against the public ABI header without CEF, devices or private assets.
+      - run: node --test --test-concurrency=1 packages/control-panel/test/native-build.fixture.ts packages/control-panel/test/service-artifacts.test.ts packages/control-panel/test/package-staging.test.ts packages/control-panel/test/project-provider-settings.test.ts packages/control-panel/test/cache-maintenance.test.ts
 
   native:
     name: Host build and tests
@@ -141,16 +164,17 @@ jobs:
             third_party/*
             !third_party/README.md
           key: third-party-${{ hashFiles('tools/fetch-deps/deps.lock.json', 'tools/fetch-deps/sources.mjs') }}
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: node tools/fetch-deps/fetch-deps.mjs
-      # The runner's newest Visual Studio (no -G): the image decides the version.
-      - run: cmake -S native/host -B native/host/build -A x64
-      - run: cmake --build native/host/build --config Release --parallel
-      - run: native/host/build/Release/host-tests.exe
+      # Same user-cache path as installed-product consumers; no source-local host build or private workspace.
+      - run: pnpm host --workspace=.artifacts/native-ci --core-only --tests
+      - run: pnpm host --workspace=.artifacts/native-ci --plugins-only
 
   required:
     name: CI required
     if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
-    needs: [readiness, changes, names, openspec, delivery, node, native]
+    needs: [readiness, changes, names, openspec, delivery, node, embedded, native]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

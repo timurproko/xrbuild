@@ -1,0 +1,40 @@
+{
+  "title": "Hands",
+  "type": "input",
+  "version": "0.1.0",
+  "name": "Hands",
+  "description": "Hand tracking provider and diagnostics.",
+  "glyph": "👋",
+  "panel": {
+    "tools": [
+      {
+        "id": "hand-tracking",
+        "label": "Hands",
+        "route": "/hand-tracking/",
+        "module": "tool.mjs",
+        "endpoints": ["/__handtracking/", "/__xrbuild/"]
+      }
+    ],
+    "samples": [
+      {
+        "id": "hand-tracking",
+        "path": "samples/hand-tracking",
+        "description": "Camera and synthetic hand diagnostics for local development."
+      }
+    ],
+    "hiddenProviders": ["hand-tracking"],
+    "settings": [
+      { "key": "delegate", "section": "Hand landmarks", "label": "Processor", "type": "select", "default": "CPU", "options": [{ "value": "CPU", "label": "CPU · WASM" }, { "value": "GPU", "label": "GPU · WebGL" }] },
+      { "key": "detection", "section": "Hand landmarks", "label": "Detection", "type": "number", "default": 0.5, "min": 0, "max": 1, "step": 0.05 },
+      { "key": "presence", "section": "Hand landmarks", "label": "Presence", "type": "number", "default": 0.5, "min": 0, "max": 1, "step": 0.05 },
+      { "key": "tracking", "section": "Hand landmarks", "label": "Tracking", "type": "number", "default": 0.5, "min": 0, "max": 1, "step": 0.05 },
+      { "key": "recordingLimit", "section": "Recording", "label": "Maximum duration (seconds)", "type": "number", "default": 120, "min": 1, "max": 120, "step": 1, "hint": "Recordings stop automatically at this limit." },
+      { "key": "recordingAutoCapture", "section": "Recording", "label": "Start capture automatically", "type": "boolean", "default": true }
+    ]
+  },
+  "settings": [
+    { "key": "scenario", "section": "Provider", "label": "Synthetic scenario", "type": "select", "default": "motion", "options": [{ "value": "stationary", "label": "Stationary" }, { "value": "motion", "label": "Motion" }, { "value": "teleport", "label": "Teleport" }, { "value": "dropout", "label": "Dropout" }, { "value": "invalid", "label": "Invalid" }], "hint": "Stop and restart the app after changing provider settings." },
+    { "key": "hands", "section": "Provider", "label": "Synthetic hands", "type": "number", "default": 2, "min": 1, "max": 2, "step": 1, "hint": "One or two hands." },
+    { "key": "hz", "section": "Provider", "label": "Requested sample rate (Hz)", "type": "number", "default": 60, "min": 1, "max": 120, "step": 1, "hint": "A requested rate, not a real-time guarantee." }
+  ]
+}

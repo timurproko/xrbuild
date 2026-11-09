@@ -1,0 +1,8 @@
+{
+  "name": "Touch targets",
+  "kind": "test",
+  "entry": ".",
+  "display": "desktop",
+  "inputs": [],
+  "fullscreen": false
+}

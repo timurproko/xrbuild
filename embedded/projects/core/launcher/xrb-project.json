@@ -1,0 +1,13 @@
+{
+  "name": "Launcher",
+  "kind": "app",
+  "entry": "dist",
+  "scripts": {
+    "build": "build",
+    "dev": "dev"
+  },
+  "icon": "icon.png",
+  "display": "desktop",
+  "inputs": [],
+  "fullscreen": false
+}

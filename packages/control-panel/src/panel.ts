@@ -9,18 +9,28 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultIcon } from '../../app-icon/src/icon.ts';
-import { finalizeBrowserBuild } from './browser-build.ts';
+import { APP_FAVICON_FILE, finalizeBrowserBuild } from './browser-build.ts';
+import { projectFile } from './embedded-projects.ts';
+import { metadataText } from './embedded-inputs.ts';
+import { stagePackagerInputs } from './package-staging.ts';
+import { setupEmbeddedServices, embeddedServiceRuntime } from './service-artifacts.ts';
+import { pluginDiscoverySnapshot, type DiscoverySnapshot } from './plugin-discovery.ts';
+import { cleanWorkingCache, reviewWorkingCache } from './cache-maintenance.ts';
+import { rebuildBundledProject, requireProjectOutput, projectPreviewRoute } from './project-build.ts';
+import { assertEditableProject, assertUserRoot, assertWritablePath } from './project-access.ts';
+import { projectStateKey, readProjectRunSettings, saveProjectRunSettings, validateRunOverrides, withRunSettings } from './project-run-settings.ts';
 import { log } from './env.ts';
-import { hostFreshness, hostPaths, listProviders, pluginBinDirs, rebuildHost } from './host-build.ts';
+import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHost, clearProviderCache } from './host-build.ts';
 import { panelFreshness, panelSourceRoots, type PanelFreshness } from './panel-freshness.ts';
 import { HostRunner, type RunMode } from './host-runner.ts';
-import { effectiveSettings, pluginFolders, pluginIcon, pluginMeta, readPluginPrefs, savePluginPrefs, validateSettings, type PluginMeta } from './plugin-manager.ts';
+import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings } from './plugin-manager.ts';
+import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, containedPath, type PluginCatalog } from './extension-catalog.ts';
 import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
 import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
 import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatus, type BuildTarget, type IdentityField, type PackagerDiscovery, type PackagerSetupStatus, type RoleSelection } from './packagers.ts';
 import { PackageList } from './packages.ts';
-import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, discoverAll, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
-import { archiveProject, removeEmptyProjectSection, unarchiveProject } from './layout.ts';
+import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, discoverAll, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
+import { archiveProject, readLayout, removeEmptyProjectSection, unarchiveProject } from './layout.ts';
 import { discoverPublishers, normalizeReleaseCatalog, publicationUrl, publisherFor, releaseIdProblem, type PublicationCard, type PublicationIdentity, type Publisher, type PublisherDiscovery, type PublisherReleaseCatalog, type PublisherStatus } from './publishers.ts';
 import { compareVersions as compareReleaseVersions, highestVersion, publicationCard, publicationIdentity, receiptMatchesOutput, suggestedVersion, verifyBuildReceipt, versionProblem, writeBuildReceipt, type PublicationConfig } from './publication.ts';
 import { importPluginSample, ProjectRefused } from './workspace.ts';
@@ -187,6 +197,22 @@ export async function packageGraphReady(root: string): Promise<boolean> {
 
 export class Panel {
   readonly jobs = new JobRunner();
+  private preparingNativeRun = false;
+  private preparingPreview = false;
+  private changingPlugins = false;
+  private maintainingCache = false;
+  private pluginConsumers = 0;
+  private servicesRevision: string | null = null;
+  private servicesPending = false;
+  private servicesProblem: string | null = null;
+  private servicesSync: Promise<void> | null = null;
+  private servicesCheckedMs = 0;
+  private readonly executedPluginCode = new Map<string, string>();
+  discoveryMaxAgeMs = 1000;
+  onPluginSourcesChanged: (restartRequired?: boolean) => Promise<void> = async () => {};
+  restartPending = false;
+  restartWorkPending: () => boolean = () => false;
+  private readonly settingsWrites = new Set<string>();
   readonly runner = new HostRunner();
   readonly packages: PackageList;
   readonly hub: EventHub;
@@ -220,9 +246,11 @@ export class Panel {
   onQuit: () => void = () => {};
   onRestart: () => void = () => {};
   launchBrowser: typeof launchPreviewBrowser = launchPreviewBrowser;
-  private previewProjection: { route: string; token: string; session: string; fullscreen: boolean; projection: 'perspective' | 'orthographic' } | null = null;
+  private previewProjection: { route: string; token: string; session: string; fullscreen: boolean; monitor: number; projection: 'perspective' | 'orthographic' } | null = null;
 
   constructor(repo: string, workspace: string, hub: EventHub, projects = workspace, bootstrapPackageLock = false) {
+    assertUserRoot(repo, workspace);
+    assertUserRoot(repo, projects);
     this.repo = repo;
     this.workspace = workspace;
     this.projects = projects;
@@ -244,7 +272,115 @@ export class Panel {
     this.runner.on('log', (text) => hub.send('run-log', text));
   }
 
+  private async withPluginServices<T>(work: () => Promise<T>): Promise<T> {
+    await this.synchronizePluginServices(true);
+    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending) throw new HttpError(409, this.servicesProblem ?? 'Plugin services are changing; retry after the update');
+    this.pluginConsumers++;
+    try { return await work(); } finally { this.pluginConsumers--; }
+  }
+
+  private async withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
+    if (this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
+      throw new HttpError(409, 'Stop running apps and jobs and wait for launch/settings preparation before changing plugins');
+    this.changingPlugins = true;
+    try { return await work(); } finally { this.changingPlugins = false; }
+  }
+
+  private async catalogFingerprint(catalog: PluginCatalog): Promise<string> {
+    const plugins = await Promise.all(catalog.plugins.map(async plugin => {
+      const declarations = await Promise.all((await pluginPackageDirs(plugin)).map(async dir => {
+        const relative = path.relative(plugin.sourceRoot, path.join(dir, 'package.json')).split(path.sep).join('/');
+        const file = await containedPath(plugin.sourceRoot, relative).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
+        return [relative, file ? await metadataText(file) : null];
+      }));
+      return [plugin.key, plugin.sourceRoot, plugin.meta, declarations];
+    }));
+    return createHash('sha256').update(JSON.stringify({ plugins, selected: catalog.selected.map(plugin => plugin.key), problems: catalog.problems })).digest('hex');
+  }
+
+  private async pluginSourceRevision(catalog: PluginCatalog): Promise<string> {
+    return createHash('sha256').update(`${await pluginPrefsRevision(this.workspace)}\0${await this.catalogFingerprint(catalog)}`).digest('hex');
+  }
+
+  pluginServiceStatus() { return { pending: this.servicesPending || this.changingPlugins || this.maintainingCache, problem: this.servicesProblem }; }
+
+  private codeChanged(snapshot: DiscoverySnapshot): boolean {
+    for (const [file, stamp] of snapshot.code) if (this.executedPluginCode.has(file) && this.executedPluginCode.get(file) !== stamp) return true;
+    for (const file of this.executedPluginCode.keys()) if (snapshot.roots.some(root => file.startsWith(`${root}${path.sep}`)) && !snapshot.code.has(file)) return true;
+    return false;
+  }
+  private rememberPluginCode(snapshot: DiscoverySnapshot): void {
+    for (const [file, stamp] of snapshot.code) this.executedPluginCode.set(file, stamp);
+  }
+  async loadInitialServices(): Promise<void> {
+    try { await this.refreshPluginServices(); }
+    catch (error) {
+      // Keep the control panel available for explicit setup/recovery; never activate the previous source.
+      this.servicesPending = true; this.servicesProblem = (error as Error).message;
+      this.packagers = { found: [], problems: [this.servicesProblem] }; this.publishers = { found: [], problems: [this.servicesProblem] };
+    }
+  }
+
+  async synchronizePluginServices(force = false): Promise<void> {
+    if (this.changingPlugins || !force && Date.now() - this.servicesCheckedMs < this.discoveryMaxAgeMs) return;
+    if (this.servicesSync) return this.servicesSync;
+    this.servicesSync = (async () => {
+      try {
+        const snapshot = await pluginDiscoverySnapshot(this.repo, this.workspace);
+        if (this.changingPlugins) return;
+        this.servicesCheckedMs = Date.now();
+        if (this.servicesRevision === null && !snapshot.problem) {
+          // Embedders/tests may have supplied service objects directly; establish their initial boundary.
+          this.servicesRevision = snapshot.revision; this.rememberPluginCode(snapshot); return;
+        }
+        if (snapshot.revision === this.servicesRevision && !snapshot.problem) return;
+        this.servicesPending = true;
+        this.servicesProblem = snapshot.problem ?? 'Plugin discovery changed; wait for running work to finish';
+        const restartRequired = this.codeChanged(snapshot);
+        await this.onPluginSourcesChanged(restartRequired);
+        if (snapshot.problem || restartRequired) {
+          this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel before using plugins';
+          this.packagers = { found: [], problems: [this.servicesProblem] }; this.publishers = { found: [], problems: [this.servicesProblem] };
+          this.publicationStatuses.clear(); clearProviderCache(); return;
+        }
+        if (this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size) return;
+        await this.withPluginMutation(() => this.refreshPluginServices());
+        this.hub.send('plugins-changed', {}); this.hub.send('projects-changed', {});
+      } catch (error) {
+        this.servicesPending = true; this.servicesProblem = `Plugin discovery unavailable: ${(error as Error).message}`;
+        this.packagers = { found: [], problems: [this.servicesProblem] }; this.publishers = { found: [], problems: [this.servicesProblem] };
+        this.publicationStatuses.clear(); clearProviderCache();
+      }
+    })().finally(() => { this.servicesSync = null; });
+    return this.servicesSync;
+  }
+
+  private async refreshPluginServices(expected?: string): Promise<void> {
+    // Never retain the previous source as fallback after a committed selection change.
+    this.packagers = { found: [], problems: ['Plugin services are refreshing'] };
+    this.publishers = { found: [], problems: ['Plugin services are refreshing'] };
+    this.publicationStatuses.clear(); this.freshness = null; clearProviderCache();
+    const before = await this.catalogFingerprint(await resolvePluginCatalog(this.workspace, this.repo, true));
+    if (expected && before !== expected) throw new HttpError(409, 'Plugin declarations changed; reload and select the source again');
+    const snapshot = await pluginDiscoverySnapshot(this.repo, this.workspace);
+    if (snapshot.problem || this.codeChanged(snapshot)) {
+      this.servicesPending = true; this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel before using plugins';
+      throw new HttpError(409, this.servicesProblem);
+    }
+    this.rememberPluginCode(snapshot);
+    const [packagers, publishers] = await Promise.all([discoverPackagers(this.repo, this.workspace), discoverPublishers(this.workspace, this.repo)]);
+    if (before !== await this.catalogFingerprint(await resolvePluginCatalog(this.workspace, this.repo, true))) throw new HttpError(409, 'Plugin sources changed during refresh; reload and select the source again');
+    const after = await pluginDiscoverySnapshot(this.repo, this.workspace);
+    if (after.revision !== snapshot.revision) { this.servicesPending = true; this.servicesProblem = 'Plugin sources changed during refresh; restart or set up services again'; throw new HttpError(409, this.servicesProblem); }
+    this.packagers = packagers; this.publishers = publishers;
+    this.servicesRevision = after.revision; this.servicesPending = false; this.servicesProblem = null; this.servicesCheckedMs = Date.now();
+    await this.onPluginSourcesChanged();
+  }
+
   private startJob(...args: Parameters<JobRunner['start']>): Job {
+    if (this.restartPending) throw new HttpError(409, 'The panel is restarting');
+    if (this.servicesPending) throw new HttpError(409, this.servicesProblem ?? 'Plugin discovery is awaiting refresh');
+    if (this.changingPlugins) throw new HttpError(409, 'Plugin services are changing; retry after the update');
     try {
       const job = this.jobs.start(...args);
       log(`[job ${job.id}] ${job.title}`);
@@ -261,6 +397,14 @@ export class Panel {
     return p.manifest;
   }
 
+  private editableManifest(p: Project): Manifest {
+    assertEditableProject(this.repo, this.projects, p);
+    const m = this.manifestOf(p);
+    for (const file of [MANIFEST, m.icon, m.entry ?? defaultEntry(m.kind)].filter((value): value is string => !!value))
+      assertWritablePath(this.repo, this.projects, path.resolve(p.dir, file));
+    return m;
+  }
+
   private entryOf(p: Project, m: Manifest): string {
     return path.resolve(p.dir, m.entry ?? defaultEntry(m.kind));
   }
@@ -271,21 +415,24 @@ export class Panel {
     if (!p?.manifest) return;
     const next = change(p.manifest);
     if (validateManifest(next, p.dir).length) return;
+    this.editableManifest(p);
     await saveManifest(p.dir, next, p.manifestMtimeMs);
   }
 
   /** Disabled plugins stay in the manifest, but runs and packages use available alternatives. */
   private async effectiveSelection(m: Manifest): Promise<RoleSelection> {
-    const prefs = await readPluginPrefs(this.workspace);
+    const catalog = await resolvePluginCatalog(this.workspace, this.repo, true), prefs = catalog.prefs;
     const disabled = new Set(prefs.disabled);
     const all = await listProviders(this.repo, this.workspace, true);
     for (const provider of all.providers) {
-      if (provider.path && prefs.disabled.includes(path.relative(path.join(this.workspace, 'plugins'), provider.path).split(path.sep)[0]))
+      if (provider.path && catalog.selected.some(plugin => !pluginEnabled(plugin, prefs) && pluginOwnsPath(plugin, provider.path!)))
         disabled.add(provider.name);
     }
-    for (const folder of prefs.disabled)
+    for (const reference of prefs.disabled) {
+      const folder = pluginByReference(catalog, reference)?.id ?? reference;
       for (const prefix of ['input-', 'display-', 'platform-'])
         if (folder.startsWith(prefix)) disabled.add(folder.slice(prefix.length));
+    }
     const selected = selectionOf(m);
     const inputs = (selected.inputs ?? []).filter((name) => !disabled.has(name));
     return { ...selected, input: inputs.find((name) => name !== 'mouse' && name !== 'keyboard') ?? 'none', inputs,
@@ -295,14 +442,14 @@ export class Panel {
 
   private async runtimeConfig(m: Manifest, selection: RoleSelection, desktop?: { fullscreen: boolean; monitor: number }): Promise<RoleSelection & { plugins: Record<string, unknown> }> {
     const plugins = structuredClone(m.plugins ?? {}) as Record<string, unknown>;
-    const prefs = await readPluginPrefs(this.workspace);
+    const catalog = await resolvePluginCatalog(this.workspace, this.repo), prefs = catalog.prefs;
     const providers = await listProviders(this.repo, this.workspace);
     const chosen = new Set([...selection.inputs ?? [], selection.display, selection.platform]);
     for (const provider of providers.providers.filter((p) => !p.builtin && p.path && chosen.has(p.name))) {
-      const folder = path.relative(path.join(this.workspace, 'plugins'), provider.path!).split(path.sep)[0];
-      if (!pluginFolders(this.workspace).includes(folder)) continue;
-      const fields = (await pluginMeta(this.workspace, folder)).settings ?? [];
-      if (fields.length) plugins[provider.name] = { ...effectiveSettings(fields, prefs.settings[folder]), ...((plugins[provider.name] as Record<string, unknown> | undefined) ?? {}) };
+      const plugin = catalog.selected.find(plugin => pluginOwnsPath(plugin, provider.path!));
+      if (!plugin) continue;
+      const fields = plugin.meta.settings ?? [];
+      if (fields.length) plugins[provider.name] = { ...effectiveSettings(fields, pluginPreferenceValues(plugin, prefs)), ...((plugins[provider.name] as Record<string, unknown> | undefined) ?? {}) };
     }
     const desktopSettings = (plugins.desktop as Record<string, unknown> | undefined) ?? {};
     if (selection.display === 'desktop' && m.display && m.display !== 'desktop')
@@ -318,23 +465,30 @@ export class Panel {
    */
   async hostArgs(p: Project, m: Manifest, desktop?: { fullscreen: boolean; monitor: number }, effective?: RoleSelection): Promise<string[]> {
     const h = m.host ?? {};
-    const config = path.join(os.tmpdir(), 'xrb-runs', `${p.id.replace(/[\\/:]/g, '_')}.json`);
-    await fs.mkdir(path.dirname(config), { recursive: true });
+    if (p.readOnly && h.args?.length) throw new HttpError(409, 'Custom bundled host arguments require an editable copy');
+    const key = projectStateKey(this.repo, p);
+    const state = path.join(this.workspace, 'build', 'project-state', key);
+    const config = path.join(state, `${this.instanceId}.json`);
+    assertWritablePath(this.repo, this.workspace, config);
+    await fs.mkdir(state, { recursive: true });
     const selection = effective ?? await this.effectiveSelection(m);
     await fs.writeFile(config, JSON.stringify(await this.runtimeConfig(m, selection, desktop), null, 2));
-    const prefs = await readPluginPrefs(this.workspace);
-    // Plugins are built into the workspace, each into its own bin/ (user-workspace: Host loads workspace plugins).
-    const args: string[] = [`--config=${config}`, ...pluginBinDirs(this.workspace, prefs.disabled).map((d) => `--plugin-dir=${d}`)];
+    const providers = await listProviders(this.repo, this.workspace);
+    if (providers.unsafe || providers.error && (await resolvedPluginBinDirs(this.repo, this.workspace)).length)
+      throw new HttpError(409, providers.error ?? 'Native provider discovery is unsafe');
+    const args: string[] = [`--config=${config}`, ...(providers.pluginBins ?? []).map((d) => `--plugin-dir=${d}`)];
     if (h.recordHands) {
-      const file = path.resolve(p.dir, h.recordHands);
+      const file = p.readOnly ? path.join(state, 'recordings', path.basename(h.recordHands)) : path.resolve(p.dir, h.recordHands);
+      assertWritablePath(this.repo, p.readOnly ? this.workspace : this.projects, file);
       await fs.mkdir(path.dirname(file), { recursive: true });
       args.push(`--record-hands=${file}`);
     }
-    const icon = m.icon ? path.resolve(p.dir, m.icon) : null;
+    const icon = m.icon ? await projectFile(p, m.icon).catch((error: HttpError) => { if (error.status === 404) return null; throw error; }) : null;
     if (icon && (await fs.access(icon).then(() => true, () => false))) args.push(`--icon=${icon}`);
     else if (!m.icon && ((m.iconColor && m.iconColor !== 'blue') || (m.iconShape && m.iconShape !== 'sphere'))) {
       // The host's built-in icon is the blue sphere; any other generated default goes in as a PNG.
-      const file = path.join(os.tmpdir(), 'xrb-icons', `default-${m.iconColor ?? 'blue'}-${m.iconShape ?? 'sphere'}.png`);
+      const file = path.join(state, `default-${m.iconColor ?? 'blue'}-${m.iconShape ?? 'sphere'}.png`);
+      assertWritablePath(this.repo, this.workspace, file);
       await fs.mkdir(path.dirname(file), { recursive: true });
       await fs.writeFile(file, defaultIcon(256, m.iconColor, m.iconShape));
       args.push(`--icon=${file}`);
@@ -344,6 +498,8 @@ export class Panel {
   }
 
   private async finalizeBrowserOutput(p: Project, m: Manifest): Promise<boolean> {
+    this.editableManifest(p);
+    for (const name of ['index.html', APP_FAVICON_FILE]) assertWritablePath(this.repo, this.projects, path.join(this.entryOf(p, m), name));
     return (await finalizeBrowserBuild(this.entryOf(p, m), {
       file: m.icon ? path.resolve(p.dir, m.icon) : undefined,
       color: m.iconColor,
@@ -362,12 +518,18 @@ export class Panel {
     if (await this.finalizeBrowserOutput(p, m)) ctx.line('Applied the project icon as the browser favicon.');
   }
 
+  private async recordBrowserBuild(p: Project, entry: string): Promise<void> {
+    const file = path.join(this.workspace, '.xrb', 'state', 'builds', `${p.id.replace(/[^a-zA-Z0-9_.-]/g, '_')}.json`);
+    assertWritablePath(this.repo, this.workspace, file);
+    await writeBuildReceipt(this.workspace, p.id, p.manifestMtimeMs, entry);
+  }
+
   private async rebuildBrowserOutput(p: Project, m: Manifest, ctx: JobContext): Promise<void> {
     await this.executeBrowserBuild(p, m, ctx);
     const currentMtimeMs = (await fs.stat(path.join(p.dir, MANIFEST))).mtimeMs;
     if (currentMtimeMs !== p.manifestMtimeMs) throw new Error('Project settings changed during Build. Review them and try again.');
     const entry = this.entryOf(p, m);
-    await writeBuildReceipt(this.workspace, p.id, currentMtimeMs, entry);
+    await this.recordBrowserBuild(p, entry);
     await verifyBuildReceipt(this.workspace, p.id, currentMtimeMs, entry);
   }
 
@@ -381,7 +543,7 @@ export class Panel {
     }
     if (!receiptError) {
       if (await this.finalizeBrowserOutput(p, m)) {
-        await writeBuildReceipt(this.workspace, p.id, p.manifestMtimeMs, entry);
+        await this.recordBrowserBuild(p, entry);
         ctx.line('Updated the current successful build with the project favicon.');
       } else ctx.line('The current successful build is unchanged; using it.');
       return;
@@ -393,7 +555,7 @@ export class Panel {
       if (!exists || (requireScriptOnStale && !(await receiptMatchesOutput(this.workspace, p.id, entry)))) throw new Error(`A current build is required, but ${p.id} has no build script.`);
       ctx.line('No build script is configured; using and recording the existing app output.');
       if (await this.finalizeBrowserOutput(p, m)) ctx.line('Applied the project icon as the browser favicon.');
-      await writeBuildReceipt(this.workspace, p.id, p.manifestMtimeMs, entry);
+      await this.recordBrowserBuild(p, entry);
       return;
     }
     ctx.line(`The build is not current (${receiptError.message}). Building now.`);
@@ -401,12 +563,21 @@ export class Panel {
   }
 
   webBuild(p: Project): Job {
-    const m = this.manifestOf(p);
+    const m = this.editableManifest(p);
     return this.startJob('web-build', p.id, `build: ${m.name}`, (ctx) => this.ensureBrowserBuild(p, m, ctx));
   }
 
   rebuildApp(p: Project): Job {
-    const m = this.manifestOf(p);
+    if (p.readOnly) {
+      if (!p.manifest?.scripts?.build) throw new HttpError(409, 'Bundled source is read-only and has no cache build script');
+      if (this.preparingNativeRun || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
+      this.refuseIfBusy(p.id);
+      return this.startJob('web-build', p.id, `rebuild cached: ${p.manifest.name}`, async ctx => {
+        try { await rebuildBundledProject(this.repo, this.workspace, p, ctx); }
+        finally { this.hub.send('projects-changed', { projectId: p.id }); }
+      });
+    }
+    const m = this.editableManifest(p);
     if (m.kind !== 'app') throw new HttpError(409, `${p.id} is not an app`);
     if (!m.scripts?.build) throw new HttpError(409, `${p.id} has no build script`);
     return this.startJob('web-build', p.id, `rebuild: ${m.name}`, async (ctx) => this.rebuildBrowserOutput(p, m, ctx));
@@ -444,6 +615,7 @@ export class Panel {
   /** Built plugins by the name they report (`xrb-host --list-plugins`) -> the folder holding their files. */
   async pluginDirs(): Promise<Record<string, string>> {
     const list = await listProviders(this.repo, this.workspace);
+    if (list.unsafe) throw new HttpError(409, list.error ?? 'Native provider discovery is unsafe');
     return Object.fromEntries(list.providers.filter((p) => !p.builtin && p.path).map((p) => [p.name, path.dirname(p.path!)]));
   }
 
@@ -455,23 +627,27 @@ export class Panel {
 
   /** All workspace plugins, including disabled and packager-only plugins. */
   async managedPlugins() {
-    const prefs = await readPluginPrefs(this.workspace);
+    const catalog = await resolvePluginCatalog(this.workspace, this.repo, true), prefs = catalog.prefs;
     const providers = await listProviders(this.repo, this.workspace, true);
-    const freshness = hostFreshness(this.repo, this.workspace).plugins;
-    const plugins = await Promise.all(pluginFolders(this.workspace).map(async (id) => {
-      let problem: string | null = null;
-      const meta: PluginMeta = await pluginMeta(this.workspace, id).catch((e: Error) => { problem = e.message; return {}; });
+    const freshness = (await resolvedHostFreshness(this.repo, this.workspace)).plugins;
+    const sourceRevision = await this.pluginSourceRevision(catalog);
+    const plugins = await Promise.all(catalog.plugins.map(async (plugin) => {
+      const meta = plugin.meta;
       if (meta.hidden) return null;
-      const root = path.join(this.workspace, 'plugins');
-      const ownProviders = providers.providers.filter((p) => p.path && path.relative(root, p.path).split(path.sep)[0] === id);
+      const selected = catalog.selected.some(item => item.key === plugin.key);
+      let problem = selected ? plugin.nativeProblem : 'Plugin origin is conflicting or not selected';
+      const id = plugin.origin === 'workspace' && !catalog.plugins.some(item => item.id === plugin.id && item.origin !== plugin.origin) ? plugin.id : plugin.key;
+      const ownProviders = providers.providers.filter((p) => p.path && pluginOwnsPath(plugin, p.path));
       const presentedProviders = ownProviders.map((provider) => {
         const presentedName = meta.panelProviderNames?.[provider.name] ?? provider.name;
         return { name: presentedName, role: provider.role, version: provider.version, ...(presentedName !== provider.name ? { runtimeName: provider.name } : {}),
           ...(meta.panelHiddenProviders?.includes(provider.name) ? { hidden: true } : {}) };
       });
-      const native = freshness.filter((p) => p.dir.split('/')[0] === id);
-      const packagerDecls = await Promise.all([id, `${id}/packager`].map(async (dir) => {
-        const decl = await fs.readFile(path.join(root, dir, 'package.json'), 'utf8').catch(() => '{}');
+      const native = freshness.filter((p) => p.key === plugin.key);
+      problem ??= native.find(p => p.problem)?.problem ?? null;
+      if (providers.blockedBins?.includes(plugin.binaryRoot)) problem ??= 'Native provider conflict or invalid DLL; see provider diagnostics';
+      const packagerDecls = await Promise.all((await pluginPackageDirs(plugin)).map(async (dir) => {
+        const decl = await fs.readFile(path.join(dir, 'package.json'), 'utf8').catch(() => '{}');
         try {
           const pkg = JSON.parse(decl);
           return pkg.xrBuild?.packager ? pkg : null;
@@ -479,38 +655,99 @@ export class Panel {
       }));
       const packager = packagerDecls.find(Boolean);
       const isPackager = !!packager;
-      const publisher = this.publishers.found.find(({ dir }) => dir === path.join(root, id))?.publisher;
-      const packagerLabel = this.packagers.found.find(({ dir }) => dir === path.join(root, id) || dir === path.join(root, id, 'packager'))?.packager.label;
-      const name = meta.name ?? presentedProviders[0]?.name ?? (isPackager ? id.replace(/^platform-/, '') : id);
+      const publisher = this.publishers.found.find(item => item.plugin?.key === plugin.key)?.publisher;
+      const packagerLabel = this.packagers.found.find(item => item.plugin?.key === plugin.key)?.packager.label;
+      const name = meta.name ?? presentedProviders[0]?.name ?? (isPackager ? plugin.id.replace(/^platform-/, '') : plugin.id);
       const derivedType = publisher ? 'publisher' : ownProviders[0]?.role ?? (isPackager ? 'platform' : 'plugin');
       return {
-        id, name, title: meta.title ?? meta.name ?? packagerLabel ?? publisher?.label ?? name, type: meta.type ?? derivedType,
+        id, key: plugin.key, logicalId: plugin.id.toLowerCase(), origin: plugin.origin, readOnly: plugin.readOnly, selected,
+        sourceRevision, selectedOrigin: Object.hasOwn(prefs.origins ?? {}, plugin.id.toLowerCase()) ? prefs.origins![plugin.id.toLowerCase()] : null,
+        availableOrigins: [...new Set(catalog.plugins.filter(item => item.id.toLowerCase() === plugin.id.toLowerCase()).map(item => item.origin))], name, title: meta.title ?? meta.name ?? packagerLabel ?? publisher?.label ?? name, type: meta.type ?? derivedType,
         label: packagerLabel ?? publisher?.label,
         description: meta.description ?? ownProviders[0]?.description ?? (typeof packager?.description === 'string' ? packager.description : ''),
         settingsDescription: meta.settingsDescription ?? '',
         version: meta.version ?? null,
-        enabled: !prefs.disabled.includes(id), icon: !problem && await pluginIcon(this.workspace, id).catch(() => null) ? `/api/plugins/manage/${id}/icon` : null,
+        enabled: selected && pluginEnabled(plugin, prefs), icon: await pluginIcon(plugin.workspaceRoot, plugin.id).catch(() => null) ? `/api/plugins/manage/${encodeURIComponent(id)}/icon` : null,
         glyph: meta.glyph ?? null,
         problem, providers: presentedProviders,
         packager: isPackager, built: !native.length || native.every((p) => p.built && !p.outdated),
-        settings: meta.settings, values: effectiveSettings(meta.settings ?? [], prefs.settings[id]),
-        panelSettings: meta.panelSettings, panelValues: effectiveSettings(meta.panelSettings ?? [], prefs.panelSettings[id]),
+        settings: meta.settings, values: effectiveSettings(meta.settings ?? [], pluginPreferenceValues(plugin, prefs)),
+        panelSettings: meta.panelSettings, panelValues: effectiveSettings(meta.panelSettings ?? [], pluginPreferenceValues(plugin, prefs, 'panelSettings')),
         samples: (meta.panelSamples ?? []).map(({ id: sampleId, name: sampleName, kind, description }) => ({ id: sampleId, name: sampleName, kind, description })),
-        dir: `plugins/${id}`,
+        dir: `${plugin.origin === 'bundled' ? 'embedded/' : ''}plugins/${plugin.id}`,
       };
     }));
     return plugins.filter((plugin) => plugin !== null);
   }
 
+  cleanupWorkingCache(project: Project | undefined, body: Parameters<typeof cleanWorkingCache>[1]): Job {
+    if (this.maintainingCache || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
+      throw new HttpError(409, 'Stop apps/jobs and wait for preparation before cache maintenance');
+    return this.startJob('cache-cleanup', project?.id ?? null, 'remove reviewed working cache', async () => {
+      this.maintainingCache = true;
+      try { return await cleanWorkingCache({ core: this.repo, workspace: this.workspace, project }, body); }
+      finally { this.maintainingCache = false; }
+    });
+  }
+
+  setupBundledServices(): Job {
+    if (this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
+      throw new HttpError(409, 'Stop apps/jobs and wait for preparation before setting up bundled services');
+    // Setup is the explicit recovery path for a failed/stale installed service snapshot.
+    this.servicesPending = false;
+    return this.startJob('tool-setup', null, 'set up bundled services', async ctx => {
+      this.changingPlugins = true;
+      try {
+        const result = await setupEmbeddedServices(this.repo, this.workspace, ctx);
+        await this.refreshPluginServices();
+        this.hub.send('plugins-changed', {}); this.hub.send('projects-changed', {});
+        return result;
+      } catch (error) {
+        this.servicesPending = true; this.servicesProblem = (error as Error).message; throw error;
+      } finally { this.changingPlugins = false; }
+    });
+  }
+
+  async selectPluginSource(reference: string, origin: unknown, revision: unknown): Promise<void> {
+    if (origin !== 'bundled' && origin !== 'workspace') throw new HttpError(400, 'Select bundled or workspace origin');
+    if (typeof revision !== 'string' || !/^[a-f0-9]{64}$/.test(revision)) throw new HttpError(409, 'Reload plugin sources before selecting an origin');
+    await this.withPluginMutation(async () => {
+      let expected: string | undefined;
+      await updatePluginPrefs(this.workspace, async prefs => {
+        const catalog = await resolvePluginCatalog(this.workspace, this.repo, true);
+        if (revision !== await this.pluginSourceRevision(catalog)) throw new HttpError(409, 'Plugin sources or preferences changed; reload before selecting an origin');
+        const plugin = pluginByReference(catalog, reference);
+        if (!plugin) throw new HttpError(404, 'Plugin source is unavailable or ambiguous');
+        const id = plugin.id.toLowerCase();
+        prefs.origins = { ...prefs.origins, [id]: origin };
+        const candidate = await resolvePluginCatalog(this.workspace, this.repo, true, prefs);
+        if (!candidate.selected.some(item => item.id.toLowerCase() === id && item.origin === origin)) throw new HttpError(409, 'The selected plugin origin is missing, invalid or ambiguous');
+        expected = await this.catalogFingerprint(candidate);
+      }, this.repo, () => this.refreshPluginServices(expected));
+      this.hub.send('plugins-changed', { reference }); this.hub.send('projects-changed', {});
+    });
+  }
+
+  private async acceptExplicitServiceLoad(): Promise<void> {
+    const snapshot = await pluginDiscoverySnapshot(this.repo, this.workspace);
+    if (snapshot.problem || this.codeChanged(snapshot)) {
+      this.servicesPending = true; this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel'; return;
+    }
+    this.servicesRevision = snapshot.revision; this.servicesPending = false; this.servicesProblem = null;
+    this.rememberPluginCode(snapshot); this.servicesCheckedMs = Date.now();
+  }
+
   /** Finds the packager plugins; problems are logged, never fatal. */
   async loadPackagers(): Promise<void> {
     this.packagers = await discoverPackagers(this.repo, this.workspace);
+    await this.acceptExplicitServiceLoad();
     for (const f of this.packagers.found) log(`[panel] packager ${f.packager.name} from ${f.dir}`);
     for (const problem of this.packagers.problems) log(`[panel] packager not loaded: ${problem}`);
   }
 
   async loadPublishers(): Promise<void> {
-    this.publishers = await discoverPublishers(this.workspace);
+    this.publishers = await discoverPublishers(this.workspace, this.repo);
+    await this.acceptExplicitServiceLoad();
     for (const f of this.publishers.found) log(`[panel] publisher ${f.publisher.name} from ${f.dir}`);
     for (const problem of this.publishers.problems) log(`[panel] publisher not loaded: ${problem}`);
   }
@@ -592,6 +829,7 @@ export class Panel {
         })
         : Promise.resolve({ catalog: null, error: null });
       current.refresh = Promise.all([status, catalog]).then(([status, releases]) => {
+        if (this.publicationStatuses.get(key) !== current) return;
         const changed = JSON.stringify([status, releases]) !== JSON.stringify([current.status, { catalog: current.catalog, error: current.catalogError }]);
         Object.assign(current, { status, catalog: releases.catalog, catalogError: releases.error, checkedMs: Date.now(), refresh: null });
         if (changed) this.hub.send('publication-status', { publisher: publisher.name, id: identity.id });
@@ -613,7 +851,7 @@ export class Panel {
   }
 
   private publicationTarget(p: Project): { m: Manifest; publication: PublicationConfig; publisher: Publisher; identity: PublicationIdentity; snapshot: PublicationConfig } {
-    const m = this.manifestOf(p), publication = m.publication;
+    const m = this.editableManifest(p), publication = m.publication;
     if (!publicationTargetOf(m) || !publication) throw new HttpError(409, 'publication is available only for configured app projects');
     const found = publisherFor(this.publishers, publication.publisher);
     if (!found) throw new HttpError(409, `publisher "${publication.publisher}" is unavailable`);
@@ -633,6 +871,9 @@ export class Panel {
    * rechecked by the publisher before it mutates anything. Legacy publishers keep their unversioned publish.
    */
   async publish(p: Project, body: { version?: unknown; expectedRevision?: unknown } = {}): Promise<Job> {
+    return this.withPluginServices(() => this.preparePublish(p, body));
+  }
+  private async preparePublish(p: Project, body: { version?: unknown; expectedRevision?: unknown }): Promise<Job> {
     const { m, publisher, identity, snapshot } = this.publicationTarget(p);
     const errors = publisher.validate(identity);
     if (errors.length) throw new HttpError(400, errors.map((e) => e.message).join('; '), { errors });
@@ -670,6 +911,9 @@ export class Panel {
 
   /** Make a retained release live: exact retained bytes at the canonical route, no rebuild, after confirmation. */
   async activate(p: Project, body: { releaseId?: unknown; expectedRevision?: unknown; confirm?: unknown }): Promise<Job> {
+    return this.withPluginServices(() => this.prepareActivate(p, body));
+  }
+  private async prepareActivate(p: Project, body: { releaseId?: unknown; expectedRevision?: unknown; confirm?: unknown }): Promise<Job> {
     const { m, publisher, identity, snapshot } = this.publicationTarget(p);
     if (!publisher.releases) throw new HttpError(409, `publisher "${publisher.name}" has no versioned release support`);
     const idProblem = releaseIdProblem(body.releaseId);
@@ -694,6 +938,9 @@ export class Panel {
 
   /** Remove a retained release that is not live or requested, after confirmation: history shrinks, the live route is untouched. */
   async deleteRelease(p: Project, body: { releaseId?: unknown; expectedRevision?: unknown; confirm?: unknown }): Promise<Job> {
+    return this.withPluginServices(() => this.prepareDeleteRelease(p, body));
+  }
+  private async prepareDeleteRelease(p: Project, body: { releaseId?: unknown; expectedRevision?: unknown; confirm?: unknown }): Promise<Job> {
     const { m, publisher, identity, snapshot } = this.publicationTarget(p);
     if (!publisher.releases) throw new HttpError(409, `publisher "${publisher.name}" has no versioned release support`);
     const idProblem = releaseIdProblem(body.releaseId);
@@ -719,6 +966,9 @@ export class Panel {
   }
 
   async unpublish(p: Project, body: { confirm?: boolean }): Promise<Job> {
+    return this.withPluginServices(() => this.prepareUnpublish(p, body));
+  }
+  private async prepareUnpublish(p: Project, body: { confirm?: boolean }): Promise<Job> {
     if (!body.confirm) throw new HttpError(409, 'unpublish requires confirmation', { needsConfirm: 'unpublish' });
     const { m, publisher, identity, snapshot } = this.publicationTarget(p);
     return this.startJob('publication', p.id, `unpublish (${publisher.name}): ${m.name}`, async (ctx) => publisher.unpublish({ publication: identity, log: ctx.line }), 'unpublish', snapshot);
@@ -756,12 +1006,15 @@ export class Panel {
   }
 
   private selectedPackager(p: Project) {
-    const packaging = this.packagingOf(this.manifestOf(p));
+    const packaging = this.packagingOf(this.editableManifest(p));
     if (!packaging.available) throw new HttpError(409, `packaging unavailable: ${packaging.reason}`);
     return packagerFor(this.packagers, packaging.platform)!.packager;
   }
 
   async packageSetupStatus(p: Project): Promise<PackagerSetupStatus> {
+    return this.withPluginServices(() => this.checkPackageSetupStatus(p));
+  }
+  private async checkPackageSetupStatus(p: Project): Promise<PackagerSetupStatus> {
     const packager = this.selectedPackager(p);
     if (!packager.setupStatus) return { state: 'ready' };
     let status: unknown;
@@ -772,6 +1025,9 @@ export class Panel {
   }
 
   async packageSetup(p: Project, acceptTerms: boolean): Promise<Job> {
+    return this.withPluginServices(() => this.preparePackageSetup(p, acceptTerms));
+  }
+  private async preparePackageSetup(p: Project, acceptTerms: boolean): Promise<Job> {
     const packager = this.selectedPackager(p);
     if (!packager.setup || !packager.setupStatus) throw new HttpError(409, 'this packager does not offer setup');
     const status = await this.packageSetupStatus(p);
@@ -787,7 +1043,10 @@ export class Panel {
   }
 
   async packageBuild(p: Project, body: { version?: string; confirm?: string[] }): Promise<Job> {
-    const m = this.manifestOf(p);
+    return this.withPluginServices(() => this.preparePackageBuild(p, body));
+  }
+  private async preparePackageBuild(p: Project, body: { version?: string; confirm?: string[] }): Promise<Job> {
+    const m = this.editableManifest(p);
     const packaging = this.packagingOf(m);
     if (!packaging.available) throw new HttpError(409, `packaging unavailable: ${packaging.reason}`);
     const packager = packagerFor(this.packagers, packaging.platform)!.packager;
@@ -810,11 +1069,11 @@ export class Panel {
     let runtimeDir = '', pluginDirs: Record<string, string> = {}, plugins: string[] = [];
     const selection = headset ? selectionOf(m) : await this.effectiveSelection(m);
     if (!headset) {
-      const fresh = hostFreshness(this.repo, this.workspace);
-      if (!fresh.exists) throw new HttpError(409, 'xrb-host.exe is not built: rebuild the host first');
+      const fresh = await resolvedHostFreshness(this.repo, this.workspace);
+      if (!fresh.exists) throw new HttpError(409, fresh.hostProblem ?? 'xrb-host.exe is not built: rebuild the host first');
       if (fresh.outdated && !confirm.has('host'))
-        throw new HttpError(409, `xrb-host.exe is older than ${fresh.newestSource}: the package would ship an outdated host. Rebuild the host first?`, { needsConfirm: 'host' });
-      runtimeDir = hostPaths(this.repo).releaseDir;
+        throw new HttpError(409, `Host sources or plugins changed (${fresh.newestSource ?? 'source membership'}): the package would ship outdated artifacts. Rebuild the host first?`, { needsConfirm: 'host' });
+      runtimeDir = fresh.runtimeDir;
       const built = await this.pluginDirs();
       plugins = [...selection.inputs ?? [], selection.display, selection.platform].filter((n) => n && !BUILTIN_PROVIDERS.has(n));
       const missing = plugins.filter((n) => !built[n]);
@@ -839,11 +1098,15 @@ export class Panel {
         await fs.mkdir(path.dirname(packageIcon), { recursive: true });
         await fs.writeFile(packageIcon, defaultIcon(512, m.iconColor, m.iconShape));
       }
-      const r = await packager.build({
+      const inputRoot = path.join(this.workspace, 'build', 'package-inputs');
+      assertWritablePath(this.repo, this.workspace, inputRoot); await fs.mkdir(inputRoot, { recursive: true });
+      const inputGeneration = await fs.mkdtemp(path.join(inputRoot, 'p-'));
+      const staged = await stagePackagerInputs({
         app: entry, runtimeDir, ...(headset ? {} : { pluginDirs }), plugins, selection, projectName: m.name, identity, config, launchUrl,
         icon: packageIcon, iconColor: m.iconColor,
         out: path.join(this.workspace, 'builds', packaging.channel), workDir: path.join(this.workspace, 'build', packaging.channel), log: (msg) => ctx.line(msg),
-      });
+      }, path.join(inputGeneration, 'inputs'), path.resolve(entry) === path.resolve(p.dir));
+      const r = await packager.build(staged);
       await this.updateManifest(p.id, (cur) => ({ ...cur, plugins: { ...cur.plugins, [platform]: { ...cur.plugins?.[platform], ...identity, lastPackaged: version, version: nextVersion(version) } } }));
       ctx.line(`package ${label} ${version}: ${r.file} (${(r.sizeBytes / 1e9).toFixed(2)} GB). Next version: ${nextVersion(version)}`);
       return { zip: r.file, sizeBytes: r.sizeBytes, version };
@@ -851,11 +1114,15 @@ export class Panel {
   }
 
   renderIcon(p: Project): Job {
-    const m = this.manifestOf(p);
+    const m = this.editableManifest(p);
     const entry = this.entryOf(p, m);
-    const rel = m.icon ?? 'icon.png';
+    const rel = m.icon ?? 'icon.png', output = path.resolve(p.dir, rel);
+    assertWritablePath(this.repo, this.projects, output);
     return this.startJob('icon-render', p.id, `icon render: ${m.name}`, async (ctx) => {
-      await ctx.run(process.execPath, [APP_ICON, 'render', '--app', entry, '--out', path.resolve(p.dir, rel), '--runtime', hostPaths(this.repo).releaseDir], { cwd: this.repo });
+      const fresh = await resolvedHostFreshness(this.repo, this.workspace);
+      if (!fresh.exists) throw new HttpError(409, fresh.hostProblem ?? 'xrb-host.exe is not built: rebuild the host first');
+      assertWritablePath(this.repo, this.projects, output);
+      await ctx.run(process.execPath, [APP_ICON, 'render', '--app', entry, '--out', output, '--runtime', fresh.runtimeDir], { cwd: this.repo });
       if (!m.icon) await this.updateManifest(p.id, (cur) => ({ ...cur, icon: rel }));
     });
   }
@@ -872,13 +1139,40 @@ export class Panel {
     }
   }
 
+  async saveRunSettings(p: Project, overrides: unknown, revision: unknown) {
+    if (this.changingPlugins || this.maintainingCache || this.preparingNativeRun || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
+    this.refuseIfBusy(p.id);
+    this.settingsWrites.add(p.id);
+    try {
+      const settings = await saveProjectRunSettings(this.repo, this.workspace, p, overrides, revision);
+      this.hub.send('projects-changed', { projectId: p.id });
+      return settings;
+    } finally { this.settingsWrites.delete(p.id); }
+  }
+
   /** Starts one panel-owned standalone WebXR browser preview and returns its app URL. */
-  async preview(p: Project, mode: RunMode, flat: boolean, token: string, browser: { fullscreen: boolean; monitor: number; clientPort: number }): Promise<string> {
+  async preview(p: Project, mode: RunMode, flat: boolean | undefined, token: string, options: { fullscreen?: boolean; monitor?: number; clientPort: number }): Promise<string> {
+    await this.synchronizePluginServices(true);
+    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending || this.preparingPreview || this.preparingNativeRun || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
+    if (p.readOnly) this.refuseIfBusy(p.id);
+    this.preparingPreview = true;
+    try { return await this.preparePreview(p, mode, flat, token, options); }
+    finally { this.preparingPreview = false; }
+  }
+
+  private async preparePreview(p: Project, mode: RunMode, flat: boolean | undefined, token: string, options: { fullscreen?: boolean; monitor?: number; clientPort: number }): Promise<string> {
+    const settings = p.readOnly ? await readProjectRunSettings(this.repo, this.workspace, p) : null;
+    if (settings) p = withRunSettings(p, settings);
+    flat ??= settings?.values.flat ?? false;
+    const browser = { ...options, fullscreen: options.fullscreen ?? settings?.values.fullscreen ?? false, monitor: options.monitor ?? settings?.values.monitor ?? 0 };
     const m = this.manifestOf(p);
+    if (p.readOnly && mode !== 'built') throw new HttpError(409, 'Bundled development requires an editable copy');
+    const bundledOutput = p.readOnly ? await requireProjectOutput(this.repo, this.workspace, p) : null;
+    if (!p.readOnly && mode === 'dev') this.editableManifest(p);
     if (buildTargetOf(m) !== 'webxr' || selectionOf(m).platform) throw new HttpError(409, `${p.id} is not a standalone WebXR preview`);
     if (!this.panelUrl) throw new HttpError(500, 'the panel preview address is unavailable');
     if (mode === 'dev') await this.ensureDevInstalled();
-    const route = `/preview/${p.id.split('/').map(encodeURIComponent).join('/')}/`;
+    const route = projectPreviewRoute(p, bundledOutput ?? undefined);
     if (this.runner.busy) throw new HttpError(409, 'stop the running app first');
     const cursor = (await readAppSettings(this.workspace)).cursor;
     const session = randomUUID();
@@ -886,7 +1180,7 @@ export class Panel {
     const mouseEnabled = (await this.effectiveSelection(m)).inputs?.includes('mouse') ?? true;
     // Settings/provider reads yielded: another request may have reserved the runner meanwhile.
     if (this.runner.busy) throw new HttpError(409, 'stop the running app first');
-    this.previewProjection = { route, token, session, fullscreen: browser.fullscreen, projection };
+    this.previewProjection = { route, token, session, fullscreen: browser.fullscreen, monitor: browser.monitor, projection };
     let href = '';
     try {
       await this.runner.startPreview({ projectId: p.id, projectDir: p.dir, devScript: m.scripts?.dev, devEnv: this.appEnv(), flat }, mode, async (devUrl) => {
@@ -917,11 +1211,29 @@ export class Panel {
   }
 
   /** flat: Orthographic managed camera; non-desktop displays also start mono and may switch live. */
-  async run(p: Project, mode: RunMode, flat = false, cameraView = false, desktop?: { fullscreen: boolean; monitor: number }): Promise<void> {
+  async run(p: Project, mode: RunMode, flat?: boolean, cameraView?: boolean, desktop?: { fullscreen?: boolean; monitor?: number }): Promise<void> {
+    await this.synchronizePluginServices(true);
+    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
+    if (this.preparingNativeRun) throw new HttpError(409, 'another native launch is being prepared');
+    if (this.jobs.active().some(job => job.kind === 'host-rebuild')) throw new HttpError(409, 'wait for the native rebuild to finish before running');
+    if (p.readOnly) this.refuseIfBusy(p.id);
+    this.preparingNativeRun = true;
+    try {
+      const settings = p.readOnly ? await readProjectRunSettings(this.repo, this.workspace, p) : null;
+      const screen = desktop || settings ? { fullscreen: desktop?.fullscreen ?? settings?.values.fullscreen ?? false, monitor: desktop?.monitor ?? settings?.values.monitor ?? 0 } : undefined;
+      await this.runNative(settings ? withRunSettings(p, settings) : p, mode, flat ?? settings?.values.flat ?? false, cameraView ?? settings?.values.cameraView ?? false, screen);
+    }
+    finally { this.preparingNativeRun = false; }
+  }
+
+  private async runNative(p: Project, mode: RunMode, flat: boolean, cameraView: boolean, desktop?: { fullscreen: boolean; monitor: number }): Promise<void> {
     const m = this.manifestOf(p);
+    if (p.readOnly && mode !== 'built') throw new HttpError(409, 'Bundled development requires an editable copy');
+    const bundledOutput = p.readOnly ? await requireProjectOutput(this.repo, this.workspace, p) : null;
+    if (!p.readOnly && mode === 'dev') this.editableManifest(p);
     if (buildTargetOf(m) === 'webxr') throw new HttpError(409, `${p.id} is a WebXR headset app: open it in a browser, or build a package for the headset`);
-    const fresh = hostFreshness(this.repo, this.workspace);
-    if (!fresh.exists) throw new HttpError(409, 'xrb-host.exe is not built: rebuild the host first');
+    const fresh = await resolvedHostFreshness(this.repo, this.workspace);
+    if (!fresh.exists) throw new HttpError(409, fresh.hostProblem ?? 'xrb-host.exe is not built: rebuild the host first');
     if (this.runner.busy) throw new HttpError(409, `${this.runner.projectId} is running: stop it first`);
     const selection = await this.effectiveSelection(m);
     const chosen = [...selection.inputs ?? [], selection.display, selection.platform].filter((n) => n && !BUILTIN_PROVIDERS.has(n));
@@ -932,10 +1244,10 @@ export class Panel {
     const cursor = (await readAppSettings(this.workspace)).cursor;
     try {
       await this.runner.start({
-        projectId: p.id, mode, hostExe: fresh.exe, projectDir: p.dir, entryDir: this.entryOf(p, m),
+        projectId: p.id, mode, hostExe: fresh.exe, projectDir: p.dir, entryDir: bundledOutput?.entry ?? this.entryOf(p, m),
         builtUrl: mode === 'built' && this.panelUrl
           ? `https://app.local/index.html?xrb-panel=${encodeURIComponent(this.panelUrl)}&xrb-mouse=${selection.inputs?.includes('mouse') ? '1' : '0'}&xrb-cursor=${cursor}` : undefined,
-        devScript: m.scripts?.dev, devEnv: this.appEnv(), panelUrl: this.panelUrl, mouseEnabled: selection.inputs?.includes('mouse') ?? true, cursor, flat, switchView: selection.display !== 'desktop', cameraView,
+        devScript: m.scripts?.dev, devEnv: this.appEnv(), panelUrl: this.panelUrl ?? undefined, mouseEnabled: selection.inputs?.includes('mouse') ?? true, cursor, flat, switchView: selection.display !== 'desktop', cameraView,
         cameraAvailable: (selection.inputs ?? []).some((name) => !BUILTIN_PROVIDERS.has(name)),
         hostArgs: [`--title=${m.name}`, `--camera-projection=${flat ? 'orthographic' : 'perspective'}`, ...(await this.hostArgs(p, m, desktop, selection)), ...(flat && selection.display !== 'desktop' ? ['--view=2d'] : [])],
       });
@@ -959,6 +1271,11 @@ export class Panel {
 
   /** Archive (projects/<section>/x -> projects/archive/x) or unarchive (back to its section). */
   private async move(p: Project, toArchive: boolean): Promise<void> {
+    assertEditableProject(this.repo, this.projects, p);
+    assertWritablePath(this.repo, this.projects, path.join(this.projects, 'xrb-panel.json'));
+    const from = (await readLayout(this.projects, [])).archivedFrom?.[liveId(p.id)];
+    for (const section of [ARCHIVE, UNSORTED, ...(from ? [from] : [])])
+      assertWritablePath(this.repo, this.projects, path.join(this.projects, PROJECTS, section, path.basename(p.dir)));
     try {
       const to = toArchive ? await archiveProject(this.projects, p) : await unarchiveProject(this.projects, p);
       log(`[projects] ${p.id} ${toArchive ? 'archived' : 'unarchived'}: ${path.relative(this.projects, to)}`);
@@ -969,8 +1286,10 @@ export class Panel {
   }
 
   async deleteProject(p: Project): Promise<void> {
+    assertEditableProject(this.repo, this.projects, p);
+    assertWritablePath(this.repo, this.projects, path.join(this.projects, 'xrb-panel.json'));
     this.refuseIfBusy(p.id);
-    const rel = path.relative(this.projects, p.dir);
+    const rel = path.relative(await fs.realpath(this.projects), await fs.realpath(p.dir));
     // projects/<section>/x, or projects/archive/x
     const segs = rel.split(path.sep);
     if (segs.length !== 3 || segs[0] !== PROJECTS || !segs[1] || !segs[2]) throw new HttpError(400, `not a project folder: ${rel}`);
@@ -995,6 +1314,12 @@ export class Panel {
 
   /** Routes under /api/projects/<id>/... ; true when handled. */
   async projectRoute(method: string, p: Project, rest: string[], req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+    if (rest.length === 1 && rest[0] === 'cache' && p.readOnly) {
+      if (method === 'GET') { sendJson(res, 200, await reviewWorkingCache({ core: this.repo, workspace: this.workspace, project: p })); return true; }
+      if (method === 'DELETE') { sendJson(res, 202, jobSummary(this.cleanupWorkingCache(p, await readJson(req)))); return true; }
+    }
+    if (p.readOnly && !(method === 'POST' && rest.length === 1 && ['run', 'preview', 'rebuild-app'].includes(rest[0])))
+      throw new HttpError(409, 'Bundled projects are read-only; copy to workspace first');
     if (rest.length === 2 && rest[0] === 'package' && rest[1] === 'setup-status' && method === 'GET') {
       sendJson(res, 200, await this.packageSetupStatus(p));
       return true;
@@ -1057,26 +1382,30 @@ export class Panel {
         return true;
       case 'preview': {
         const { mode, flat, fullscreen, token, monitor } = await readJson<{ mode?: RunMode; flat?: boolean; fullscreen?: boolean; token?: string; monitor?: number }>(req);
+        if (p.readOnly) validateRunOverrides(Object.fromEntries(Object.entries({ flat, fullscreen, monitor }).filter(([, value]) => value !== undefined)));
         if (mode !== 'dev' && mode !== 'built') throw new HttpError(400, 'standalone preview mode must be built or dev');
         const runMode: RunMode = mode;
         const previewToken = typeof token === 'string' && /^[a-zA-Z0-9-]{16,80}$/.test(token) ? token : randomUUID();
         const screen = Number.isInteger(monitor) && monitor! >= 0 && monitor! <= 255 ? monitor! : 0;
-        const url = await this.preview(p, runMode, flat === true, previewToken, {
-          fullscreen: fullscreen === true, monitor: screen, clientPort: req.socket.remotePort ?? 0,
+        const url = await this.preview(p, runMode, p.readOnly && flat === undefined ? undefined : flat === true, previewToken, {
+          fullscreen: p.readOnly && fullscreen === undefined ? undefined : fullscreen === true,
+          monitor: p.readOnly && monitor === undefined ? undefined : screen, clientPort: req.socket.remotePort ?? 0,
         });
-        sendJson(res, 200, { url, fullscreen: fullscreen === true, monitor: screen });
+        sendJson(res, 200, { url, fullscreen: this.previewProjection?.fullscreen ?? false, monitor: this.previewProjection?.monitor ?? 0 });
         return true;
       }
       case 'run': {
         const { mode, flat, cameraView, fullscreen, monitor } = await readJson<{ mode?: RunMode; flat?: boolean; cameraView?: boolean; fullscreen?: boolean; monitor?: number }>(req);
+        if (p.readOnly) validateRunOverrides(Object.fromEntries(Object.entries({ flat, cameraView, fullscreen, monitor }).filter(([, value]) => value !== undefined)));
         const runMode = mode === 'dev' ? 'dev' : 'built';
-        if (runMode === 'built') {
+        if (runMode === 'built' && !p.readOnly) {
           const build = this.webBuild(p);
           const done = await this.jobs.wait(build);
           if (done.state === 'failed') throw new HttpError(400, done.error ?? 'the app build failed');
         }
         const screen = Number.isInteger(monitor) && monitor! >= 0 && monitor! <= 255 ? monitor! : 0;
-        await this.run(p, runMode, flat === true, cameraView === true, { fullscreen: fullscreen === true, monitor: screen });
+        await this.run(p, runMode, p.readOnly && flat === undefined ? undefined : flat === true, p.readOnly && cameraView === undefined ? undefined : cameraView === true,
+          { fullscreen: p.readOnly && fullscreen === undefined ? undefined : fullscreen === true, monitor: p.readOnly && monitor === undefined ? undefined : screen });
         sendJson(res, 200, this.runner.state());
         return true;
       }
@@ -1089,27 +1418,36 @@ export class Panel {
     const key = `${method} ${api.join('/')}`;
     if (api[0] === 'plugins' && api[1] === 'manage' && api.length >= 3) {
       const id = api[2];
-      if (!pluginFolders(this.workspace).includes(id)) throw new HttpError(404, `no plugin ${id}`);
+      const catalog = await resolvePluginCatalog(this.workspace, this.repo, true), plugin = pluginByReference(catalog, id);
+      if (!plugin) throw new HttpError(404, `no unambiguous plugin ${id}`);
+      const preferenceKey = id.includes(':') || !plugin.legacyPreferences ? plugin.key : plugin.id;
+      if (method === 'PUT' && api.length === 4 && api[3] === 'origin') {
+        const body = await readJson<{ origin?: unknown; revision?: unknown }>(req);
+        if (Object.keys(body).some(key => !['origin', 'revision'].includes(key))) throw new HttpError(400, 'Only origin and revision are accepted');
+        await this.selectPluginSource(id, body.origin, body.revision);
+        sendJson(res, 200, { saved: true }); return true;
+      }
       if (method === 'GET' && api.length === 4 && api[3] === 'settings') {
-        const meta = await pluginMeta(this.workspace, id), prefs = await readPluginPrefs(this.workspace);
+        const meta = plugin.meta, prefs = catalog.prefs;
         sendJson(res, 200, {
-          enabled: !prefs.disabled.includes(id),
-          runtime: effectiveSettings(meta.settings ?? [], prefs.settings[id]),
-          panel: effectiveSettings(meta.panelSettings ?? [], prefs.panelSettings[id]),
+          enabled: pluginEnabled(plugin, prefs),
+          runtime: effectiveSettings(meta.settings ?? [], pluginPreferenceValues(plugin, prefs)),
+          panel: effectiveSettings(meta.panelSettings ?? [], pluginPreferenceValues(plugin, prefs, 'panelSettings')),
         });
         return true;
       }
       if (method === 'POST' && api.length === 4 && api[3] === 'open-folder') {
-        const dir = path.join(this.workspace, 'plugins', id);
+        const dir = plugin.sourceRoot;
         this.openInShell(dir);
         sendJson(res, 200, { opened: dir });
         return true;
       }
       if (method === 'POST' && api.length === 6 && api[3] === 'samples' && api[5] === 'import') {
-        const meta = await pluginMeta(this.workspace, id), sample = meta.panelSamples?.find((item) => item.id === api[4]);
+        const meta = plugin.meta, sample = meta.panelSamples?.find((item) => item.id === api[4]);
         if (!sample) throw new HttpError(404, `no sample ${api[4]} in plugin ${id}`);
         const body = await readJson<{ folder?: string; name?: string }>(req);
         if (!body.folder || !body.name?.trim()) throw new HttpError(400, 'project folder and name required');
+        assertWritablePath(this.repo, this.projects, path.join(this.projects, PROJECTS, 'plugins', body.folder));
         let projectId: string;
         try { projectId = await importPluginSample(this.projects, sample.dir, body.folder, body.name.trim()); }
         catch (error) { if (error instanceof ProjectRefused) throw new HttpError(409, error.message); throw error; }
@@ -1119,7 +1457,7 @@ export class Panel {
         return true;
       }
       if (method === 'GET' && api.length === 4 && api[3] === 'icon') {
-        const file = await pluginIcon(this.workspace, id);
+        const file = await pluginIcon(plugin.workspaceRoot, plugin.id);
         if (!file) throw new HttpError(404, 'plugin has no icon');
         const png = await fs.readFile(file);
         if (png.length > 2 * 1024 * 1024 || !png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new HttpError(400, 'plugin icon must be a PNG under 2 MB');
@@ -1130,25 +1468,23 @@ export class Panel {
       if (method === 'PUT' && api.length === 3) {
         const body = await readJson<{ enabled?: boolean; settings?: unknown; panelSettings?: unknown }>(req);
         if (typeof body.enabled !== 'boolean' && body.settings === undefined && body.panelSettings === undefined) throw new HttpError(400, 'enabled or settings required');
-        if ((body.enabled !== undefined || body.settings !== undefined) && (this.runner.busy || this.jobs.active().length))
-          throw new HttpError(409, 'stop the running app and jobs before changing plugins');
-        const meta = await pluginMeta(this.workspace, id);
-        const prefs = await readPluginPrefs(this.workspace);
-        if (body.enabled !== undefined) {
-          if (typeof body.enabled !== 'boolean') throw new HttpError(400, 'enabled must be a boolean');
-          prefs.disabled = body.enabled ? prefs.disabled.filter((item) => item !== id) : [...new Set([...prefs.disabled, id])];
-        }
-        if (body.settings !== undefined) {
-          try { prefs.settings[id] = validateSettings(meta.settings ?? [], body.settings); }
-          catch (e) { throw new HttpError(400, (e as Error).message); }
-        }
-        if (body.panelSettings !== undefined) {
-          if (prefs.disabled.includes(id)) throw new HttpError(409, 'enable the plugin before changing its settings');
-          try { prefs.panelSettings[id] = validateSettings(meta.panelSettings ?? [], body.panelSettings); }
-          catch (e) { throw new HttpError(400, (e as Error).message); }
-        }
-        await savePluginPrefs(this.workspace, prefs);
-        await Promise.all([this.loadPackagers(), this.loadPublishers()]);
+        const meta = plugin.meta, runtimeChange = body.enabled !== undefined || body.settings !== undefined;
+        const update = () => updatePluginPrefs(this.workspace, prefs => {
+          if (body.enabled !== undefined) {
+            if (typeof body.enabled !== 'boolean') throw new HttpError(400, 'enabled must be a boolean');
+            prefs.disabled = body.enabled ? prefs.disabled.filter((item) => item !== plugin.id && item !== plugin.key) : [...new Set([...prefs.disabled, preferenceKey])];
+          }
+          if (body.settings !== undefined) {
+            try { prefs.settings[preferenceKey] = validateSettings(meta.settings ?? [], body.settings); }
+            catch (e) { throw new HttpError(400, (e as Error).message); }
+          }
+          if (body.panelSettings !== undefined) {
+            if (!pluginEnabled(plugin, prefs)) throw new HttpError(409, 'enable the plugin before changing its settings');
+            try { prefs.panelSettings[preferenceKey] = validateSettings(meta.panelSettings ?? [], body.panelSettings); }
+            catch (e) { throw new HttpError(400, (e as Error).message); }
+          }
+        }, this.repo, runtimeChange ? () => this.refreshPluginServices() : undefined);
+        if (runtimeChange) await this.withPluginMutation(update); else await update();
         this.hub.send('plugins-changed', { id });
         this.hub.send('projects-changed', {});
         sendJson(res, 200, { saved: true });
@@ -1183,20 +1519,19 @@ export class Panel {
         return true;
       }
       case 'GET host':
-        sendJson(res, 200, { ...hostFreshness(this.repo, this.workspace), workspace: this.workspace });
+        sendJson(res, 200, { ...await resolvedHostFreshness(this.repo, this.workspace), workspace: this.workspace });
         return true;
       case 'GET panel':
         sendJson(res, 200, this.panelFreshness());
         return true;
       case 'GET plugins': {
         // Host providers and packagers are independent; disabled plugins are excluded from both.
-        const prefs = await readPluginPrefs(this.workspace);
-        const folders = pluginFolders(this.workspace), metaByFolder = new Map(await Promise.all(folders.map(async (id) => [id, await pluginMeta(this.workspace, id).catch(() => null)] as const)));
-        const activeMeta = folders.filter((id) => !prefs.disabled.includes(id)).map((id) => metaByFolder.get(id));
+        const catalog = await resolvePluginCatalog(this.workspace, this.repo, true), prefs = catalog.prefs;
+        const activeMeta = catalog.selected.filter(plugin => pluginEnabled(plugin, prefs)).map(plugin => plugin.meta);
         const standaloneTargets = [...new Set(activeMeta.flatMap((meta) => meta?.panelTargets ?? []))];
         const presentProvider = (provider: Awaited<ReturnType<typeof listProviders>>['providers'][number]) => {
           if (!provider.path) return provider;
-          const folder = path.relative(path.join(this.workspace, 'plugins'), provider.path).split(path.sep)[0], meta = metaByFolder.get(folder);
+          const meta = catalog.selected.find(plugin => pluginOwnsPath(plugin, provider.path!))?.meta;
           if (!meta) return provider;
           const presentedName = meta.panelProviderNames?.[provider.name] ?? provider.name;
           return { ...provider, name: presentedName, ...(presentedName !== provider.name ? { runtimeName: provider.name } : {}), label: meta.title,
@@ -1205,10 +1540,10 @@ export class Panel {
             displayMode: provider.role === 'display' ? meta.displayMode : undefined };
         };
         const all = await listProviders(this.repo, this.workspace, true);
-        const disabled = all.providers.filter((p) => p.path && prefs.disabled.includes(path.relative(path.join(this.workspace, 'plugins'), p.path).split(path.sep)[0])).map(presentProvider);
+        const disabled = all.providers.filter((p) => p.path && catalog.selected.some(plugin => !pluginEnabled(plugin, prefs) && pluginOwnsPath(plugin, p.path!))).map(presentProvider);
         const disabledNames: Array<{ name: string; role: string }> = [];
         for (const id of prefs.disabled) {
-          const meta = metaByFolder.get(id), role = meta?.type;
+          const meta = pluginByReference(catalog, id)?.meta, role = meta?.type;
           if (role && ['input', 'display', 'platform'].includes(role) && meta?.panelProviderNames)
             disabledNames.push(...Object.values(meta.panelProviderNames).map((name) => ({ name, role })));
           else for (const candidate of ['input', 'display', 'platform']) if (id.startsWith(`${candidate}-`)) disabledNames.push({ name: id.slice(candidate.length + 1), role: candidate });
@@ -1224,14 +1559,25 @@ export class Panel {
             .map((provider) => [`${provider.role}:${provider.name}`, provider])).values()],
           packagers: platformsFor(this.packagers, 'host'), headsetPlatforms: platformsFor(this.packagers, 'webxr'), standaloneTargets,
           packagerLabels: Object.fromEntries(this.packagers.found.filter(({ packager }) => packager.label)
-            .map(({ packager }) => [packager.name, packager.label])), packagerProblems: this.packagers.problems });
+            .map(({ packager }) => [packager.name, packager.label])), packagerProblems: this.packagers.problems, pluginProblems: catalog.problems });
+        return true;
+      }
+      case 'GET plugins/cache':
+        sendJson(res, 200, await reviewWorkingCache({ core: this.repo, workspace: this.workspace })); return true;
+      case 'DELETE plugins/cache':
+        sendJson(res, 202, jobSummary(this.cleanupWorkingCache(undefined, await readJson(req)))); return true;
+      case 'POST plugins/setup-bundled':
+        sendJson(res, 202, jobSummary(this.setupBundledServices())); return true;
+      case 'GET plugins/runtime': {
+        try { const runtime = await embeddedServiceRuntime(this.repo, this.workspace); sendJson(res, 200, { available: true, installed: runtime.installed, problem: null }); }
+        catch (error) { sendJson(res, 200, { available: false, installed: true, problem: (error as Error).message }); }
         return true;
       }
       case 'GET plugins/manage':
-        sendJson(res, 200, { plugins: await this.managedPlugins() });
+        sendJson(res, 200, { plugins: await this.managedPlugins(), services: this.pluginServiceStatus(), problems: (await resolvePluginCatalog(this.workspace, this.repo)).problems });
         return true;
       case 'POST host/rebuild':
-        if (this.runner.busy) throw new HttpError(409, 'stop the running host first: its exe is locked while it runs');
+        if (this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop the running or starting host first: its exe must not overlap a rebuild');
         sendJson(res, 202, jobSummary(this.startJob('host-rebuild', null, 'rebuild xrb-host', (ctx) => rebuildHost(this.repo, this.workspace, ctx))));
         return true;
       case 'GET preview/projection': {
@@ -1312,12 +1658,18 @@ export class Panel {
         return true;
       }
       case 'POST restart': {
-        const { confirm } = await readJson<{ confirm?: boolean }>(req);
-        const busy = [this.runner.busy ? `${this.runner.projectId} is running` : '', ...this.jobs.active().map((j) => `${j.title} is ${j.state}`)].filter(Boolean);
-        if (busy.length && !confirm) throw new HttpError(409, `${busy.join('; ')}. Restart anyway? The host is stopped cleanly first.`, { needsConfirm: 'restart' });
-        sendJson(res, 200, { restarting: true, pid: process.pid, instanceId: this.instanceId });
-        log('[panel] restart requested');
-        setTimeout(() => this.onRestart(), 50);
+        const { confirm, ifIdle, expectedInstanceId } = await readJson<{ confirm?: boolean; ifIdle?: boolean; expectedInstanceId?: string }>(req);
+        if ((confirm !== undefined && typeof confirm !== 'boolean') || (ifIdle !== undefined && typeof ifIdle !== 'boolean')) throw new HttpError(400, 'Restart flags must be boolean');
+        if (ifIdle && (confirm !== false || expectedInstanceId !== this.instanceId)) throw new HttpError(409, 'Automatic restart requires the current panel instance and cannot force active work');
+        const busy = [this.runner.busy ? `${this.runner.projectId} is running` : '', ...this.jobs.active().map((j) => `${j.title} is ${j.state}`),
+          this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.settingsWrites.size || this.changingPlugins || this.maintainingCache || this.restartWorkPending() ? 'Panel work is preparing or changing' : ''].filter(Boolean);
+        if (busy.length && !confirm) throw new HttpError(409, ifIdle ? 'Waiting for the panel to become idle' : `${busy.join('; ')}. Restart anyway? The host is stopped cleanly first.`, ifIdle ? { retryWhenIdle: true } : { needsConfirm: 'restart' });
+        sendJson(res, 200, { restarting: true, pid: process.pid, instanceId: this.instanceId, repo: this.repo, workspace: this.workspace, projects: this.projects });
+        if (!this.restartPending) {
+          this.restartPending = true;
+          log('[panel] restart requested');
+          setTimeout(() => this.onRestart(), 50);
+        }
         return true;
       }
       case 'POST quit': {

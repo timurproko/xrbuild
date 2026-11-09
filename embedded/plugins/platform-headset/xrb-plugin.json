@@ -1,0 +1,10 @@
+{
+  "title": "Headset",
+  "type": "platform",
+  "version": "0.1.0",
+  "description": "Package published WebXR apps for standalone headsets.",
+  "config": [
+    { "key": "toolchainConfigured", "label": "Reviewed toolchain configured", "type": "boolean", "default": false },
+    { "key": "toolchainFile", "label": "User toolchain descriptor", "type": "text", "default": "toolchain.json" }
+  ]
+}

@@ -16,8 +16,6 @@ import {
   ARCHIVE,
   defaultEntry,
   defaultManifest,
-  discoverAll,
-  discoverArchived,
   discoverProjects,
   identityOf,
   isArchivedId,
@@ -33,6 +31,11 @@ import {
   type Project,
 } from './projects.ts';
 import { Panel } from './panel.ts';
+import { discoverProjectCatalog } from './extension-catalog.ts';
+import { bundledBuildPlan, resolveProjectOutput, requireProjectOutput, projectPreviewRoute, projectBuildRoot } from './project-build.ts';
+import { copyBundledProject, projectFile, projectPath } from './embedded-projects.ts';
+import { assertEditableProject, assertUserRoot, assertWritablePath } from './project-access.ts';
+import { projectRunSettingsFile, readProjectRunSettings } from './project-run-settings.ts';
 import { publicationCard } from './publication.ts';
 import { ManagedTools } from './managed-tools.ts';
 import { applyLayout, readLayout, validateLayout, type Layout } from './layout.ts';
@@ -173,8 +176,9 @@ function sendAutoRouteError(res: ServerResponse, message: string): void {
 }
 
 /** Project for an id ("x", or "archive/x" when archived), or a 404. */
-async function findProject(repo: string, id: string): Promise<Project> {
-  const p = (await discoverAll(repo)).find((x) => x.id === id);
+async function resolveProject(core: string, projects: string, id: string): Promise<Project> {
+  const catalog = await discoverProjectCatalog(core, projects);
+  const p = catalog.projects.find(record => record.key === id || record.origin === 'workspace' && record.project.id === id)?.project;
   if (!p) throw new HttpError(404, `no project ${id}`);
   return p;
 }
@@ -200,18 +204,23 @@ async function mtime(file: string | null): Promise<number | null> {
 /** A project as the UI sees it (`projects`: the project repository root). */
 export async function describeProject(projects: string, p: Project, panel: Panel) {
   const m = p.manifest;
-  const entry = m ? entryDir(p, m) : null;
-  const webBuildMs = entry ? await mtime(path.join(entry, 'index.html')) : null;
+  const runSettings = p.readOnly && m ? await readProjectRunSettings(panel.repo, panel.workspace, p)
+    .then(value => ({ value, problem: null as string | null }), error => ({ value: null, problem: (error as Error).message })) : null;
+  const output = p.readOnly && m ? await resolveProjectOutput(panel.repo, panel.workspace, p) : null;
+  const buildPlan = p.readOnly && m ? await bundledBuildPlan(panel.repo, p).then(() => ({ available: true, reason: null as string | null }), error => ({ available: false, reason: (error as Error).message })) : null;
+  const entry = output ? output.entry : m ? entryDir(p, m) : null;
+  const assetTime = async (relative: string) => projectFile(p, relative).then(mtime, () => null);
+  const relativeEntry = m?.entry ?? (m ? defaultEntry(m.kind) : '.');
+  const webBuildMs = entry ? output ? await mtime(path.join(entry, 'index.html')) : await assetTime(`${relativeEntry}/index.html`) : null;
   // The build's 3D icon (icon.js next to index.html), which a launcher imports from the preview route.
-  const iconModelMs = entry ? await mtime(path.join(entry, 'icon.js')) : null;
-  const icon = iconPath(p, m);
-  const iconMs = await mtime(icon);
-  const packageId = m ? identityOf(m)?.id : undefined;
+  const iconModelMs = entry ? output ? await mtime(path.join(entry, 'icon.js')) : await assetTime(`${relativeEntry}/icon.js`) : null;
+  const iconMs = m?.icon ? await assetTime(m.icon) : null;
+  const packageId = !p.readOnly && m ? identityOf(m)?.id : undefined;
   const zipMs = typeof packageId === 'string' ? await mtime(path.join(panel.workspace, 'builds', `${packageId}.zip`)) : null;
-  const publicationPromise = panel.publicationOf(m);
-  let standalone = m;
+  const publicationPromise = panel.publicationOf(p.readOnly ? null : m);
+  let standalone = p.readOnly ? null : m;
   let publicationStandalonePromise = publicationPromise;
-  if (m && (m.target !== 'webxr' || m.platform)) {
+  if (!p.readOnly && m && (m.target !== 'webxr' || m.platform)) {
     standalone = { ...m, target: 'webxr' };
     delete standalone.platform;
     publicationStandalonePromise = panel.publicationOf(standalone);
@@ -220,8 +229,15 @@ export async function describeProject(projects: string, p: Project, panel: Panel
   const [publication, publicationStandalone, publicationDestinations] = await Promise.all([publicationPromise, publicationStandalonePromise, publicationDestinationsPromise]);
   return {
     id: p.id,
+    key: p.key ?? `workspace:${p.id}`,
+    origin: p.origin ?? 'workspace',
+    readOnly: p.readOnly ?? false,
+    build: output ? { path: path.relative(panel.workspace, projectBuildRoot(panel.repo, panel.workspace, p)).split(path.sep).join('/'), origin: output.origin, generation: output.generation, problem: output.problem, canRebuild: buildPlan?.available ?? false, reason: buildPlan?.reason ?? null } : null,
+    runSettings: runSettings?.value ?? null,
+    runSettingsProblem: runSettings?.problem ?? null,
+    runSettingsPath: p.readOnly ? path.relative(panel.workspace, projectRunSettingsFile(panel.repo, panel.workspace, p)).split(path.sep).join('/') : null,
     section: p.section,
-    dir: path.relative(projects, p.dir).split(path.sep).join('/'),
+    dir: path.relative(await fs.realpath(p.readOnly ? panel.repo : projects), p.dir).split(path.sep).join('/'),
     manifest: m,
     errors: p.errors,
     manifestMtimeMs: p.manifestMtimeMs,
@@ -229,15 +245,15 @@ export async function describeProject(projects: string, p: Project, panel: Panel
     webBuildMs,
     icon: {
       custom: iconMs !== null, mtimeMs: iconMs, changedSincePackage: iconMs !== null && zipMs !== null && iconMs > zipMs,
-      model: iconModelMs !== null ? `/preview/${p.id.split('/').map(encodeURIComponent).join('/')}/icon.js` : null,
+      model: iconModelMs !== null ? `${projectPreviewRoute(p, output ?? undefined)}icon.js` : null,
     },
     running: panel.runner.projectId === p.id,
     // The launcher card this project presents everywhere: the same contract a publisher records with a deployment.
     card: m ? publicationCard(m, iconModelMs !== null) : null,
-    canDev: !!m?.scripts?.dev,
+    canDev: !p.readOnly && !!m?.scripts?.dev,
     archived: isArchivedId(p.id),
-    packaging: panel.packagingOf(m),
-    packagingChoices: panel.packagingChoicesOf(m),
+    packaging: panel.packagingOf(p.readOnly ? null : m),
+    packagingChoices: panel.packagingChoicesOf(p.readOnly ? null : m),
     publication,
     publicationStandalone,
     publicationDestinations,
@@ -245,9 +261,12 @@ export async function describeProject(projects: string, p: Project, panel: Panel
 }
 
 export function createServer(opts: ServerOptions = {}): PanelServer {
-  const core = opts.repo ?? REPO;
+  const core = opts.repo ?? opts.panel?.repo ?? REPO;
   const workspace = opts.workspace ?? opts.panel?.workspace ?? WORKSPACE;
   const projects = opts.projects ?? opts.panel?.projects ?? workspace;
+  assertUserRoot(core, workspace);
+  assertUserRoot(core, projects);
+  const findProject = (id: string) => resolveProject(core, projects, id);
   const port = opts.port ?? DEFAULT_PORT;
   const url = `http://127.0.0.1:${port}/`;
   const workspaceKind = opts.workspaceKind ?? 'explicit';
@@ -256,7 +275,10 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
   panel.panelUrl = url;
   const uiDir = path.join(PANEL_DIR, 'ui');
   let server: http.Server;
-  const managedTools = new ManagedTools({ core, workspace, projects, port, server: () => server, prepare: () => panel.prepareManagedTools() });
+  let closing = false, activeMutations = 0;
+  panel.restartWorkPending = () => activeMutations > 0 || managedTools.pendingWork();
+  const managedTools = new ManagedTools({ core, workspace, projects, port, server: () => server, prepare: () => panel.prepareManagedTools(), available: () => { const status = panel.pluginServiceStatus(); return status.pending ? status.problem ?? 'Plugin services are changing; wait for setup/refresh to finish' : null; } });
+  panel.onPluginSourcesChanged = async (restartRequired) => { if (restartRequired) managedTools.invalidatePluginRuntimes(); await managedTools.navigation(); };
   const autoRoute = opts.autoRoute;
   let autoRouteWork: Promise<string | null> | null = null;
 
@@ -283,6 +305,10 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
     if (reject) throw new HttpError(403, reject);
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     const parts = url.pathname.split('/').filter(Boolean);
+    if (closing || panel.restartPending && !['/api/ping', '/api/restart'].includes(url.pathname)) {
+      res.setHeader('connection', 'close');
+      return sendJson(res, 503, { error: 'The panel is restarting' });
+    }
 
     if (autoRoute && isDocumentRefresh(method, req, url.pathname) && !['api', 'preview', 'vendor', 'sdk'].includes(parts[0])) {
       try {
@@ -300,15 +326,34 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
 
     if (parts[0] === 'preview') {
       // /preview/[archive/]<project>/<file...>: a project's entry folder, for browser Run and the icon studio.
-      const n = parts[1] === ARCHIVE ? 2 : 1;
-      const p = await findProject(projects, parts.slice(1, 1 + n).join('/'));
-      const file = url.pathname.split('/').slice(2 + n).join('/');
-      if (!file || file === 'index.html') {
+      if (!['GET', 'HEAD'].includes(method)) throw new HttpError(405, 'method not allowed');
+      const decoded = parts.slice(1).map(decodeURIComponent);
+      const n = /^(?:(?:bundled|workspace):)?archive$/.test(decoded[0]) ? 2 : 1;
+      const p = await findProject(decoded.slice(0, n).join('/'));
+      let file = parts.slice(1 + n).join('/');
+      let bundledEntry: string | null = null;
+      if (p.readOnly) {
+        const marker = decodeURIComponent(parts[1 + n] ?? '');
+        const generation = marker.startsWith('@r-') ? marker.slice(1) : undefined;
+        if (generation !== undefined) file = parts.slice(2 + n).join('/');
+        const output = await requireProjectOutput(core, workspace, p, generation);
+        bundledEntry = output.entry;
+        if (!generation && output.generation) {
+          res.writeHead(302, { location: `${projectPreviewRoute(p, output)}${file}${url.search}`, 'cache-control': 'no-store' }); res.end(); return;
+        }
+      }
+      if (!p.readOnly && (!file || file === 'index.html')) {
         const job = panel.webBuild(p);
         const done = await panel.jobs.wait(job);
         if (done.state === 'failed') throw new HttpError(400, done.error ?? 'the app build failed');
       }
-      return serveStatic(res, entryDir(p, usable(p)), file);
+      const entry = bundledEntry ?? await projectPath(p, usable(p).entry ?? defaultEntry(usable(p).kind));
+      if (p.readOnly) {
+        const relative = decodeURIComponent(file || 'index.html'), owner = { ...p, dir: entry };
+        const asset = await projectPath(owner, relative);
+        if ((await fs.stat(asset)).isDirectory()) await projectFile(owner, `${relative}/index.html`);
+      }
+      return serveStatic(res, entry, file);
     }
     if (method === 'GET' && url.pathname === '/vendor/three.module.js') {
       // three.js for the icon preview page (ui/icon-preview.html), from the SDK's own dependency.
@@ -322,6 +367,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       return;
     }
     if (parts[0] !== 'api') {
+      if (url.pathname.endsWith('/') || parts[0]?.startsWith('__')) await panel.synchronizePluginServices(true);
       if (await managedTools.handle(req, res, url.pathname)) return;
       if (method !== 'GET') throw new HttpError(405, 'method not allowed');
       if (url.pathname === '/' || url.pathname === '/plugins' || url.pathname === '/plugins/' || url.pathname === '/settings' || url.pathname === '/settings/') return serveStatic(res, uiDir, 'index.html');
@@ -332,6 +378,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
     const is = (m: string, ...segs: string[]) => method === m && api.length === segs.length && segs.every((s, i) => s === '*' || s === api[i]);
 
     if (is('GET', 'ping')) return sendJson(res, 200, { app: APP_NAME, repo: core, workspace, projects, pid: process.pid, instanceId: panel.instanceId });
+    if (!(method !== 'GET' && ['plugins', 'restart', 'quit'].includes(api[0]))) await panel.synchronizePluginServices(method !== 'GET');
     if (is('GET', 'navigation')) return sendJson(res, 200, await managedTools.navigation());
     if (api[0] === 'tools' && api.length === 3) {
       const id = api[1], action = api[2];
@@ -349,6 +396,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
     if (is('GET', 'workspace')) return sendJson(res, 200, { path: projects, integrationPath: workspace, exists: await isWorkspace(projects), kind: workspaceKind, autoRoute: !!autoRoute });
     if (is('GET', 'monitors')) return sendJson(res, 200, { monitors: await listMonitors() });
     if (is('POST', 'workspace', 'open-folder')) {
+      assertWritablePath(core, projects);
       await fs.mkdir(projects, { recursive: true });
       panel.openInShell(projects);
       return sendJson(res, 200, { opened: projects });
@@ -372,19 +420,23 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       }
       log(`[projects] created ${folder} from the template (projects/${UNSORTED}/${folder})`);
       hub.send('projects-changed', {});
-      return sendJson(res, 200, await describeProject(projects, await findProject(projects, folder), panel));
+      return sendJson(res, 200, await describeProject(projects, await findProject(folder), panel));
     }
     if (is('GET', 'events')) {
+      if (closing || panel.restartPending) { res.setHeader('connection', 'close'); return sendJson(res, 503, { error: 'The panel is restarting' }); }
       hub.attach(res);
       hub.send('run', panel.runner.state());
       return;
     }
     if (is('GET', 'projects')) {
-      const [liveProjects, archived] = await Promise.all([discoverProjects(projects), discoverArchived(projects)]);
+      const catalog = await discoverProjectCatalog(core, workspace, projects);
+      const liveProjects = catalog.projects.map(record => record.project).filter(p => !isArchivedId(p.id));
+      const archived = catalog.projects.map(record => record.project).filter(p => isArchivedId(p.id));
       return sendJson(res, 200, {
         projects: await Promise.all(liveProjects.map((p) => describeProject(projects, p, panel))),
         archived: await Promise.all(archived.map((p) => describeProject(projects, p, panel))),
-        layout: await readLayout(projects, liveProjects),
+        layout: await readLayout(projects, liveProjects.filter(p => !p.readOnly)),
+        problems: catalog.problems,
         unregistered: await unregisteredApps(projects),
       });
     }
@@ -392,8 +444,18 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       const l = await readJson<Layout>(req);
       const problem = validateLayout(l);
       if (problem) throw new HttpError(400, problem);
+      assertWritablePath(core, projects, path.join(projects, 'xrb-panel.json'));
+      assertWritablePath(core, projects, path.join(projects, PROJECTS, UNSORTED));
+      if (Object.keys(l.colors ?? {}).some(id => id.startsWith('bundled:'))) throw new HttpError(409, 'Bundled layout is read-only');
+      for (const section of l.sections) {
+        if (section.items.some(id => id.startsWith('bundled:'))) throw new HttpError(409, 'Bundled layout is read-only');
+        assertWritablePath(core, projects, path.join(projects, PROJECTS, section.name.trim().toLowerCase()));
+        if (section.from) assertWritablePath(core, projects, path.join(projects, PROJECTS, section.from));
+      }
+      const editable = await discoverProjects(projects);
+      for (const project of editable) assertEditableProject(core, projects, project);
       try {
-        await applyLayout(projects, l, await discoverProjects(projects));
+        await applyLayout(projects, l, editable);
       } catch (e) {
         if (e instanceof MoveRefused) throw new HttpError(409, e.message);
         throw e;
@@ -405,19 +467,35 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       const { id } = await readJson<{ id?: string }>(req);
       if (!id || !(await unregisteredApps(projects)).includes(id)) throw new HttpError(400, `${id} is not an app folder without a manifest`);
       const dir = path.join(projects, PROJECTS, id);
+      assertWritablePath(core, projects, path.join(dir, MANIFEST));
       // The new app runs like the workspace's first app (same providers and platform).
       const like = (await discoverProjects(projects)).find((x) => x.manifest?.kind === 'app')?.manifest ?? null;
       const r = await saveManifest(dir, await defaultManifest(dir, like));
       if (r.errors.length) throw new HttpError(400, 'default manifest is invalid', r.errors);
       log(`[projects] created ${id}/${MANIFEST}`);
-      return sendJson(res, 200, await describeProject(projects, await findProject(projects, path.basename(dir)), panel));
+      return sendJson(res, 200, await describeProject(projects, await findProject(path.basename(dir)), panel));
     }
     // /api/projects/[archive/]<project>/...
     if (api[0] === 'projects' && api.length >= 2) {
-      const n = api[1] === ARCHIVE ? 2 : 1;
+      const n = /^(?:(?:bundled|workspace):)?archive$/.test(api[1]) ? 2 : 1;
       const id = api.slice(1, 1 + n).join('/');
       const rest = api.slice(1 + n);
-      const p = await findProject(projects, id);
+      const p = await findProject(id);
+      if (rest.length === 1 && rest[0] === 'run-settings') {
+        if (method === 'GET') return sendJson(res, 200, await readProjectRunSettings(core, workspace, p));
+        if (method === 'PUT' || method === 'DELETE') {
+          const body = await readJson<{ overrides?: unknown; revision?: unknown }>(req);
+          return sendJson(res, 200, await panel.saveRunSettings(p, method === 'DELETE' ? {} : body?.overrides, body?.revision));
+        }
+      }
+      if (method === 'POST' && rest.length === 1 && rest[0] === 'copy') {
+        const body = await readJson<{ folder: string; name?: string }>(req);
+        const copied = await copyBundledProject(core, projects, p, body.folder, body.name);
+        hub.send('projects-changed', {});
+        return sendJson(res, 201, await describeProject(projects, await findProject(copied), panel));
+      }
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && !(p.readOnly && rest.length === 1 && ['run', 'preview', 'rebuild-app', 'cache'].includes(rest[0])))
+        assertEditableProject(core, projects, p);
       if (method === 'GET' && rest.length === 0) return sendJson(res, 200, await describeProject(projects, p, panel));
       if (method === 'PUT' && rest[0] === 'manifest' && rest.length === 1) {
         const body = await readJson<{ manifest?: Manifest; mtimeMs?: number; confirm?: string[] }>(req);
@@ -433,6 +511,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
             throw new HttpError(409, 'Changing an active publication route may strand installed packages.', { needsConfirm: 'publication-route', previousUrl: state.status?.selectedUrl });
         }
         try {
+          assertWritablePath(core, projects, path.join(p.dir, MANIFEST));
           const r = await saveManifest(p.dir, body.manifest, body.mtimeMs);
           if (r.errors.length) return sendJson(res, 400, { error: 'invalid settings', fields: r.errors });
         } catch (e) {
@@ -440,12 +519,12 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
           throw e;
         }
         log(`[projects] saved ${id}/${MANIFEST}`);
-        return sendJson(res, 200, await describeProject(projects, await findProject(projects, id), panel));
+        return sendJson(res, 200, await describeProject(projects, await findProject(id), panel));
       }
       if (rest[0] === 'icon' && rest.length === 1) {
         if (method === 'GET') {
-          const file = iconPath(p, p.manifest);
-          const png = file ? await fs.readFile(file).catch(() => null) : null;
+          const file = p.manifest?.icon ? await projectFile(p, p.manifest.icon).catch((error: HttpError) => { if (error.status === 404) return null; throw error; }) : null;
+          const png = file ? await fs.readFile(file) : null;
           res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' });
           res.end(png ?? defaultIcon(256, p.manifest?.iconColor, p.manifest?.iconShape));
           return;
@@ -457,10 +536,12 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
           const rel = m.icon ?? 'icon.png';
           const file = path.resolve(p.dir, rel);
           if (!isInside(p.dir, rel)) throw new HttpError(400, 'icon path outside the project');
+          assertWritablePath(core, projects, file);
+          assertWritablePath(core, projects, path.join(p.dir, MANIFEST));
           await fs.writeFile(file, png);
           if (!m.icon) await saveManifest(p.dir, { ...m, icon: rel }, p.manifestMtimeMs);
           log(`[projects] icon of ${id} written (${png.length} bytes)`);
-          const d = await describeProject(projects, await findProject(projects, id), panel);
+          const d = await describeProject(projects, await findProject(id), panel);
           hub.send('project', d);
           return sendJson(res, 200, d);
         }
@@ -468,13 +549,15 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
           const m = usable(p);
           if (m.icon) {
             const file = path.resolve(p.dir, m.icon);
+            assertWritablePath(core, projects, file);
+            assertWritablePath(core, projects, path.join(p.dir, MANIFEST));
             const next = { ...m };
             delete next.icon;
             await saveManifest(p.dir, next, p.manifestMtimeMs);
             await fs.unlink(file).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
             log(`[projects] custom icon of ${id} removed`);
           }
-          const d = await describeProject(projects, await findProject(projects, id), panel);
+          const d = await describeProject(projects, await findProject(id), panel);
           hub.send('project', d);
           return sendJson(res, 200, d);
         }
@@ -487,7 +570,9 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
   }
 
   server = http.createServer((req, res) => {
-    const localRead = req.url === '/api/projects' || /^\/api\/projects\/[^/?]+\/icon(?:\?|$)/.test(req.url ?? '')
+    const mutation = !['GET', 'HEAD', 'OPTIONS'].includes(req.method ?? 'GET') && !/^\/api\/(?:restart|quit)\/?(?:\?|$)/.test(req.url ?? '');
+    if (mutation) activeMutations++;
+    const localRead = req.url === '/api/projects' || /^\/api\/projects\/(?:[^/?]+\/){1,2}icon(?:\?|$)/.test(req.url ?? '')
       || /^\/preview\//.test(req.url ?? '');
     const previewProjectionRead = /^\/api\/preview\/projection(?:\?|$)/.test(req.url ?? '');
     let loopbackOrigin = '';
@@ -505,18 +590,21 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       if (status >= 500) log(`[http] ${req.method} ${req.url}: ${(e as Error).stack ?? e}`);
       if (res.headersSent) return res.end();
       sendJson(res, status, { error: (e as Error).message, details: e instanceof HttpError ? e.details : undefined });
-    });
+    }).finally(() => { if (mutation) activeMutations--; });
   });
   panel.onQuit = () => void closeServer();
   panel.onRestart = () => void closeServer();
   let closeWork: Promise<void> | null = null;
   function closeServer(): Promise<void> {
     return closeWork ??= (async () => {
+      closing = true;
+      // Stop accepting reconnects BEFORE draining event streams and tool startup.
+      const closed = new Promise<void>((resolve) => server.close(() => resolve()));
       hub.closeAll();
       await managedTools.close();
       await panel.dispose();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-      server.closeAllConnections();
+      server.closeIdleConnections();
+      await closed;
     })();
   }
   return { server, panel, managedTools, hub, port, url, close: closeServer };
@@ -669,7 +757,7 @@ export async function launch(opts: { port: number; open: boolean; repo?: string;
   const s = createServer({ port: opts.port, repo: opts.repo, workspace: opts.workspace, projects: selectedProjects, workspaceKind: opts.workspaceKind, autoRoute: opts.autoRoute });
   // Workspace packagers load the core's modules from XRB_CORE (they never import it by a relative path).
   process.env.XRB_CORE ??= s.panel.repo;
-  await Promise.all([s.panel.loadPackagers(), s.panel.loadPublishers()]);
+  await s.panel.loadInitialServices();
   await s.managedTools.prepareConfigured();
   if (await isWorkspace(s.panel.projects)) await writeEditorConfig(s.panel.repo, s.panel.projects).catch((e) => log(`[projects] jsconfig.json not written: ${(e as Error).message}`));
   await new Promise<void>((resolve, reject) => {

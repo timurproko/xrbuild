@@ -84,7 +84,7 @@ test('a completed draft promotes, finalizes in its own branch, and Delivery acce
     assert.equal(verdict.ok, true);
     const ci = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
     assert.match(ci, /name: CI required/);
-    assert.match(ci, /needs: \[readiness, changes, names, openspec, delivery, node, native\]/);
+    assert.match(ci, /needs: \[readiness, changes, names, openspec, delivery, node, embedded, native\]/);
   } finally { rmSync(repo, { recursive: true, force: true }); }
 });
 

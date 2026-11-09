@@ -1,0 +1,18 @@
+{
+  "name": "Launcher",
+  "short_name": "Launcher",
+  "description": "Launch published XR Build experiences on the web or a standalone headset.",
+  "start_url": "./?xrb-xr=enter",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#071014",
+  "theme_color": "#071014",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

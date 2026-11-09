@@ -2,7 +2,7 @@
 // publishers once, at start, so a change on disk after that needs a restart. A publisher whose target had moved kept
 // reporting a live app as unpublished until the panel was restarted by hand. UI files are read per request and a page
 // reload shows them: they are not scanned.
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 export interface PanelFreshness {
@@ -42,7 +42,13 @@ function newest(p: string, inConfig = false): { file: string; ms: number } | nul
 /** The core's panel server code and the folders of the loaded packagers and publishers. */
 export function panelSourceRoots(repo: string, workspace: string, pluginDirs: string[]): PanelSourceRoot[] {
   const core = ['control-panel', 'app-icon'].map((p) => ({ dir: path.join(repo, 'packages', p, 'src'), base: repo }));
-  const plugins = [...new Set(pluginDirs)].map((dir) => ({ dir, base: dir.startsWith(workspace) ? workspace : repo }));
+  const canonical = (dir: string) => { try { return realpathSync.native(dir); } catch { return path.resolve(dir); } };
+  const userRoot = canonical(workspace);
+  const plugins = [...new Set(pluginDirs.map(canonical))].map((dir) => {
+    const relative = path.relative(userRoot, dir);
+    const inWorkspace = relative === '' || relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+    return { dir, base: inWorkspace ? userRoot : canonical(repo) };
+  });
   return [...core, ...plugins];
 }
 

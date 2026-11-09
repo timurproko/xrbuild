@@ -7,7 +7,9 @@ import { existsSync, readdirSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { pluginFolders, readPluginPrefs } from './plugin-manager.ts';
+import { containedModule, containedPath, pluginPackageDirs, resolvePluginCatalog, type ResolvedPlugin } from './extension-catalog.ts';
+import { resolvePluginModule } from './component-resolver.ts';
+import { pluginServiceContext, type PluginServiceContext } from './plugin-service.ts';
 
 /** One identity field the packager needs per project (stored in the manifest's `plugins.<platform>` section). */
 export interface IdentityField {
@@ -133,18 +135,13 @@ export interface FoundPackager {
   packager: Packager;
   /** folder of the package.json that declared it */
   dir: string;
+  plugin?: ResolvedPlugin;
 }
 
 export interface PackagerDiscovery {
   found: FoundPackager[];
   /** declared packagers that failed to load: shown, never fatal */
   problems: string[];
-}
-
-function candidateDirs(repo: string, workspace: string, disabled: readonly string[]): string[] {
-  const subdirs = (d: string) => (existsSync(d) ? readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== 'node_modules').map((e) => path.join(d, e.name)) : []);
-  const plugins = pluginFolders(workspace).filter((id) => !disabled.includes(id)).map((id) => path.join(workspace, 'plugins', id));
-  return [...subdirs(path.join(repo, 'packages')), ...plugins, ...plugins.flatMap(subdirs)];
 }
 
 /** The folder of one plugin to ship (PackagerBuildOptions.pluginDirs, with its default). */
@@ -167,33 +164,50 @@ export function targetOf(p: Packager): BuildTarget {
 
 /** Finds and loads every declared packager. A module exports the contract as `packager` (or default). */
 export async function discoverPackagers(repo: string, workspace: string): Promise<PackagerDiscovery> {
-  const found: FoundPackager[] = [], problems: string[] = [];
-  for (const dir of candidateDirs(repo, workspace, (await readPluginPrefs(workspace)).disabled)) {
+  const catalog = await resolvePluginCatalog(workspace, repo);
+  const found: FoundPackager[] = [], problems = [...catalog.problems];
+  const packages = path.join(repo, 'packages');
+  const coreDirs = existsSync(packages) ? readdirSync(packages, { withFileTypes: true }).filter(entry => entry.isDirectory() && !entry.isSymbolicLink() && entry.name !== 'node_modules').map(entry => path.join(packages, entry.name)) : [];
+  const candidates: Array<{ dir: string; plugin?: ResolvedPlugin }> = [
+    ...coreDirs.map(dir => ({ dir })),
+    ...(await Promise.all(catalog.selected.map(async plugin => (await pluginPackageDirs(plugin)).map(dir => ({ dir, plugin }))))).flat(),
+  ];
+  const conflicts = new Set<string>(), standaloneConflicts = new Set<BuildTarget>();
+  for (const { dir, plugin } of candidates) {
     let decl: unknown;
     try {
-      decl = (JSON.parse(await fs.readFile(path.join(dir, 'package.json'), 'utf8')) as { xrBuild?: { packager?: unknown } }).xrBuild?.packager;
+      decl = (JSON.parse(await fs.readFile(await containedPath(dir, 'package.json'), 'utf8')) as { xrBuild?: { packager?: unknown } }).xrBuild?.packager;
     } catch {
       continue;  // no package.json
     }
     if (decl === undefined) continue;
-    const where = dir.startsWith(workspace) ? path.relative(workspace, dir) : path.relative(repo, dir);
+    const where = plugin ? `${plugin.origin}:${path.relative(plugin.workspaceRoot, dir)}` : path.relative(repo, dir);
     if (typeof decl !== 'string') {
       problems.push(`${where}: xrBuild.packager must be a module path`);
       continue;
     }
     try {
-      const mod = (await import(pathToFileURL(path.resolve(dir, decl)).href)) as { packager?: unknown; default?: unknown };
-      const p = mod.packager ?? mod.default;
+      const resolved = plugin ? await resolvePluginModule(plugin, dir, decl, workspace, repo, catalog) : { file: await containedModule(dir, dir, decl), runtimeRoot: null };
+      const file = resolved.file;
+      const mod = (await import(pathToFileURL(file).href)) as { packager?: unknown; default?: unknown; createPackager?: (context: PluginServiceContext) => unknown };
+      if (plugin?.meta.config !== undefined && typeof mod.createPackager !== 'function') throw new Error('a packager with user config must export createPackager(context)');
+      const legacy = mod.packager ?? mod.default;
+      const useFactory = plugin?.meta.config !== undefined || legacy === undefined;
+      if (useFactory && typeof mod.createPackager === 'function' && !plugin) throw new Error('a packager factory must belong to a plugin');
+      const p = useFactory && typeof mod.createPackager === 'function' ? await mod.createPackager(await pluginServiceContext(plugin!, workspace, repo, resolved.runtimeRoot)) : legacy;
       if (!isPackager(p)) throw new Error(`the module does not export a packager (name, identityFields, validate, build; target ${BUILD_TARGETS.join(' or ')} when set)`);
-      if (found.some((f) => f.packager.name === p.name)) throw new Error(`a packager named "${p.name}" is already loaded`);
-      if (p.standalone && found.some((f) => f.packager.standalone && targetOf(f.packager) === targetOf(p)))
-        throw new Error(`a standalone ${targetOf(p)} packager is already loaded`);
-      found.push({ packager: p, dir });
+      found.push({ packager: p, dir, ...(plugin ? { plugin } : {}) });
     } catch (e) {
       problems.push(`${where}: ${(e as Error).message}`);
     }
   }
-  return { found, problems };
+  for (const { packager } of found) {
+    if (found.filter(item => item.packager.name === packager.name).length > 1) conflicts.add(packager.name);
+    if (packager.standalone && found.filter(item => item.packager.standalone && targetOf(item.packager) === targetOf(packager)).length > 1) standaloneConflicts.add(targetOf(packager));
+  }
+  for (const name of conflicts) problems.push(`conflicting packagers named "${name}": all implementations are unavailable`);
+  for (const target of standaloneConflicts) problems.push(`conflicting standalone ${target} packagers: all implementations are unavailable`);
+  return { found: found.filter(item => !conflicts.has(item.packager.name) && !(item.packager.standalone && standaloneConflicts.has(targetOf(item.packager)))), problems };
 }
 
 /** The packager for a platform; null when the project runs standalone or no plugin packages for it. */

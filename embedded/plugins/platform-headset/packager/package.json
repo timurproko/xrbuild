@@ -1,0 +1,9 @@
+{
+  "name": "@xr-build/headset-pack",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Explicitly configured WebXR headset launcher packaging",
+  "type": "module",
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "xrBuild": { "packager": "./src/packager.mjs" }
+}

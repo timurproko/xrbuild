@@ -48,7 +48,7 @@ before(async () => {
   await write('projects/Apps/demo/xrb-project.json', JSON.stringify({ name: 'Demo', kind: 'app', entry: 'dist', platform: 'station', plugins: { station: { id: 'Demo', title: 'Demo', version: '0.1.0' } } }));
   await write('projects/Apps/demo/dist/index.html', '<h1>demo</h1>');
   await write('projects/Apps/demo/secret.txt', 'outside the entry folder');
-  await write('projects/Unsorted/plain/package.json', JSON.stringify({ scripts: { build: 'vite build' } }));
+  await write('projects/unsorted/plain/package.json', JSON.stringify({ scripts: { build: 'vite build' } }));
   await write('projects/Tests/rig-check/xrb-project.json', JSON.stringify({ name: 'Rig check', kind: 'test', entry: '.' }));
   await write('projects/Tests/rig-check/index.html', 'rig');
   port = await freePort();
@@ -137,9 +137,9 @@ test('checkRequest: loopback Host, same-origin writes', () => {
 
 test('rejects a foreign Host and cross-origin writes over HTTP', async () => {
   assert.equal((await request('GET', '/api/ping', { host: 'rebind.example' })).status, 403);
-  assert.equal((await request('POST', '/api/projects/create', { origin: 'https://evil.example', body: '{"id":"Unsorted/plain"}' })).status, 403);
-  assert.equal((await request('POST', '/api/projects/create', { origin: null, body: '{"id":"Unsorted/plain"}' })).status, 403);
-  await assert.rejects(fs.access(path.join(repo, 'projects/Unsorted/plain/xrb-project.json')), 'nothing created');
+  assert.equal((await request('POST', '/api/projects/create', { origin: 'https://evil.example', body: '{"id":"unsorted/plain"}' })).status, 403);
+  assert.equal((await request('POST', '/api/projects/create', { origin: null, body: '{"id":"unsorted/plain"}' })).status, 403);
+  await assert.rejects(fs.access(path.join(repo, 'projects/unsorted/plain/xrb-project.json')), 'nothing created');
 });
 
 test('browser previews use the project icon as their favicon', async () => {
@@ -171,9 +171,9 @@ test('publication API delegates verified WebXR builds and confirms removal', asy
   await write('projects/Apps/published/build.mjs', `import fs from 'node:fs/promises'; await fs.mkdir('dist',{recursive:true}); await fs.writeFile('dist/index.html','<h1>built automatically</h1>');`);
   await fs.mkdir(path.join(repo, 'node_modules'));
   await write('projects/Apps/published/dist/index.html', '<h1>stale</h1>');
-  await write('plugins/publisher/xrb-plugin.json', JSON.stringify({ title: 'Publisher', type: 'publisher', version: '0.1.0' }));
-  await write('plugins/publisher/package.json', JSON.stringify({ name: 'publisher', xrBuild: { publisher: './publisher.mjs' } }));
-  await write('plugins/publisher/publisher.mjs', `import fs from 'node:fs/promises'; import path from 'node:path'; import {fileURLToPath} from 'node:url'; const state=path.join(path.dirname(fileURLToPath(import.meta.url)),'state.json'); export const publisher={name:'fixture',origin:'https://example.test',routePrefix:'apps',validate(){return []},async status(p){const live=await fs.readFile(state,'utf8').then(JSON.parse,()=>null);const published=live?.id===p.id&&live?.slug===p.slug;return {state:published?'published':'unpublished',selectedUrl:'https://example.test/apps/'+p.slug+'/',deployedUrl:published?'https://example.test/apps/'+p.slug+'/':undefined}},async publish(o){const html=await fs.readFile(path.join(o.app,'index.html'),'utf8');if(!html.includes('data-xrb-app-icon'))throw new Error('published build has no project favicon');await fs.access(path.join(o.app,'xrb-app-icon.png'));await fs.writeFile(state,JSON.stringify(o.publication));o.log('published');return {url:'https://example.test/apps/'+o.publication.slug+'/'}},async unpublish(o){await fs.rm(state,{force:true});o.log('unpublished');return {}}};`);
+  await write('plugins/fixture-publisher/xrb-plugin.json', JSON.stringify({ title: 'Publisher', type: 'publisher', version: '0.1.0' }));
+  await write('plugins/fixture-publisher/package.json', JSON.stringify({ name: 'publisher', xrBuild: { publisher: './publisher.mjs' } }));
+  await write('plugins/fixture-publisher/publisher.mjs', `import fs from 'node:fs/promises'; import path from 'node:path'; import {fileURLToPath} from 'node:url'; const state=path.join(path.dirname(fileURLToPath(import.meta.url)),'state.json'); export const publisher={name:'fixture',origin:'https://example.test',routePrefix:'apps',validate(){return []},async status(p){const live=await fs.readFile(state,'utf8').then(JSON.parse,()=>null);const published=live?.id===p.id&&live?.slug===p.slug;return {state:published?'published':'unpublished',selectedUrl:'https://example.test/apps/'+p.slug+'/',deployedUrl:published?'https://example.test/apps/'+p.slug+'/':undefined}},async publish(o){const html=await fs.readFile(path.join(o.app,'index.html'),'utf8');if(!html.includes('data-xrb-app-icon'))throw new Error('published build has no project favicon');await fs.access(path.join(o.app,'xrb-app-icon.png'));await fs.writeFile(state,JSON.stringify(o.publication));o.log('published');return {url:'https://example.test/apps/'+o.publication.slug+'/'}},async unpublish(o){await fs.rm(state,{force:true});o.log('unpublished');return {}}};`);
   await write('plugins/publisher-two/xrb-plugin.json', JSON.stringify({ title: 'Publisher Two', type: 'publisher', version: '0.1.0' }));
   await write('plugins/publisher-two/package.json', JSON.stringify({ name: 'publisher-two', xrBuild: { publisher: './publisher.mjs' } }));
   await write('plugins/publisher-two/publisher.mjs', `import fs from 'node:fs/promises'; import path from 'node:path'; import {fileURLToPath} from 'node:url'; const state=path.join(path.dirname(fileURLToPath(import.meta.url)),'state.json'); export const publisher={name:'fixture-two',origin:'https://second.example.test',routePrefix:'apps',validate(){return []},async status(p){const live=await fs.readFile(state,'utf8').then(JSON.parse,()=>null);const published=live?.id===p.id&&live?.slug===p.slug;return {state:published?'published':'unpublished',selectedUrl:'https://second.example.test/apps/'+p.slug+'/',deployedUrl:published?'https://second.example.test/apps/'+p.slug+'/':undefined}},async publish(o){await fs.writeFile(state,JSON.stringify(o.publication));o.log('published second');return {url:'https://second.example.test/apps/'+o.publication.slug+'/'}},async unpublish(o){await fs.rm(state,{force:true});o.log('unpublished second');return {}}};`);
@@ -187,7 +187,7 @@ test('publication API delegates verified WebXR builds and confirms removal', asy
   const publishedHtml = await fs.readFile(path.join(repo, 'projects/Apps/published/dist/index.html'), 'utf8');
   assert.match(publishedHtml, /data-xrb-app-icon/);
   assert.match(publishedHtml, /<h1>built automatically<\/h1>/);
-  assert.deepEqual(JSON.parse(await fs.readFile(path.join(repo, 'plugins/publisher/state.json'), 'utf8')), { id: manifest.publication.id, slug: 'published' }, 'publisher plugins receive only the selected identity');
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(repo, 'plugins/fixture-publisher/state.json'), 'utf8')), { id: manifest.publication.id, slug: 'published' }, 'publisher plugins receive only the selected identity');
   const liveProject = (await request('GET', '/api/projects/published')).json;
   const liveMove = await request('PUT', '/api/projects/published/manifest', { body: JSON.stringify({ manifest: { ...liveProject.manifest, publication: { ...liveProject.manifest.publication, slug: 'published-moved' } }, mtimeMs: liveProject.manifestMtimeMs }) });
   assert.equal(liveMove.status, 409);
@@ -199,7 +199,7 @@ test('publication API delegates verified WebXR builds and confirms removal', asy
   assert.equal(selectSecond.json.publication.status.state, 'unpublished', 'the newly selected provider has its own Publish state');
   assert.equal(selectSecond.json.publicationDestinations.fixture.status.state, 'published');
   assert.equal(selectSecond.json.publicationDestinations['fixture-two'].status.state, 'unpublished');
-  assert.equal(await fs.readFile(path.join(repo, 'plugins/publisher/state.json'), 'utf8').then(Boolean), true, 'the first deployment stays live');
+  assert.equal(await fs.readFile(path.join(repo, 'plugins/fixture-publisher/state.json'), 'utf8').then(Boolean), true, 'the first deployment stays live');
   const preparedSecondProvider = await request('GET', '/preview/published/');
   assert.equal(preparedSecondProvider.status, 200, preparedSecondProvider.body);
   await write('projects/Apps/published/build.mjs', `import fs from 'node:fs/promises'; await fs.mkdir('dist',{recursive:true}); await fs.writeFile('dist/index.html','<h1>rebuilt from current source</h1>');`);
@@ -220,7 +220,7 @@ test('publication API delegates verified WebXR builds and confirms removal', asy
   assert.equal(removed.status, 202);
   assert.equal(removed.json.operation, 'unpublish');
   await panel.panel.jobs.wait(panel.panel.jobs.get(removed.json.id)!);
-  await assert.rejects(fs.access(path.join(repo, 'plugins/publisher/state.json')));
+  await assert.rejects(fs.access(path.join(repo, 'plugins/fixture-publisher/state.json')));
   assert.equal(await fs.readFile(path.join(repo, 'plugins/publisher-two/state.json'), 'utf8').then(Boolean), true, 'unpublishing one provider preserves the other');
   const unpublishedProject = (await request('GET', '/api/projects/published')).json;
   const freeMove = await request('PUT', '/api/projects/published/manifest', { body: JSON.stringify({ manifest: { ...unpublishedProject.manifest, publication: { ...unpublishedProject.manifest.publication, slug: 'published-moved' } }, mtimeMs: unpublishedProject.manifestMtimeMs }) });
@@ -233,7 +233,7 @@ test('publication API delegates verified WebXR builds and confirms removal', asy
   const rootStarted = await request('POST', '/api/projects/published/publish', { body: '{}' });
   assert.equal(rootStarted.status, 202);
   await panel.panel.jobs.wait(panel.panel.jobs.get(rootStarted.json.id)!);
-  assert.deepEqual(JSON.parse(await fs.readFile(path.join(repo, 'plugins/publisher/state.json'), 'utf8')), { id: manifest.publication.id, slug: '' });
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(repo, 'plugins/fixture-publisher/state.json'), 'utf8')), { id: manifest.publication.id, slug: '' });
 });
 
 test('publication actions and status ignore package targets while preserving manifest selections', async () => {
@@ -673,11 +673,12 @@ test('different workspace panels on separate ports stay independent', async () =
 test('lists projects and unregistered apps', async () => {
   const r = await request('GET', '/api/projects');
   assert.equal(r.status, 200);
-  assert.deepEqual(r.json.projects.map((p: any) => p.id), ['demo', 'published', 'rig-check']);
-  const demo = r.json.projects[0];
+  assert.deepEqual(r.json.projects.filter((p: any) => !p.readOnly).map((p: any) => p.id), ['demo', 'published', 'rig-check']);
+  assert.ok(r.json.projects.filter((p: any) => p.readOnly).every((p: any) => p.id.startsWith('bundled:')));
+  const demo = r.json.projects.find((p: any) => p.id === 'demo');
   assert.equal(demo.entryExists, true);
   assert.equal(demo.icon.custom, false);
-  assert.deepEqual(r.json.unregistered, ['Unsorted/plain']);
+  assert.deepEqual(r.json.unregistered, ['unsorted/plain']);
 });
 
 test('serves the icon preview page with three.js and the SDK icon modules as browser JS', async () => {
@@ -734,10 +735,10 @@ test('saves multiple input methods and rejects duplicate providers', async () =>
 });
 
 test('creates a manifest for an app folder without one', async () => {
-  const r = await request('POST', '/api/projects/create', { body: JSON.stringify({ id: 'Unsorted/plain' }) });
+  const r = await request('POST', '/api/projects/create', { body: JSON.stringify({ id: 'unsorted/plain' }) });
   assert.equal(r.status, 200);
   assert.equal(r.json.manifest.kind, 'app');
-  assert.equal((await request('POST', '/api/projects/create', { body: JSON.stringify({ id: 'Unsorted/plain' }) })).status, 400, 'only once');
+  assert.equal((await request('POST', '/api/projects/create', { body: JSON.stringify({ id: 'unsorted/plain' }) })).status, 400, 'only once');
 });
 
 test('serves a project entry folder for the icon studio, nothing outside it', async () => {
@@ -826,7 +827,7 @@ test('archived projects are full projects under "archive/<id>"; archive and unar
   const restoredHtml = await fs.readFile(path.join(repo, 'projects/Tests/old-check/index.html'), 'utf8');
   assert.match(restoredHtml, /data-xrb-app-icon/);
   assert.match(restoredHtml, /old/);
-  assert.deepEqual((await request('GET', '/api/projects')).json.archived.map((p: any) => p.id), []);
+  assert.deepEqual((await request('GET', '/api/projects')).json.archived.filter((p: any) => !p.readOnly).map((p: any) => p.id), []);
 
   // never overwrite: unarchiving onto an existing project is refused
   await request('POST', '/api/projects/old-check/archive', { body: '{}' });
@@ -885,13 +886,13 @@ test('separate project and integration roots keep project discovery out of the p
     assert.deepEqual((await api('/api/workspace')).json, { path: projects, integrationPath: integration, exists: true, kind: 'explicit', autoRoute: false });
     const list = await api('/api/projects');
     assert.equal(list.status, 200);
-    assert.deepEqual(list.json.projects.map((project: any) => project.id), ['public-app']);
+    assert.deepEqual(list.json.projects.filter((project: any) => !project.readOnly).map((project: any) => project.id), ['public-app']);
     const created = await fetch(`http://127.0.0.1:${splitPort}/api/projects/new`, {
       method: 'POST', headers: { origin: `http://127.0.0.1:${splitPort}`, 'content-type': 'application/json' },
       body: JSON.stringify({ folder: 'split-app', name: 'Split app' }),
     });
     assert.equal(created.status, 200, await created.text());
-    await fs.access(path.join(projects, 'projects', 'Unsorted', 'split-app', 'xrb-project.json'));
+    await fs.access(path.join(projects, 'projects', 'unsorted', 'split-app', 'xrb-project.json'));
     const imported = await fetch(`http://127.0.0.1:${splitPort}/api/plugins/manage/private-plugin/samples/demo/import`, {
       method: 'POST', headers: { origin: `http://127.0.0.1:${splitPort}`, 'content-type': 'application/json' },
       body: JSON.stringify({ folder: 'private-demo', name: 'Private Demo Copy' }),
@@ -1005,30 +1006,38 @@ test('manages installed workspace plugins without deleting files', async () => {
   assert.ok(await fs.stat(path.join(repo, 'plugins/input-sample/icon.png')));
 });
 
-test('plugin-declared standalone targets disappear immediately when their plugin is disabled', async () => {
-  await write('plugins/publisher-browser/xrb-plugin.json', JSON.stringify({
-    title: 'Browser Target', type: 'publisher', version: '0.1.0', panel: { targets: ['webxr'] },
-  }));
-  assert.ok((await request('GET', '/api/plugins')).json.standaloneTargets.includes('webxr'));
-  const saved = await request('PUT', '/api/plugins/manage/publisher-browser', { body: JSON.stringify({ enabled: false }) });
-  assert.equal(saved.status, 200, saved.body);
-  assert.ok(!(await request('GET', '/api/plugins')).json.standaloneTargets.includes('webxr'));
+test('plugin-declared standalone targets disappear immediately when their last enabled owner is disabled', async () => {
+  // Isolate this workspace-only fixture from real bundled integrations that can declare the same target.
+  const bundled = (await request('GET', '/api/plugins/manage')).json.plugins.filter((p: any) => p.origin === 'bundled' && p.enabled);
+  try {
+    for (const plugin of bundled) assert.equal((await request('PUT', `/api/plugins/manage/${encodeURIComponent(plugin.id)}`, { body: '{"enabled":false}' })).status, 200);
+    assert.ok(!(await request('GET', '/api/plugins')).json.standaloneTargets.includes('webxr'));
+    await write('plugins/publisher-browser/xrb-plugin.json', JSON.stringify({
+      title: 'Browser Target', type: 'publisher', version: '0.1.0', panel: { targets: ['webxr'] },
+    }));
+    assert.ok((await request('GET', '/api/plugins')).json.standaloneTargets.includes('webxr'));
+    const saved = await request('PUT', '/api/plugins/manage/publisher-browser', { body: JSON.stringify({ enabled: false }) });
+    assert.equal(saved.status, 200, saved.body);
+    assert.ok(!(await request('GET', '/api/plugins')).json.standaloneTargets.includes('webxr'));
+  } finally {
+    for (const plugin of bundled) assert.equal((await request('PUT', `/api/plugins/manage/${encodeURIComponent(plugin.id)}`, { body: '{"enabled":true}' })).status, 200);
+  }
 });
 
 test('disabled packager-only platforms stay out of headset choices', async () => {
   await write('plugins/headset/xrb-plugin.json', JSON.stringify({ title: 'Headset', type: 'platform', version: '0.1.0' }));
   await write('plugins/headset/package.json', JSON.stringify({ xrBuild: { packager: './packager.mjs' } }));
-  await write('plugins/headset/packager.mjs', `export const packager = { name: 'headset', label: 'Device Model', target: 'webxr', identityFields: [], validate: () => [], build: async () => ({ file: '', sizeBytes: 0 }) };`);
+  await write('plugins/headset/packager.mjs', `export const packager = { name: 'fixture-headset', label: 'Device Model', target: 'webxr', identityFields: [], validate: () => [], build: async () => ({ file: '', sizeBytes: 0 }) };`);
   await panel.panel.loadPackagers();
   const named = await request('GET', '/api/plugins');
-  assert.equal(named.json.packagerLabels.headset, 'Device Model');
+  assert.equal(named.json.packagerLabels['fixture-headset'], 'Device Model');
   assert.equal((await request('GET', '/api/plugins/manage')).json.plugins.find((p: any) => p.id === 'headset').label, 'Device Model');
   const saved = await request('PUT', '/api/plugins/manage/headset', { body: JSON.stringify({ enabled: false }) });
   assert.equal(saved.status, 200, saved.body);
   const choices = await request('GET', '/api/plugins');
   assert.equal(choices.status, 200, choices.body);
   assert.ok(choices.json.disabled.some((p: any) => p.name === 'headset' && p.role === 'platform'));
-  assert.ok(!choices.json.headsetPlatforms.includes('headset'));
+  assert.ok(!choices.json.headsetPlatforms.includes('fixture-headset'));
 });
 
 test('preview browser uses the selected monitor and optional fullscreen startup', async () => {
@@ -1240,16 +1249,24 @@ test('restart and panel launchers create no terminal process', async () => {
 
 test('restart and ping identify the old panel instance before invoking restart', async () => {
   let restarted = false;
+  const previous = panel.panel.onRestart;
   panel.panel.onRestart = () => { restarted = true; };
-  const ping = await request('GET', '/api/ping');
-  assert.equal(ping.status, 200, ping.body);
-  assert.equal(ping.json.instanceId, panel.panel.instanceId);
-  assert.match(ping.json.instanceId, /^[0-9a-f-]{36}$/);
-  const r = await request('POST', '/api/restart', { body: '{}' });
-  assert.equal(r.status, 200, r.body);
-  assert.deepEqual(r.json, { restarting: true, pid: process.pid, instanceId: panel.panel.instanceId });
-  await new Promise((resolve) => setTimeout(resolve, 75));
-  assert.equal(restarted, true);
+  try {
+    const ping = await request('GET', '/api/ping');
+    assert.equal(ping.status, 200, ping.body);
+    assert.equal(ping.json.instanceId, panel.panel.instanceId);
+    assert.match(ping.json.instanceId, /^[0-9a-f-]{36}$/);
+    const r = await request('POST', '/api/restart', { body: '{}' });
+    assert.equal(r.status, 200, r.body);
+    assert.deepEqual(r.json, { restarting: true, pid: process.pid, instanceId: panel.panel.instanceId, repo: ping.json.repo, workspace: ping.json.workspace, projects: ping.json.projects });
+    assert.equal((await request('GET', '/api/panel')).status, 503, 'pending restart blocks new work');
+    await new Promise((resolve) => setTimeout(resolve, 75));
+    assert.equal(restarted, true);
+  } finally {
+    // This mock deliberately does not replace the process; restore its shared fixture.
+    panel.panel.restartPending = false;
+    panel.panel.onRestart = previous;
+  }
 });
 
 test('panel freshness reports server code changed after the process started', async () => {

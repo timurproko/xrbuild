@@ -12,6 +12,9 @@ test('Activity header and Settings remain accessible in narrow/wide and light/da
   const workspace = await fs.mkdtemp(path.join(artifacts, 'shell-ui-'));
   await fs.mkdir(path.join(workspace, 'projects/Apps/sample'), { recursive: true });
   await fs.writeFile(path.join(workspace, 'projects/Apps/sample/xrb-project.json'), JSON.stringify({ name: 'Sample', kind: 'app', entry: 'dist' }));
+  // This layout fixture exercises the multi-module All view; single-module navigation is covered separately.
+  await fs.mkdir(path.join(workspace, 'plugins/settings-fixture'), { recursive: true });
+  await fs.writeFile(path.join(workspace, 'plugins/settings-fixture/xrb-plugin.json'), JSON.stringify({ title: 'Settings fixture', type: 'input', version: '0.1.0', settings: [{ key: 'enabled', label: 'Enabled', type: 'boolean', default: false }] }));
   const reserve = http.createServer();
   await new Promise<void>(resolve => reserve.listen(0, '127.0.0.1', resolve));
   const port = (reserve.address() as { port: number }).port;
@@ -66,7 +69,9 @@ test('Activity header and Settings remain accessible in narrow/wide and light/da
       await evaluate(`document.querySelector('#activity-jobs-tab').click()`);
       await navigate(panel.url, `document.querySelector('#activity-jobs-tab')?.getAttribute('aria-selected')==='true'`);
       const appsFavicon = await evaluate(`document.querySelector('link[rel=icon]').href`);
-      await navigate(`${panel.url}settings`, `!!document.querySelector('#app-preferences')`);
+      await navigate(`${panel.url}settings`, `!!document.querySelector('#app-preferences') && !!document.querySelector('[data-settings-filter="all"]')`);
+      assert.equal(await evaluate(`document.querySelector('[data-settings-filter="all"] .meta').textContent`), 'settings');
+      assert.equal(await evaluate(`document.querySelector('[data-settings-filter="control-panel"] .meta').textContent`), 'core');
       const appsEmoji = await evaluate(`document.querySelector('[data-settings-filter="control-panel"] .plugin-symbol-emoji').textContent`);
       assert.ok(decodeURIComponent(appsFavicon).includes(appsEmoji), 'Settings Apps shares the favicon emoji');
       let previousFavicon = '', previousAppsFavicon = '';
@@ -79,7 +84,7 @@ test('Activity header and Settings remain accessible in narrow/wide and light/da
         assert.ok(decodeURIComponent(appsIdentity.favicon).includes(`filter:${appsIdentity.filter}`), 'Apps favicon uses the sidebar detail tint');
         if (previousAppsFavicon) assert.notEqual(appsIdentity.favicon, previousAppsFavicon, 'Apps favicon updates on theme change');
         previousAppsFavicon = appsIdentity.favicon;
-        await navigate(`${panel.url}settings`, `!!document.querySelector('#app-preferences')`);
+        await navigate(`${panel.url}settings`, `!!document.querySelector('#app-preferences') && !!document.querySelector('[data-settings-filter="all"]')`);
         const detail = await evaluate(`(async () => {
           const {emojiFavicon}=await import('/design-system.js');
           const image=new Image();image.src=emojiFavicon(${JSON.stringify(appsEmoji)});await image.decode();

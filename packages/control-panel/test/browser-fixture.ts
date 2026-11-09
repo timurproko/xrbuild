@@ -43,7 +43,7 @@ export async function withBrowser(run: (browser: { send(method: string, params?:
     const navigate = async (url: string, ready: string) => {
       await evaluate('window.__fixturePreviousDocument = true');
       await send('Page.navigate', { url });
-      for (let i = 0; i < 100; i++) { if (await evaluate(`!window.__fixturePreviousDocument && (${ready})`)) return; await sleep(100); }
+      for (let i = 0; i < 100; i++) { if (await evaluate(`!window.__fixturePreviousDocument && !document.body?.classList.contains('workspace-pending') && (${ready})`)) return; await sleep(100); }
       assert.fail(`Page not ready: ${url}`);
     };
     await send('Page.enable');

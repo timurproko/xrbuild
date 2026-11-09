@@ -1,0 +1,25 @@
+{
+  "title": "WebXR",
+  "type": "publisher",
+  "version": "0.1.0",
+  "description": "Publish WebXR apps for local testing or on the web.",
+  "panel": {
+    "targets": ["webxr"],
+    "settingsDescription": "Choose where to publish your WebXR apps: Localhost for testing on this computer, or Production for your website."
+  },
+  "settings": [
+    { "key": "localhost", "label": "Localhost", "type": "boolean", "default": true },
+    { "key": "production", "label": "Production", "type": "boolean", "default": false }
+  ],
+  "config": [
+    { "key": "localPort", "label": "Loopback HTTPS port", "type": "number", "default": 8443, "min": 1024, "max": 65535, "step": 1 },
+    { "key": "productionConfigured", "label": "Production configured explicitly", "type": "boolean", "default": false },
+    { "key": "productionOrigin", "label": "Production HTTPS origin", "type": "text", "default": "" },
+    { "key": "productionRepository", "label": "Output repository", "type": "text", "default": "" },
+    { "key": "productionBranch", "label": "Output branch", "type": "text", "default": "" },
+    { "key": "productionSeedBranch", "label": "Initial branch", "type": "text", "default": "" },
+    { "key": "productionRoutePrefix", "label": "App route prefix", "type": "text", "default": "apps" },
+    { "key": "productionSitePath", "label": "Site subtree", "type": "text", "default": "/" },
+    { "key": "productionTimeoutMs", "label": "Verification timeout", "type": "number", "default": 300000, "min": 1, "max": 600000, "step": 1 }
+  ]
+}

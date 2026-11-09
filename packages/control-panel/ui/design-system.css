@@ -191,6 +191,7 @@ a.xrb-path:hover, a.xrb-path:focus-visible { color: var(--accent); text-decorati
 .xrb-error-banner:empty { display: none; }
 .state, .chip { font-size: .74rem; font-weight: 600; padding: 3px 10px; border-radius: 99px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
 .state.none, .chip { color: var(--muted); border: 1px dashed var(--line); }
+.state.neutral { background: var(--surface-2); color: var(--muted); }
 .state.busy, .chip.warn { background: var(--warn-soft); color: var(--warn); border: 0; }
 .state.rebuild, .chip.rebuild { background: var(--rebuild-soft); color: var(--rebuild); border: 0; }
 .state.ok, .chip.good { background: var(--ok-soft); color: var(--ok); border: 0; }

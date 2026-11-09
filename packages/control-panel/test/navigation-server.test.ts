@@ -5,6 +5,14 @@ import { once } from 'node:events';
 import { test } from 'node:test';
 import { createServer } from '../src/server.ts';
 import { freePort } from '../src/host-runner.ts';
+import { REPO } from '../src/env.ts';
+import { resolvePluginCatalog } from '../src/extension-catalog.ts';
+
+// These fixtures test workspace-only navigation, not the presence/absence of shipped product tools.
+async function workspaceToolsOnly(workspace: string) {
+  const catalog = await resolvePluginCatalog(workspace, REPO, true);
+  await fs.writeFile(path.join(workspace, 'xrb-plugins.json'), JSON.stringify({ disabled: catalog.plugins.filter(plugin => plugin.origin === 'bundled').map(plugin => plugin.key) }));
+}
 
 const parent = path.resolve(import.meta.dirname, '../../../.artifacts');
 const waitFor = async (check: () => Promise<boolean>) => {
@@ -16,7 +24,7 @@ const waitFor = async (check: () => Promise<boolean>) => {
 test('navigation API reads only the selected integration workspace and starts nothing', async () => {
   await fs.mkdir(parent, { recursive: true });
   const root = await fs.mkdtemp(path.join(parent, 'navigation-http-')), workspace = path.join(root, 'integration'), projects = path.join(root, 'projects');
-  await fs.mkdir(workspace); await fs.mkdir(projects);
+  await fs.mkdir(workspace); await fs.mkdir(projects); await workspaceToolsOnly(workspace);
   await fs.writeFile(path.join(workspace, 'xrb-tools.json'), JSON.stringify({ tools: [{ id: 'tracker', label: 'Hand tracking', url: 'http://127.0.0.1:5220/' }] }));
   await fs.writeFile(path.join(projects, 'xrb-tools.json'), JSON.stringify({ tools: [{ id: 'other', label: 'Wrong workspace', url: 'http://127.0.0.1:5221/' }] }));
   const port = await freePort(), panel = createServer({ workspace, projects, port }); panel.server.listen(port, '127.0.0.1'); await once(panel.server, 'listening');
@@ -33,6 +41,7 @@ test('managed tool starts once on its panel route and owns only declared paths',
   await fs.mkdir(parent, { recursive: true });
   const root = await fs.mkdtemp(path.join(parent, 'managed-tool-http-')), workspace = path.join(root, 'integration');
   await fs.mkdir(path.join(workspace, 'tools'), { recursive: true });
+  await workspaceToolsOnly(workspace);
   await fs.writeFile(path.join(workspace, 'tools', 'fixture.mjs'), `let starts=0;export async function createWorkspaceTool(){starts++;return{handle(req,res,next){if(req.url.startsWith('/managed/')){res.setHeader('content-type','application/json');res.end(JSON.stringify({starts,path:req.url}));return;}if(req.url.startsWith('/__fixture/')){res.end('endpoint');return;}next();}}}`);
   await fs.writeFile(path.join(workspace, 'xrb-tools.json'), JSON.stringify({ tools: [{ id: 'managed', label: 'Managed Tool', route: '/managed/', module: 'tools/fixture.mjs', endpoints: ['/__fixture/'] }] }));
   const port = await freePort(), panel = createServer({ workspace, port }); panel.server.listen(port, '127.0.0.1'); await once(panel.server, 'listening');
@@ -90,6 +99,6 @@ test('managed module realpath cannot escape through a workspace junction', async
   const port = await freePort(), panel = createServer({ workspace, port }); panel.server.listen(port, '127.0.0.1'); await once(panel.server, 'listening');
   try {
     const base = `http://127.0.0.1:${port}`; assert.equal((await fetch(base + '/escape/')).status, 503);
-    assert.match((await fetch(base + '/api/tools/escape/status').then((response) => response.json())).error, /escapes .*workspace/);
+    assert.match((await fetch(base + '/api/tools/escape/status').then((response) => response.json())).error, /symbolic link or junction/);
   } finally { await panel.close(); await fs.rm(root, { recursive: true, force: true }); }
 });

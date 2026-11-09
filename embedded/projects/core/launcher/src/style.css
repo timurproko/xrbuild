@@ -1,0 +1,21 @@
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #15181d;
+}
+
+body {
+  color: #e8ecf2;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+canvas {
+  position: fixed;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}

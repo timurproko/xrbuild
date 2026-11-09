@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>XR Build touch-target check</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0f14; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<p id="capability" style="position:fixed;bottom:0;z-index:1;color:#c8d0d8;background:#0b0f14;font:14px system-ui">Archived diagnostic: a compatible host/provider must be selected explicitly. No capture starts from this page.</p>
+<canvas id="c"></canvas>
+<script>
+// Hand-to-panel alignment check. Five targets are drawn ON the panel plane (zero
+// disparity) at known positions. For each target: touch the glass at the target
+// with your index fingertip and hold still. The page records the tracked index
+// fingertip (keypoint 8) and reports where it was relative to the target.
+// Results are logged as TOUCH-RESULT / TOUCH-SUMMARY lines (copied into the host log).
+const host = window.__XRB_HOST__;
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const TARGETS = [[0, 0], [-0.2, 0.1], [0.2, 0.1], [0.2, -0.1], [-0.2, -0.1]];  // panel metres
+const HOLD_MS = 7000, SAMPLE_MS = 2500;  // per target; samples from the last 2.5 s
+let hands = [], current = -1, phaseStart = 0, samples = [], results = [];
+
+if (host) {
+  const ws = new WebSocket(host.channel.url);
+  ws.binaryType = 'arraybuffer';
+  ws.onmessage = (e) => {
+    if (!(e.data instanceof ArrayBuffer) || e.data.byteLength < 32) return;
+    const bounds = new DataView(e.data);
+    if (bounds.getUint8(0) === 2 && e.data.byteLength < 32 + bounds.getUint8(28) * 456) return;
+    const v = new DataView(e.data);
+    if (v.getUint8(0) !== 2) return;
+    const n = v.getUint8(28);
+    hands = [];
+    for (let h = 0; h < n; h++) {
+      const o = 32 + h * 456 + 12 + 8 * 16;  // keypoint 8 = index fingertip
+      hands.push({ id: v.getInt32(32 + h * 456, true), tip: [v.getFloat32(o, true), v.getFloat32(o + 4, true), v.getFloat32(o + 8, true)],
+        score: v.getFloat32(o + 12, true) });
+    }
+    if (current >= 0 && performance.now() - phaseStart > HOLD_MS - SAMPLE_MS && hands.length) {
+      // The fingertip closest to the target in x/y is the touching one.
+      const [tx, ty] = TARGETS[current];
+      const best = hands.reduce((a, b) => (Math.hypot(a.tip[0] - tx, a.tip[1] - ty) < Math.hypot(b.tip[0] - tx, b.tip[1] - ty) ? a : b));
+      samples.push(best.tip);
+    }
+  };
+}
+
+const median = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : NaN; };
+
+function finishTarget() {
+  const [tx, ty] = TARGETS[current];
+  const m = [0, 1, 2].map((i) => median(samples.map((s) => s[i])));
+  const r = { target: current, targetM: [tx, ty], fingertipM: m, errorXcm: (m[0] - tx) * 100, errorYcm: (m[1] - ty) * 100,
+    zcm: m[2] * 100, samples: samples.length };
+  results.push(r);
+  console.log(`TOUCH-RESULT ${JSON.stringify(r)}`);
+  samples = [];
+}
+
+function start() { current = 0; phaseStart = performance.now(); results = []; samples = []; }
+if (host) setTimeout(start, 3000);
+
+function resize() { canvas.width = innerWidth; canvas.height = innerHeight; }
+addEventListener('resize', resize); resize();
+
+function drawEye(x0, w, h) {
+  const d = host?.display ?? { widthM: 0.597, heightM: 0.336 };
+  const toPx = (x, y) => [x0 + w / 2 + x * w / d.widthM, h / 2 - y * h / d.heightM];
+  ctx.save(); ctx.beginPath(); ctx.rect(x0, 0, w, h); ctx.clip();
+  ctx.fillStyle = '#0b0f14'; ctx.fillRect(x0, 0, w, h);
+  TARGETS.forEach(([x, y], i) => {
+    const [px, py] = toPx(x, y);
+    const active = i === current;
+    ctx.strokeStyle = active ? '#f08a24' : results[i] ? '#3b7a52' : '#2a3542';
+    ctx.lineWidth = active ? w / 300 : w / 600;
+    ctx.beginPath(); ctx.arc(px, py, w / 40, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px - w / 25, py); ctx.lineTo(px + w / 25, py); ctx.moveTo(px, py - w / 25); ctx.lineTo(px, py + w / 25); ctx.stroke();
+  });
+  for (const hnd of hands) {  // live fingertip, drawn where tracking puts it (x/y only)
+    const [px, py] = toPx(hnd.tip[0], hnd.tip[1]);
+    ctx.fillStyle = '#5bd18b'; ctx.beginPath(); ctx.arc(px, py, w / 120, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.fillStyle = '#c8d0d8'; ctx.font = `${Math.round(w / 45)}px system-ui`;
+  const msg = current < 0 ? (results.length ? 'done - see the log' : 'get ready...')
+    : `touch the orange target with your index fingertip and hold still (${Math.ceil((HOLD_MS - (performance.now() - phaseStart)) / 1000)} s)`;
+  ctx.fillText(msg, x0 + 20, h - 30);
+  ctx.restore();
+}
+
+function frame() {
+  if (hands.length && current >= 0 && performance.now() - phaseStart > HOLD_MS) {
+    finishTarget();
+    current++;
+    phaseStart = performance.now();
+    if (current >= TARGETS.length) {
+      current = -1;
+      const ex = results.map((r) => r.errorXcm), ey = results.map((r) => r.errorYcm);
+      const err = results.map((r) => Math.hypot(r.errorXcm, r.errorYcm));
+      const summary = { meanXcm: ex.reduce((a, b) => a + b, 0) / ex.length, meanYcm: ey.reduce((a, b) => a + b, 0) / ey.length,
+        meanZcm: results.reduce((a, r) => a + r.zcm, 0) / results.length, meanErrorCm: err.reduce((a, b) => a + b, 0) / err.length,
+        maxErrorCm: Math.max(...err) };
+      summary.pass = summary.maxErrorCm <= 1.5;
+      console.log(`TOUCH-SUMMARY ${JSON.stringify(summary)}`);
+    }
+  }
+  const W = canvas.width, H = canvas.height;
+  if (host?.stereo) { drawEye(0, W / 2, H); drawEye(W / 2, W / 2, H); } else drawEye(0, W, H);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

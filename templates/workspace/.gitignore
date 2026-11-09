@@ -5,5 +5,9 @@ build/
 builds/
 plugins/*/bin/
 third_party/
+# User-owned plugin configuration may contain private destinations or credentials.
+config/plugins/
+# Personal bundled project settings are scoped to this installation and user.
+config/projects/
 # Written by the panel for editors: maps the SDK to the core on this machine.
 jsconfig.json
