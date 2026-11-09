@@ -2,6 +2,7 @@
 // Trusted draft promotion. Run only main's copy of this script on a PR-head checkout treated as data.
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 import { parseLink } from './pr-body.mjs';
 import { openTasks } from './finalize.mjs';
 
@@ -30,7 +31,7 @@ export function inspectProgress(body, tasks) {
   const taskItems = tasks.split(/\r?\n/).filter((l) => /^\s*[-*] \[[ xX]\] /.test(l));
   if (!taskItems.length) return { status: 'blocked', reason: 'tasks.md has no checkable tasks' };
   const open = openTasks(tasks);
-  return open.length ? { status: 'incomplete', reason: `${open.length} open task(s) in tasks.md` } : { status: 'complete' };
+  return open.length ? { status: 'blocked', reason: `pre-ready-tasks-open: ${open.length} open task(s) in tasks.md despite checked Implementation outcomes` } : { status: 'complete' };
 }
 
 /** Return a verdict without mutating GitHub. Every identity and input is rechecked before the mutation. */
@@ -57,14 +58,14 @@ export function candidate(pr, { repository, head, tasks }) {
 export function sameSnapshot(before, after) {
   return before?.node_id === after?.node_id && before?.number === after?.number && after?.state === 'open'
     && after?.draft === true && before?.body === after?.body && before?.base?.sha === after?.base?.sha
-    && before?.base?.ref === after?.base?.ref && before?.head?.sha === after?.head?.sha
+    && before?.base?.ref === after?.base?.ref && before?.base?.repo?.full_name === after?.base?.repo?.full_name && before?.head?.sha === after?.head?.sha
     && before?.head?.ref === after?.head?.ref && before?.head?.repo?.full_name === after?.head?.repo?.full_name;
 }
 
 const gh = (args) => JSON.parse(execFileSync('gh', ['api', ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
 const git = (repo, args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
-export async function reconcile({ number, repository, repo, get = (n) => gh([`repos/${repository}/pulls/${n}`]),
+export async function reconcile({ number, repository, repo, inspectOnly = false, get = (n) => gh([`repos/${repository}/pulls/${n}`]),
   read = (ref) => { try { return git(repo, ['show', `HEAD:${ref}`]); } catch { return null; } },
   head = () => git(repo, ['rev-parse', 'HEAD']),
   ready = (id) => gh(['graphql', '-f', 'query=mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){pullRequest{id}}}', '-f', `id=${id}`]),
@@ -73,7 +74,7 @@ export async function reconcile({ number, repository, repo, get = (n) => gh([`re
   const parsed = parseLink(before.body);
   const tasks = parsed.linked ? read(`openspec/changes/${parsed.link.change}/tasks.md`) : null;
   const verdict = candidate(before, { repository, head: head(), tasks });
-  if (verdict.status !== 'complete') return verdict;
+  if (verdict.status !== 'complete' || inspectOnly) return verdict;
   const after = get(number);
   if (!sameSnapshot(before, after)) return { status: 'skipped', reason: 'PR changed before promotion' };
   if (head() !== after.head.sha || read(`openspec/changes/${parsed.link.change}/tasks.md`) !== tasks) {
@@ -87,10 +88,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const args = process.argv.slice(2);
   const repo = args[args.indexOf('--repo') + 1];
   const number = Number(args[args.indexOf('--pr') + 1]);
-  if (!repo || !Number.isSafeInteger(number) || number < 1 || process.env.GITHUB_EVENT_NAME !== 'pull_request_target'
-      || !process.env.GITHUB_REPOSITORY) throw new Error('trusted pull_request_target and --repo <checkout> --pr <number> required');
-  reconcile({ number, repository: process.env.GITHUB_REPOSITORY, repo }).then((result) => {
+  if (!repo || !Number.isSafeInteger(number) || number < 1 || !['pull_request_target', 'workflow_dispatch'].includes(process.env.GITHUB_EVENT_NAME)
+      || !process.env.GITHUB_REPOSITORY) throw new Error('trusted workflow and --repo <checkout> --pr <number> required');
+  reconcile({ number, repository: process.env.GITHUB_REPOSITORY, repo, inspectOnly: args.includes('--inspect') }).then((result) => {
     console.log(`${result.status}: ${result.reason ?? ''}`);
-    if (result.status === 'blocked') process.exitCode = 1;
+    if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `status=${result.status}\n`);
+    if (result.status === 'blocked') {
+      console.error(`::error title=Draft readiness blocked::${String(result.reason).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A')}`);
+      process.exitCode = 1;
+    }
   }).catch((error) => { console.error(error); process.exitCode = 1; });
 }

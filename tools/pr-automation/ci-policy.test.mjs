@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { requiredProblems } from './required.mjs';
 
 const ci = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const triage = readFileSync(new URL('../../.github/workflows/nightly-triage.yml', import.meta.url), 'utf8');
@@ -45,16 +46,21 @@ test('fast PR checks remain path-selected and the required check accepts only in
   assert.doesNotMatch(changes, /outputs\.native|native=true|native=\$\(/);
   assert.match(changes, /echo "node=\$\(match/);
   assert.doesNotMatch(ci, /workspace_assets|hand_tracking_runtime|\.xrbuild\/|lfs: true|CORE_READ_TOKEN/);
-  assert.match(changes, /\\\.github\/workflows\/ci\\\.yml\$/);
+  assert.match(changes, /\\\.github\//);
   assert.match(job('node'), /needs\.changes\.outputs\.node == 'true'/);
   const required = job('required');
   assert.match(required, /needs: \[readiness, changes, names, openspec, delivery, node, native\]/);
-  assert.ok(required.includes(`grep -qE '"(failure|cancelled)"'`));
-  for (const [results, passes] of [
-    [['success', 'skipped'], true], // Ready PR: the native job was skipped.
-    [['success', 'failure'], false], // Nightly host failure must fail the aggregate.
-    [['cancelled', 'success'], false],
-  ]) assert.equal(!results.some((result) => result === 'failure' || result === 'cancelled'), passes);
+  assert.match(required, /always\(\) && \(github\.event_name != 'pull_request' \|\| !github\.event\.pull_request\.draft\)/);
+  assert.match(required, /node tools\/pr-automation\/required\.mjs/);
+  const ready = { readiness: { result: 'success', outputs: { ready: 'true' } }, changes: { result: 'success', outputs: { node: 'true' } },
+    names: { result: 'success' }, openspec: { result: 'success' }, delivery: { result: 'success' }, node: { result: 'success' }, native: { result: 'skipped' } };
+  assert.deepEqual(requiredProblems(ready, 'pull_request'), []);
+  for (const result of ['skipped', 'failure', 'cancelled', undefined]) {
+    assert.ok(requiredProblems({ ...ready, node: { result } }, 'pull_request').length);
+    assert.ok(requiredProblems({ ...ready, delivery: { result } }, 'pull_request').length);
+  }
+  assert.ok(requiredProblems({ ...ready, readiness: { result: 'success', outputs: { ready: 'false' } } }, 'pull_request').length);
+  assert.deepEqual(requiredProblems({ ...ready, delivery: { result: 'skipped' }, native: { result: 'success' } }, 'schedule'), []);
 });
 
 test('only a scheduled main failure automatically enters nightly triage with separate read and write credentials', () => {

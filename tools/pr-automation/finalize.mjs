@@ -64,11 +64,20 @@ function summary(text) {
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`);
 }
 
+export function sameFinalizationSnapshot(before, after, expectedHead = before?.head?.sha) {
+  return before?.node_id === after?.node_id && before?.number === after?.number && after?.state === 'open' && after?.draft === false
+    && before?.body === after?.body && before?.base?.sha === after?.base?.sha && before?.base?.ref === after?.base?.ref
+    && before?.base?.repo?.full_name === after?.base?.repo?.full_name && before?.head?.ref === after?.head?.ref
+    && before?.head?.repo?.full_name === after?.head?.repo?.full_name && after?.head?.sha === expectedHead;
+}
+
 function main(a) {
   const repoName = process.env.GITHUB_REPOSITORY;
   for (const k of ['repo', 'pr', 'author']) if (!a[k]) throw new Error(`missing --${k}`);
   const gh = (args, input) => execFileSync('gh', args, { encoding: 'utf8', input, stdio: [input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
   const pr = JSON.parse(gh(['api', `repos/${repoName}/pulls/${a.pr}`]));
+  if (pr.base?.repo?.full_name !== repoName || pr.head?.repo?.full_name !== repoName || pr.base?.ref !== 'main'
+    || !/^[a-f0-9]{40}$/.test(pr.head?.sha ?? '') || !/^[a-f0-9]{40}$/.test(pr.base?.sha ?? '') || !pr.node_id) throw new Error('Finalization repository or PR identity mismatch');
   const parsed = parseLink(pr.body);
   if (parsed.error) throw new Error(parsed.error);
   if (!parsed.linked) return summary(`#${a.pr} links no OpenSpec change: nothing to finalize`);
@@ -83,7 +92,9 @@ function main(a) {
     process.exitCode = 1;
     return;
   }
-  let link = { ...parsed.link, archive: result.archive };
+  const refreshed = JSON.parse(gh(['api', `repos/${repoName}/pulls/${a.pr}`]));
+  if (!sameFinalizationSnapshot(pr, refreshed)) return summary(`#${a.pr} changed during finalization; bounded retry required, nothing pushed`);
+  let link = { ...parsed.link, archive: result.archive, finalizedHead: result.commit ?? head };
   if (result.status === 'finalized') {
     git(a.repo, ['push', '--quiet', 'origin', `HEAD:refs/heads/${pr.head.ref}`]);
     link = { ...link, finalizedHead: result.commit };
@@ -92,6 +103,8 @@ function main(a) {
     summary(`### ${change}: already finalized (\`${result.archive}\`)`);
   }
   if (JSON.stringify(link) !== JSON.stringify(parsed.link)) {
+    const current = JSON.parse(gh(['api', `repos/${repoName}/pulls/${a.pr}`]));
+    if (!sameFinalizationSnapshot(pr, current, link.finalizedHead)) return summary(`#${a.pr} changed before its final-head body update; preserve human text and retry`);
     gh(['api', '-X', 'PATCH', `repos/${repoName}/pulls/${a.pr}`, '--input', '-'], JSON.stringify({ body: writeLink(pr.body, link) }));
   }
 }

@@ -57,7 +57,10 @@ The maintainer uses ordinary Git there; agents never push `main` in either repos
   in a follow-up change, not ticked here. Manual device-only acceptance may be reported as a gap, but never
   pretend an unverified task is done. Tick a PR Implementation outcome as soon as its code, tests and related
   detailed tasks are done; CI status and manual acceptance do not count as checkbox progress.
-- Run the focused tests for what changed (`node --test` in the package, `host-tests` for the host) and `pnpm check:names`.
+- Run quick targeted checks for changed code and its written tests, plus `pnpm check:names` and strict change validation;
+  use the type check when the repository provides it. Do not turn broad local suites into a repeated pre-push loop.
+  Written code/tests and truthful pre-ready bookkeeping determine Implementation progress; exact-final-head CI is the
+  later integration gate, not a future result to mark already passed.
 - Add `## Acceptance` before `## Automation`: one to ten plain bullets saying what now holds, specific to this change.
 
 ## 4. Ready and finalization
@@ -65,7 +68,8 @@ The maintainer uses ordinary Git there; agents never push `main` in either repos
 - Bring the branch up to date with `origin/main` if it is behind. Add plain Acceptance outcomes before checking
   the last Implementation item. Push completed `tasks.md` and the updated PR body; do not mark new linked PRs
   ready yourself. Trusted automation verifies the exact complete draft and marks it ready. A pre-existing legacy
-  ready PR remains on the old path; a policy PR before this automation lands on `main` uses the old manual route.
+  ready PR remains on the old path; a policy PR before this automation lands on `main` uses the maintainer-reviewed bootstrap route.
+  Missing trusted policy or bot setup does not authorize an agent ready mutation or merge.
 - The OpenSpec finalization workflow (the repo bot) archives the linked change in the PR branch, syncs the specs,
   commits `docs(openspec): finalize <change-id>` and records the archive in the Automation block. It refuses while
   `tasks.md` has open tasks; its run lists them.
