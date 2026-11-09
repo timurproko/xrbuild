@@ -22,7 +22,7 @@ test('completion needs valid headings, at least 2 checked implementation outcome
   const detailed = body.replace('- [x] Preserve existing work.', '- [x] Preserve existing work.\n- [x] Cover routing.\n- [x] Cover diagnostics.\n- [x] Cover empty states.\n- [x] Cover package setup.');
   assert.deepEqual(inspectProgress(detailed, tasks), { status: 'complete' }, 'two to five outcomes are recommended, not a hard maximum');
   assert.equal(inspectProgress(body.replace('[x] Preserve', '[ ] Preserve'), tasks).status, 'incomplete');
-  assert.equal(inspectProgress(body, tasks.replace('[x] second', '[ ] second')).status, 'incomplete');
+  assert.equal(inspectProgress(body, tasks.replace('[x] second', '[ ] second')).status, 'blocked');
   assert.equal(inspectProgress(body.replace('- Completed changes', '- Device-only inspection remains for the maintainer'), tasks).status, 'complete');
   assert.equal(inspectProgress(body, '').status, 'blocked');
   assert.equal(inspectProgress(body.replace('- Completed changes', '- [x] Completed changes'), tasks).status, 'blocked');
@@ -44,6 +44,10 @@ test('promotion rechecks head and body before the App mutation; incomplete never
   let calls = 0;
   const opts = { number: 9, repository, repo: '.', head: () => sha, read: () => tasks, ready: () => { calls++; } };
   assert.equal((await reconcile({ ...opts, get: () => pr })).status, 'promoted');
+  assert.equal(calls, 1);
+  assert.equal((await reconcile({ ...opts, inspectOnly: true, get: () => pr })).status, 'complete');
+  assert.equal(calls, 1, 'read-only inspection never mints or uses mutation authority');
+  assert.equal((await reconcile({ ...opts, read: () => tasks.replace('[x] second', '[ ] second'), get: () => pr })).status, 'blocked');
   assert.equal(calls, 1);
   assert.equal((await reconcile({ ...opts, get: () => ({ ...pr, body: body.replace('[x] Preserve', '[ ] Preserve') }) })).status, 'incomplete');
   assert.equal(calls, 1);
@@ -87,7 +91,12 @@ test('a completed draft promotes, finalizes in its own branch, and Delivery acce
 test('workflow consumes only the base script, checks exact head and does not grant merge permission', () => {
   const workflow = readFileSync(new URL('../../.github/workflows/openspec-finalization.yml', import.meta.url), 'utf8');
   assert.match(workflow, /node base\/tools\/pr-automation\/promote\.mjs --repo head/);
-  assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /ref: \$\{\{ steps\.candidate\.outputs\.head \}\}/);
+  assert.match(workflow, /--jq \.head\.sha/);
+  assert.ok(workflow.indexOf('id: inspect') < workflow.indexOf('id: bot'));
+  assert.match(workflow, /--inspect/);
+  assert.match(workflow, /steps\.inspect\.outputs\.status == 'complete'/);
+  assert.match(workflow, /--ignore-scripts/);
   assert.match(workflow, /types: \[opened, ready_for_review, synchronize, reopened, edited\]/);
   assert.match(workflow, /!github\.event\.pull_request\.draft/);
   assert.match(workflow, /persist-credentials: false/);

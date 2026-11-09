@@ -314,9 +314,12 @@ pnpm worktree remove hand-jitter       # remove one after its merge (--discard i
 ```
 
 A change that needs a plan starts as a draft PR holding only its OpenSpec change, linked in the PR body's Automation
-block; the code follows in the same PR once the plan is approved. When the PR is marked ready, the repo bot archives
-the change in the PR (specs synced), and CI's `Delivery` job turns green. Documentation-only PRs that link no change
-merge by themselves once CI passes (the `no-auto-merge` label opts out). Ready PRs keep the name guard, OpenSpec,
+block; the code follows in the same PR once the plan is approved. Complete Implementation outcomes and their detailed
+pre-ready tasks truthfully; trusted automation, not the agent, marks an unchanged eligible draft ready. Missing bot
+configuration or unfinished task records remain visible blockers. Once ready, the repo bot archives
+the change in the PR (specs synced), and CI's `Delivery` job turns green. The existing narrow documentation-only
+auto-merge policy remains available only when explicitly enabled; the reviewed delivery activation profile leaves that
+auxiliary workflow disabled. Implementation PRs remain maintainer-merged. Ready PRs keep the name guard, OpenSpec,
 delivery and relevant Node/workspace checks, but **do not build or test the native host**, even when host code changes.
 A skipped host check is not a successful native build. Pushes to `main` also omit that several-minute lane. The full
 Windows host build and native tests run on the scheduled nightly CI for `main`, or when CI is manually dispatched
@@ -325,16 +328,20 @@ PR; it cannot retroactively block an earlier merge. The full process for agents 
 `.claude/skills/change-delivery/SKILL.md`.
 
 Repository settings, the `main` ruleset and the workflow labels are declared in
-`config/github-repository-governance.json`. The maintainer checks them locally with their own `gh` login (no
-workflow reads the settings); change them in a PR, then:
+`config/github-repository-governance.json`. No administrator or bot bypass is declared. The maintainer checks them
+locally with their own `gh` login; change them in a PR, then review capability preflight and explicitly scoped activation:
 
 ```text
-pnpm governance check
-pnpm governance apply --confirm apply-xr-build-governance
+pnpm governance preflight
+pnpm governance protect --confirm apply-xr-build-governance
+pnpm governance activate-ci --confirm apply-xr-build-governance
 ```
 
-**Repo bot.** The bot workflows run as a GitHub App installed on this repository only, with repository permissions
-Contents, Pull requests and Issues (read and write), Metadata (read), and no webhook. Its id is
+See [protected PR delivery](docs/pr-delivery-governance.md) for full bot activation, bootstrap, blocked private-account
+capabilities and exact-head canary acceptance. Partial CI-only activation does not certify automatic readiness.
+
+**Repo bot.** Install a repository-scoped GitHub App with Contents and Pull requests (read/write), Metadata (read),
+and only additional read permissions required by enabled probes; no webhook is needed. Its id is
 the Actions variable `XRB_BOT_APP_ID` and a private key the secret `XRB_BOT_PRIVATE_KEY`; the `Bot probe` workflow
 checks both. To rotate the key, generate a new one on the App's page, replace the secret, and delete the old key.
 

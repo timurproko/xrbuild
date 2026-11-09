@@ -78,13 +78,12 @@ test('an empty declared list (no bypass actors) is compared as a whole, not as t
   assert.deepEqual(diffDeclared({ bypass_actors: [] }, { bypass_actors: [] }), []);
 });
 
-test('protect-main keeps the maintainer as its only bypass actor', () => {
+test('protect-main grants no administrator or bot bypass', () => {
   const rs = config.rulesets.find((r) => r.name === 'protect-main');
-  assert.deepEqual(rs.bypass_actors, [{ actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' }]);
-  const live = { ...structuredClone(rs), bypass_actors: [] };
-  assert.deepEqual(diffDeclared(rs, live).map((d) => d.path), ['bypass_actors']);
-  const reordered = { ...structuredClone(rs), bypass_actors: [{ bypass_mode: 'always', actor_type: 'RepositoryRole', actor_id: 5 }] };
-  assert.deepEqual(diffDeclared(rs, reordered), []);
+  assert.deepEqual(rs.bypass_actors, []);
+  for (const actor of [{ actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' }, { actor_id: 99, actor_type: 'Integration', bypass_mode: 'pull_request' }]) {
+    assert.deepEqual(diffDeclared(rs, { ...structuredClone(rs), bypass_actors: [actor] }).map(d => d.path), ['bypass_actors']);
+  }
 });
 
 test('another repository is refused before anything is read or written', () => {
