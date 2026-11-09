@@ -27,6 +27,10 @@
 - [x] 5.2 Run focused changed-code/API/browser tests, type checking, name guard and strict OpenSpec validation; verify recorded results are truthful, product fixtures remain unchanged, and any manual native/device/signing gaps have an explicit follow-up owner rather than a passing claim.
 - [x] 5.3 Record implementation outcomes and exact tested revision in the authorized PR/worktree handoff; verify no private content is included, no unfinished outcome is checked and bot finalization/CI/maintainer merge remain pending until actually observed. Implementation commit 95eb3d6 was pushed to PR #4 after the maintainer requested the push; the local handoff preserves targeted test evidence and the tested source-state record. Exact-final-head CI, ordered bot finalization and maintainer merge remain separate pending gates.
 
+## 6. Spec repair
+
+- [x] 6.1 Preserve predecessor scenario identities and their applicable safety/compatibility coverage in the successor's modified requirement blocks; verify strict change validation and a read-only merge preview against the pending embedded contract both pass, without modifying canonical specs or predecessor artifacts. This preview does not clear the missing-canonical-baseline delivery prerequisite.
+
 ## Local verification evidence
 
 - New embedded workflow suite: 12 passing checks, including real headless browser platform/publication saves, compact tabs, mixed sections/archive, same-timestamp stale saves, normal same-name deletion on Windows, package setup/publication/packaging fixture adapters, source-update reconciliation, independent-process locks, native-run leases and non-destructive cache handling.
@@ -35,6 +39,8 @@
 - Explicit real public launcher fixture: passed using frozen public dependencies and checked immutable finalized output; installed embedded inventory unchanged. Added to the existing Windows public-boundary lane.
 - Explicit synthetic native compiler/provider/browser fixture: passed. No physical integration was activated.
 - Strict production type check, browser module syntax check, all 23 strict OpenSpec validations, name guard and whitespace check: passed.
+
+- Spec repair: the trusted pinned spec merger previously rejected the successor for dropping predecessor scenarios, starting with `Customize a bundled project`. The successor now retains all predecessor scenario identities across its three modified requirements, with updated normal-workflow assertions. An ignored fixture-only baseline/merge preview passed; strict change validation, name guard and whitespace checks passed. Canonical specs and predecessor plans/tasks remain unchanged.
 
 ## Remaining acceptance and delivery prerequisites
 

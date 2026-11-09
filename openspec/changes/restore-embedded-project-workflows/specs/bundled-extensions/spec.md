@@ -31,7 +31,7 @@ The project catalog SHALL distinguish embedded and user project identities, incl
 - **WHEN** an embedded project has valid packaged output and no conflicting effective local build state and is previewed or run in built mode
 - **THEN** the panel may read contained packaged output without installing dependencies or rewriting it, and launch configuration and other mutable state remain user-owned
 
-#### Scenario: Optional independent copy
+#### Scenario: Customize a bundled project
 - **WHEN** the user explicitly chooses to create a separate copy of an embedded project
 - **THEN** it becomes an independent ordinary project in the selected writable repository without inheriting credentials or a live deployment identity, and this action is not a prerequisite for using the original embedded project
 
@@ -50,6 +50,22 @@ The project catalog SHALL distinguish embedded and user project identities, incl
 ### Requirement: Personal bundled run settings
 The panel SHALL preserve existing scoped personal input/display/monitor/fullscreen/projection/camera choices for unmaterialized bundled projects without changing product defaults. Legacy records SHALL retain bounded field/schema validation, source ownership, revision-checked atomic saves and cooperating-writer exclusion. Invalid, oversized, linked or foreign records SHALL block their consumption without replacement or echoing saved contents. The first explicit preparation of durable effective project state SHALL import validated personal choices once into the normal effective manifest and run defaults while preserving the original record. Subsequent normal project edits SHALL take precedence; the legacy run-settings API SHALL NOT become a second conflicting editor for a materialized project. Materialized projects SHALL use the same ordinary editable manifest/provider configuration rules as user projects, with normal user-owned persistence rather than restrictions to the legacy run-override field list.
 
+#### Scenario: Save and restore personal choices
+- **WHEN** an unmaterialized project's legacy personal settings are explicitly saved or restored using the current revision
+- **THEN** only its contained user-owned record changes, product defaults remain unchanged, and a later effective manifest imports the resulting validated choices only once
+
+#### Scenario: Defaults or another writer changed
+- **WHEN** product defaults, selected provider ownership/schema or another settings writer changes the revision before a legacy save or first preparation
+- **THEN** stale or incompatible choices are refused without overwriting newer user data, and settings already imported into an effective manifest are not silently replaced
+
+#### Scenario: Schema-bound advanced provider choices
+- **WHEN** an unmaterialized project reads, saves or imports legacy advanced provider choices
+- **THEN** the choices remain bound to the actual selected provider owner/schema and its declared boolean, number or select fields, while materialized projects subsequently use normal manifest configuration rules
+
+#### Scenario: Settings during active use
+- **WHEN** legacy settings saving or effective settings preparation conflicts with an active run, build, package, publication, icon job or another writer
+- **THEN** the conflicting action is refused or serialized without changing the active consumer's selected settings or creating a second legacy editor for a materialized project
+
 #### Scenario: Existing personal choices before preparation
 - **WHEN** the user opens or runs an unmaterialized embedded project with valid saved personal choices
 - **THEN** its normal controls and launch snapshot reflect those choices without rewriting product defaults or initializing editable sources during discovery
@@ -58,7 +74,7 @@ The panel SHALL preserve existing scoped personal input/display/monitor/fullscre
 - **WHEN** an explicit writable action first prepares an embedded project and the user later changes normal project settings
 - **THEN** validated legacy choices initialize the effective settings once, subsequent edits remain authoritative across reloads, and the legacy record is preserved rather than reapplied over those edits
 
-#### Scenario: Legacy malformed or stale settings
+#### Scenario: Invalid personal state
 - **WHEN** an unmaterialized project's legacy settings are malformed, oversized, linked, foreign, stale or have an incompatible selected provider schema
 - **THEN** their consumption or conflicting save is refused with a user-state recovery location, without silently replacing the file or weakening its old validation
 
@@ -69,7 +85,7 @@ The panel SHALL preserve existing scoped personal input/display/monitor/fullscre
 ### Requirement: Explicit cached bundled project rebuilds
 The panel SHALL expose supported embedded project development and build scripts through normal project actions without modifying installed sources or implicitly installing user/private workspace packages. An explicit source-consuming action SHALL prepare or reuse contained durable user-owned working inputs using the pinned manager and validated frozen public dependency graph, and SHALL build declared transitive local prerequisites in order. Unsupported dependency configuration SHALL produce an actionable preparation failure rather than silently installing an ambient workspace or making an independent project copy a workflow prerequisite. Installation lifecycle hooks SHALL remain disabled for managed public snapshot preparation. Successful finalized builds SHALL publish checked immutable output generations with atomic receipts bound to installation, effective source/settings and output content. Development, runs, icon jobs, packaging and publication SHALL consume coherently resolved effective project snapshots. Durable working sources and configuration SHALL NOT be treated as disposable build cache. These checks SHALL NOT be described as a sandbox or export audit.
 
-#### Scenario: Build from normal workflow
+#### Scenario: Rebuild through the bundled detail view
 - **WHEN** the user builds an embedded app through the normal Develop or Build workflow
 - **THEN** the panel starts an observable job using checked user-owned inputs, and successful output is available to native/browser runs, packaging and publication without rewriting installed files
 
@@ -81,15 +97,15 @@ The panel SHALL expose supported embedded project development and build scripts 
 - **WHEN** effective public inputs have unsupported package-manager configuration, invalid graph/lock links or escaping filesystem dependencies
 - **THEN** preparation fails with the location and corrective requirement without installing surrounding user/private packages or modifying product sources
 
-#### Scenario: Failed, stale or foreign local state
+#### Scenario: Failed, stale or foreign local project state
 - **WHEN** effective settings, source-baseline state or build receipts/output are invalid, incomplete, failed, stale, malformed, linked or bound to another project
 - **THEN** the affected new action is blocked with a recovery diagnostic rather than automatically selecting packaged or older output, and original user data is preserved
 
-#### Scenario: Existing consumers during another build
+#### Scenario: Existing cached consumers during another build
 - **WHEN** a new build succeeds or fails after a browser/native consumer selected a successful generation
 - **THEN** the existing consumer retains its validated reserved output and its generation-qualified assets remain available under the existing containment rules
 
-#### Scenario: Overlapping actions or settings writers
+#### Scenario: Overlapping project builders and launches
 - **WHEN** incompatible project preparation, launches, builds, organization or settings changes overlap
 - **THEN** the panel serializes or refuses conflicting actions, checks revisions before publication, and does not remove foreign locks or partially overwrite state
 
