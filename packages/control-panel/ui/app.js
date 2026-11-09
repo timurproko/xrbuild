@@ -1,6 +1,6 @@
 // XR Build control panel UI: plain ES module, no build step. Talks to the panel server
 // (same origin) over JSON and a Server-Sent Events stream.
-import { hasProjectPublishers, renderProjectHero } from './project-workflow.js';
+import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
 import { workingCacheReview } from './cache-review.js';
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
 import {requestedNavigation,menuKeyboard,renderNavigationMenu,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
@@ -1564,7 +1564,7 @@ function publicationFields(p) {
   const result = failure;
   const selectedSlug = published && typeof status?.deployedSlug === 'string'
     ? status.deployedSlug
-    : typeof pub.slug === 'string' ? pub.slug : p.id.split('/').pop();
+    : typeof pub.slug === 'string' ? pub.slug : defaultProjectSlug(p.id);
   // Next version is a draft: editing it (or Patch/Minor/Major from its context menu) deploys nothing. Live version
   // comes only from verified status. Publish/Update and Unpublish sit in the hero below the title.
   const live = catalog?.liveReleaseId ? catalog.releases.find((release) => release.releaseId === catalog.liveReleaseId) : null;

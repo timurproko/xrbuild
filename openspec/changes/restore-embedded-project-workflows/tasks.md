@@ -19,6 +19,8 @@
 - [x] 4.1 Add durable logical embedded section/order/archive state and coherent mixed-origin layout handling; verify move, reorder, rename/delete section, default archive, archive/unarchive, counts, last-item section pruning, restart and same-name origin isolation without embedded folder moves.
 - [x] 4.2 Restore one compact normal project view, tabs, settings, menus and drag/drop for both origins, suppressing only embedded Delete; verify browser interaction tests exercise Develop / Publish / Build where supported, action jobs, mixed sections and archive, and measure layout against ordinary-project geometry.
 
+- [x] 4.3 Derive default publication slugs from the unqualified project folder, not catalog origin/archive prefixes; verify ordinary and qualified live/archive IDs suggest the same slug, normal browser publisher selection saves it, and explicit/deployed slugs remain unchanged. The 21-check browser/publication regression selection passed; the isolated manual instance displayed and saved launcher without field errors, with publication available.
+
 ## 5. Acceptance and handoff
 
 - [x] 5.1 Update current docs/instructions for normal embedded workflows and user-state ownership without rewriting predecessors; verify documentation no longer requires Copy to workspace for normal actions and the ordered prerequisite ledger remains accurate.

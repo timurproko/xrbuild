@@ -6,7 +6,14 @@ import { createServer } from '../src/server.ts';
 import { freePort } from '../src/host-runner.ts';
 import { REPO } from '../src/env.ts';
 import { withBrowser, sleep } from './browser-fixture.ts';
-import { hasProjectPublishers } from '../ui/project-workflow.js';
+import { defaultProjectSlug, hasProjectPublishers } from '../ui/project-workflow.js';
+
+test('default publication slugs exclude catalog origin and archive prefixes', () => {
+  for (const id of ['launcher', 'archive/launcher', 'bundled:launcher', 'bundled:archive/launcher', 'workspace:launcher', 'workspace:archive/launcher']) {
+    assert.equal(defaultProjectSlug(id), 'launcher', id);
+  }
+  assert.equal(defaultProjectSlug('bundled:ui-kit'), 'ui-kit');
+});
 
 test('Publish visibility uses installed publishers, not configured/stale destinations', () => {
   assert.equal(hasProjectPublishers({}), false);

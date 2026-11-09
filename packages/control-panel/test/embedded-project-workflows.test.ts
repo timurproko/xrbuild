@@ -367,6 +367,9 @@ test('real browser shows normal compact tabs and mixed sections for embedded pro
     await until(`!!document.querySelector('[name="publication.slug"]')`);
     for (let i = 0; i < 100 && !(await f.request('GET', '/api/projects/bundled%3Asample')).json.manifest.publication?.publisher; i++) await sleep(50);
     await sleep(350);
+    const initialPublication = (await f.request('GET', '/api/projects/bundled%3Asample')).json.manifest.publication;
+    assert.equal(initialPublication.slug, 'sample', 'automatic publisher selection never persists the bundled namespace in the slug');
+    assert.equal(await evaluate(`document.querySelector('[name="publication.slug"]').value`), 'sample');
     await evaluate(`const slug=document.querySelector('[name="publication.slug"]');slug.value='browser-sample';slug.dispatchEvent(new Event('change',{bubbles:true}))`);
     for (let i = 0; i < 100 && (await f.request('GET', '/api/projects/bundled%3Asample')).json.manifest.publication?.slug !== 'browser-sample'; i++) await sleep(50);
     assert.equal((await f.request('GET', '/api/projects/bundled%3Asample')).json.manifest.publication.slug, 'browser-sample');
@@ -379,7 +382,8 @@ test('real browser shows normal compact tabs and mixed sections for embedded pro
     await evaluate(`document.querySelector('.nav-tabs [data-view="archive"]').click()`);
     await until(`!!document.querySelector('.proj[data-id="bundled:archive/sample"]')`);
     await evaluate(`document.querySelector('.proj[data-id="bundled:archive/sample"]').click()`);
-    await until(`!!document.querySelector('[data-surface="publish"]')`);
+    await until(`document.querySelector('[name="publication.slug"]')?.value === 'browser-sample'`);
+    assert.equal((await f.request('GET', '/api/projects/bundled%3Aarchive/sample')).json.manifest.publication.slug, 'browser-sample', 'archive does not rewrite an explicit slug');
     await send('Emulation.setDeviceMetricsOverride', { width: 800, height: 1000, deviceScaleFactor: 1, mobile: false });
     assert.ok(await evaluate(`document.querySelector('.project-hero').getBoundingClientRect().width <= innerWidth`));
   });

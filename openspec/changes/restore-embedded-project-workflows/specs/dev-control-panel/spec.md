@@ -23,6 +23,10 @@ The Apps UI SHALL render embedded and ordinary projects through the same compact
 - **WHEN** either an ordinary or embedded project lacks a development script, packageable kind, compatible packager, configured publisher or required signing tools
 - **THEN** the UI explains the same ordinary capability/configuration restriction rather than promising unconditional execution or requiring a copy based on origin
 
+#### Scenario: Publication slug defaults
+- **WHEN** a project without a saved publication slug is opened in Publish
+- **THEN** its suggested slug uses the unqualified project folder without internal origin or archive prefixes, while explicitly saved and deployed slugs remain authoritative
+
 #### Scenario: Layout parity
 - **WHEN** equivalent embedded and ordinary apps are viewed at desktop and narrow viewport sizes
 - **THEN** their tabs, identity rows, fields and primary actions follow the same shared compact geometry without the former tall embedded-only form
