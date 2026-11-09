@@ -174,7 +174,12 @@ Start the control panel (no console window; a second start only opens the runnin
 start.vbs
 ```
 
-Or from a terminal:
+If core app dependencies are missing after a pull, the shortcut shows a Rebuild-style setup modal with live logs,
+installs the pinned public dependencies with a frozen lock and lifecycle hooks disabled, then opens the requested panel
+automatically. Errors stay visible with Retry and Copy log. Healthy starts skip installation; private/native setup is not
+part of this repair. See [Shortcut startup](docs/shortcut-startup.md) for prerequisites, logs and recovery.
+
+Or from a terminal (normal CLI diagnostics, without GUI bootstrap):
 
 ```text
 pnpm panel

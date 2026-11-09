@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>XR Build · Starting</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/design-system.css"><link rel="stylesheet" href="/startup.css"><script type="module" src="/startup.js"></script></head>
+<body><main><h1>XR Build</h1><p class="muted">Getting your app ready</p></main>
+<dialog class="xrb-dialog xrb-progress-dialog xrb-rebuild-dialog" aria-labelledby="startup-title" aria-describedby="startup-message">
+<div class="xrb-progress-status"><span class="xrb-progress-status-icon" data-state="running" aria-hidden="true"><span class="xrb-spinner xrb-spinner-accent xrb-progress-running"></span><span class="xrb-progress-check"></span><span class="xrb-progress-error"></span></span><div><h3 id="startup-title">Checking XR Build</h3><p id="startup-message" class="muted" role="status" aria-live="polite">Checking app dependencies…</p></div></div>
+<p id="startup-core" class="context muted"></p><pre class="log" id="startup-output" tabindex="0" aria-label="Setup output">Waiting for output…</pre><p id="startup-log" class="context muted"></p>
+<div class="row ask-buttons"><span class="hint muted" id="startup-hint">You can close this tab; setup keeps running. Reopen the shortcut to return.</span><span class="spacer"></span><button type="button" class="action-button" id="startup-copy">Copy log</button><button type="button" class="action-button primary" id="startup-retry" hidden>Retry</button><button type="button" class="action-button" id="startup-close" disabled>Close</button></div>
+</dialog></body></html>
