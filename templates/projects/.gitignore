@@ -1,4 +1,9 @@
 node_modules/
+# Local embedded working sources and state may include private user configuration.
+.xrb/
+.xrb-layout.lock
+xrb-panel.json.*.tmp
+.xrb-manifest-*.tmp
 projects/*/*/dist/
 jsconfig.json
 .DS_Store

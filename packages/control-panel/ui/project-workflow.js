@@ -1,3 +1,8 @@
+/** Catalog namespaces identify ownership, not public publication routes. */
+export function defaultProjectSlug(projectId) {
+  return String(projectId ?? '').replace(/^(?:bundled|workspace):/, '').split('/').at(-1) ?? '';
+}
+
 /** Installed services, not a manifest's stale publisher selection or configuration status. */
 export function hasProjectPublishers(project) {
   return !!(project.publicationStandalone ?? project.publication)?.publishers?.length;

@@ -67,6 +67,7 @@ export interface PreviewRequest {
   projectDir: string;
   devScript?: string;
   devEnv?: Record<string, string>;
+  devEnvIsolated?: boolean;
   flat?: boolean;
 }
 
@@ -88,12 +89,18 @@ export interface RunRequest {
   devScript?: string;
   /** dev mode: extra environment for the dev server (XRB_CORE: where the app's SDK comes from) */
   devEnv?: Record<string, string>;
+  /** Treat devEnv as the complete environment instead of inheriting ambient configuration. */
+  devEnvIsolated?: boolean;
   flat?: boolean;
   /** true when 2D also controls the display session; false for the desktop mono display */
   switchView?: boolean;
   cameraView?: boolean;
   cameraAvailable?: boolean;
   hostArgs: string[];
+}
+
+export function devProcessEnvironment(env?: Record<string, string>, isolated = false): NodeJS.ProcessEnv {
+  return isolated ? { ...env } : { ...process.env, ...env };
 }
 
 const STOP_GRACE_MS = 20_000;
@@ -297,7 +304,7 @@ export class HostRunner extends EventEmitter {
     const devUrl = `http://127.0.0.1:${port}/`;
     this.addLog(`[panel] starting the dev server: corepack pnpm run ${req.devScript} on ${devUrl}`);
     this.dev = spawn('cmd.exe', ['/d', '/s', '/c', `corepack pnpm run ${req.devScript} --host 127.0.0.1 --port ${port} --strictPort`], {
-      cwd: req.projectDir, env: { ...process.env, ...req.devEnv }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: req.projectDir, env: devProcessEnvironment(req.devEnv, req.devEnvIsolated), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
     });
     const devOut = new LineSplitter((l) => this.addLog(`[dev] ${l}`));
     this.dev.stdout!.setEncoding('utf8').on('data', (d: string) => devOut.push(d));

@@ -43,7 +43,8 @@ test('sections are the folders under projects/, in the saved order; Unsorted is 
   assert.deepEqual(l.sections, [{ name: 'Demos', items: ['b', 'a'] }, { name: 'Checks', items: ['rig'] }]);
   assert.deepEqual(l.colors, { b: 'teal' });
   await fs.writeFile(path.join(ws, LAYOUT_FILE), '{ broken');
-  assert.deepEqual((await readLayout(ws, await discoverProjects(ws))).sections.map((s) => s.name), ['Checks', 'Demos'], 'unreadable file: the folders still count');
+  await assert.rejects(readLayout(ws, await discoverProjects(ws)), /layout is invalid/);
+  assert.equal(await fs.readFile(path.join(ws, LAYOUT_FILE), 'utf8'), '{ broken', 'invalid user state is preserved for review');
 });
 
 test('layout ignores orphan empty folders but keeps explicitly saved empty sections', async () => {

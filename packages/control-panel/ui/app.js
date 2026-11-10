@@ -1,7 +1,6 @@
 // XR Build control panel UI: plain ES module, no build step. Talks to the panel server
 // (same origin) over JSON and a Server-Sent Events stream.
-import { bundledProjectDetails } from './bundled-project.js';
-import { hasProjectPublishers, renderProjectHero } from './project-workflow.js';
+import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
 import { workingCacheReview } from './cache-review.js';
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
 import {requestedNavigation,menuKeyboard,renderNavigationMenu,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
@@ -482,7 +481,7 @@ function wireInventoryDrag(nav) {
   nav.querySelectorAll('.xrb-tab[data-view]').forEach((tab) => {
     const accepts = () => {
       const project = draggedProject();
-      return project && !project.readOnly && !project.running && (tab.dataset.view === 'archive') !== project.archived;
+      return project && !project.running && (tab.dataset.view === 'archive') !== project.archived;
     };
     tab.addEventListener('dragover', (event) => {
       if (!accepts()) return;
@@ -498,7 +497,7 @@ function wireInventoryDrag(nav) {
       clearProjectDragMarks(nav);
       inventoryDragId = null;
       const project = allProjects().find((item) => item.id === id);
-      if (!project || project.readOnly || project.running || (view === 'archive') === project.archived) return;
+      if (!project || project.running || (view === 'archive') === project.archived) return;
       await archiveProject(id, view);
     }));
   });
@@ -513,10 +512,10 @@ function renderProjects() {
   const item = (p) => {
     const m = p.manifest;
     const kind = m?.kind ?? 'app';
-    const meta = !m ? 'manifest has errors' : p.readOnly ? 'embedded' : '';
+    const meta = !m ? 'manifest has errors' : p.origin === 'bundled' ? 'embedded' : '';
     const pill = !m ? '<span class="state err">error</span>' : projectRunning(p) || p.running ? runPill() : searching && p.archived ? '<span class="state busy">archived</span>' : '';
     const published = m ? publishedMark(p) : '';
-    return `<button class="proj xrb-focus-inset ${kind} ${p.id === state.selected ? 'selected' : ''}" data-id="${esc(p.id)}" aria-current="${p.id === state.selected}" ${searching || p.readOnly ? '' : 'draggable="true"'}>
+    return `<button class="proj xrb-focus-inset ${kind} ${p.id === state.selected ? 'selected' : ''}" data-id="${esc(p.id)}" aria-current="${p.id === state.selected}" ${searching ? '' : 'draggable="true"'}>
       <span class="stripe"></span>
       <img src="${iconSrc(p)}" alt="" draggable="false">
       <div class="text"><div class="name">${esc(m?.name ?? p.id)}</div>${meta ? `<div class="meta">${meta}</div>` : ''}</div>${pill ? `<div class="pill">${pill}</div>` : ''}${published ? `<div class="published">${published}</div>` : ''}
@@ -538,7 +537,7 @@ function renderProjects() {
       : '<div class="empty-note">Nothing is archived yet.</div>');
   } else {
     // The developer's sections (xrb-panel.json), then "Unsorted" for projects in none of them.
-    const editable = state.projects.filter(p => !p.readOnly);
+    const editable = state.projects;
     const byId = new Map(editable.map((p) => [p.id, p]));
     const placed = new Set();
     const secs = state.layout.sections.map((s, index) => ({
@@ -551,7 +550,6 @@ function renderProjects() {
         <h2 class="sec-head" data-tooltip="Double-click to rename"><span class="sec-name" data-tooltip-anchor>${esc(s.name)}</span></h2>
         <div class="sec-items">${s.items.map(item).join('') || '<div class="empty-note">Drag projects here.</div>'}</div>
       </section>`).join('') +
-      [...new Set(state.projects.filter(p => p.readOnly).map(p => p.section))].map(section => `<section class="bundled-sec"><h2>embedded · ${esc(section)}</h2>${state.projects.filter(p => p.readOnly && p.section === section).map(item).join('')}</section>`).join('') +
       '<button type="button" class="xrb-add-action" id="new-project">+ New project</button>' +
       (state.unregistered.length ? `<h2>Without manifest</h2>` + state.unregistered.map((id) =>
         `<div class="unregistered row">${esc(id)}<span class="spacer"></span><button class="small" data-create="${esc(id)}">Create manifest</button></div>`).join('') : '');
@@ -604,7 +602,7 @@ function renderProjects() {
     const p = allProjects().find((x) => x.id === b.dataset.id);
     if (!p) return;
     e.preventDefault();
-    if (!p.readOnly) openMenu(e.clientX, e.clientY, p.id);
+    openMenu(e.clientX, e.clientY, p.id);
   }));
   nav.querySelector('#new-project')?.addEventListener('click', action(newProject));
   nav.querySelectorAll('[data-create]').forEach((b) => b.addEventListener('click', action(async () => {
@@ -635,10 +633,11 @@ function closeSearch() {
 async function saveLayout(layout) {
   state.layout = layout;
   renderProjects();
-  await api('PUT', '/api/layout', layout);
+  try { await api('PUT', '/api/layout', layout); }
+  finally { await loadProjects(); }
 }
 
-const cloneLayout = () => ({ sections: state.layout.sections.map((s) => ({ name: s.name, items: [...s.items] })), colors: { ...(state.layout.colors ?? {}) }, platformOrder: [...(state.layout.platformOrder ?? [])] });
+const cloneLayout = () => ({ revision: state.layout.revision, sections: state.layout.sections.map((s) => ({ name: s.name, items: [...s.items] })), colors: { ...(state.layout.colors ?? {}) }, platformOrder: [...(state.layout.platformOrder ?? [])] });
 /** Project id as stored in the layout: archived projects keep their live id there. */
 const layoutId = (id) => id.replace(/^archive\//, '');
 
@@ -680,7 +679,7 @@ function wireSections(nav) {
       if (!name || taken(name)) { if (name) await ask({ title: 'Section exists', message: `There is already a section named "${name}".`, cancel: null }); return renderProjects(); }
       const placed = new Set(state.layout.sections.flatMap((s) => s.items));
       const l = cloneLayout();
-      l.sections.push({ name, items: state.projects.filter(p => !p.readOnly).map((p) => p.id).filter((id) => !placed.has(id)) });
+      l.sections.push({ name, items: state.projects.map((p) => p.id).filter((id) => !placed.has(id)) });
       return saveLayout(l);
     }
     const name = (await editName(h, state.layout.sections[index].name))?.toLowerCase();
@@ -814,7 +813,7 @@ $('#icon-menu').addEventListener('click', action(async (e) => {
   if (color === 'blue') delete m.iconColor;  // blue is the default
   else m.iconColor = color;
   delete m.iconShape;
-  await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest: m, mtimeMs: p.manifestMtimeMs });
+  await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest: m, mtimeMs: p.manifestMtimeMs, revision: p.manifestRevision });
   await loadProjects();
   // Keep the palette open so the generated icon behind it acts as a live preview while cycling.
   menu.querySelectorAll('[data-icon-color]').forEach((item) => item.setAttribute('aria-pressed', String(item.dataset.iconColor === color)));
@@ -828,7 +827,11 @@ function openMenu(x, y, projectId) {
   menu.querySelector('[data-act="rename"]').hidden = !p?.manifest;  // a broken manifest can only be deleted
   menu.querySelector('[data-act="favicon"]').hidden = !p?.manifest;
   menu.querySelector('[data-act="rebuild-app"]').hidden = p?.manifest?.kind !== 'app' || !p.manifest.scripts?.build;
-  menu.querySelector('[data-act="delete"]').hidden = !!p?.running;
+  menu.querySelector('[data-act="cache"]').hidden = p?.origin !== 'bundled';
+  const deletion = menu.querySelector('[data-act="delete"]');
+  deletion.hidden = !!p?.running;
+  deletion.disabled = p?.origin === 'bundled';
+  deletion.dataset.tooltip = deletion.disabled ? 'Embedded projects cannot be deleted. Use Archive instead.' : '';
   // Archive for live projects, Unarchive for archived ones
   const arch = menu.querySelector('[data-act="archive"]');
   arch.textContent = p?.archived ? 'Unarchive' : 'Archive';
@@ -949,6 +952,7 @@ $('#ctx-menu').addEventListener('click', (e) => {
   closeMenu();
   if (act === 'rename') startRename(id);
   if (act === 'rebuild-app') rebuildApp(id).catch(report);
+  if (act === 'cache') openProjectCache(id);
   if (act === 'delete') deleteProject(id).catch(report);
   if (act === 'archive') archiveProject(id).catch(report);
 });
@@ -966,11 +970,11 @@ async function rebuildApp(id) {
  */
 async function archiveProject(id, targetView = null) {
   const p = allProjects().find((x) => x.id === id);
-  await api('POST', `${projectUrl(id)}/${p?.archived ? 'unarchive' : 'archive'}`);
+  const result = await api('POST', `${projectUrl(id)}/${p?.archived ? 'unarchive' : 'archive'}`);
   if (targetView && p) {
     state.view = targetView;
     state.search = null;
-    state.selected = p.archived ? layoutId(id) : `archive/${layoutId(id)}`;
+    state.selected = result.id;
     localStorage.setItem('panel.view', state.view);
     localStorage.setItem('panel.selected', state.selected);
   } else if (state.selected === id) state.selected = null;
@@ -1013,7 +1017,7 @@ function startRename(id) {
       if (save && name && name !== p.manifest.name) {
         const m = structuredClone(p.manifest);
         m.name = name;
-        await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest: m, mtimeMs: p.manifestMtimeMs });
+        await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest: m, mtimeMs: p.manifestMtimeMs, revision: p.manifestRevision });
       }
     } catch (e) {
       report(e);
@@ -1560,7 +1564,7 @@ function publicationFields(p) {
   const result = failure;
   const selectedSlug = published && typeof status?.deployedSlug === 'string'
     ? status.deployedSlug
-    : typeof pub.slug === 'string' ? pub.slug : p.id.split('/').pop();
+    : typeof pub.slug === 'string' ? pub.slug : defaultProjectSlug(p.id);
   // Next version is a draft: editing it (or Patch/Minor/Major from its context menu) deploys nothing. Live version
   // comes only from verified status. Publish/Update and Unpublish sit in the hero below the title.
   const live = catalog?.liveReleaseId ? catalog.releases.find((release) => release.releaseId === catalog.liveReleaseId) : null;
@@ -1644,9 +1648,14 @@ function packageAction(p) {
   };
 }
 
-const cameraMode = (id) => localStorage.getItem(`panel.cams.${id}`) === '1';
+const preferenceId = (p) => p?.preferenceKey ?? p?.id;
+const cameraKey = (id) => `panel.cams.${preferenceId(allProjects().find(project => project.id === id)) ?? id}`;
+const cameraMode = (id) => {
+  const p = allProjects().find(project => project.id === id), saved = localStorage.getItem(cameraKey(id)) ?? localStorage.getItem(`panel.cams.${id}`);
+  return saved === null ? p?.runDefaults?.cameraView === true : saved === '1';
+};
 const surfaceKey = () => 'panel.surface';
-const surfaceChoiceKey = (p, surface) => `panel.surfaceChoice.${surface}.${p.id}`;
+const surfaceChoiceKey = (p, surface) => `panel.surfaceChoice.${surface}.${preferenceId(p)}`;
 const choicesForSurface = (p, surface) => platformChoices(p.manifest, state.plugins, surface).options;
 function projectSurface(p) {
   const current = platformChoiceOf(p.manifest);
@@ -1687,13 +1696,13 @@ async function selectProjectSurface(p, surface) {
 /** Run toggles are app-level so Desktop and standalone WebXR never disagree. */
 const legacyRunOptionKey = (name, p) => `panel.${name}.${p.id}.${platformChoiceOf(p.manifest)}`;
 const appRunOption = (name, p) => {
-  const key = `panel.${name}.${p.id}`, saved = localStorage.getItem(key);
+  const key = `panel.${name}.${preferenceId(p)}`, saved = localStorage.getItem(key);
   if (saved !== null) return saved === '1';
-  const legacy = localStorage.getItem(legacyRunOptionKey(name, p));
+  const legacy = localStorage.getItem(`panel.${name}.${p.id}`) ?? localStorage.getItem(legacyRunOptionKey(name, p));
   if (legacy !== null) localStorage.setItem(key, legacy);
-  return legacy === '1';
+  return legacy === null ? p.runDefaults?.[name] === true || name === 'fullscreen' && p.manifest?.plugins?.desktop?.fullscreen === true : legacy === '1';
 };
-const setAppRunOption = (name, p, on) => localStorage.setItem(`panel.${name}.${p.id}`, on ? '1' : '0');
+const setAppRunOption = (name, p, on) => localStorage.setItem(`panel.${name}.${preferenceId(p)}`, on ? '1' : '0');
 const devMode = (p) => appRunOption('dev', p);
 const setDevMode = (p, on) => setAppRunOption('dev', p, on);
 const flatMode = (p) => appRunOption('flat', p);
@@ -1780,6 +1789,18 @@ function wireWorkingCacheReview(button, content, url) {
   }));
 }
 
+function openProjectCache(id) {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'xrb-dialog';
+  dialog.innerHTML = `<div class="xrb-dialog-header"><h3>Build cache</h3><button type="button" class="xrb-icon-button" data-cache-close aria-label="Close">${iconSvg('close')}</button></div><div class="xrb-stack"><button type="button" class="action-button" id="bundled-cache-review">Refresh review</button><div id="bundled-cache-content"></div></div>`;
+  document.body.append(dialog);
+  dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  dialog.querySelector('[data-cache-close]').addEventListener('click', () => dialog.close());
+  wireWorkingCacheReview(dialog.querySelector('#bundled-cache-review'), dialog.querySelector('#bundled-cache-content'), `${projectUrl(id)}/cache`);
+  dialog.showModal();
+  dialog.querySelector('#bundled-cache-review').click();
+}
+
 function renderDetail(force = false) {
   // Live events re-render the view; never throw away settings the developer is editing.
   if (state.dirty && !force) return;
@@ -1805,72 +1826,6 @@ function renderDetail(force = false) {
   }
   const m = p.manifest;
   const busy = !!state.run && state.run.phase !== 'idle';
-  if (p.readOnly) {
-    el.innerHTML = bundledProjectDetails(p, { icon: iconSrc(p), busy: busy || [...state.jobs.values()].some(job => job.projectId === p.id && ['running', 'queued'].includes(job.state)), running: projectRunning(p) || p.running, providers: state.plugins?.providers ?? [] });
-    wireWorkingCacheReview($('#bundled-cache-review'), $('#bundled-cache-content'), `${projectUrl(p.id)}/cache`);
-    const form = $('#bundled-copy');
-    form.addEventListener('input', () => { state.dirty = true; });
-    form.addEventListener('submit', action(async event => {
-      event.preventDefault();
-      const folder = new FormData(form).get('folder');
-      const copy = await api('POST', `${projectUrl(p.id)}/copy`, { folder });
-      state.dirty = false;
-      state.selected = copy.id;
-      state.view = 'projects';
-      localStorage.setItem('panel.selected', copy.id);
-      localStorage.setItem('panel.view', 'projects');
-      await loadProjects();
-    }));
-    $('#bundled-rebuild')?.addEventListener('click', action(async () => {
-      const job = await api('POST', `${projectUrl(p.id)}/rebuild-app`, {});
-      state.jobs.set(job.id, { ...job, lines: state.jobs.get(job.id)?.lines ?? [] });
-      await loadProjects();
-    }));
-    const settingsForm = $('#bundled-run-settings');
-    settingsForm?.querySelectorAll('[data-provider-override]').forEach(checkbox => checkbox.addEventListener('change', () => {
-      const value = checkbox.closest('[data-provider-setting]').querySelector('input:not([data-provider-override]), select');
-      value.disabled = !checkbox.checked;
-    }));
-    settingsForm?.addEventListener('input', () => { state.dirty = true; if ($('#bundled-run')) $('#bundled-run').disabled = true; });
-    settingsForm?.addEventListener('submit', action(async event => {
-      event.preventDefault();
-      const data = new FormData(settingsForm), current = p.runSettings;
-      const values = { inputs: String(data.get('inputs') ?? '').split(',').map(value => value.trim()).filter(Boolean),
-        display: data.get('display') ?? current.values.display, monitor: Number(data.get('monitor')),
-        fullscreen: data.has('fullscreen'), flat: data.has('flat'), cameraView: m?.target === 'webxr' ? current.values.cameraView : data.has('cameraView') };
-      const overrides = { ...current.overrides };
-      for (const [key, value] of Object.entries(values)) if (JSON.stringify(value) !== JSON.stringify(current.values[key])) {
-        if (JSON.stringify(value) === JSON.stringify(current.defaults[key])) delete overrides[key];
-        else overrides[key] = value;
-      }
-      const providerSettings = structuredClone(current.overrides.providerSettings ?? {});
-      for (const schema of current.providerSchemas ?? []) {
-        const providerValues = {};
-        for (const field of schema.fields) {
-          const prefix = `provider.${schema.provider}.${field.key}`;
-          if (!data.has(`${prefix}.override`)) continue;
-          const raw = data.get(prefix);
-          if (field.type === 'number' && (raw === null || raw === '')) throw new Error(`Enter a number for ${field.label}`);
-          providerValues[field.key] = field.type === 'boolean' ? data.has(prefix) : field.type === 'number' ? Number(raw) : String(raw);
-        }
-        if (Object.keys(providerValues).length) providerSettings[schema.provider] = { owner: schema.owner, schema: schema.schema, values: providerValues };
-        else delete providerSettings[schema.provider];
-      }
-      if (Object.keys(providerSettings).length) overrides.providerSettings = providerSettings; else delete overrides.providerSettings;
-      await api('PUT', `${projectUrl(p.id)}/run-settings`, { revision: current.revision, overrides });
-      state.dirty = false;
-      await loadProjects();
-    }));
-    $('#bundled-reset-settings')?.addEventListener('click', action(async () => {
-      await api('DELETE', `${projectUrl(p.id)}/run-settings`, { revision: p.runSettings.revision });
-      state.dirty = false;
-      await loadProjects();
-    }));
-    $('#bundled-run')?.addEventListener('click', action(() => startManagedRun(p, 'built', p.runSettings?.values.flat ?? false, () => api('POST', `${projectUrl(p.id)}/${m?.target === 'webxr' ? 'preview' : 'run'}`, { mode: 'built' }))));
-    $('#bundled-stop')?.addEventListener('click', action(stopManagedRun));
-    syncRunDock(p);
-    return;
-  }
   const surface = m ? projectSurface(p) : 'display';
   const displaySurface = surface === 'display';
   const publishSurface = surface === 'publish';
@@ -1889,8 +1844,9 @@ function renderDetail(force = false) {
       <button type="button" class="xrb-tab" role="tab" data-surface="build" data-view="build" aria-selected="${surface === 'build'}" ${surface === 'build' ? 'data-active' : ''} ${buildChoices.length ? '' : 'disabled'}>Build</button>
       ${publicationLink ? `<span class="spacer"></span>${publicationLink}` : ''}
     </div>` : '';
-  const manifestButton = m
-    ? `<a href="${esc(vscodeLink(`${p.dir}/xrb-project.json`))}" class="xrb-icon-button" id="open-manifest" title="Open ${esc(p.dir)}/xrb-project.json in VS Code" aria-label="Open JSON">${iconSvg('code')}</a>`
+  const manifestButton = m && p.origin === 'bundled'
+    ? `<button type="button" class="xrb-icon-button" id="open-manifest" aria-label="Open JSON">${iconSvg('code')}</button>`
+    : m ? `<a href="${esc(vscodeLink(`${p.dir}/xrb-project.json`))}" class="xrb-icon-button" id="open-manifest" title="Open ${esc(p.dir)}/xrb-project.json in VS Code" aria-label="Open JSON">${iconSvg('code')}</a>`
     : '';
   // One click to the version chosen in Live version: an inspected release opens its archive, published or not;
   // otherwise the selected destination's live app, whenever it is published and reachable.
@@ -1920,7 +1876,7 @@ function renderDetail(force = false) {
         </div><div class="hero-actions">${projectActions}</div></div>
         ${p.errors.length ? `<ul class="errors">${p.errors.map((e) => `<li>${esc(e.field ? `${e.field}: ` : '')}${esc(e.message)}</li>`).join('')}</ul>` : ''}
       </div>
-    </div>`;
+    </div>${p.sourceUpdate ? `<div class="xrb-stack"><p class="xrb-help">Installed sources changed. Your working sources are preserved at ${esc(p.sourceUpdate.path)}. Review them before continuing.</p><button type="button" class="action-button" id="keep-working-sources">Keep my working sources</button></div>` : ''}`;
   // The surface's primary action (Run/Stop, Publish/Update with Unpublish, Build) sits left-aligned below all content.
   const actionRow = heroButton ? `<div class="project-actions">${heroButton}</div>` : '';
   if (!m) {
@@ -1958,6 +1914,12 @@ function renderDetail(force = false) {
     setRevealed(block, block.dataset.publicationEffect === 'enter', { elapsed: Number(block.dataset.publicationElapsed) || 0 });
   }
 
+  $('#keep-working-sources')?.addEventListener('click', action(async () => {
+    if (!await ask({ title: 'Keep working sources?', message: 'Keep your existing editable sources and settings instead of replacing them with updated product defaults. The next action will rebuild output with the current core.', ok: 'Keep sources' })) return;
+    await api('POST', `${projectUrl(p.id)}/keep-working-sources`, { revision: p.sourceUpdate.revision, confirm: true });
+    await loadProjects();
+  }));
+  if (p.origin === 'bundled') $('#open-manifest')?.addEventListener('click', action(() => api('POST', `${projectUrl(p.id)}/open-manifest`)));
   // The icon itself has no menu: its actions live under Favicon in the project row's right-click menu.
   $('#open-dir')?.addEventListener('click', action(async (e) => { e.preventDefault(); await api('POST', `${projectUrl(p.id)}/open-folder`); }));
   $('#settings [name="display"]')?.closest('.dropdown')?.addEventListener('contextmenu', (e) => {
@@ -2162,7 +2124,7 @@ async function rebasePlatformChoice(p, choice) {
     const latest = await api('GET', projectUrl(p.id));
     const { next } = platformChoiceManifest(p, latest.manifest, choice);
     try {
-      return await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest: next, mtimeMs: latest.manifestMtimeMs });
+      return await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest: next, mtimeMs: latest.manifestMtimeMs, revision: latest.manifestRevision });
     } catch (error) {
       if (!(error instanceof ApiError) || error.status !== 409 || error.data?.details?.needsConfirm) throw error;
       conflict = error;
@@ -2184,7 +2146,7 @@ async function savePlatformChoice(p, choice) {
   state.queuedPlatform = null;
   const next = previewPlatformChoice(p, choice);
   try {
-    await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest: next, mtimeMs: p.manifestMtimeMs });
+    await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest: next, mtimeMs: p.manifestMtimeMs, revision: p.manifestRevision });
     state.fieldErrors = {};
     await loadProjects();
     const queued = state.queuedPlatform?.projectId === p.id ? state.queuedPlatform : null;
@@ -2251,7 +2213,7 @@ async function rebasePublicationSettings(p, desired, confirm = []) {
       publication: { ...desired, id: current?.id ?? desired.id, routes },
     };
     try {
-      return await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest, mtimeMs: latest.manifestMtimeMs, ...(confirm.length ? { confirm } : {}) });
+      return await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest, mtimeMs: latest.manifestMtimeMs, revision: latest.manifestRevision, ...(confirm.length ? { confirm } : {}) });
     } catch (error) {
       if (!(error instanceof ApiError) || error.status !== 409 || error.data?.details?.needsConfirm) throw error;
       conflict = error;
@@ -2336,7 +2298,7 @@ async function saveSettings(p, form, changedName) {
   }
   if (publicationSave) renderDetail(true);
   try {
-    await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest: m, mtimeMs: p.manifestMtimeMs });
+    await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest: m, mtimeMs: p.manifestMtimeMs, revision: p.manifestRevision });
     state.fieldErrors = {};
     state.dirty = false;
     clearPublicationSave();
@@ -2368,7 +2330,7 @@ async function saveSettings(p, form, changedName) {
       if (yes) {
         try {
           if (editingPublication) await rebasePublicationSettings(p, m.publication, ['publication-route']);
-          else await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest: m, mtimeMs: p.manifestMtimeMs, confirm: ['publication-route'] });
+          else await api('PUT', `${projectUrl(p.id)}/manifest`, { manifest: m, mtimeMs: p.manifestMtimeMs, revision: p.manifestRevision, confirm: ['publication-route'] });
           state.dirty = false;
         } finally {
           clearPublicationSave();
@@ -3584,10 +3546,10 @@ $('#act-cams').addEventListener('change', (e) => {
   const running = state.run && state.run.phase === 'running';
   const id = running ? state.run.projectId : state.selected;
   if (!id) return;
-  if (!running) { localStorage.setItem(`panel.cams.${id}`, enabled ? '1' : '0'); return; }
+  if (!running) { localStorage.setItem(cameraKey(id), enabled ? '1' : '0'); return; }
   e.target.disabled = true;
   api('POST', '/api/run/cameras', { enabled }).then(() => {
-    localStorage.setItem(`panel.cams.${id}`, enabled ? '1' : '0');
+    localStorage.setItem(cameraKey(id), enabled ? '1' : '0');
     e.target.disabled = false;
   }).catch((err) => { e.target.checked = !enabled; e.target.disabled = false; report(err); });
 });

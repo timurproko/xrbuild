@@ -8,7 +8,7 @@ import { findCmake, nativeBinaryFingerprint, rebuildHost, resolvedHostFreshness,
 import { runProcess, type JobContext } from '../src/jobs.ts';
 import { createServer } from '../src/server.ts';
 import { freePort } from '../src/host-runner.ts';
-import { withBrowser, sleep } from './browser-fixture.ts';
+import { withBrowser } from './browser-fixture.ts';
 
 test('real native compiler builds cached host and both origins against selected SDK/dependencies without product writes', { skip: process.platform !== 'win32', timeout: 240_000 }, async t => {
   const artifacts = path.join(REPO, '.artifacts'); await fs.mkdir(artifacts, { recursive: true });
@@ -95,16 +95,24 @@ int main(int argc, char** argv) {
       const product = nativeBinaryFingerprint(core);
       try {
         await withBrowser(async ({ navigate, evaluate }) => {
-          await navigate(server.url, `!!document.querySelector('[name="provider.product.gain.override"]')`);
-          await evaluate(`(() => { const toggle=document.querySelector('[name="provider.product.gain.override"]'); toggle.checked=true;toggle.dispatchEvent(new Event('change',{bubbles:true}));const value=document.querySelector('[name="provider.product.gain"]');value.value='7';value.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#bundled-run-settings').requestSubmit(); })()`);
-          let saved;
-          for (let i=0;i<100;i++) { saved=await fetch(server.url+'api/projects/bundled%3Aoptions/run-settings').then(response=>response.json()); if(saved.overrides?.providerSettings?.product?.values.gain===7)break; await sleep(50); }
+          await navigate(server.url, `!!document.querySelector('.project-workflow-tabs')`);
+          // Preserve schema-bound legacy choices, then promote them into normal editable settings.
+          const saved = await evaluate(`(async () => {
+            const route='/api/projects/bundled%3Aoptions/run-settings';
+            const current=await fetch(route).then(r=>r.json());
+            const schema=current.providerSchemas.find(s=>s.provider==='product');
+            return fetch(route,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({revision:current.revision,overrides:{providerSettings:{product:{owner:schema.owner,schema:schema.schema,values:{gain:7}}}}})}).then(r=>r.json());
+          })()`);
           assert.equal(saved.overrides.providerSettings.product.values.gain, 7);
-          await navigate(server.url, `document.querySelector('[name="provider.product.gain"]')?.value === '7'`);
-          assert.equal(await evaluate(`document.querySelector('[name="provider.product.gain.override"]').checked`), true);
-          await evaluate(`document.querySelector('#bundled-cache-review').click()`);
-          for(let i=0;i<100&&!await evaluate(`document.querySelector('#bundled-cache-content').textContent.includes('No obsolete')`);i++)await sleep(50);
-          assert.match(await evaluate(`document.querySelector('#bundled-cache-content').textContent`), /No obsolete/);
+          const updated = await evaluate(`(async () => {
+            const route='/api/projects/bundled%3Aoptions', current=await fetch(route).then(r=>r.json());
+            return fetch(route+'/manifest',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({mtimeMs:current.manifestMtimeMs,revision:current.manifestRevision,manifest:{...current.manifest,name:'Saved provider options'}})}).then(r=>r.json());
+          })()`);
+          assert.equal(updated.manifest.plugins.product.gain, 7);
+          await navigate(server.url, `document.querySelector('.project-title-row h3')?.textContent === 'Saved provider options'`);
+          assert.equal(await evaluate(`!!document.querySelector('#settings') && !document.querySelector('#bundled-run-settings')`), true);
+          const cache = await fetch(server.url+'api/projects/bundled%3Aoptions/cache').then(response=>response.json());
+          assert.ok(Array.isArray(cache.candidates));
         });
         assert.equal(nativeBinaryFingerprint(core), product);
       } finally { await server.close(); }

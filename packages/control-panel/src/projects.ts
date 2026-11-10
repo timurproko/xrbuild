@@ -2,6 +2,7 @@
 // workspace's projects/ (projects/<section>/<project>; projects/unsorted/ for none), or archived in
 // projects/archive/<project>. There is no central registry; the folders are the list and the sections.
 import fs from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { ICON_COLORS, ICON_SHAPES, isIconColor, isIconShape, type IconColor, type IconShape } from '../../app-icon/src/icon.ts';
 import { BUILD_TARGETS, type BuildTarget, type RoleSelection } from './packagers.ts';
@@ -59,6 +60,15 @@ export interface Project {
   key?: string;
   origin?: 'bundled' | 'workspace';
   readOnly?: boolean;
+  /** Installed provenance retained by user-owned effective embedded projects. */
+  productDir?: string;
+  integrationWorkspace?: string;
+  workingRoot?: string;
+  stateProblem?: string;
+  sourceUpdate?: { revision: string; path: string };
+  organizationRevision?: string;
+  importedRunRevision?: string | null;
+  runDefaults?: { flat: boolean; cameraView: boolean };
   /** the project's folder name, e.g. "demo"; "archive/demo" when archived */
   id: string;
   dir: string;
@@ -183,7 +193,7 @@ export const UNSORTED = 'unsorted';
 export const RESERVED_SECTIONS = [ARCHIVE, UNSORTED];
 
 /** Reads the project folder `dir` with the given id; null when it holds no manifest. */
-async function readProject(dir: string, id: string, section: string | null): Promise<Project | null> {
+export async function readProject(dir: string, id: string, section: string | null): Promise<Project | null> {
   const file = path.join(dir, MANIFEST);
   let stat;
   try {
@@ -341,7 +351,14 @@ export async function saveManifest(dir: string, manifest: Manifest, expectedMtim
     const now = await fs.stat(file).then((s) => s.mtimeMs, () => 0);
     if (now !== expectedMtimeMs) throw new ManifestConflictError(`${file} changed on disk; reload the project before saving`);
   }
-  await fs.writeFile(file, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+  const temporary = path.join(dir, `.xrb-manifest-${randomUUID()}.tmp`);
+  const handle = await fs.open(temporary, 'wx', 0o600);
+  try {
+    try { await handle.writeFile(JSON.stringify(manifest, null, 2) + '\n'); await handle.sync(); }
+    finally { await handle.close(); }
+    if (expectedMtimeMs !== undefined && (await fs.stat(file)).mtimeMs !== expectedMtimeMs) throw new ManifestConflictError(`${file} changed during save; reload the project`);
+    await fs.rename(temporary, file);
+  } finally { await fs.unlink(temporary).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; }); }
   return { errors: [], mtimeMs: (await fs.stat(file)).mtimeMs };
 }
 

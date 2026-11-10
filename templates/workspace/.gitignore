@@ -3,6 +3,11 @@ node_modules/
 dist/
 build/
 builds/
+# Durable local embedded edits, deployment state and cooperating-writer scratch are user-owned.
+.xrb/
+.xrb-layout.lock
+xrb-panel.json.*.tmp
+.xrb-manifest-*.tmp
 plugins/*/bin/
 third_party/
 # User-owned plugin configuration may contain private destinations or credentials.

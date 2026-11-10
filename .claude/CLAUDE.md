@@ -80,13 +80,21 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   Same root-relative manifests and `plugins/`, `projects/<section>/<id>/`, `docs/`, `third_party/` structure as a user
   workspace. Product sources/defaults are read-only in ordinary panel use; user config belongs in
   `<selected-workspace>/config/plugins/<id>/`. Public bundled dependency fetches use core `third_party/`.
-  Bundled project IDs are origin-qualified; packaged preview/run is read-only. Editing/development/publication/package/
-  icon actions currently require Copy to workspace in the selected editable project repository. Copies do not inherit
-  live deployment or device identity. Launch config, generated icons and bundled recordings use selected-workspace
-  `build/project-state/`, not product source. Personal run settings use scoped `config/projects/<key>/run.json` with
-  explicit revision-checked Save/Restore; malformed or linked settings block Run without being replaced. Advanced
-  choices bind actual selected provider ownership/schema and permit declared boolean/number/select fields only. Explicit bundled rebuilds install the frozen public embedded workspace in a fresh
-  selected-workspace `build/projects/<key>/` snapshot, then publish immutable output without product writes. Cached
+  Embedded project IDs are origin-qualified and retain stable logical identity through organization changes. Embedded
+  apps use the normal compact Develop/Publish/Build UI and support ordinary settings/name/icon edits, development,
+  runs, packaging, publication, mixed sections/order and archive/unarchive; only deletion is forbidden by origin.
+  Installed sources stay immutable. Explicit writable actions prepare durable editable public inputs in the selected
+  project repository's `.xrb/embedded-projects/<scope>/w-<id>/workspace/`; no separate Copy step or catalog duplicate.
+  Working sources/settings/deployment identity survive rebuild/restart and stay outside disposable caches. Logical
+  embedded placement in `xrb-panel.json` never moves product folders. Operation locks in `.xrb/embedded-locks/`
+  protect builds/settings/organization and remain leased for active runs. Installed input changes require explicit
+  non-destructive reconciliation; Keep my working sources preserves edits and invalidates current output for rebuild.
+  Valid unmaterialized packaged preview/run stays read-only. Optional independent copies reset deployment/device identity.
+  Launch config/default icons use integration-workspace `build/project-state/`; effective recordings use writable sources.
+  Legacy personal `config/projects/<key>/run.json` choices remain scoped/revision-checked and import once into effective
+  settings; malformed/linked/schema-mismatched records block preparation without replacement. Normal settings then
+  take precedence. Managed public dependencies retain pinned/frozen isolated installation, prerequisite ordering and
+  checked immutable finalized output under integration-workspace `build/projects/<key>/`, without product writes. Cached
   preview/native runs share validated output; stale/failed/foreign state blocks automatic fallback. Browser routes pin
   generations. No user/private workspace packages or ambient repository/package-manager configuration is inherited;
   build code is trusted, not sandboxed. `setup:embedded`, `build:embedded` and `test:embedded` use explicit writable

@@ -256,7 +256,7 @@ dialog.ask .log { max-height: 200px; }
 .nav-tabs.xrb-section-label { flex: none; }
 .nav-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
 #projects h2, #plugin-nav h2, #settings-nav .settings-module-heading { top: 0; }
-#projects .sec-head, #projects .bundled-sec > h2, #plugin-nav .sec-head { margin: 0; padding: 0 2px 8px; }
+#projects .sec-head, #plugin-nav .sec-head { margin: 0; padding: 0 2px 8px; }
 #projects .proj, #plugin-nav .proj, #settings-nav .proj { flex: none; }
 /* Disabled plugins remain selectable so they can be re-enabled, but their tiles look inactive. */
 #plugin-nav .proj.plugin-disabled .text, #plugin-nav .proj.plugin-disabled img, #plugin-nav .proj.plugin-disabled .plugin-symbol,

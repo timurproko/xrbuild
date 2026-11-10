@@ -5,6 +5,8 @@ import path from 'node:path';
 import { pluginMeta, readPluginPrefs, type PluginMeta, type PluginPrefs } from './plugin-manager.ts';
 import { discoverAll, type Project } from './projects.ts';
 import { nativeArtifacts, type NativeArtifacts } from './plugin-artifacts.ts';
+import { effectiveEmbeddedProject } from './embedded-project-state.ts';
+import { readSavedLayout, withEmbeddedPlacement } from './layout.ts';
 
 export type ExtensionOrigin = 'bundled' | 'workspace';
 export interface ResolvedPlugin extends NativeArtifacts {
@@ -171,6 +173,7 @@ export async function discoverProjectCatalog(core: string, workspace: string, pr
   if (withinRoot(await futurePath(path.join(core, 'embedded')), await futurePath(projects)))
     return { projects: [], problems: ['Editable projects must be outside embedded product sources'] };
   let embeddedRoot: string | null = null;
+  const layout = await readSavedLayout(projects);
   for (const { origin, root } of roots(core, projects)) {
     try {
       const workspaceRoot = await plainRoot(root);
@@ -183,7 +186,9 @@ export async function discoverProjectCatalog(core: string, workspace: string, pr
         try {
           await containedPath(workspaceRoot, path.relative(workspaceRoot, path.join(project.dir, 'xrb-project.json')).split(path.sep).join('/'));
           const key = `${origin}:${project.id}`, readOnly = origin === 'bundled';
-          found.push({ key, origin, workspaceRoot, readOnly, project: { ...project, id: readOnly ? key : project.id, key, origin, readOnly } });
+          const owned = { ...project, id: readOnly ? key : project.id, key, origin, readOnly };
+          const effective = readOnly ? withEmbeddedPlacement(await effectiveEmbeddedProject(core, workspace, projects, owned), layout) : { ...owned, organizationRevision: undefined };
+          found.push({ key: readOnly ? effective.key! : key, origin, workspaceRoot, readOnly, project: effective });
         } catch (error) { problems.push(`${origin}:${project.id}: ${(error as Error).message}`); }
       }
     } catch (error) { problems.push(`${origin}: ${(error as Error).message}`); }

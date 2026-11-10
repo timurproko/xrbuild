@@ -9,7 +9,7 @@ import { assertWritablePath } from './project-access.ts';
 import type { JobContext } from './jobs.ts';
 
 const OMIT = new Set(['.git', '.gitmodules', '.xrbuild', '.artifacts', '.xrb', 'node_modules', 'dist', 'build', 'builds', 'coverage', '.cache', '.vite', 'recordings', 'logs', 'third_party']);
-const omit = (name: string) => OMIT.has(name.toLowerCase()) || /^\.env(?:\.|$)/i.test(name) || /\.(?:pem|key|pfx|p12|jks|keystore|log)$/i.test(name);
+const omit = (name: string) => OMIT.has(name.toLowerCase()) || /^\.xrb-manifest-.*\.tmp$/i.test(name) || /^\.env(?:\.|$)/i.test(name) || /\.(?:pem|key|pfx|p12|jks|keystore|log)$/i.test(name);
 export const inputHash = (value: string) => createHash('sha256').update(value).digest('hex');
 export const scriptName = (value: unknown): value is string => typeof value === 'string' && /^\w[\w:.-]*$/.test(value);
 export function outputDirectory(entry: unknown): asserts entry is string {
@@ -37,8 +37,8 @@ export async function buildJson(file: string): Promise<any> {
   const text = await metadataText(file);
   try { return JSON.parse(text); } catch { throw new Error('Invalid build metadata JSON'); }
 }
-export async function embeddedDeclaration(core: string) {
-  const root = await containedPath(canonicalFuturePath(core), 'embedded');
+export async function embeddedDeclaration(core: string, workspaceRoot?: string) {
+  const root = workspaceRoot ?? await containedPath(canonicalFuturePath(core), 'embedded');
   const declaration = await buildJson(await containedPath(root, 'package.json'));
   if (declaration?.private !== true || typeof declaration.packageManager !== 'string' || !/^pnpm@\d+\.\d+\.\d+(?:\+sha\d+\.[a-zA-Z0-9]+)?$/.test(declaration.packageManager)) throw new Error('Embedded root requires private: true and an exact pinned pnpm manager');
   const lock = await containedPath(root, 'pnpm-lock.yaml'), lockStat = await fs.lstat(lock);
@@ -89,7 +89,7 @@ export async function embeddedInputs(core: string, excluded: string | string[] =
     const source = await containedPath(canonicalFuturePath(core), relative).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
     sdk.push(source ? (await buildInventory(source)).fingerprint : 'missing');
   }
-  for (const relative of ['package.json', 'pnpm-lock.yaml', 'tools/fetch-deps/deps.lock.json', 'packages/sdk/package.json', 'packages/ui-kit/package.json', 'packages/control-panel/package.json', 'packages/control-panel/src/browser-build.ts', 'packages/control-panel/src/project-build.ts', 'packages/control-panel/src/embedded-inputs.ts', 'packages/control-panel/src/embedded-workspace.ts', 'packages/control-panel/src/service-artifacts.ts', 'packages/control-panel/src/component-resolver.ts', 'packages/control-panel/src/plugin-manager.ts']) {
+  for (const relative of ['package.json', 'pnpm-lock.yaml', 'tools/fetch-deps/deps.lock.json', 'packages/sdk/package.json', 'packages/ui-kit/package.json', 'packages/control-panel/package.json', 'packages/control-panel/src/browser-build.ts', 'packages/control-panel/src/project-build.ts', 'packages/control-panel/src/embedded-inputs.ts', 'packages/control-panel/src/embedded-workspace.ts', 'packages/control-panel/src/embedded-project-state.ts', 'packages/control-panel/src/embedded-project-output.ts', 'packages/control-panel/src/service-artifacts.ts', 'packages/control-panel/src/component-resolver.ts', 'packages/control-panel/src/plugin-manager.ts']) {
     const file = await containedPath(canonicalFuturePath(core), relative).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
     if (file && (await fs.lstat(file)).nlink !== 1) throw new Error('Core build input uses a hard link');
     sdk.push(file ? inputHash(await fs.readFile(file, 'utf8')) : 'missing');
@@ -127,6 +127,12 @@ export async function prepareEmbeddedSnapshot(core: string, workspace: string, r
   if (before.fingerprint !== (await embeddedInputs(core, excluded)).fingerprint || (await buildInventory(snapshot, true, excluded)).fingerprint !== before.sourceFingerprint) throw new Error('Bundled inputs changed while copying; rebuild again');
   const config = path.join(work, 'user.npmrc'), globalConfig = path.join(work, 'global.npmrc');
   await fs.writeFile(config, '', { flag: 'wx' }); await fs.writeFile(globalConfig, '', { flag: 'wx' });
+  return { ...embeddedSnapshotRunner(core, workspace, work, snapshot), markWorking };
+}
+
+/** Resume a durable user-owned snapshot with the same isolated package-manager environment. */
+export function embeddedSnapshotRunner(core: string, workspace: string, work: string, snapshot: string) {
+  const config = path.join(work, 'user.npmrc'), globalConfig = path.join(work, 'global.npmrc');
   const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(?:npm_|pnpm_|git_|node_(?:options|path|auth_token)$|ssh_(?:auth_sock|askpass)$|corepack_npm_)/i.test(key)));
   const env = { ...inherited, GIT_CEILING_DIRECTORIES: snapshot, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1', COREPACK_ENABLE_PROJECT_SPEC: '1', COREPACK_ENABLE_STRICT: '1', XRB_CORE: canonicalFuturePath(core), XRB_HOME: snapshot, XRB_PROJECTS_HOME: snapshot, XRB_TEST_ROOT: path.join(workspace, 'build', 'tests', inputHash(work).slice(0, 16)),
     npm_config_userconfig: config, npm_config_globalconfig: globalConfig, npm_config_store_dir: path.join(work, 'store'), npm_config_enable_pre_post_scripts: 'false' };
@@ -135,7 +141,7 @@ export async function prepareEmbeddedSnapshot(core: string, workspace: string, r
     if (process.platform === 'win32') await ctx.run('cmd.exe', ['/d', '/s', '/c', `corepack pnpm ${args.join(' ')}`], { cwd, env });
     else await ctx.run('corepack', ['pnpm', ...args], { cwd, env });
   };
-  return { work, snapshot, markWorking,
+  return { work, snapshot, env,
     async install(ctx: JobContext) {
       ctx.line('Installing the frozen public embedded workspace in a writable snapshot (dependency lifecycle scripts disabled).');
       await pnpm(ctx, ['install', '--frozen-lockfile', '--ignore-scripts', '--ignore-pnpmfile', '--config.package-import-method=copy'], snapshot);

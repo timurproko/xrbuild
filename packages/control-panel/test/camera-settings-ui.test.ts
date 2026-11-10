@@ -24,7 +24,7 @@ test('project 2D mode replaces global camera settings and keeps the remaining co
   assert.match(panel, /flat && selection\.display !== 'desktop' \? \['--view=2d'\]/);
   assert.match(panel, /async preview\(p: Project, mode: RunMode[\s\S]*runner\.startPreview[\s\S]*case 'preview'/);
 
-  assert.match(app, /const appRunOption = \(name, p\) => \{[\s\S]*const key = `panel\.\$\{name\}\.\$\{p\.id\}`[\s\S]*legacyRunOptionKey\(name, p\)[\s\S]*localStorage\.setItem\(key, legacy\)/);
+  assert.match(app, /const appRunOption = \(name, p\) => \{[\s\S]*const key = `panel\.\$\{name\}\.\$\{preferenceId\(p\)\}`[\s\S]*legacyRunOptionKey\(name, p\)[\s\S]*localStorage\.setItem\(key, legacy\)/);
   assert.match(app, /const devMode = \(p\) => appRunOption\('dev', p\)/);
   assert.match(app, /const flatMode = \(p\) => appRunOption\('flat', p\)/);
   assert.match(app, /const fullscreenMode = \(p\) => appRunOption\('fullscreen', p\)/);

@@ -109,8 +109,8 @@ importers:
   await new Promise<void>(resolve => server.server.listen(server.port, '127.0.0.1', resolve));
   try {
     await withBrowser(async ({ navigate, evaluate }) => {
-      await navigate(server.url, `!!document.querySelector('#bundled-cache-review')`);
-      await evaluate(`document.querySelector('#bundled-cache-review').click()`);
+      await navigate(server.url, `!!document.querySelector('.proj[data-id="bundled:demo"]')`);
+      await evaluate(`document.querySelector('.proj[data-id="bundled:demo"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:80,clientY:300}));document.querySelector('#ctx-menu [data-act="cache"]').click()`);
       for (let i=0;i<100&&!await evaluate(`!!document.querySelector('.working-cache-form input')`);i++) await sleep(50);
       await evaluate(`document.querySelector('.working-cache-form input').checked=true;document.querySelector('.working-cache-form').requestSubmit()`);
       for(let i=0;i<100&&!await evaluate(`document.querySelector('#ask').open`);i++)await sleep(50);

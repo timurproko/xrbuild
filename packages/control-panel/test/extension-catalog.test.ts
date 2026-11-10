@@ -118,7 +118,8 @@ test('public-only discovery and a separate project repository need no private wo
   await f.write(f.workspace, 'projects/unsorted/not-selected/xrb-project.json', { name: 'Other', kind: 'app' });
   const catalog = await discoverProjectCatalog(f.core, f.workspace, projects);
   assert.deepEqual(catalog.problems, []);
-  assert.deepEqual(catalog.projects.map(p => p.key), ['bundled:demo', 'bundled:archive/old', 'workspace:demo']);
+  assert.deepEqual(catalog.projects.map(p => p.key), ['bundled:demo', 'bundled:old', 'workspace:demo']);
+  assert.equal(catalog.projects[1].project.id, 'bundled:archive/old', 'archive membership does not change logical identity');
   assert.equal(catalog.projects[0].project.manifest?.name, catalog.projects[2].project.manifest?.name);
   assert.equal(catalog.projects[2].readOnly, false);
   const aliased = await discoverProjectCatalog(f.core, f.workspace, f.embedded);
