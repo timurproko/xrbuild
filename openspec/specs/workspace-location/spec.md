@@ -6,15 +6,15 @@ Define how ordinary and repository-development workspaces are selected and kept 
 ## Requirements
 
 ### Requirement: Workspace roots
-A workspace SHALL remain a logical root distinct from the XR Build core, whether it is stored outside the core repository or tracked at the repository's `.xrbuild/` path. Every workspace SHALL use the same project, plugin, layout, dependency and output conventions, and core modules SHALL NOT import concrete workspace integrations.
+A workspace SHALL remain a logical root distinct from the XR Build core, whether stored outside the core repository or independently cloned at the repository's ignored `.xrbuild/` path. Every workspace SHALL use the same project, plugin, layout, dependency and output conventions, and core modules SHALL NOT import concrete workspace integrations.
 
 #### Scenario: Embedded workspace
-- **WHEN** the repository contains `.xrbuild/projects`, `.xrbuild/plugins` and the workspace package files
-- **THEN** the panel and tools treat `.xrbuild/` as one ordinary workspace root and still treat the repository root as the core root
+- **WHEN** an authorized maintainer clones the private workspace at `<checkout>/.xrbuild/`
+- **THEN** the panel and tools treat it as one ordinary workspace root and still treat the outer repository as the core root
 
 #### Scenario: Separate plugins
-- **WHEN** the embedded workspace contains concrete display, input, platform, packager or publisher integrations
-- **THEN** each integration remains a separate folder under `.xrbuild/plugins/` and core code reaches it only through the applicable neutral contract
+- **WHEN** the private workspace contains concrete display, input, platform, packager or publisher integrations
+- **THEN** each integration remains a separate folder under its `plugins/` and core code reaches it only through the applicable neutral contract
 
 ### Requirement: User workspace resolution
 Without an explicit workspace argument, the workspace SHALL be the folder named by `XRB_HOME` when it is set and `%USERPROFILE%\.xrbuild` otherwise. The panel and workspace dependency command SHALL use the same default, and the existence of `<repo>/.xrbuild/` SHALL NOT change this ordinary resolution. The prior `%USERPROFILE%\.xr-build` workspace SHALL NOT be automatically migrated or deleted; it remains available through an explicit `XRB_HOME` override.
@@ -51,28 +51,35 @@ The panel and workspace dependency tool SHALL accept an explicit workspace path.
 - **THEN** Windows receives a distinct **XR Build Dev** shortcut that launches that checkout's `start-repo.vbs`, while **XR Build** continues to use the ordinary user workspace
 
 ### Requirement: Embedded workspace versioning
-The embedded integration workspace SHALL be tracked by the repository's root Git history and SHALL NOT contain
-nested Git metadata. Its plugin source, manifests, locks and pinned third-party dependencies SHALL be tracked, with
-binary dependencies stored through Git LFS. When a separate project repository is selected, project source, project
-layout and app package metadata SHALL be versioned only by that repository and SHALL NOT be duplicated in the
-embedded workspace. Credentials, signing material, installed packages, compiled plugin output and generated builds
-SHALL remain ignored.
+The development workspace at `.xrbuild/` SHALL be an independent private Git clone ignored as a whole by the core, not a submodule, symlink or junction. Its own history SHALL version plugin source, projects when not separately selected, manifests, locks and pinned dependencies, with binaries stored through Git LFS. Credentials, signing material, installed packages, compiled output and generated builds SHALL remain ignored. Separate project repositories SHALL retain exclusive ownership of their app source and package metadata.
+
+#### Scenario: Core staging
+- **WHEN** an authorized maintainer edits a file inside the nested private workspace and stages ordinary core changes
+- **THEN** core Git does not stage the workspace file or its nested Git metadata
 
 #### Scenario: Import an existing workspace
-- **WHEN** the maintainer imports integration files into `.xrbuild/` and selects a separate project repository
-- **THEN** root Git tracks the private plugin source and LFS pointers but no nested repository or app source
-
-#### Scenario: Private integrations with public projects
-- **WHEN** repository development selects `<repo>/.xrbuild/` as the integration workspace and a sibling checkout as the project repository
-- **THEN** root Git tracks the private plugins but no app source, while the sibling repository tracks the projects and app package metadata
+- **WHEN** a maintainer imports existing integration files into the private workspace repository
+- **THEN** that repository tracks their source and LFS pointers while the core ignores the entire nested workspace
 
 #### Scenario: Build the embedded workspace
-- **WHEN** projects from a separate project repository use plugins from the embedded integration workspace
-- **THEN** installed packages, compiled binaries and generated output do not appear as tracked changes in either repository; pinned LFS dependencies remain tracked privately
+- **WHEN** projects use plugins from the nested private integration workspace
+- **THEN** installed packages, compiled binaries and generated output remain ignored in both repositories while pinned dependencies stay tracked privately
+
+#### Scenario: Private workspace commit
+- **WHEN** an authorized maintainer commits private integration changes
+- **THEN** the commit belongs only to the workspace repository and not to core history
+
+#### Scenario: Private integrations with public projects
+- **WHEN** the selected project repository is distinct from the private integration workspace
+- **THEN** project source and app package metadata are tracked only in the selected project repository
+
+#### Scenario: Fresh public clone
+- **WHEN** a user clones the public core without private-repository credentials
+- **THEN** the core has no tracked private workspace files or private LFS download requirement and ordinary user-workspace mode remains usable
 
 #### Scenario: Fresh clone with LFS
-- **WHEN** a maintainer clones the private repository with Git LFS and separately clones the project repository
-- **THEN** private pinned integration files materialize under `.xrbuild/third_party/` and the project checkout contains no private dependency objects
+- **WHEN** an authorized maintainer separately clones the private workspace with Git LFS
+- **THEN** its pinned integration binaries materialize under that workspace using its own attributes and LFS storage
 
 ### Requirement: Private workspace naming boundary
 The repository's core paths and file contents SHALL satisfy the neutral-name policy. The name guard SHALL exempt paths and contents beneath `.xrbuild/` as private workspace material. Core code SHALL NOT depend on private integration identities, and credentials or signing material SHALL NOT be tracked in the private workspace.
@@ -174,3 +181,14 @@ The launcher SHALL support its existing mouse and hand interactions without rend
 
 - **WHEN** the launcher receives supported hand input
 - **THEN** card and page controls remain interactive after the launcher-specific mouse cursor object is removed
+
+### Requirement: Independent task workspace ownership
+Core task worktrees SHALL NOT automatically share the primary private workspace through a link or shared dependency tree. Private development MAY use an independently provisioned task-local clone. Core worktree cleanup SHALL refuse to discard a nested private repository through an outer clean-status check alone.
+
+#### Scenario: Task-local private changes
+- **WHEN** a task has its own private workspace clone
+- **THEN** explicit repository-development commands select that task's workspace and private edits do not modify the primary clone
+
+#### Scenario: Cleanup with nested Git repository
+- **WHEN** a clean core worktree still contains an independently versioned private workspace
+- **THEN** automated core cleanup refuses removal until the private clone has been preserved and handled separately
