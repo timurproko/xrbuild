@@ -14,6 +14,7 @@ import { hostPaths, hostCachePaths, resolvedHostPaths, hostSourceFingerprint, va
 export { hostPaths, hostCachePaths, resolvedHostPaths } from './host-artifacts.ts';
 export { nativeBinaryFingerprint } from './plugin-artifacts.ts';
 import { mergeProviderProbes, providerQuery } from './native-provider-validation.ts';
+import { nativeDependencyRoot } from './native-dependencies.ts';
 
 export const PLUGIN_BUILD_SUCCESS = '.xrb-last-successful-build';
 
@@ -217,10 +218,11 @@ export async function nativePluginPlan(repo: string, workspace: string, includeD
   return { projects, problems };
 }
 
-export function resolvedPluginCmakeVars(repo: string, project: NativePluginProject): string[] {
+export function resolvedPluginCmakeVars(repo: string, project: NativePluginProject, coreDependencies = path.join(repo, 'third_party')): string[] {
   const p = (value: string) => value.split(path.sep).join('/');
-  return [`-DXRB_PLUGIN_SDK=${p(path.join(repo, 'native/plugin-sdk'))}`, `-DXRB_THIRD_PARTY=${p(project.plugin.dependencyRoot)}`,
-    `-DXRB_CORE_THIRD_PARTY=${p(path.join(repo, 'third_party'))}`, `-DXRB_PLUGIN_BIN_DIR=${p(project.outputDir)}`];
+  const dependencies = canonicalFuturePath(project.plugin.dependencyRoot) === canonicalFuturePath(path.join(repo, 'third_party')) ? coreDependencies : project.plugin.dependencyRoot;
+  return [`-DXRB_PLUGIN_SDK=${p(path.join(repo, 'native/plugin-sdk'))}`, `-DXRB_THIRD_PARTY=${p(dependencies)}`,
+    `-DXRB_CORE_THIRD_PARTY=${p(coreDependencies)}`, `-DXRB_PLUGIN_BIN_DIR=${p(project.outputDir)}`];
 }
 
 export async function resolvedHostFreshness(repo: string, workspace: string, coreOnly = false): Promise<HostFreshness> {
@@ -343,14 +345,49 @@ export async function listProviders(repo: string, workspace: string, includeDisa
   return list;
 }
 
-/** cmake on PATH, else one bundled with any installed Visual Studio version/edition. */
-export function findCmake(): string | null {
+/** Known system tool roots, including when a long-running launcher has an older environment. */
+export function nativeToolRoots(env: NodeJS.ProcessEnv = process.env): string[] {
+  const drive = env.SystemDrive ?? 'C:';
+  return [...new Set([env.ProgramW6432, env.ProgramFiles, env['ProgramFiles(x86)'], path.join(drive, 'Program Files'), path.join(drive, 'Program Files (x86)')].filter((value): value is string => !!value))];
+}
+export function buildToolInstances(): Array<{ root: string; major: number }> {
+  const found = new Map<string, number>();
+  if (process.platform !== 'win32') return [];
+  for (const pf of nativeToolRoots()) {
+    const locator = path.join(pf, 'Microsoft Visual Studio/Installer/vswhere.exe');
+    if (existsSync(locator)) {
+      try {
+        const rows = JSON.parse(execFileSync(locator, ['-products', '*', '-format', 'json', '-utf8'], { encoding: 'utf8', windowsHide: true, timeout: 5000 }));
+        for (const row of rows) if (row.isComplete && typeof row.installationPath === 'string' && /^\d+\./.test(row.installationVersion)) found.set(row.installationPath, Number(row.installationVersion.split('.')[0]));
+      } catch { /* Conventional locations below still allow manual installations. */ }
+    }
+    const root = path.join(pf, 'Microsoft Visual Studio');
+    if (!existsSync(root)) continue;
+    for (const version of readdirSync(root)) {
+      const dir = path.join(root, version);
+      if (!statSync(dir, { throwIfNoEntry: false })?.isDirectory()) continue;
+      for (const edition of readdirSync(dir)) {
+        const instance = path.join(dir, edition);
+        if (existsSync(path.join(instance, 'VC/Tools/MSVC'))) found.set(instance, version === '2022' ? 17 : Number(version));
+      }
+    }
+  }
+  return [...found].filter(([, major]) => Number.isFinite(major)).map(([root, major]) => ({ root, major })).sort((a, b) => b.major - a.major);
+}
+
+/** cmake on PATH, standalone, or bundled with an installed native toolchain. */
+export function findCmake(accept: (file: string) => boolean = () => true): string | null {
   for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
     const c = path.join(dir, 'cmake.exe');
-    if (dir && existsSync(c)) return c;
+    if (dir && existsSync(c) && accept(c)) return c;
   }
-  for (const pf of [process.env.ProgramFiles, process.env['ProgramFiles(x86)']]) {
-    if (!pf) continue;
+  for (const instance of buildToolInstances()) {
+    const cmake = path.join(instance.root, 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe');
+    if (existsSync(cmake) && accept(cmake)) return cmake;
+  }
+  for (const pf of nativeToolRoots()) {
+    const standalone = path.join(pf, 'CMake/bin/cmake.exe');
+    if (existsSync(standalone) && accept(standalone)) return standalone;
     const root = path.join(pf, 'Microsoft Visual Studio');
     if (!existsSync(root)) continue;
     // Newest first: current VS uses numeric folders (18), older releases used years (2022).
@@ -359,7 +396,7 @@ export function findCmake(): string | null {
       if (!statSync(versionDir, { throwIfNoEntry: false })?.isDirectory()) continue;
       for (const edition of readdirSync(versionDir)) {
         const c = path.join(versionDir, edition, 'Common7', 'IDE', 'CommonExtensions', 'Microsoft', 'CMake', 'CMake', 'bin', 'cmake.exe');
-        if (existsSync(c)) return c;
+        if (existsSync(c) && accept(c)) return c;
       }
     }
   }
@@ -371,7 +408,10 @@ export function visualStudioGenerator(cmake: string): string {
   try {
     const help = execFileSync(cmake, ['--help'], { encoding: 'utf8', windowsHide: true });
     const generators = [...help.matchAll(/^\*?\s*(Visual Studio \d+ \d+)\s*=/gm)].map((m) => m[1]);
-    if (generators.length) return generators[0];
+    const installed = buildToolInstances();
+    const selected = generators.find(generator => installed.some(instance => generator.startsWith(`Visual Studio ${instance.major} `)));
+    if (selected) return selected;
+    if (generators.length && !installed.length) return generators[0];
   } catch {
     // cmakeBuild reports the useful process error if the executable itself cannot run.
   }
@@ -433,6 +473,7 @@ async function plainNativeTree(dir: string): Promise<void> {
 /** Build a selected origin as one transaction; partial binaries never become active via a success stamp. */
 export async function rebuildNativePlugins(repo: string, workspace: string, ctx: JobContext, cmake: string, generator: string, includeDisabled = false): Promise<void> {
   const plan = await nativePluginPlan(repo, workspace, includeDisabled);
+  const dependencies = await nativeDependencyRoot(repo, workspace);
   if (plan.problems.length) throw new Error(plan.problems.join('; '));
   const groups = new Map<string, NativePluginProject[]>();
   for (const project of plan.projects) groups.set(project.plugin.key, [...(groups.get(project.plugin.key) ?? []), project]);
@@ -457,7 +498,7 @@ export async function rebuildNativePlugins(repo: string, workspace: string, ctx:
       started = true;
       for (const project of projects) {
         ctx.line(`plugin ${plugin.key}${project.dir.endsWith('/runtime') ? '/runtime' : ''}`);
-        await cmakeBuild(cmake, generator, project.sourceDir, project.buildDir, ctx, resolvedPluginCmakeVars(repo, project));
+        await cmakeBuild(cmake, generator, project.sourceDir, project.buildDir, ctx, resolvedPluginCmakeVars(repo, project, dependencies));
         await recordPluginBuildSuccess(project.buildDir);
       }
       await plainNativeTree(projects[0].outputDir);
@@ -473,6 +514,7 @@ export async function rebuildNativePlugins(repo: string, workspace: string, ctx:
 /** Build in the selected user cache, then publish a new immutable runtime for future consumers. */
 async function rebuildCoreHost(repo: string, workspace: string, ctx: JobContext, cmake: string, generator: string): Promise<void> {
   const hp = hostCachePaths(repo, workspace);
+  const dependencies = await nativeDependencyRoot(repo, workspace);
   await validateHostCache(repo, workspace, false, true);
   await containedPath(canonicalFuturePath(repo), 'native/host/CMakeLists.txt');
   const inputs = hostSourceFingerprint(repo);
@@ -489,7 +531,7 @@ async function rebuildCoreHost(repo: string, workspace: string, ctx: JobContext,
     await writeHostReceipt(repo, workspace, 'building', inputs);
     started = true;
     ctx.line(`host build cache: ${hp.buildDir}`);
-    await cmakeBuild(cmake, generator, hp.hostDir, hp.buildDir, ctx, [`-DXRB_ROOT=${canonicalFuturePath(repo).split(path.sep).join('/')}`]);
+    await cmakeBuild(cmake, generator, hp.hostDir, hp.buildDir, ctx, [`-DXRB_ROOT=${canonicalFuturePath(repo).split(path.sep).join('/')}`, `-DXRB_THIRD_PARTY=${dependencies.split(path.sep).join('/')}`]);
     await nativeDirectory(workspace, hp.releaseDir);
     await plainNativeTree(hp.buildDir);
     const legacy = path.join(hp.releaseDir, 'plugins');

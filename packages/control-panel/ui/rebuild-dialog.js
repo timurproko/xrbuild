@@ -1,5 +1,6 @@
 // One framework-neutral host rebuild dialog for Control Panel, Plugins Manager and registered tools.
-import {iconSvg} from './design-system.js';
+import {iconSvg, sentenceText} from './design-system.js';
+import {desktopSetupBeforeRebuild} from './desktop-setup.js';
 
 export const REBUILD_AUTOCLOSE_KEY = 'panel.rebuildAutoclose';
 const controllers = new WeakMap();
@@ -19,19 +20,21 @@ function safePanelOrigin(value) {
 }
 
 export function rebuildPresentation(job, error = '') {
-  const running = !error && (!job || job.state === 'running');
+  const running = !error && (!job || job.state === 'running' || job.state === 'queued');
   const failed = !!error || job?.state === 'failed';
+  const setup = job?.kind === 'desktop-setup';
+  const restart = setup && job?.result?.restartRequired === true;
   const phase = [...(job?.lines ?? [])].reverse().find((line) => line.startsWith('plugin '));
   return {
     state: running ? 'running' : failed ? 'failed' : 'done',
-    title: running ? 'Rebuilding' : failed ? 'Rebuild failed' : 'Rebuilt',
-    message: error || (running
+    title: setup ? running ? 'Installing desktop prerequisites' : failed ? 'Setup failed' : restart ? 'Restart required' : 'Setup complete' : running ? 'Rebuilding' : failed ? 'Rebuild failed' : 'Rebuilt',
+    message: error || (setup ? running ? sentenceText(job.title || 'Installing desktop prerequisites').replace(/\.$/u, '…') : failed ? job.error || 'Review setup output and retry explicitly.' : restart ? 'Restart Windows when convenient, then refresh Desktop setup.' : 'Setup completed and readiness checks passed.' : running
       ? `Building ${phase ? phase.slice('plugin '.length) : 'xrb-host'}…`
       : failed ? job?.error || 'See build output below.' : 'The host and workspace plugins are ready.'),
     output: job?.lines?.length ? job.lines.slice(-20).join('\n')
       : error ? 'The job could not start.' : 'Waiting for build output…',
     running,
-    succeeded: !running && !failed,
+    succeeded: !running && !failed && !restart,
     viewJobDisabled: job?.id == null,
   };
 }
@@ -116,9 +119,10 @@ export async function rebuildHostInPlace(origin = globalThis.location?.origin, o
     globalThis.location?.assign(destination.href);
   };
   const progress = rebuildProgressDialog({onViewJob: options.onViewJob ?? defaultViewJob});
-  progress.show();
   let started;
   try {
+    if (!await desktopSetupBeforeRebuild(safe, {progress,onJob:options.onJob})) return null;
+    progress.show();
     const response = await fetch(new URL('/api/host/rebuild', safe), {method: 'POST'});
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || `Rebuild failed (${response.status})`);
@@ -126,7 +130,7 @@ export async function rebuildHostInPlace(origin = globalThis.location?.origin, o
     progress.render(started);
     options.onJob?.(started);
   } catch (error) {
-    progress.render(null, error instanceof Error ? error.message : String(error));
+    progress.show(null, error instanceof Error ? error.message : String(error));
     return null;
   }
 

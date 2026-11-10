@@ -8,12 +8,16 @@ const fixture={id:'tracker',label:'Hand Tracking',url:'http://127.0.0.1:5220/'};
 test('tool links are bounded local navigation metadata, not commands or credentials',()=>{
   assert.deepEqual(validateToolLinks({tools:[{...fixture,command:'ignored'}]}),[fixture]);
   for(const url of ['https://example.test/','http://example.test:5220/','http://127.0.0.1/','http://u:p@127.0.0.1:5220/','javascript:alert(1)','http://127.0.0.1:5220/?token=secret','http://127.0.0.1:5220/#fragment'])assert.throws(()=>validateToolLinks({tools:[{...fixture,url}]}),/URL/);
-  for(const tools of [[fixture,fixture],[{...fixture,id:'projects'}],[{...fixture,id:'settings'}],[{...fixture,id:'../escape'}],[{...fixture,label:'x'.repeat(61)}],[{...fixture,label:'bad\nlabel'}],Array(13).fill(fixture)])assert.throws(()=>validateToolLinks({tools}));
+  for(const tools of [[fixture,fixture],[{...fixture,id:'projects'}],[{...fixture,id:'settings'}],[{...fixture,id:'design-system'}],[{...fixture,id:'../escape'}],[{...fixture,label:'x'.repeat(61)}],[{...fixture,label:'bad\nlabel'}],Array(13).fill(fixture)])assert.throws(()=>validateToolLinks({tools}));
   assert.throws(()=>validateToolLinks({tools:{}}));assert.throws(()=>validateToolLinks({tools:[{...fixture,passPanelOrigin:'no'}]}),/passPanelOrigin/);
   assert.deepEqual(validateToolLinks({tools:[{...fixture,url:'http://127.0.0.1:5220/hand-tracking/',passPanelOrigin:false}]}),[{...fixture,url:'http://127.0.0.1:5220/hand-tracking/',passPanelOrigin:false}]);
   const managed={id:'managed',label:'Managed Tool',route:'/managed/',module:'tools/managed.mjs',endpoints:['/__managed/']};assert.deepEqual(validateToolLinks({tools:[managed]}),[managed]);
-  for(const tool of [{...managed,url:fixture.url},{...managed,route:'/api/'},{...managed,module:'../escape.mjs'},{...managed,module:'tools/managed.js'},{...managed,endpoints:['/api/']},{...managed,endpoints:['/__same/','/__same/']}])assert.throws(()=>validateToolLinks({tools:[tool]}));
+  for(const tool of [{...managed,url:fixture.url},{...managed,route:'/api/'},{...managed,route:'/design-system/'},{...managed,module:'../escape.mjs'},{...managed,module:'tools/managed.js'},{...managed,endpoints:['/api/']},{...managed,endpoints:['/__same/','/__same/']}])assert.throws(()=>validateToolLinks({tools:[tool]}));
   assert.throws(()=>validateToolLinks({tools:[managed,{...managed,id:'other',route:'/managed/child/'}]}),/non-overlapping/);
+  assert.deepEqual(validateToolLinks({tools:[{...managed,aliases:['/legacy/']}]}),[{...managed,aliases:['/legacy/']}]);
+  for(const aliases of [['/api/'],['/design/'],['/managed/'],['/legacy/','/legacy/'],['/legacy/','/legacy/child/'],['//foreign/'],['/../escape/'],Array(9).fill('/old/')])assert.throws(()=>validateToolLinks({tools:[{...managed,aliases}]}));
+  assert.throws(()=>validateToolLinks({tools:[{...fixture,aliases:['/old/']}]}));
+  assert.throws(()=>validateToolLinks({tools:[{...managed,aliases:['/other/']},{...managed,id:'other',route:'/other/',endpoints:[]}]}));
 });
 test('tool configuration is optional, BOM tolerant, bounded and workspace-local',async()=>{
   const parent=path.resolve(import.meta.dirname,'../../../.artifacts');await fs.mkdir(parent,{recursive:true});const root=await fs.mkdtemp(path.join(parent,'navigation-'));
@@ -21,7 +25,7 @@ test('tool configuration is optional, BOM tolerant, bounded and workspace-local'
 });
 test('enabled plugins provision bounded managed menu tools and disabled plugins start nothing',async()=>{
   const parent=path.resolve(import.meta.dirname,'../../../.artifacts');await fs.mkdir(parent,{recursive:true});const root=await fs.mkdtemp(path.join(parent,'plugin-navigation-')),plugin=path.join(root,'plugins','input-hands');
-  try{await fs.mkdir(plugin,{recursive:true});await fs.writeFile(path.join(plugin,'tool.mjs'),'export const fixture=true;');const declaration={id:'hand-tracking',label:'Hand Tracking',route:'/hand-tracking/',module:'tool.mjs',endpoints:['/__handtracking/']};await fs.writeFile(path.join(plugin,'xrb-plugin.json'),JSON.stringify({title:'Hand Tracking',type:'input',version:'0.1.0',panel:{tools:[declaration]}}));
+  try{await fs.mkdir(plugin,{recursive:true});await fs.writeFile(path.join(plugin,'tool.mjs'),'export const fixture=true;');const declaration={id:'hand-tracking',label:'Hand Tracking',route:'/hand-tracking/',aliases:['/legacy-tool/'],module:'tool.mjs',endpoints:['/__handtracking/']};await fs.writeFile(path.join(plugin,'xrb-plugin.json'),JSON.stringify({title:'Hand Tracking',type:'input',version:'0.1.0',panel:{tools:[declaration]}}));
     assert.deepEqual(await readToolLinks(root),[{...declaration,module:'plugins/input-hands/tool.mjs',owner:{key:'workspace:input-hands',root:await fs.realpath(plugin),module:'tool.mjs'}}]);
     await fs.writeFile(path.join(root,'xrb-plugins.json'),JSON.stringify({disabled:['input-hands'],settings:{}}));assert.deepEqual(await readToolLinks(root),[]);
     await fs.writeFile(path.join(root,'xrb-plugins.json'),JSON.stringify({disabled:[],settings:{}}));await fs.writeFile(path.join(root,TOOLS_FILE),JSON.stringify({tools:[{...fixture,id:'hand-tracking'}]}));await assert.rejects(readToolLinks(root),/distinct across plugins/);
@@ -32,8 +36,13 @@ test('shared navigation has exact order, explicit active page and same-panel ret
   const items=navigationItems('http://127.0.0.1:5182',[fixture],'tracker');assert.deepEqual(items.map(i=>i.label??'separator'),['Apps','Hand Tracking','Plugins','Settings','separator','Restart','Rebuild']);assert.deepEqual(items.filter(i=>i.current).map(i=>i.id),['tracker']);
   const tool=new URL(items[1].href!);assert.equal(tool.origin,'http://127.0.0.1:5220');assert.equal(tool.searchParams.get('xrbuildPanel'),'http://127.0.0.1:5182');
   const cleanTool=new URL(navigationItems('http://127.0.0.1:5182',[{...fixture,url:'http://127.0.0.1:5220/hand-tracking/',passPanelOrigin:false}],'projects')[1].href!);assert.equal(cleanTool.pathname,'/hand-tracking/');assert.equal(cleanTool.search,'');assert.equal(new URL(items[2].href!).pathname,'/plugins/');assert.equal(new URL(items[3].href!).pathname,'/settings/');assert.equal(new URL(items[5].href!).searchParams.get('maintenance'),'restart');assert.equal(new URL(items[6].href!).searchParams.get('maintenance'),'rebuild');
+  const design=navigationItems('http://localhost:5182',[{id:'design-system',label:'Design System',url:'http://127.0.0.1:5182/design-system.html'}]).find(item=>item.id==='design-system');
+  assert.equal(design?.href,'http://localhost:5182/design','the built-in link preserves the actual panel origin and theme storage');
+  const devTools=[{id:'design-system',label:'Design System',url:'http://127.0.0.1:5182/design-system.html'},fixture];
+  assert.deepEqual(navigationItems('http://127.0.0.1:5182',devTools).map(item=>item.label??'separator'),['Apps','Hand Tracking','Plugins','Settings','Design','separator','Restart','Rebuild']);
+  assert.deepEqual(navigationItems('http://127.0.0.1:5182',devTools,'design-system',{maintenance:false}).map(item=>item.label??'separator'),['Apps','Hand Tracking','Plugins','Settings','Design']);
   const managed=new URL(navigationItems('http://127.0.0.1:5182',[{id:'managed',label:'Managed',route:'/managed/'}],'managed')[1].href!);assert.equal(managed.href,'http://127.0.0.1:5182/managed/');
-  assert.equal(panelOrigin('https://example.test'),null);assert.equal(panelOrigin('http://127.0.0.1:5182/path'),null);assert.equal(panelOrigin('http://u:p@127.0.0.1:5182'),null);assert.throws(()=>panelDestination('http://example.test:5182','projects'));assert.throws(()=>toolDestination('javascript:alert(1)','http://127.0.0.1:5182'));assert.throws(()=>managedToolDestination('/api/','http://127.0.0.1:5182'));assert.throws(()=>managedToolDestination('/settings/','http://127.0.0.1:5182'));
+  assert.equal(panelOrigin('https://example.test'),null);assert.equal(panelOrigin('http://127.0.0.1:5182/path'),null);assert.equal(panelOrigin('http://u:p@127.0.0.1:5182'),null);assert.throws(()=>panelDestination('http://example.test:5182','projects'));assert.throws(()=>toolDestination('javascript:alert(1)','http://127.0.0.1:5182'));assert.throws(()=>managedToolDestination('/api/','http://127.0.0.1:5182'));assert.throws(()=>managedToolDestination('/settings/','http://127.0.0.1:5182'));assert.throws(()=>managedToolDestination('/design-system/','http://127.0.0.1:5182'));
 });
 test('stale panel navigation errors defer to the existing restart indication',()=>{
   assert.equal(shouldReportNavigationError('invalid tool URL',{outdated:true}),false);

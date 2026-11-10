@@ -23,6 +23,7 @@ import { assertEditableProject, assertUserRoot, assertWritablePath } from './pro
 import { projectStateKey, readProjectRunSettings, saveProjectRunSettings, validateRunOverrides, withRunSettings } from './project-run-settings.ts';
 import { log } from './env.ts';
 import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHost, clearProviderCache } from './host-build.ts';
+import { DesktopSetup } from './desktop-setup.ts';
 import { panelFreshness, panelSourceRoots, type PanelFreshness } from './panel-freshness.ts';
 import { HostRunner, type RunMode } from './host-runner.ts';
 import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings } from './plugin-manager.ts';
@@ -216,6 +217,7 @@ export class Panel {
   restartWorkPending: () => boolean = () => false;
   private readonly settingsWrites = new Set<string>();
   readonly runner = new HostRunner();
+  desktopSetup: DesktopSetup;
   readonly packages: PackageList;
   readonly hub: EventHub;
   /** the core repo (host build, templates) */
@@ -255,6 +257,7 @@ export class Panel {
     assertUserRoot(repo, projects);
     this.repo = repo;
     this.workspace = workspace;
+    this.desktopSetup = new DesktopSetup(repo, workspace);
     this.projects = projects;
     this.bootstrapPackageLock = bootstrapPackageLock;
     this.hub = hub;
@@ -716,6 +719,23 @@ export class Panel {
       };
     }));
     return plugins.filter((plugin) => plugin !== null);
+  }
+
+  async setupDesktop(body: { action?: unknown; revision?: unknown; confirm?: unknown }): Promise<Job> {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !['action', 'revision', 'confirm'].includes(key))
+      || body.confirm !== true || typeof body.action !== 'string' || !['toolchain', 'native-deps'].includes(body.action)) throw new HttpError(400, 'Confirm a supported desktop setup action before installing');
+    const requireIdle = () => {
+      if (this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
+        throw new HttpError(409, 'Stop apps/jobs and wait for preparation before desktop setup');
+    };
+    requireIdle();
+    const status = await this.desktopSetup.check();
+    requireIdle();
+    if (body.revision !== status.revision || status.busy) throw new HttpError(409, 'Desktop setup changed or is busy; refresh the checklist');
+    if (!status.supported || !status.steps.some(step => step.action === body.action && step.state === 'missing')) throw new HttpError(409, 'This desktop setup step is unavailable or already ready');
+    const job = this.startJob('desktop-setup', null, body.action === 'toolchain' ? 'install desktop build tools' : 'install core native libraries', ctx => this.desktopSetup.install(body.action, body.revision, body.confirm, ctx));
+    job.setupAction = body.action === 'toolchain' ? 'toolchain' : 'native-deps';
+    return job;
   }
 
   cleanupWorkingCache(project: Project | undefined, body: Parameters<typeof cleanWorkingCache>[1]): Job {
@@ -1289,9 +1309,11 @@ export class Panel {
   async run(p: Project, mode: RunMode, flat?: boolean, cameraView?: boolean, desktop?: { fullscreen?: boolean; monitor?: number }): Promise<void> {
     if (mode === 'dev' && !p.manifest?.scripts?.dev) throw new HttpError(409, `${p.id} has no dev script`);
     await this.synchronizePluginServices(true);
+    const desktopSetupBusy = await this.desktopSetup.isBusy();
     if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
     if (this.preparingNativeRun) throw new HttpError(409, 'another native launch is being prepared');
     if (this.jobs.active().some(job => job.kind === 'host-rebuild')) throw new HttpError(409, 'wait for the native rebuild to finish before running');
+    if (this.jobs.active().some(job => job.kind === 'desktop-setup') || desktopSetupBusy) throw new HttpError(409, 'wait for desktop setup to finish before running');
     if (p.readOnly) this.refuseIfBusy(p.id);
     this.preparingNativeRun = true;
     try {
@@ -1673,9 +1695,17 @@ export class Panel {
       case 'GET plugins/manage':
         sendJson(res, 200, { plugins: await this.managedPlugins(), services: this.pluginServiceStatus(), problems: (await resolvePluginCatalog(this.workspace, this.repo)).problems });
         return true;
+      case 'GET host/setup':
+        sendJson(res, 200, await this.desktopSetup.check()); return true;
+      case 'POST host/setup':
+        sendJson(res, 202, jobSummary(await this.setupDesktop(await readJson(req)))); return true;
       case 'POST host/rebuild':
+        if (await this.desktopSetup.isBusy()) throw new HttpError(409, 'Wait for desktop setup to finish before rebuilding');
         if (this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop the running or starting host first: its exe must not overlap a rebuild');
-        sendJson(res, 202, jobSummary(this.startJob('host-rebuild', null, 'rebuild xrb-host', (ctx) => rebuildHost(this.repo, this.workspace, ctx))));
+        sendJson(res, 202, jobSummary(this.startJob('host-rebuild', null, 'rebuild xrb-host', async ctx => {
+          const tools = await this.desktopSetup.deps.tools();
+          return rebuildHost(this.repo, this.workspace, ctx, { cmake: tools.cmake ?? undefined, generator: tools.generator });
+        })));
         return true;
       case 'GET preview/projection': {
         const query = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams;
@@ -1755,6 +1785,7 @@ export class Panel {
         return true;
       }
       case 'POST restart': {
+        if (this.jobs.active().some(job => job.kind === 'desktop-setup')) throw new HttpError(409, 'Wait for desktop setup to finish; the installer must not be interrupted', { retryWhenIdle: true });
         const { confirm, ifIdle, expectedInstanceId } = await readJson<{ confirm?: boolean; ifIdle?: boolean; expectedInstanceId?: string }>(req);
         if ((confirm !== undefined && typeof confirm !== 'boolean') || (ifIdle !== undefined && typeof ifIdle !== 'boolean')) throw new HttpError(400, 'Restart flags must be boolean');
         if (ifIdle && (confirm !== false || expectedInstanceId !== this.instanceId)) throw new HttpError(409, 'Automatic restart requires the current panel instance and cannot force active work');
@@ -1770,6 +1801,7 @@ export class Panel {
         return true;
       }
       case 'POST quit': {
+        if (this.jobs.active().some(job => job.kind === 'desktop-setup')) throw new HttpError(409, 'Wait for desktop setup to finish; the installer must not be interrupted');
         const { confirm } = await readJson<{ confirm?: boolean }>(req);
         const busy = [this.runner.busy ? `${this.runner.projectId} is running` : '', ...this.jobs.active().map((j) => `${j.title} is ${j.state}`)].filter(Boolean);
         if (busy.length && !confirm) throw new HttpError(409, `${busy.join('; ')}. Quit anyway? The host is stopped cleanly first.`, { needsConfirm: 'quit' });

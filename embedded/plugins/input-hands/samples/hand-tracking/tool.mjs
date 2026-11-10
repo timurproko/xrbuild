@@ -7,6 +7,7 @@ import {panelStatusPlugin} from './panel-status.mjs';
 import {recordingStorePlugin} from './recording-store.mjs';
 import {visionAssetsPlugin} from './prepare-assets.mjs';
 import {plainPath,statePaths} from './state-paths.mjs';
+import {managedPanelDocument} from './panel-document.mjs';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon','.wasm':'application/wasm'};
 export async function createWorkspaceTool(context){
@@ -17,8 +18,7 @@ export async function createWorkspaceTool(context){
     handlers.push(typeof prefix==='string'?(req,res,next)=>{const pathname=new URL(req.url||'/','http://127.0.0.1').pathname;return pathname===prefix||pathname.startsWith(prefix+'/')?handler(req,res,next):next();}:prefix);
   }}};
   for(const plugin of plugins)plugin.configureServer?.(server);
-  const escape=value=>String(value).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;');
-  const html=()=>fs.readFile(index,'utf8').then(source=>source.replace('</head>',`<meta name="handtracking-managed-bridge" content="1"><meta name="handtracking-panel-managed" content="1"><meta name="xrbuild-panel-url" content="${escape(context.panelOrigin)}"></head>`));
+  const html=()=>fs.readFile(index,'utf8').then(source=>managedPanelDocument(source,context.panelOrigin));
   const content=async(req,res,next)=>{
     const url=new URL(req.url||'/','http://127.0.0.1');if(url.pathname===context.route.replace(/\/$/,'')){res.writeHead(302,{Location:context.route+url.search}).end();return;}if(!url.pathname.startsWith(context.route))return next();
     if(!['GET','HEAD'].includes(req.method||'')){res.writeHead(405).end();return;}

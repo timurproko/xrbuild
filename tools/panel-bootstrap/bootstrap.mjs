@@ -137,6 +137,7 @@ export async function createCoordinator(options = {}) {
     ['/startup.css', [path.join(assets,'startup.css'),'text/css; charset=utf-8']],
     ['/design-system.css', [path.join(system,'design-system.css'),'text/css; charset=utf-8']],
     ['/design-system.js', [path.join(system,'design-system.js'),'text/javascript; charset=utf-8']],
+    ['/scrollbars.js', [path.join(system,'scrollbars.js'),'text/javascript; charset=utf-8']],
   ]);
   const server = http.createServer(async (req,res) => {
     const reply = (status, body, type = 'application/json') => { res.writeHead(status, {'content-type':type}); res.end(type === 'application/json' ? JSON.stringify(body) : body); };

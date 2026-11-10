@@ -41,27 +41,15 @@ import { assertEditableProject, assertUserRoot, assertWritablePath } from './pro
 import { projectRunSettingsFile, readProjectRunSettings, withRunSettings } from './project-run-settings.ts';
 import { publicationCard } from './publication.ts';
 import { ManagedTools } from './managed-tools.ts';
+import { listMonitors } from './monitors.ts';
 import { applyLayout, readLayout, validateLayout, type Layout } from './layout.ts';
 import { createProject, createProjectWorkspace, createWorkspace, isWorkspace, ProjectRefused, writeEditorConfig } from './workspace.ts';
 
 export const APP_NAME = 'xrb-control-panel';
 const ICON_LIMIT = 8 * 1024 * 1024;
-const LIST_MONITORS = path.join(PANEL_DIR, 'src', 'list-monitors.ps1');
 const RESTART_SILENT = path.join(PANEL_DIR, 'src', 'restart-silent.vbs');
 /** SDK modules the icon preview page loads (`/sdk/<name>`); they import only `three`. */
 const SDK_MODULES = new Set(['icon.js', 'icon-object.js']);
-
-async function listMonitors(): Promise<unknown[]> {
-  return new Promise((resolve) => {
-    execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', LIST_MONITORS], { windowsHide: true }, (error, stdout) => {
-      if (error) return resolve([]);
-      try {
-        const parsed = JSON.parse(stdout.trim() || '[]');
-        resolve(Array.isArray(parsed) ? parsed : [parsed]);
-      } catch { resolve([]); }
-    });
-  });
-}
 
 export type WorkspaceKind = 'user' | 'repository' | 'explicit';
 
@@ -93,6 +81,8 @@ export interface ServerOptions {
   projects?: string;
   port?: number;
   workspaceKind?: WorkspaceKind;
+  /** Expose developer-only navigation for this process's explicit launch mode. */
+  developerMode?: boolean;
   /** Re-evaluate the Start-menu auto route on browser document refreshes. */
   autoRoute?: AutoRouteOptions;
   /** override for tests: the panel's services */
@@ -110,6 +100,10 @@ export interface PanelServer {
 }
 
 export type ShortcutLaunch = 'user' | 'repository' | 'auto';
+
+export function developerModeForLaunch(marker: ShortcutLaunch | undefined, kind: WorkspaceKind): boolean {
+  return marker ? marker === 'repository' : kind === 'repository';
+}
 
 export interface ShortcutRecoveryOptions {
   marker: ShortcutLaunch;
@@ -394,6 +388,12 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       return;
     }
     if (parts[0] !== 'api') {
+      if (['/design', '/design/', '/design-system.html'].includes(url.pathname)) {
+        if (!['GET','HEAD'].includes(method)) throw new HttpError(405, 'method not allowed');
+        if (url.pathname !== '/design') { res.writeHead(302, {location:`/design${url.search}`, 'cache-control':'no-store'}); res.end(); return; }
+        if (method === 'HEAD') { res.writeHead(200, {'content-type':'text/html; charset=utf-8'}); res.end(); return; }
+        return serveStatic(res, uiDir, 'design-system.html');
+      }
       if (url.pathname.endsWith('/') || parts[0]?.startsWith('__')) await panel.synchronizePluginServices(true);
       if (await managedTools.handle(req, res, url.pathname)) return;
       if (method !== 'GET') throw new HttpError(405, 'method not allowed');
@@ -406,7 +406,12 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
 
     if (is('GET', 'ping')) return sendJson(res, 200, { app: APP_NAME, repo: core, workspace, projects, pid: process.pid, instanceId: panel.instanceId });
     if (!(method !== 'GET' && ['plugins', 'restart', 'quit'].includes(api[0]))) await panel.synchronizePluginServices(method !== 'GET');
-    if (is('GET', 'navigation')) return sendJson(res, 200, await managedTools.navigation());
+    if (is('GET', 'navigation')) {
+      const navigation = await managedTools.navigation();
+      return sendJson(res, 200, { ...navigation, tools: [...navigation.tools,
+        ...(opts.developerMode === true ? [{ id: 'design-system', label: 'Design', url: new URL('/design', url).href }] : []),
+      ] });
+    }
     if (api[0] === 'tools' && api.length === 3) {
       const id = api[1], action = api[2];
       if (method === 'GET' && action === 'status') {
@@ -804,7 +809,7 @@ export function silentRestartInvocation(argv = process.argv.slice(1), cwd = proc
  * Single-instance start (design D2): when a panel already answers on the port, only open the
  * browser on it; when another program holds the port, give up with a message.
  */
-export async function launch(opts: { port: number; open: boolean; repo?: string; workspace?: string; projects?: string; workspaceKind?: WorkspaceKind; autoRoute?: AutoRouteOptions; shortcutRecovery?: ShortcutRecoveryOptions; browser?: (url: string) => void }): Promise<
+export async function launch(opts: { port: number; open: boolean; repo?: string; workspace?: string; projects?: string; workspaceKind?: WorkspaceKind; developerMode?: boolean; autoRoute?: AutoRouteOptions; shortcutRecovery?: ShortcutRecoveryOptions; browser?: (url: string) => void }): Promise<
   { result: 'started'; server: PanelServer } | { result: 'already-running' | 'workspace-mismatch' | 'port-taken'; server: null }
 > {
   const browser = opts.browser ?? openBrowser;
@@ -835,7 +840,7 @@ export async function launch(opts: { port: number; open: boolean; repo?: string;
     log(`[panel] port ${opts.port} is used by another program; set XRB_PANEL_PORT to use another port`);
     return { result: 'port-taken', server: null };
   }
-  const s = createServer({ port: opts.port, repo: opts.repo, workspace: opts.workspace, projects: selectedProjects, workspaceKind: opts.workspaceKind, autoRoute: opts.autoRoute });
+  const s = createServer({ port: opts.port, repo: opts.repo, workspace: opts.workspace, projects: selectedProjects, workspaceKind: opts.workspaceKind, developerMode: opts.developerMode, autoRoute: opts.autoRoute });
   // Workspace packagers load the core's modules from XRB_CORE (they never import it by a relative path).
   process.env.XRB_CORE ??= s.panel.repo;
   await s.panel.loadInitialServices();
@@ -868,6 +873,7 @@ async function main(): Promise<void> {
     workspace,
     projects,
     workspaceKind,
+    developerMode: developerModeForLaunch(shortcutLaunch, workspaceKind),
     autoRoute: autoRoute ? { explicitProjects, argv: process.argv.slice(1), cwd: process.cwd(), execPath: process.execPath } : undefined,
     shortcutRecovery: shortcutLaunch ? { marker: shortcutLaunch } : undefined,
   });

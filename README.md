@@ -33,6 +33,12 @@ Toolchain (dev machine):
 - Visual Studio 2022 Build Tools with the C++ workload (CMake ships with it, see [Build](#build))
 - `gh`, authenticated, only for `pnpm preview:readme`
 
+The panel's **Rebuild** action checks desktop prerequisites first and offers an explicit
+[setup checklist with background progress](docs/desktop-setup.md). Browser-only use does not require the native
+toolchain. Installation requires your consent and may show an administrator prompt; it never requests an automatic reboot.
+
+**Settings → Apps (core) → Theme** offers System, Light and Dark, applied immediately and saved only in this browser. The **Dev shortcut** (or repository-development CLI) exposes **Design** in the app menu. Its [gallery](packages/control-panel/ui/DESIGN-SYSTEM.md#appearance-and-case-gallery) at `/design` collects shared components in Main and simulated workflow cases without installing anything; normal user launches do not show that menu entry.
+
 The core runs without any device: the `desktop` display shows the page in a window and the `simulated`
 or `replay` input stands in for hands. A 3D display, a hand tracker or a station platform comes from a
 plugin, and each plugin lists the hardware and runtimes it needs.

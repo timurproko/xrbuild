@@ -45,7 +45,7 @@ const state = {
   managedPlugins: [],
   managedId: localStorage.getItem('panel.managedPlugin'),
   appSettings: { cursor: 'system' },
-  settingsFilter: new URLSearchParams(location.search).get('module') || localStorage.getItem('panel.settingsFilter') || 'all',
+  settingsFilter: new URLSearchParams(location.search).get('module') || 'all',
   activityTab: localStorage.getItem('panel.activityTab') === 'jobs' ? 'jobs' : 'log',
   page: ['plugins', 'settings'].includes(initialNavigationRequest.page) ? initialNavigationRequest.page : 'projects',
   dashboardScroll: 0,
@@ -2446,8 +2446,8 @@ function drawCameraFrame(buffer) {
   slot.label.textContent = `${label}${nBoxes || !rgb ? ` · ${boxes.length} box${boxes.length === 1 ? '' : 'es'}` : ''}`;
 }
 
-// Header metrics and the mirrored Run/Stop control are one unit: they become visible in the same
-// observer callback, avoiding a partial header while the page crosses the sticky bar.
+// Header metrics and the mirrored Run/Stop control share one visibility decision, both when
+// rebinding the current action and when it crosses above the sticky bar.
 let runDockVisible = false;
 
 function renderStatsDock(s) {
@@ -3114,7 +3114,6 @@ function renderManagedPlugins() {
       await Promise.all([loadManagedPlugins(), loadPlugins(), loadNavigation(), loadProjects()]);
     } finally { if (form.isConnected) form.querySelector('button[type="submit"]').disabled = false; }
   }));
-  el.querySelector('.plugin-hero-settings')?.addEventListener('click', () => localStorage.setItem('panel.settingsFilter', p.id));
   el.querySelector('#open-plugin-folder').addEventListener('click', action(() => api('POST', `/api/plugins/manage/${encodeURIComponent(p.id)}/open-folder`)));
   el.querySelectorAll('[data-import-sample]').forEach((button) => button.addEventListener('click', action(() => {
     const sample = samples.find((item) => item.id === button.dataset.importSample);
@@ -3182,13 +3181,8 @@ function renderGlobalSettings() {
   const defaultFilter = plugins.length ? 'all' : 'control-panel';
   const filters = new Set([...(plugins.length ? ['all'] : []), 'control-panel', ...plugins.map((plugin) => plugin.id)]);
   const requestedFilter = new URLSearchParams(location.search).get('module');
-  if (requestedFilter && filters.has(requestedFilter)) {
-    state.settingsFilter = requestedFilter;
-    localStorage.setItem('panel.settingsFilter', requestedFilter);
-  } else if (!filters.has(state.settingsFilter)) {
-    state.settingsFilter = defaultFilter;
-    localStorage.setItem('panel.settingsFilter', defaultFilter);
-  }
+  // Route intent wins: the plain menu destination always opens All, not the last sidebar module.
+  state.settingsFilter = requestedFilter && filters.has(requestedFilter) ? requestedFilter : defaultFilter;
   if (requestedFilter && !filters.has(requestedFilter)) {
     const url = new URL(location.href);
     url.searchParams.delete('module');
@@ -3203,7 +3197,6 @@ function renderGlobalSettings() {
   nav.innerHTML = `<div class="nav-tabs xrb-section-label settings-module-heading"><span>Module</span></div><div class="nav-list">${rows.map((row) => `<button type="button" class="proj xrb-focus-inset ${row.id === state.settingsFilter ? 'selected' : ''} ${row.enabled === false ? 'plugin-disabled' : ''}" data-settings-filter="${esc(row.id)}" aria-current="${row.id === state.settingsFilter}"><span class="stripe"></span>${row.icon}<span class="text"><span class="name">${esc(row.name)}</span><span class="meta">${esc(row.meta)}</span></span></button>`).join('')}</div>`;
   nav.querySelectorAll('[data-settings-filter]').forEach((button) => button.addEventListener('click', () => {
     state.settingsFilter = button.dataset.settingsFilter;
-    localStorage.setItem('panel.settingsFilter', state.settingsFilter);
     const url = new URL(location.href);
     if (state.settingsFilter === 'all') url.searchParams.delete('module');
     else url.searchParams.set('module', state.settingsFilter);
@@ -3212,11 +3205,15 @@ function renderGlobalSettings() {
   }));
   const shownPlugins = state.settingsFilter === 'all' ? plugins : plugins.filter((plugin) => plugin.id === state.settingsFilter);
   const apps = ['all', 'control-panel'].includes(state.settingsFilter) ? settingsOwnerSection('control-panel', 'Apps',
-    `<form id="app-preferences" class="card"><div class="settings-card-fields">${field('Cursor', 'cursor', state.appSettings.cursor, {
+    `<div class="card"><form id="panel-appearance" class="settings-card-fields">${field('Theme', 'theme', window.xrbTheme.get(), {
+      options: ['system', 'light', 'dark'], raw: true,
+      optionLabels: { system: 'System', light: 'Light', dark: 'Dark' },
+    })}</form><form id="app-preferences" class="xrb-section-divider"><div class="settings-card-fields">${field('Cursor', 'cursor', state.appSettings.cursor, {
       options: ['system', 'ring', 'ring-dot'], raw: true,
       optionLabels: { system: 'System', ring: 'Ring', 'ring-dot': 'Ring with hover dot' },
-    })}</div><p class="xrb-help">Applies on the next run. Mouse must be selected in the app’s Input options.</p></form>`) : '';
+    })}</div><p class="xrb-help">Applies on the next run. Mouse must be selected in the app’s Input options.</p></form></div>`) : '';
   $('#settings-content').innerHTML = apps + shownPlugins.map(pluginSettingsSection).join('');
+  $('#panel-appearance')?.addEventListener('change', event => window.xrbTheme.set(event.currentTarget.elements.namedItem('theme').value));
   $('#app-preferences')?.addEventListener('change', action(async (event) => {
     const form = event.currentTarget, cursor = form.elements.namedItem('cursor').value;
     form.querySelectorAll('input,button').forEach(control => { control.disabled = true; });
@@ -3307,6 +3304,11 @@ function syncPanelIdentity() {
   else setPageIdentity(plugins ? 'Plugins' : 'Apps', plugins ? '🧩' : APPS_GLYPH, plugins ? tint : detailTint);
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncPanelIdentity);
+window.addEventListener('xrb-theme-change', () => {
+  syncPanelIdentity();
+  const input = $('#panel-appearance [name="theme"]');
+  if (input) input.value = window.xrbTheme.get();
+});
 
 // ---- header -------------------------------------------------------------------------------
 
@@ -3587,7 +3589,7 @@ await loadProjects().catch(report);
 // Plugins and Settings are standalone routes; legacy ?page= links are consumed once.
 const navigationRequest=initialNavigationRequest;
 if(navigationRequest.page==='plugins'&&location.pathname!=='/plugins/'&&!navigationRequest.maintenance){location.replace('/plugins/');}
-if(navigationRequest.page==='settings'&&location.pathname!=='/settings/'&&!navigationRequest.maintenance){location.replace('/settings/');}
+if(navigationRequest.page==='settings'&&location.pathname!=='/settings/'&&!navigationRequest.maintenance){const destination=new URL(navigationRequest.cleanUrl);destination.pathname='/settings/';location.replace(destination.href);}
 if(navigationRequest.cleanUrl!==location.href)history.replaceState(null,'',navigationRequest.cleanUrl);
 const initialPage = ['plugins', 'settings'].includes(navigationRequest.page) ? navigationRequest.page : 'projects';
 await showPage(initialPage).catch(report);
@@ -3627,6 +3629,7 @@ function syncRunDock(p) {
   const dock = $('#run-dock');
   const src = $('#act-stop') ?? $('#act-run');
   syncRunDock.observer?.disconnect();
+  syncRunDock.observer = null;
   if (!src) {
     runDockVisible = false;
     dock.hidden = true;
@@ -3641,13 +3644,21 @@ function syncRunDock(p) {
   btn.textContent = pending ? '...' : src.id === 'act-stop' ? 'Stop' : 'Run';
   btn.title = src.textContent;
   btn.disabled = src.disabled;
-  // Hidden while the real button shows below the top bar.
+  // A workflow animation can clip the action below the header without any scrolling.
+  // Only an action above the app bar belongs in the dock; below-viewport actions do not.
   const top = getComputedStyle(document.documentElement).getPropertyValue('--top-h').trim() || '54px';
-  syncRunDock.observer = new IntersectionObserver(([e]) => {
-    runDockVisible = !e.isIntersecting;
+  const update = () => {
+    const rect = src.getBoundingClientRect(), edge = $('.top').getBoundingClientRect().bottom;
+    runDockVisible = src.isConnected && rect.width > 0 && rect.height > 0 && rect.bottom <= edge;
     dock.hidden = !runDockVisible;
     renderStatsDock(state.run && state.run.phase !== 'idle' ? state.status : null);
+  };
+  const observer = new IntersectionObserver(() => {
+    if (syncRunDock.observer !== observer || !src.isConnected) return;
+    update();
   }, { rootMargin: `-${top} 0px 0px 0px` });
-  syncRunDock.observer.observe(src);
+  syncRunDock.observer = observer;
+  update();
+  observer.observe(src);
 }
 $('#run-dock button').addEventListener('click', () => ($('#act-stop') ?? $('#act-run'))?.click());

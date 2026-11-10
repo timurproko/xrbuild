@@ -10,7 +10,8 @@
       {
         "id": "hand-tracking",
         "label": "Hands",
-        "route": "/hand-tracking/",
+        "route": "/hands/",
+        "aliases": ["/hand-tracking/"],
         "module": "tool.mjs",
         "endpoints": ["/__handtracking/", "/__xrbuild/"]
       }

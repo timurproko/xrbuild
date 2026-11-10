@@ -10,6 +10,7 @@
 //   node tools/fetch-deps/fetch-deps.mjs --workspace --plugins=<plugin>,<plugin>   only these plugins
 //   node tools/fetch-deps/fetch-deps.mjs --update-lock      (re)pin hashes of current sources
 //   node tools/fetch-deps/fetch-deps.mjs --only cef,nlohmann
+//   node tools/fetch-deps/fetch-deps.mjs --output=<fresh-empty-directory>   pinned core inputs only
 //
 // The workspace is XRB_HOME, else %USERPROFILE%\.xrbuild (as the control panel resolves it).
 
@@ -84,35 +85,39 @@ function check(lock, key, actual, updateLock, log) {
 }
 
 /** Copy a file into place only after its hash checks out (via a temp file). */
-async function installFile({ key, from, to }, lock, updateLock, log) {
+async function installFile({ key, from, to }, lock, updateLock, log, fresh = false) {
+  if (fresh && await exists(to)) throw new Error('Fresh dependency output changed; preserve and review it');
   if (!await exists(from)) throw new Error(`${key}: source not found: ${from}`);
   if (!updateLock && lock[key] && await exists(to) && await sha256File(to) === lock[key]) return 'kept';
   const actual = await sha256File(from);
   check(lock, key, actual, updateLock, log);
   await fs.mkdir(path.dirname(to), { recursive: true });
   const tmp = `${to}.partial`;
-  await fs.copyFile(from, tmp);
+  await fs.copyFile(from, tmp, fresh ? 1 : 0);
   if (await sha256File(tmp) !== actual) throw new HashMismatchError(`${key}: changed while copying`);
-  await fs.rename(tmp, to);
+  if (fresh) { await fs.link(tmp, to); await fs.unlink(tmp); }
+  else await fs.rename(tmp, to);
   return 'copied';
 }
 
-async function installArchive(src, root, lock, updateLock, log) {
+async function installArchive(src, root, lock, updateLock, log, fresh = false) {
   const key = `archive:${src.id}`;
   const destDir = path.join(root, src.dest);
+  if (fresh && await exists(destDir)) throw new Error('Fresh dependency output changed; preserve and review it');
   const marker = path.join(destDir, '.fetched-sha256');
   if (!updateLock && lock[key] && await exists(marker)
       && (await fs.readFile(marker, 'utf8')).trim() === lock[key]) return 'kept';
 
-  const cacheDir = path.join(root, '.cache');
-  await fs.mkdir(cacheDir, { recursive: true });
+  const cacheDir = fresh ? await fs.mkdtemp(path.join(root, '.cache-')) : path.join(root, '.cache');
+  if (!fresh) await fs.mkdir(cacheDir, { recursive: true });
   const file = path.join(cacheDir, decodeURIComponent(path.basename(new URL(src.url).pathname)));
   if (!await exists(file)) {
     log(`  downloading ${src.url}`);
     const res = await fetch(src.url);
     if (!res.ok) throw new Error(`[${src.id}] download failed: HTTP ${res.status}`);
-    await pipeline(Readable.fromWeb(res.body), createWriteStream(`${file}.partial`));
-    await fs.rename(`${file}.partial`, file);
+    await pipeline(Readable.fromWeb(res.body), createWriteStream(`${file}.partial`, { flags: fresh ? 'wx' : 'w' }));
+    if (fresh) { await fs.link(`${file}.partial`, file); await fs.unlink(`${file}.partial`); }
+    else await fs.rename(`${file}.partial`, file);
   }
   const actual = await sha256File(file);
   try {
@@ -127,11 +132,11 @@ async function installArchive(src, root, lock, updateLock, log) {
     }
     check(lock, key, actual, updateLock, log);
   } catch (e) {
-    await fs.rm(file, { force: true }); // never keep a bad download around
+    if (!fresh) await fs.rm(file, { force: true }); // Managed failed generations remain available for review.
     throw e;
   }
-  await fs.rm(destDir, { recursive: true, force: true });
-  await fs.mkdir(destDir, { recursive: true });
+  if (fresh) await fs.mkdir(destDir); // Exclusive creation: never remove newly appeared KEEP/unknown state.
+  else { await fs.rm(destDir, { recursive: true, force: true }); await fs.mkdir(destDir, { recursive: true }); }
   log(`  extracting into ${path.relative(root, destDir)}`);
   // Windows ships bsdtar, which handles .tar.bz2. Call it by full path: a GNU tar
   // from Git Bash earlier on PATH reads "D:\..." as a remote host.
@@ -143,23 +148,25 @@ async function installArchive(src, root, lock, updateLock, log) {
   return 'extracted';
 }
 
-async function installDownload(src, root, lock, updateLock, log) {
+async function installDownload(src, root, lock, updateLock, log, fresh = false) {
   const key = src.dest;
   const to = path.join(root, src.dest);
+  if (fresh && await exists(to)) throw new Error('Fresh dependency output changed; preserve and review it');
   if (!updateLock && lock[key] && await exists(to) && await sha256File(to) === lock[key]) return 'kept';
   log(`  downloading ${src.url}`);
   const res = await fetch(src.url);
   if (!res.ok) throw new Error(`[${src.id}] download failed: HTTP ${res.status}`);
   await fs.mkdir(path.dirname(to), { recursive: true });
   const tmp = `${to}.partial`;
-  await pipeline(Readable.fromWeb(res.body), createWriteStream(tmp));
+  await pipeline(Readable.fromWeb(res.body), createWriteStream(tmp, { flags: fresh ? 'wx' : 'w' }));
   try {
     check(lock, key, await sha256File(tmp), updateLock, log);
   } catch (e) {
     await fs.rm(tmp, { force: true });
     throw e;
   }
-  await fs.rename(tmp, to);
+  if (fresh) { await fs.link(tmp, to); await fs.unlink(tmp); }
+  else await fs.rename(tmp, to);
   return 'downloaded';
 }
 
@@ -215,13 +222,13 @@ export async function depGroups(repoRoot, coreSources, { workspace = null, plugi
  * Fetches one group into its root with its lock (`only`: source id prefixes). A failure names the group
  * (the plugin), the file and, for a hash mismatch, both hashes. Returns null when nothing was selected.
  */
-export async function syncGroup(group, { updateLock = false, only = null, log = () => {} } = {}) {
+export async function syncGroup(group, { updateLock = false, only = null, log = () => {}, fresh = false } = {}) {
   const sources = only ? group.sources.filter((s) => only.some((o) => s.id.startsWith(o))) : group.sources;
   if (!sources.length) return null;
   const lock = await exists(group.lockPath) ? JSON.parse(await fs.readFile(group.lockPath, 'utf8')) : {};
   let summary;
   try {
-    summary = await syncSources(sources, { root: group.root, lock, updateLock, log });
+    summary = await syncSources(sources, { root: group.root, lock, updateLock, log, fresh });
   } catch (e) {
     e.message = `[${group.name}] ${e.message}`;
     throw e;
@@ -238,27 +245,41 @@ export async function syncGroup(group, { updateLock = false, only = null, log = 
  * Install `sources` into `root`, verifying against `lock` (mutated when
  * updateLock is set). Throws HashMismatchError on any mismatch.
  */
-export async function syncSources(sources, { root, lock, updateLock = false, log = () => {} }) {
+export async function syncSources(sources, { root, lock, updateLock = false, log = () => {}, fresh = false }) {
   const summary = {};
   for (const src of sources) {
     log(`[${src.id}]`);
     if (src.kind === 'archive') {
-      summary[src.id] = await installArchive(src, root, lock, updateLock, log);
+      summary[src.id] = await installArchive(src, root, lock, updateLock, log, fresh);
       continue;
     }
     if (src.kind === 'download') {
-      summary[src.id] = await installDownload(src, root, lock, updateLock, log);
+      summary[src.id] = await installDownload(src, root, lock, updateLock, log, fresh);
       continue;
     }
     const copies = await expand(src, root);
     const counts = {};
     for (const c of copies) {
-      const r = await installFile(c, lock, updateLock, log);
+      const r = await installFile(c, lock, updateLock, log, fresh);
       counts[r] = (counts[r] ?? 0) + 1;
     }
     summary[src.id] = counts;
   }
   return summary;
+}
+
+/** Managed callers can fetch pinned core inputs only into a fresh plain output tree. */
+export async function freshOutputRoot(value) {
+  const root = path.resolve(value);
+  let current = root;
+  for (;;) {
+    const stat = await fs.lstat(current).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+    if (stat && (!stat.isDirectory() || stat.isSymbolicLink())) throw new Error('Native dependency output must use plain directories');
+    const parent = path.dirname(current); if (parent === current) break; current = parent;
+  }
+  const entries = await fs.readdir(root).catch(error => { if (error.code === 'ENOENT') return []; throw error; });
+  if (entries.length) throw new Error('Native dependency output must be a fresh empty directory');
+  return root;
 }
 
 async function main() {
@@ -271,6 +292,11 @@ async function main() {
   const plugins = pluginsArg ? pluginsArg.slice('--plugins='.length).split(',').map((n) => n.trim()).filter(Boolean) : null;
   const wsArg = args.find((a) => a === '--workspace' || a.startsWith('--workspace='));
   const workspace = wsArg ? (wsArg.includes('=') ? path.resolve(wsArg.slice('--workspace='.length)) : workspaceDir()) : null;
+  const outputs = args.filter(arg => arg === '--output' || arg.startsWith('--output='));
+  if (outputs.length > 1 || outputs.length && (outputs[0] === '--output' || outputs[0] === '--output=' || workspace || plugins || updateLock || only)) {
+    console.error('--output=<fresh-empty-directory> is only for pinned complete core inputs');
+    process.exitCode = 1; return;
+  }
   if (plugins && !workspace) {
     console.error('--plugins= picks workspace plugins: add --workspace');
     process.exitCode = 1;
@@ -278,9 +304,11 @@ async function main() {
   }
   try {
     if (workspace) console.log(`workspace ${workspace}`);
+    const output = outputs.length ? await freshOutputRoot(outputs[0].slice('--output='.length)) : null;
     for (const group of await depGroups(REPO_ROOT, SOURCES, { workspace, plugins })) {
+      if (output) group.root = output;
       console.log(`== ${group.name}`);
-      const summary = await syncGroup(group, { updateLock, only, log: console.log });
+      const summary = await syncGroup(group, { updateLock, only, log: console.log, fresh: !!output });
       if (summary) console.log(JSON.stringify(summary, null, 1));
     }
   } catch (e) {

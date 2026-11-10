@@ -7,12 +7,12 @@ const ID = /^[a-z][a-z0-9-]{0,47}$/;
 const MANAGED_ROUTE = /^\/(?:[a-z][a-z0-9-]*\/)+$/;
 const ENDPOINT = /^\/{1}__[a-z][a-z0-9-]*(?:\/[a-z0-9-]+)*\/?$/;
 const MODULE = /^(?:[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.mjs|#[a-z][a-z0-9-]{0,47})$/;
-const RESERVED_IDS = new Set(['projects', 'plugins', 'settings', 'rebuild', 'restart']);
-const RESERVED_PATHS = ['/api/', '/plugins/', '/settings/', '/preview/', '/vendor/', '/sdk/'];
+const RESERVED_IDS = new Set(['projects', 'plugins', 'settings', 'rebuild', 'restart', 'design-system']);
+const RESERVED_PATHS = ['/api/', '/plugins/', '/settings/', '/preview/', '/vendor/', '/sdk/', '/design-system/', '/design/'];
 
 interface ToolBase { id: string; label: string }
 export interface ExternalToolLink extends ToolBase { url: string; passPanelOrigin?: boolean }
-export interface ManagedToolLink extends ToolBase { route: string; module: string; endpoints: string[]; owner?: { key: string; root: string; module: string } }
+export interface ManagedToolLink extends ToolBase { route: string; module: string; endpoints: string[]; aliases?: string[]; owner?: { key: string; root: string; module: string } }
 export type ToolLink = ExternalToolLink | ManagedToolLink;
 export const isManagedTool = (tool: ToolLink): tool is ManagedToolLink => 'route' in tool;
 
@@ -33,7 +33,7 @@ function validateItems(tools: unknown[], source: string, modulePrefix = '', mana
       throw new Error(`${source}: tool IDs must be distinct lower-case names`);
     if (typeof tool.label !== 'string' || !tool.label.trim() || tool.label.length > 60 || /[\x00-\x1f\x7f]/.test(tool.label))
       throw new Error(`${source}: invalid tool label`);
-    const hasUrl = tool.url !== undefined, hasManaged = tool.route !== undefined || tool.module !== undefined || tool.endpoints !== undefined;
+    const hasUrl = tool.url !== undefined, hasManaged = tool.route !== undefined || tool.module !== undefined || tool.endpoints !== undefined || tool.aliases !== undefined;
     if (hasUrl === hasManaged || managedOnly && hasUrl) throw new Error(`${source}: each tool must define ${managedOnly ? 'a managed route/module' : 'either url or route/module'}`);
     ids.add(tool.id);
     const base = { id: tool.id, label: tool.label.trim() };
@@ -57,8 +57,11 @@ function validateItems(tools: unknown[], source: string, modulePrefix = '', mana
       throw new Error(`${source}: managed tool endpoints must be bounded local path prefixes`);
     const distinct = [...new Set(endpoints as string[])];
     if (distinct.length !== endpoints.length) throw new Error(`${source}: managed tool endpoints must be distinct`);
-    ownedPaths.push(tool.route, ...distinct);
-    return { ...base, route: tool.route, module, endpoints: distinct };
+    const aliases = tool.aliases ?? [];
+    if (!Array.isArray(aliases) || aliases.length > 8 || aliases.some(entry => typeof entry !== 'string' || entry.length > 128 || !MANAGED_ROUTE.test(entry)))
+      throw new Error(`${source}: managed tool aliases must be bounded local directory paths`);
+    ownedPaths.push(tool.route, ...distinct, ...aliases);
+    return { ...base, route: tool.route, module, endpoints: distinct, ...(aliases.length ? {aliases: aliases as string[]} : {}) };
   });
   validatePathOwnership(ownedPaths, source);
   return result;
@@ -68,7 +71,7 @@ function validateInventory(tools: ToolLink[]): ToolLink[] {
   if (tools.length > 12) throw new Error('workspace tools: at most 12 combined tools are supported');
   const ids = new Set<string>();
   for (const tool of tools) { if (ids.has(tool.id)) throw new Error('workspace tools: tool IDs must be distinct across plugins and workspace configuration'); ids.add(tool.id); }
-  validatePathOwnership(tools.flatMap((tool) => isManagedTool(tool) ? [tool.route, ...tool.endpoints] : []), 'workspace tools');
+  validatePathOwnership(tools.flatMap((tool) => isManagedTool(tool) ? [tool.route, ...tool.endpoints, ...(tool.aliases ?? [])] : []), 'workspace tools');
   return tools;
 }
 

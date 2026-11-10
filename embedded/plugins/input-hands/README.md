@@ -1,7 +1,7 @@
 # Hands
 
-Plugin/catalog ID: **`input-hands`** (display name **Hands**). The tool route `/hand-tracking/`, native provider ID,
-recording format and persistent recording/cache paths remain stable; only plugin ownership/configuration uses the new ID.
+Plugin/catalog ID: **`input-hands`** (display name **Hands**). The tool uses `/hands/`, with `/hand-tracking/` retained as a local redirect. Native provider ID,
+recording format and persistent recording/cache paths remain stable; plugin ownership/configuration uses the catalog ID.
 
 Bundled hand-tracking implementation, plugin-owned diagnostic/sample, tests and build descriptors. The native provider ID remains `hand-tracking`; its application input is **synthetic**, not neural/camera input. It uses the public C ABI, deterministic authored 21-joint fixtures and the core's pinned header-only JSON dependency. There is no dependency on another input plugin.
 
@@ -17,7 +17,7 @@ Ordinary user workspace means `XRB_HOME`, otherwise the home `.xrbuild`; core lo
 
 ## Use and validation
 
-After explicit bundled setup, Plugins → **Hands · Bundled** opens the diagnostic on the normal panel's `/hand-tracking/` route. Default use is a generated fixture: opening the page does not request cameras, start inference, fetch model weights or compile device code. Application selection hides the synthetic provider from normal real-input choices; explicit test manifests can select it.
+After explicit bundled setup, Plugins → **Hands · Bundled** opens the diagnostic on the normal panel's `/hands/` route. Default use is a generated fixture: opening the page does not request cameras, start inference, fetch model weights or compile device code. Application selection hides the synthetic provider from normal real-input choices; explicit test manifests can select it.
 
 The plugin owns `samples/hand-tracking`; Import creates an independently editable workspace copy. The frozen embedded package graph builds/tests/types this nested sample without a private clone. Run the core embedded validation entry point with an explicit writable workspace.
 

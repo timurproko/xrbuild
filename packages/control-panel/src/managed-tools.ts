@@ -210,11 +210,18 @@ export class ManagedTools {
 
   async handle(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> {
     const tool = (await this.tools()).find((candidate): candidate is ManagedToolLink => isManagedTool(candidate)
-      && (owns(candidate.route, pathname) || candidate.endpoints.some((endpoint) => owns(endpoint, pathname))));
+      && (owns(candidate.route, pathname) || candidate.endpoints.some((endpoint) => owns(endpoint, pathname)) || !!candidate.aliases?.some(alias => owns(alias, pathname))));
     if (!tool) {
       const previous = [...this.runtimes.values()].find(runtime => runtime.sourceChanged && (pathname === runtime.tool.route || pathname === `${runtime.tool.route}index.html`));
       if (previous && ['GET', 'HEAD'].includes(req.method ?? 'GET')) { this.failurePage(res, previous); return true; }
       return false;
+    }
+    const alias = tool.aliases?.find(alias => owns(alias, pathname));
+    if (alias) {
+      if (!['GET','HEAD'].includes(req.method ?? 'GET')) { res.writeHead(405, {Allow:'GET, HEAD'}); res.end(); return true; }
+      const suffix = pathname === alias.slice(0, -1) ? '' : pathname.slice(alias.length);
+      const search = new URL(req.url ?? '/', 'http://127.0.0.1').search;
+      res.writeHead(302, {location: `${tool.route}${suffix}${search}`, 'cache-control':'no-store'}); res.end(); return true;
     }
     const runtime = this.runtime(tool), isPage = owns(tool.route, pathname), rootPage = pathname === tool.route || pathname === `${tool.route}index.html`;
     const blocked = this.options.available?.();
