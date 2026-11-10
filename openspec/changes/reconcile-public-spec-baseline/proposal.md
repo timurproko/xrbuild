@@ -4,7 +4,7 @@ The accepted public implementation was bootstrapped with unfinished historical O
 
 ## What Changes
 
-- Propose an explicitly approved, contract-only checkpoint for the accepted public implementation at `d7f9c04493f1731cdfbefc451d33b3900edb7c66`, not completion of any historical plan.
+- Deliver the maintainer-approved, contract-only checkpoint for the accepted public implementation at `d7f9c04493f1731cdfbefc451d33b3900edb7c66`, not completion of any historical plan.
 - Reconcile relevant workspace-separation contracts in recorded predecessor order, then embedded ownership and the pre-PR-#4 embedded project contract. Existing canonical ordinary-user resolution remains authoritative; do not restore obsolete defaults from older pending deltas.
 - Have the normal repository bot synchronize and archive this independently completed reconciliation change. Do not manually edit canonical specs or archive predecessor plans.
 - Preserve historical plans/tasks unchanged. Document remaining acceptance separately from this checkpoint and require explicit maintainer approval before treating the checkpoint as satisfying PR #4's canonical-contract prerequisite.
@@ -27,4 +27,4 @@ The accepted public implementation was bootstrapped with unfinished historical O
 
 ## Impact
 
-Plan/delta artifacts first; implementation is a public-contract evidence review and documentation reconciliation, not runtime or privileged-automation changes. No private clone, source export, hosting mutation, hardware operation, task-completion rewrite or cleanup is authorized. No required check is removed or bypassed. The maintainer reviews this checkpoint approach before implementation and alone chooses when to merge its normally finalized PR; PR #4 then incorporates that actual canonical baseline.
+Plan/delta artifacts first; implementation is a public-contract evidence review and documentation reconciliation, not runtime or privileged-automation changes. No private clone, source export, hosting mutation, hardware operation, task-completion rewrite or cleanup is authorized. No required check is removed or bypassed. The maintainer approved draft PR #5's checkpoint approach and requested implementation (`yes implement it`); only the maintainer chooses when to merge its normally finalized PR. PR #4 then incorporates that actual canonical baseline.

@@ -1,10 +1,12 @@
 # Accepted public contract checkpoint proposal
 
-Status: plan awaiting review; no historical prerequisite is declared satisfied.
+Status: maintainer approved draft PR #5's contract-only checkpoint and requested implementation (`yes implement it`). This approves the documented historical-task disposition, not historical task completion or a merged canonical baseline. No delivery prerequisite is declared satisfied before actual bot finalization and maintainer merge.
 
 Review source-contract order: `user-workspace-public-core` -> `split-private-workspace` -> `bundled-extensions`. Preserve current accepted ordinary-user resolution while composing the compatible independent-workspace/embedded contract. The source is the already-public accepted main implementation, not private history.
 
-The maintainer must explicitly approve using an independently finalized accepted-contract checkpoint for the missing canonical baseline. This approval does not close the predecessor plans or their migration, device, external-companion, export or hosting acceptance. Their files and task checkboxes remain unchanged. No source export, remote migration, hardware operation or cleanup is authorized.
+The maintainer explicitly approved using an independently finalized accepted-contract checkpoint for the missing canonical baseline. This approval does not close the predecessor plans or their migration, device, external-companion, export or hosting acceptance. Their files and task checkboxes remain unchanged. No source export, remote migration, hardware operation or cleanup is authorized.
+
+Evidence and unchanged historical scope are recorded in `docs/spec-baseline-reconciliation.md`.
 
 Delivery order after approval:
 

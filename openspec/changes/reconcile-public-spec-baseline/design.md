@@ -4,9 +4,9 @@ The implementation predecessor order is `user-workspace-public-core` -> `split-p
 
 The current finalizer correctly rejects PR #4's MODIFIED embedded requirements because their canonical target does not exist. A fixture-only merge preview also found that the successor omitted predecessor scenario identities. PR #4 repair commit `370afa0` preserves these identities and the applicable safety/compatibility assertions; its embedded merge preview now passes against the pending baseline. This does not create canonical specs or clear the baseline gate.
 
-## Decision requiring plan approval
+## Approved decision
 
-Use an explicitly reviewed **accepted-contract checkpoint**, not a claim that the historical plans are fully delivered. This is a proposed disposition of the stale canonical baseline and must be approved before implementation. Approval must explicitly distinguish contract synchronization from unfinished historical acceptance. Until that decision and normal delivery occur, the original predecessor gate remains unresolved.
+Use an explicitly reviewed **accepted-contract checkpoint**, not a claim that the historical plans are fully delivered. The maintainer approved draft PR #5's disposition and requested implementation (`yes implement it`), distinguishing contract synchronization from unfinished historical acceptance. Until normal bot finalization and maintainer merge occur, the successor's canonical prerequisite remains unresolved.
 
 The checkpoint is an ordinary linked OpenSpec change with its own truthful implementation tasks. The existing trusted bot archives only this fully completed change and produces canonical files. No new finalizer mode, open-task bypass, manual archive, main push, ready mutation or automatic merge is needed.
 
@@ -19,7 +19,7 @@ Use the existing accepted public main tree at `d7f9c04493f1731cdfbefc451d33b3900
 3. Reconcile neutral core/embedded ownership and the existing pre-workflow-restoration embedded contract. Do not promote the separate unfinished companion-automation capability or represent private acceptance as passed.
 4. Preview the actual PR #4 delta on the composed candidate, including preservation of all predecessor scenarios. The baseline must not prematurely include PR #4's unmerged mutable-project behavior.
 
-Draft deltas are proposal artifacts, not proof of implementation acceptance. After approval, bind each requirement to current public source/tests; correct any draft that would regress an already-accepted public contract. Preserve unrelated canonical requirements/scenarios.
+Each requirement is mapped to accepted public source/tests in `docs/spec-baseline-reconciliation.md`. The approved checkpoint itself is a new documented process contract, not a claim that this process already existed in the accepted runtime snapshot. Instruction regressions verify approval, historical preservation, ordinary bot delivery and merge-dependent successor blocking; evidence coverage checks remain valid after normal bot archival. Preserve unrelated canonical requirements/scenarios.
 
 ## Historical plan preservation
 

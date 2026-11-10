@@ -25,6 +25,13 @@ trusted remote CI or delivery authorization. The helper never stages, exports, p
 Follow `docs/embedded-extensions.md` and the active change's `prerequisites.md`; predecessor synchronization/archive
 belongs to the bot's ordered delivery gate, never manual overwriting of an older active change.
 
+A missing canonical baseline after an accepted public bootstrap may use an explicitly maintainer-approved,
+contract-only checkpoint: follow `docs/spec-baseline-reconciliation.md`. Bind contracts to the accepted public tree,
+review predecessor contracts in their recorded order, and leave historical plans and task completion unchanged.
+The checkpoint needs its own complete verified tasks and normal bot finalization; it is not an open-task bypass.
+A successor stays blocked until that checkpoint is bot-finalized and maintainer-merged, then updates only its own
+ledger with the observed baseline. Approval grants no private export, hosting mutation, cleanup or merge authority.
+
 ## 1. Preflight
 
 - From the primary checkout (it stays on `main`): `pnpm worktree sweep` and relay its lines. `--apply` only removes

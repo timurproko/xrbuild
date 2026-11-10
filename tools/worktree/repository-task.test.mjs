@@ -152,3 +152,49 @@ test('instruction matrix and prerequisite order are explicit without overwriting
   assert.match(prerequisites, /user-workspace-public-core.*split-private-workspace.*bundled-extensions/s);
   assert.match(prerequisites, /bot.*finalization/i); assert.match(prerequisites, /never.*overwrite.*predecessor/i);
 });
+
+test('accepted contract checkpoints require approval, historical preservation and ordinary bot delivery', async () => {
+  const read = file => fs.readFile(path.join(REPO, file), 'utf8');
+  const [instructions, delivery, context, governance, checkpoint] = await Promise.all([
+    '.claude/CLAUDE.md', '.claude/skills/change-delivery/SKILL.md', 'openspec/config.yaml',
+    'docs/pr-delivery-governance.md', 'docs/spec-baseline-reconciliation.md',
+  ].map(read));
+  for (const entry of [instructions, delivery, context, governance]) {
+    assert.match(entry, /spec-baseline-reconciliation\.md/);
+    assert.match(entry, /explicitly.*approved/i);
+    assert.match(entry, /bot-finalized and maintainer-merged/);
+  }
+  assert.match(delivery, /leave historical plans and task completion unchanged/);
+  assert.match(delivery, /not an open-task bypass/);
+  assert.match(checkpoint, /user-workspace-public-core[\s\S]*split-private-workspace[\s\S]*bundled-extensions[\s\S]*restore-embedded-project-workflows/);
+  assert.match(checkpoint, /Do not edit or archive historical plans, change their task completion/);
+  assert.match(checkpoint, /Only the normal trusted repository bot synchronizes and archives/);
+  assert.match(checkpoint, /After that actual merge[\s\S]*update only the successor's own prerequisite ledger/);
+  assert.match(checkpoint, /PR #4 remains blocked/);
+  assert.match(checkpoint, /No private workflow activation/);
+});
+
+test('every checkpoint requirement has public evidence before and after bot archival', async () => {
+  const change = 'reconcile-public-spec-baseline', changes = path.join(REPO, 'openspec/changes');
+  const archived = (await fs.readdir(path.join(changes, 'archive'))).filter(name => name.endsWith(`-${change}`));
+  const candidates = [path.join(changes, change), ...archived.map(name => path.join(changes, 'archive', name))];
+  const found = [];
+  for (const candidate of candidates) {
+    try { if ((await fs.stat(path.join(candidate, 'specs'))).isDirectory()) found.push(candidate); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  assert.equal(found.length, 1, 'exactly one active or bot-archived checkpoint must exist');
+  const evidence = await fs.readFile(path.join(REPO, 'docs/spec-baseline-reconciliation.md'), 'utf8');
+  let requirements = 0;
+  for (const capability of await fs.readdir(path.join(found[0], 'specs'))) {
+    const delta = await fs.readFile(path.join(found[0], 'specs', capability, 'spec.md'), 'utf8');
+    for (const [, requirement] of delta.matchAll(/^### Requirement: (.+)$/gm)) {
+      assert.ok(evidence.includes(`| ${capability} | ${requirement.trim()} |`), `${capability}/${requirement} lacks an evidence row`);
+      requirements++;
+    }
+  }
+  assert.equal(requirements, 26, 'the approved checkpoint has a bounded 26-requirement scope');
+  for (const [, file] of evidence.matchAll(/`((?:src|test)\/[^`]+)`/g)) {
+    await fs.access(path.join(REPO, 'packages/control-panel', file));
+  }
+});
