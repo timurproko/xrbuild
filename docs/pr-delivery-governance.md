@@ -10,6 +10,15 @@ Trusted main policy inspects the exact PR head as data with read-only credential
 
 The App's ready event starts ordinary CI. The finalizer uses trusted tools, archives/synchronizes on the PR branch and rechecks before publishing and updating the body. Ordinary PR events validate the final head. Drafts do not emit a successful protected aggregate; selected gates that unexpectedly skip, fail or cancel cannot make `CI required` green. A green gate is not acceptance or permission for an agent to merge.
 
+## Accepted public contract checkpoints
+
+A missing canonical baseline after public bootstrap may be reconciled only through an explicitly approved,
+contract-only checkpoint with public implementation evidence, independently complete tasks and the normal trusted
+bot finalizer. Historical plans and unfinished task completion stay unchanged. This neither changes privileged
+workflow execution nor waives any required check. A dependent successor remains blocked until the checkpoint is
+bot-finalized and maintainer-merged; only then does its own ledger cite the observed canonical baseline.
+See [baseline reconciliation](spec-baseline-reconciliation.md) for the accepted source, evidence and remaining scope.
+
 ## Owner prerequisites
 
 Use a repository-installed App with Contents and Pull requests write, Metadata read, and only other permissions actually needed by enabled probes. Set the numeric App id in `XRB_BOT_APP_ID` and supply its key through the repository secret `XRB_BOT_PRIVATE_KEY`. Never put keys in chat, source, logs or scratch. Existing encrypted secrets cannot be extracted from another repository. Names/settings presence alone is not proof of installation permissions; a real probe and event-producing canary remain required.

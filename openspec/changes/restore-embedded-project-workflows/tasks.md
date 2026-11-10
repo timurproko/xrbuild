@@ -1,6 +1,6 @@
 ## 1. Plan approval
 
-- [x] 1.1 Review and approve the successor contract and draft PR before implementation; verify maintainer approval is recorded and predecessor bot synchronization is explicitly tracked. Maintainer approved implementation after draft PR #4; ordered bot synchronization remains tracked in prerequisites.md.
+- [x] 1.1 Review and approve the successor contract and draft PR before implementation; verify maintainer approval is recorded and predecessor bot synchronization is explicitly tracked. Maintainer approved implementation after draft PR #4; the accepted-contract checkpoint was subsequently bot-finalized and maintainer-merged through PR #5, as recorded in prerequisites.md. Historical plans/tasks remain unchanged.
 
 ## 2. Effective embedded project state
 
@@ -29,7 +29,9 @@
 
 ## 6. Spec repair
 
-- [x] 6.1 Preserve predecessor scenario identities and their applicable safety/compatibility coverage in the successor's modified requirement blocks; verify strict change validation and a read-only merge preview against the pending embedded contract both pass, without modifying canonical specs or predecessor artifacts. This preview does not clear the missing-canonical-baseline delivery prerequisite.
+- [x] 6.1 Preserve predecessor scenario identities and their applicable safety/compatibility coverage in the successor's modified requirement blocks; verify strict change validation and a read-only merge preview against the pending embedded contract both pass, without modifying canonical specs or predecessor artifacts. This preview alone did not clear the missing-canonical-baseline delivery prerequisite; the actual merged checkpoint is recorded in 6.2.
+
+- [x] 6.2 Incorporate PR #5's actual merged canonical checkpoint and record the observed prerequisite disposition; verify main commit `8027ebd01444f5bb366cff055c0857ddf9ec8725` contains the bot archive and canonical target, historical plans stay unchanged, and the successor passes strict pre/post-sync validation and focused regression checks without claiming future finalization or CI.
 
 ## Local verification evidence
 
@@ -42,9 +44,11 @@
 
 - Spec repair: the trusted pinned spec merger previously rejected the successor for dropping predecessor scenarios, starting with `Customize a bundled project`. The successor now retains all predecessor scenario identities across its three modified requirements, with updated normal-workflow assertions. An ignored fixture-only baseline/merge preview passed; strict change validation, name guard and whitespace checks passed. Canonical specs and predecessor plans/tasks remain unchanged.
 
+- Merged-baseline update: PR #5's bot archive and canonical target are present in observed main commit `8027ebd01444f5bb366cff055c0857ddf9ec8725`. Integration changes no runtime code relative to `370afa0`, and all historical predecessor folders remain unchanged. The successor's two delta previews pass against that actual baseline; the disposable post-sync candidate passes all 24 active/canonical validations, and the current branch passes all 25 strict validations. The embedded workflow suite passes 12 tests with real browser coverage, the real frozen public Launcher build passes, both checkpoint instruction/evidence regressions pass, and production types, names and whitespace checks pass. These local checks do not claim future bot finalization, exact-head CI or maintainer merge.
+
 ## Remaining acceptance and delivery prerequisites
 
 - CI/maintainer owns rerunning the skipped file-symlink negative case in a privileged test environment.
 - Maintainer owns physical display/input validation, actual signing/package installation and any live-destination publication acceptance after provisioning those resources. Synthetic adapters/compiler checks do not certify those environments or authorize deployment.
-- Trusted automation owns exact-final-head CI and ordered predecessor/successor spec finalization. The active prerequisite chain remains in prerequisites.md; no predecessor artifact or task completion was rewritten.
+- The canonical-contract prerequisite was delivered through the bot-finalized, maintainer-merged PR #5 checkpoint recorded in prerequisites.md. Trusted automation still owns this successor's finalization and exact-final-head CI; no predecessor artifact or task completion was rewritten.
 - Only the maintainer may merge. No worktree/private data cleanup is part of this task.

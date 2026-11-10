@@ -18,6 +18,11 @@ context: |
   records use ignored local artifacts; core/embedded-only work needs no private clone, private-only work needs
   no empty public PR, and paired work retains separate owners. Local checks grant no commit/push/hosting or
   cleanup authority. Active predecessor spec deltas synchronize in their recorded order through the repo bot.
+  A missing canonical baseline after an accepted public bootstrap may use an explicitly maintainer-approved
+  contract-only checkpoint as described in docs/spec-baseline-reconciliation.md. Review relevant predecessor
+  contracts in their recorded order, bind them to accepted public implementation evidence, and leave historical
+  plans/tasks unchanged. Its own complete tasks and normal bot finalization remain required; successors stay
+  blocked until the checkpoint is bot-finalized and maintainer-merged. No private export or hosting authority follows.
   A change ships in the PR that implements it, as the change-delivery skill describes
   (`.claude/skills/change-delivery/SKILL.md`): plan first as a draft PR linked to the change, implementation after
   approval, then the repo bot archives the change in that PR so main gets the code and the synced specs together.

@@ -46,21 +46,13 @@ writing.
 - **WHEN** `apply` runs without the confirm flag
 - **THEN** it prints what it would change and writes nothing
 
-### Requirement: Workspace direct push
-Only changes inside `.xrbuild/` SHALL reach `main` without a PR. The tracked `pre-push` hook SHALL refuse a push to
-`main` that contains a commit touching any path outside `.xrbuild/`, and SHALL refuse deleting `main`.
-`pnpm workspace:push -m <message>` SHALL stage only `.xrbuild/`, refuse when paths outside it are staged, commit
-`chore(workspace): <message>`, rebase on `origin/main` and push. Agents SHALL NOT push to `main`, workspace changes
-included.
+### Requirement: Governance target identity
+The governance tool SHALL accept the core repository name `xrbuild` and SHALL reject other repository names before reading or writing their settings. The existing explicit apply confirmation SHALL remain required.
 
-#### Scenario: Renaming a section
-- **WHEN** the maintainer moves projects to another section in the panel and runs `pnpm workspace:push -m "move apps to CORE"`
-- **THEN** one commit with the renames and the updated `xrb-panel.json` lands on `main` without a PR
+#### Scenario: Core repository
+- **WHEN** a maintainer checks governance for a repository named `xrbuild`
+- **THEN** the tool compares declared settings without rejecting the core's name
 
-#### Scenario: Core file in the push
-- **WHEN** a commit pushed to `main` also edits a file in `packages/`
-- **THEN** the pre-push hook refuses the push and names that file, and the change goes through a PR
-
-#### Scenario: Core file staged
-- **WHEN** `pnpm workspace:push` runs while a core file is staged
-- **THEN** it commits nothing and names the staged paths outside `.xrbuild/`
+#### Scenario: Private workspace or archive
+- **WHEN** governance is invoked for a repository with a different name
+- **THEN** it refuses before making any settings API request

@@ -8,7 +8,11 @@ Core-only: generic control-panel code, public contracts, tests and documentation
 
 `user-workspace-public-core` -> `split-private-workspace` -> `bundled-extensions` -> `restore-embedded-project-workflows`.
 
-The bundled-extensions implementation is present in the checked main baseline, but its specification remains an active delta. This change modifies its project requirements as a successor. Do not edit, archive or mark predecessor tasks complete. The repository bot must synchronize predecessors before finalizing this successor's modified requirements. Local validation does not establish that this remote delivery prerequisite is satisfied.
+The missing canonical-contract prerequisite is now satisfied through the maintainer-approved contract-only checkpoint in PR #5, following the relevant predecessor contracts in the order above. The normal bot finalized that checkpoint at `af537cf9496264e32e5d14911d4171c143c00e68` and archived it at `openspec/changes/archive/2026-11-10-reconcile-public-spec-baseline/`. The maintainer merged PR #5 into main at `8027ebd01444f5bb366cff055c0857ddf9ec8725` on 2026-11-10. That observed main snapshot contains the canonical `bundled-extensions` target and accepted workspace/ownership contracts and is incorporated into this branch.
+
+This is the approved accepted-contract disposition documented in `docs/spec-baseline-reconciliation.md`, not completion or archival of the historical plans. Their migration, device, export, hosting and external-companion acceptance remains unchanged and outside this successor. Do not edit, archive or mark predecessor tasks complete, or blindly reapply their old deltas over newer canonical behavior.
+
+This successor retains MODIFIED requirements against the actual merged canonical target. Its own normal bot finalization, exact-final-head CI and maintainer merge remain separate required gates; local validation does not certify them.
 
 ## Approval and delivery
 

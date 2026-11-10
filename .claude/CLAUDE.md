@@ -24,6 +24,10 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
 - Every change follows the `change-delivery` skill (`.claude/skills/change-delivery/SKILL.md`): own worktree and
   branch, plan first as a draft PR, implementation after the maintainer approves, OpenSpec finalization in the PR by
   the repo bot, handoff, cleanup. Agents never merge, arm auto-merge or push to `main`; the maintainer merges.
+- Missing canonical contracts after an accepted public bootstrap may use an explicitly approved contract-only
+  checkpoint under `docs/spec-baseline-reconciliation.md`. Preserve historical plans/tasks and recorded contract
+  order; only the normal bot synchronizes/archives the completed checkpoint. A successor stays blocked until
+  the checkpoint is bot-finalized and maintainer-merged. This grants no export, hosting, cleanup or merge authority.
 - Commits and PR titles: `type(scope): subject` (scope: `host`, `plugin-sdk`, `sdk`, `ui-kit`, `app-icon`,
   `panel`, `templates`, `fetch-deps`, `name-guard`, `openspec`, `ci`, `claude`, ...). The PR title becomes the
   squash commit on `main`.
