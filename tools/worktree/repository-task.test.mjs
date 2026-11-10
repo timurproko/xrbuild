@@ -188,6 +188,13 @@ test('every checkpoint requirement has public evidence before and after bot arch
   let requirements = 0;
   for (const capability of await fs.readdir(path.join(found[0], 'specs'))) {
     const delta = await fs.readFile(path.join(found[0], 'specs', capability, 'spec.md'), 'utf8');
+    if (capability === 'ci-validation') {
+      const predecessor = await fs.readFile(path.join(changes, 'split-private-workspace/specs/ci-validation/spec.md'), 'utf8');
+      const scenarios = text => [...text.matchAll(/^#### Scenario: (.+)$/gm)].map(([, name]) => name.trim()).sort();
+      assert.deepEqual(scenarios(delta), scenarios(predecessor), 'post-sync CI scenarios must not invalidate the unchanged predecessor');
+      assert.match(delta, /Ready public embedded-module, shared-contract, dependency and relevant compiler changes SHALL select/);
+      assert.match(delta, /unexpectedly skip SHALL NOT produce a successful required aggregate/);
+    }
     for (const [, requirement] of delta.matchAll(/^### Requirement: (.+)$/gm)) {
       assert.ok(evidence.includes(`| ${capability} | ${requirement.trim()} |`), `${capability}/${requirement} lacks an evidence row`);
       requirements++;

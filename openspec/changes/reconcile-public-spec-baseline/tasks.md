@@ -14,5 +14,5 @@ Implementation approval: the maintainer approved draft PR #5's contract-only che
 ## 3. Successor compatibility and handoff
 
 - [x] 3.1 Preview the actual PR #4 delta against the candidate and retain its applicable predecessor scenarios; verify the pinned merger succeeds without converting successor MODIFIED requirements to ADDED or weakening scenario coverage.
-- [x] 3.2 Run focused public evidence checks, strict delta/candidate validation, neutral-name and whitespace checks; verify exact results and limitations are recorded without equating previews with trusted finalization.
+- [x] 3.2 Run focused public evidence checks, strict delta/candidate validation, neutral-name and whitespace checks; verify exact results and limitations are recorded without equating previews with trusted finalization, and all unchanged active plans pass strict validation against the post-sync baseline and successor fixtures.
 - [x] 3.3 Prepare truthful PR outcomes and delivery handoff for this independently completed scope; verify normal bot finalization and maintainer merge remain explicit subsequent gates, and PR #4 stays blocked until it can cite their actual canonical baseline.

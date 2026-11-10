@@ -100,6 +100,8 @@ merger's duplicate, missing-target and missing-scenario errors remain hard failu
 
 1. Complete this checkpoint's own evidence/documentation tasks and truthful PR outcomes. Do not manually edit
    canonical specs, synthesize a finalization commit, mark the draft ready or change labels to bypass finalization.
+   Validate all unchanged active plans against the post-sync candidate, not just canonical specs; new scenario names
+   in a modified requirement must not invalidate an older unchanged delta. Keep public boundary assertions intact.
 2. Only the normal trusted repository bot synchronizes and archives the completed checkpoint on its PR branch.
    Trusted-base execution, read-only candidate inspection, exact-head checks and all ordinary required gates remain.
 3. Only the maintainer chooses whether/when to merge the finalized, verified checkpoint. A preview, checked task list

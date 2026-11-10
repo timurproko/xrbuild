@@ -36,12 +36,27 @@ resolution and unrelated canonical requirements/scenarios remain intact.
   remains MODIFIED against a real candidate target. Separate negative fixtures confirmed missing canonical targets
   and dropped predecessor scenarios still fail; neither guard was weakened.
 - Strict canonical validation: 18 baseline specs passed; 18 baseline-plus-successor specs passed.
+- Post-sync validation including all unchanged active plans and a disposable archive-layout fixture: 24 items passed
+  for the baseline, and 24 items passed for baseline-plus-successor. The source historical files remained unchanged.
 - Strict repository validation (`validate --all --strict --no-interactive`): 23 items passed.
 - Neutral-name check (`pnpm check:names`) and whitespace checks: passed.
 
 The preview starts from the immutable public base's canonical files and extracts only the named public successor
 spec deltas into task-local ignored fixtures. It does not read another task's working files or run an archive against
 tracked files. It generates separate baseline/successor candidates and records candidate content hashes locally.
+
+## Finalization compatibility repair
+
+The bot promoted the completed draft normally. Its first finalization attempt on `f6464eb` then rejected the
+unchanged `split-private-workspace` delta: the checkpoint's new `Public embedded contract change` scenario made
+that older MODIFIED block omit a now-current scenario. Canonical-only validation had not exercised this interaction.
+
+The repair removes only that new scenario heading from this checkpoint and retains its public-boundary selection
+and fail-closed aggregate rules in the existing requirement and scenario set. No historical delta/task is edited.
+The evidence regression now checks scenario compatibility with the unchanged predecessor while asserting those
+public-boundary rules remain present. Both the 24-item post-sync baseline and successor fixtures pass strict
+validation of all active plans and canonical specs. Only ignored copies simulate archival; the real archive and
+canonical synchronization remain the bot's job. The two instruction/evidence regressions passed after the repair.
 
 ## Limitations and owners
 

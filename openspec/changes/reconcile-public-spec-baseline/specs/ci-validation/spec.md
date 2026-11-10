@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Jobs by changed paths
-For a PR, core CI SHALL always run the name guard and OpenSpec validation, SHALL run Node tests when `packages/`, `tools/`, `templates/`, the pnpm files or `ci.yml` change, and SHALL NOT run the host build or native host tests regardless of changed paths. Main pushes SHALL run non-host core jobs. Scheduled main runs and explicit dispatches SHALL also run host build/tests. Core CI SHALL NOT require private workspace source, assets or credentials; private integration jobs belong to private CI. Ready public embedded-module, shared-contract, dependency and relevant compiler changes SHALL select the implemented Windows embedded public-boundary lane, including frozen public installation, strict production type checks and synthetic compiler/service/package boundary checks, without private credentials or hardware. The generic core-only build SHALL remain independent of optional device dependencies.
+For a PR, core CI SHALL always run the name guard and OpenSpec validation, SHALL run Node tests when `packages/`, `tools/`, `templates/`, the pnpm files or `ci.yml` change, and SHALL NOT run the host build or native host tests regardless of changed paths. Main pushes SHALL run non-host core jobs. Scheduled main runs and explicit dispatches SHALL also run host build/tests. Core CI SHALL NOT require private workspace source, assets or credentials; private integration jobs belong to private CI. Ready public embedded-module, shared-contract, dependency and relevant compiler changes SHALL select the implemented Windows embedded public-boundary lane, including frozen public installation, strict production type checks and synthetic compiler/service/package boundary checks, without private credentials or hardware. The generic core-only build SHALL remain independent of optional device dependencies. Selected public checks that unexpectedly skip SHALL NOT produce a successful required aggregate.
 
 #### Scenario: Native change
 - **WHEN** a PR changes a file under `native/host/`
@@ -26,10 +26,6 @@ For a PR, core CI SHALL always run the name guard and OpenSpec validation, SHALL
 #### Scenario: Unrelated private workspace change
 - **WHEN** a private workspace document changes without a core change
 - **THEN** the public core does not select or require a private runtime build for that document
-
-#### Scenario: Public embedded contract change
-- **WHEN** a ready public PR changes embedded source or its shared manifests, dependency graph or compiler boundaries
-- **THEN** its required public boundary checks run without private source, hardware or signing state, and selected checks that unexpectedly skip cannot produce a successful required aggregate
 
 #### Scenario: Private integration change
 - **WHEN** a private workspace integration or pinned dependency changes in its own repository
