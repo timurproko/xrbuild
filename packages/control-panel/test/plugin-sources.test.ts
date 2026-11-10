@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -154,6 +155,43 @@ test('malformed, oversized and linked preferences and foreign locks preserve exi
   await fs.rename(file, `${file}.preserved`); await fs.link(`${file}.preserved`, file);
   await assert.rejects(updatePluginPrefs(f.workspace, () => {}, f.core), /link|unsafe/);
   assert.deepEqual(await fs.readFile(file), saved);
+});
+
+test('preference lock contention never canonicalizes the transient lock leaf', async t => {
+  const f = await fixture(t), file = path.join(f.workspace, 'xrb-plugins.json'), lock = `${file}.lock`;
+  const saved = await fs.readFile(file); await fs.writeFile(lock, 'other writer');
+  const native = realpathSync.native;
+  t.mock.method(realpathSync, 'native', (target: string) => {
+    // Windows may reject realpath while a competing writer unlinks its lock.
+    if (target === lock) throw Object.assign(new Error('Lock leaf is being deleted'), { code: 'EPERM' });
+    return native(target);
+  });
+  let changes = 0;
+  const change = (prefs: Awaited<ReturnType<typeof readPluginPrefs>>) => { changes++; prefs.settings.next = { value: true }; };
+  await assert.rejects(updatePluginPrefs(f.workspace, change, f.core), /lock exists/);
+  assert.equal(changes, 0); assert.equal(await fs.readFile(lock, 'utf8'), 'other writer');
+  assert.deepEqual(await fs.readFile(file), saved);
+  await fs.unlink(lock);
+  await updatePluginPrefs(f.workspace, change, f.core);
+  assert.equal(changes, 1); assert.deepEqual((await readPluginPrefs(f.workspace)).settings.next, { value: true });
+  await assert.rejects(fs.access(lock));
+});
+
+test('linked lock leaves are refused without modifying their targets', async t => {
+  const f = await fixture(t), file = path.join(f.workspace, 'xrb-plugins.json'), lock = `${file}.lock`;
+  const saved = await fs.readFile(file), target = await f.write('outside/keep.txt', 'preserve lock target');
+  let changes = 0;
+  const change = () => { changes++; };
+  await fs.link(target, lock);
+  await assert.rejects(updatePluginPrefs(f.workspace, change, f.core), /lock exists/);
+  assert.equal(await fs.readFile(target, 'utf8'), 'preserve lock target');
+  await fs.unlink(lock);
+  await fs.symlink(path.dirname(target), lock, process.platform === 'win32' ? 'junction' : 'dir');
+  await assert.rejects(updatePluginPrefs(f.workspace, change, f.core), /lock exists/);
+  assert.ok((await fs.lstat(lock)).isSymbolicLink());
+  assert.equal(await fs.readFile(target, 'utf8'), 'preserve lock target');
+  assert.deepEqual(await fs.readFile(file), saved); assert.equal(changes, 0);
+  await fs.unlink(lock);
 });
 
 test('independent preference writers preserve unrelated settings without lost updates', async t => {

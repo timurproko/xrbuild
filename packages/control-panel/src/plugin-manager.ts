@@ -84,8 +84,10 @@ export async function readPluginPrefs(workspace: string): Promise<PluginPrefs> {
 
 export async function updatePluginPrefs(workspace: string, change: (prefs: PluginPrefs) => void | Promise<void>, core = workspace, afterWrite?: () => Promise<void>): Promise<void> {
   const file = path.join(workspace, PLUGIN_PREFS), lockFile = `${file}.lock`, temp = `${file}.${randomUUID()}.tmp`;
-  assertWritablePath(core, workspace, file); assertWritablePath(core, workspace, lockFile);
+  assertWritablePath(core, workspace, file);
   await fs.mkdir(workspace, { recursive: true });
+  // The checked preference path shares the lock's parent. Exclusive creation refuses any existing
+  // lock leaf (including links); do not realpath a competing writer's transient/deleting lock.
   const lock = await fs.open(lockFile, 'wx', 0o600).catch((error: NodeJS.ErrnoException) => { if (error.code === 'EEXIST') throw new Error('Plugin preference lock exists; verify the previous writer stopped before recovery'); throw error; });
   try {
     await lock.writeFile(JSON.stringify({ pid: process.pid, started: new Date().toISOString() }));
