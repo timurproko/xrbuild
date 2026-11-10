@@ -6,14 +6,12 @@ import { REPO } from '../src/env.ts';
 import { runEmbeddedWorkspace, embeddedStateRoot, EMBEDDED_LOCK } from '../src/embedded-workspace.ts';
 import { setupEmbeddedServices } from '../src/service-artifacts.ts';
 import { reviewWorkingCache, cleanWorkingCache } from '../src/cache-maintenance.ts';
-import { workingCacheReview } from '../ui/cache-review.js';
 import { Panel } from '../src/panel.ts';
 import { EventHub } from '../src/http.ts';
 import { discoverProjectCatalog } from '../src/extension-catalog.ts';
 import { rebuildBundledProject, requireProjectOutput, projectPreviewRoute } from '../src/project-build.ts';
 import { createServer } from '../src/server.ts';
 import { freePort } from '../src/host-runner.ts';
-import { withBrowser, sleep } from './browser-fixture.ts';
 
 async function fixture(t: TestContext) {
   await fs.mkdir(path.join(REPO, '.artifacts'), { recursive: true });
@@ -84,7 +82,7 @@ test('external links and preservation markers stop reclamation, and the panel re
   assert.equal(await fs.readFile(path.join(outside, 'keep.txt'), 'utf8'), 'outside');
 });
 
-test('browser cache review requires confirmation and removes only selected obsolete work while pinned output stays readable', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
+test('cache APIs retain explicit review and confirmation while pinned output stays readable without browser controls', async t => {
   const f = await fixture(t), embedded = path.join(f.core, 'embedded'), source = path.join(embedded, 'projects/core/demo');
   await f.write(path.join(source, 'xrb-project.json'), { name: 'Cache demo', kind: 'app', target: 'webxr', entry: 'dist', scripts: { build: 'build' } });
   await f.write(path.join(source, 'package.json'), { name: 'demo', private: true, scripts: { build: 'node build.mjs' } });
@@ -108,24 +106,25 @@ importers:
   const server = createServer({ repo: f.core, workspace: f.workspace, port: await freePort() });
   await new Promise<void>(resolve => server.server.listen(server.port, '127.0.0.1', resolve));
   try {
-    await withBrowser(async ({ navigate, evaluate }) => {
-      await navigate(server.url, `!!document.querySelector('.proj[data-id="bundled:demo"]')`);
-      await evaluate(`document.querySelector('.proj[data-id="bundled:demo"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:80,clientY:300}));document.querySelector('#ctx-menu [data-act="cache"]').click()`);
-      for (let i=0;i<100&&!await evaluate(`!!document.querySelector('.working-cache-form input')`);i++) await sleep(50);
-      await evaluate(`document.querySelector('.working-cache-form input').checked=true;document.querySelector('.working-cache-form').requestSubmit()`);
-      for(let i=0;i<100&&!await evaluate(`document.querySelector('#ask').open`);i++)await sleep(50);
-      assert.equal(await evaluate(`document.querySelector('#ask').open`), true); assert.ok(await fs.stat(old));
-      await evaluate(`document.querySelector('#ask-ok').click()`);
-      for(let i=0;i<100&&await fs.lstat(old).catch(()=>null);i++)await sleep(50);
-      await assert.rejects(fs.access(old));
-      assert.equal((await fetch(server.url + projectPreviewRoute(p, pinned).slice(1))).status, 200);
-    });
+    const url = new URL('/api/projects/bundled%3Ademo/cache', server.url);
+    const response = await fetch(url);
+    assert.equal(response.status, 200);
+    const current = await response.json() as typeof review;
+    assert.equal(current.revision, review.revision);
+    assert.deepEqual(current.candidates, review.candidates);
+    const cleanup = async (confirm: boolean) => {
+      const response = await fetch(url, { method: 'DELETE', headers: { origin: new URL(server.url).origin, 'content-type': 'application/json' }, body: JSON.stringify({ revision: current.revision, generations: [current.candidates[0].name], confirm }) });
+      assert.equal(response.status, 202, await response.clone().text());
+      const job = await response.json() as { id: string };
+      return server.panel.jobs.wait(server.panel.jobs.get(job.id)!);
+    };
+    const refused = await cleanup(false);
+    assert.equal(refused.state, 'failed'); assert.match(refused.error!, /Confirm/);
+    assert.ok(await fs.stat(old));
+    const removed = await cleanup(true);
+    assert.equal(removed.state, 'done', removed.error ?? '');
+    await assert.rejects(fs.access(old));
+    assert.equal((await fetch(server.url + projectPreviewRoute(p, pinned).slice(1))).status, 200);
     assert.equal(await fs.readFile(path.join(f.workspace, 'config/projects/keep/run.json'), 'utf8'), '{"private":"preserve"}');
   } finally { await server.close(); }
-});
-
-test('working cache review escapes diagnostics and requires explicit checkbox selection', () => {
-  const html = workingCacheReview({ revision: 'revision', candidates: [{ name: 'w-ABCDEF', bytes: 1024, files: 2 }], retained: [{ name: 'w-GHIJKL', reason: '<KEEP>' }], problem: null });
-  assert.match(html, /type="checkbox" name="generation"/); assert.match(html, /Published runtimes, settings and recordings are preserved/);
-  assert.match(html, /&lt;KEEP&gt;/); assert.doesNotMatch(html, / checked/);
 });

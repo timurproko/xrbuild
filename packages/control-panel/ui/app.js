@@ -1,7 +1,6 @@
 // XR Build control panel UI: plain ES module, no build step. Talks to the panel server
 // (same origin) over JSON and a Server-Sent Events stream.
 import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
-import { workingCacheReview } from './cache-review.js';
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
 import {requestedNavigation,menuKeyboard,renderNavigationMenu,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
 import {rebuildHostInPlace} from './rebuild-dialog.js';
@@ -28,7 +27,6 @@ const state = {
   status: null,
   runLog: [],
   jobs: new Map(),
-  workingCacheReviews: new Map(),
   publicationOverrides: new Map(),
   publicationEffects: new Map(),
   savingPublication: new Map(),
@@ -827,11 +825,8 @@ function openMenu(x, y, projectId) {
   menu.querySelector('[data-act="rename"]').hidden = !p?.manifest;  // a broken manifest can only be deleted
   menu.querySelector('[data-act="favicon"]').hidden = !p?.manifest;
   menu.querySelector('[data-act="rebuild-app"]').hidden = p?.manifest?.kind !== 'app' || !p.manifest.scripts?.build;
-  menu.querySelector('[data-act="cache"]').hidden = p?.origin !== 'bundled';
   const deletion = menu.querySelector('[data-act="delete"]');
-  deletion.hidden = !!p?.running;
-  deletion.disabled = p?.origin === 'bundled';
-  deletion.dataset.tooltip = deletion.disabled ? 'Embedded projects cannot be deleted. Use Archive instead.' : '';
+  deletion.hidden = p?.origin === 'bundled' || !!p?.running;
   // Archive for live projects, Unarchive for archived ones
   const arch = menu.querySelector('[data-act="archive"]');
   arch.textContent = p?.archived ? 'Unarchive' : 'Archive';
@@ -952,7 +947,6 @@ $('#ctx-menu').addEventListener('click', (e) => {
   closeMenu();
   if (act === 'rename') startRename(id);
   if (act === 'rebuild-app') rebuildApp(id).catch(report);
-  if (act === 'cache') openProjectCache(id);
   if (act === 'delete') deleteProject(id).catch(report);
   if (act === 'archive') archiveProject(id).catch(report);
 });
@@ -1760,45 +1754,6 @@ async function stopManagedRun() {
 function vscodeLink(workspaceRelative) {
   const root = (state.repo ?? '').replace(/\\/g, '/');
   return `vscode://file/${root}/${workspaceRelative}`.replace(/ /g, '%20');
-}
-
-function wireWorkingCacheReview(button, content, url) {
-  if (!button || !content) return;
-  content.dataset.cacheReviewUrl = url;
-  const render = review => {
-    content.innerHTML = workingCacheReview(review);
-    content.querySelector('.working-cache-form')?.addEventListener('submit', action(async event => {
-      event.preventDefault();
-      const generations = new FormData(event.currentTarget).getAll('generation');
-      if (!generations.length) return;
-      if (!await ask({ title: 'Remove reviewed working cache?', message: `Remove ${generations.length} obsolete working generations? Published runtimes, settings and recordings are preserved.`, ok: 'Remove', danger: true })) return;
-      const job = await api('DELETE', url, { revision: review.revision, generations, confirm: true });
-      state.workingCacheReviews.delete(url); state.jobs.set(job.id, { ...job, lines: [] });
-      content.innerHTML = '<p class="xrb-help">Cache maintenance started; see Jobs. Review again after it finishes.</p>';
-    }));
-  };
-  content.addEventListener('cache-review-update', event => render(event.detail));
-  if (state.workingCacheReviews.has(url)) render(state.workingCacheReviews.get(url));
-  button.addEventListener('click', action(async () => {
-    button.disabled = true;
-    try {
-      const review = await api('GET', url); state.workingCacheReviews.set(url, review);
-      // A live project/status refresh may have replaced the original card while the request was pending.
-      for (const target of document.querySelectorAll('[data-cache-review-url]')) if (target.dataset.cacheReviewUrl === url) target.dispatchEvent(new CustomEvent('cache-review-update', { detail: review }));
-    } finally { if (button.isConnected) button.disabled = false; }
-  }));
-}
-
-function openProjectCache(id) {
-  const dialog = document.createElement('dialog');
-  dialog.className = 'xrb-dialog';
-  dialog.innerHTML = `<div class="xrb-dialog-header"><h3>Build cache</h3><button type="button" class="xrb-icon-button" data-cache-close aria-label="Close">${iconSvg('close')}</button></div><div class="xrb-stack"><button type="button" class="action-button" id="bundled-cache-review">Refresh review</button><div id="bundled-cache-content"></div></div>`;
-  document.body.append(dialog);
-  dialog.addEventListener('close', () => dialog.remove(), { once: true });
-  dialog.querySelector('[data-cache-close]').addEventListener('click', () => dialog.close());
-  wireWorkingCacheReview(dialog.querySelector('#bundled-cache-review'), dialog.querySelector('#bundled-cache-content'), `${projectUrl(id)}/cache`);
-  dialog.showModal();
-  dialog.querySelector('#bundled-cache-review').click();
 }
 
 function renderDetail(force = false) {

@@ -347,7 +347,7 @@ test('normal scripted builds keep editable inputs, frozen installation and pinne
   assert.equal((await buildInventory(f.core)).fingerprint, before);
 });
 
-test('real browser shows normal compact tabs and mixed sections for embedded projects, with only Delete disabled', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
+test('real browser shows normal embedded workflows with cache review removed and Delete hidden', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
   const f = await fixture(t);
   f.server.panel.publishers = { found: [{ dir: f.workspace, publisher: { name: 'fixture', origin: 'https://example.test', validate: () => [], status: async () => ({ state: 'unpublished', selectedUrl: '' }), publish: async () => ({ url: '' }), unpublish: async () => ({}) } }], problems: [] };
   await withBrowser(async ({ navigate, evaluate, send }) => {
@@ -375,8 +375,15 @@ test('real browser shows normal compact tabs and mixed sections for embedded pro
     assert.equal((await f.request('GET', '/api/projects/bundled%3Asample')).json.manifest.publication.slug, 'browser-sample');
     assert.equal(JSON.parse(await fs.readFile(path.join(f.source, 'xrb-project.json'), 'utf8')).publication, undefined);
     await evaluate(`document.querySelector('.proj[data-id="bundled:sample"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:80,clientY:300}))`);
-    assert.equal(await evaluate(`document.querySelector('#ctx-menu [data-act="delete"]').disabled`), true);
+    assert.equal(await evaluate(`document.querySelector('#ctx-menu [data-act="delete"]').hidden`), true);
+    assert.equal(await evaluate(`!!document.querySelector('#ctx-menu [data-act="cache"], #bundled-cache-review, #bundled-cache-content, [data-cache-close]')`), false);
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('dialog')).some(dialog => dialog.textContent.includes('Build cache'))`), false);
     assert.equal(await evaluate(`document.querySelector('#ctx-menu [data-act="archive"]').hidden`), false);
+    await evaluate(`document.querySelector('.proj[data-id="sample"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:80,clientY:400}))`);
+    assert.deepEqual(await evaluate(`(() => { const button = document.querySelector('#ctx-menu [data-act="delete"]'); return { hidden: button.hidden, disabled: button.disabled, tooltip: button.dataset.tooltip ?? '' }; })()`), { hidden: false, disabled: false, tooltip: '' });
+    assert.equal(await evaluate(`!!document.querySelector('#ctx-menu [data-act="cache"]')`), false);
+    await evaluate(`document.querySelector('.proj[data-id="bundled:sample"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:80,clientY:300}))`);
+    assert.equal(await evaluate(`document.querySelector('#ctx-menu [data-act="delete"]').hidden`), true);
     await evaluate(`document.querySelector('#ctx-menu [data-act="archive"]').click()`);
     await until(`document.querySelector('.proj[data-id="bundled:sample"]')===null`);
     await evaluate(`document.querySelector('.nav-tabs [data-view="archive"]').click()`);
@@ -384,6 +391,11 @@ test('real browser shows normal compact tabs and mixed sections for embedded pro
     await evaluate(`document.querySelector('.proj[data-id="bundled:archive/sample"]').click()`);
     await until(`document.querySelector('[name="publication.slug"]')?.value === 'browser-sample'`);
     assert.equal((await f.request('GET', '/api/projects/bundled%3Aarchive/sample')).json.manifest.publication.slug, 'browser-sample', 'archive does not rewrite an explicit slug');
+    await evaluate(`document.querySelector('.proj[data-id="bundled:archive/sample"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:80,clientY:300}))`);
+    assert.equal(await evaluate(`document.querySelector('#ctx-menu [data-act="delete"]').hidden`), true);
+    assert.equal(await evaluate(`!!document.querySelector('#ctx-menu [data-act="cache"]')`), false);
+    assert.equal(await evaluate(`document.querySelector('#ctx-menu [data-act="archive"]').textContent`), 'Unarchive');
+    assert.equal(await evaluate(`document.querySelector('#ctx-menu [data-act="archive"]').hidden`), false);
     await send('Emulation.setDeviceMetricsOverride', { width: 800, height: 1000, deviceScaleFactor: 1, mobile: false });
     assert.ok(await evaluate(`document.querySelector('.project-hero').getBoundingClientRect().width <= innerWidth`));
   });
