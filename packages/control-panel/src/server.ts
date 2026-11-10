@@ -440,7 +440,8 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       const { folder, name } = await readJson<{ folder?: string; name?: string }>(req);
       if (!folder) throw new HttpError(400, 'folder missing');
       try {
-        await createProject(core, projects, folder, name?.trim() || folder);
+        await createProject(core, projects, folder, name?.trim() || folder, canonicalPath(projects) === canonicalPath(workspace) ? 'combined' : 'projects');
+        await writeEditorConfig(core, projects);
       } catch (e) {
         if (e instanceof ProjectRefused) throw new HttpError(409, e.message);
         throw e;
@@ -839,7 +840,6 @@ export async function launch(opts: { port: number; open: boolean; repo?: string;
   process.env.XRB_CORE ??= s.panel.repo;
   await s.panel.loadInitialServices();
   await s.managedTools.prepareConfigured();
-  if (await isWorkspace(s.panel.projects)) await writeEditorConfig(s.panel.repo, s.panel.projects).catch((e) => log(`[projects] jsconfig.json not written: ${(e as Error).message}`));
   await new Promise<void>((resolve, reject) => {
     s.server.once('error', reject);
     s.server.listen(opts.port, '127.0.0.1', () => resolve());

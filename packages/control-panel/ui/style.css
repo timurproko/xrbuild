@@ -187,17 +187,6 @@ button.publication-hero-menu.disabled .publication-status-dot { background: var(
 .studio-actions { display: flex; flex-direction: column; gap: 8px; }
 
 /* ---- dialogs (ask(): confirm / prompt / message; the archive list) */
-/* First run is a real modal on an opaque backdrop: none of the inactive dashboard is visible. */
-dialog.workspace-setup { width: min(520px, calc(100vw - 32px)); padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: visible; }
-dialog.workspace-setup::backdrop { background: var(--bg); }
-.workspace-brand { margin-bottom: 18px; text-align: center; }
-.workspace-brand span { color: var(--muted); font-weight: 500; }
-.workspace-panel { padding: 26px 28px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: 0 14px 40px rgba(0, 0, 0, .25); }
-dialog.workspace-setup h3 { font-size: 1.3rem; }
-.workspace-panel > p { margin: 10px 0 0; }
-.workspace-folder { display: grid; gap: 6px; margin-top: 22px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
-.workspace-folder code { overflow-wrap: anywhere; color: var(--fg); }
-dialog.workspace-setup .ask-buttons { margin-top: 22px; }
 dialog.ask { width: min(460px, 92vw); padding: 20px 22px; }
 dialog.ask form { display: flex; flex-direction: column; gap: 12px; }
 dialog.ask #ask-input[aria-invalid="true"] { background: var(--surface-2); border-color: transparent; }

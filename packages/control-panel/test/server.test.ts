@@ -530,7 +530,7 @@ test('auto routes serve only the selected workspace and keep separate defaults',
       assert.equal(started.result, 'started');
       try {
         assert.equal((await fetch(`http://127.0.0.1:${livePort}/api/ping`).then((r) => r.json())).workspace, chosen);
-        assert.equal((await fetch(`http://127.0.0.1:${livePort}/api/workspace`).then((r) => r.json())).exists, false, 'missing and empty user roots stay in workspace setup');
+        assert.equal((await fetch(`http://127.0.0.1:${livePort}/api/workspace`).then((r) => r.json())).exists, false, 'missing and empty roots remain uninitialized without forcing setup');
         const reused = await launch({ port: livePort, open: true, workspace: chosen, browser: (u) => opened.push(u) });
         assert.equal(reused.result, 'already-running');
         const refused = await launch({ port: livePort, open: true, workspace: dev, browser: (u) => opened.push(u) });

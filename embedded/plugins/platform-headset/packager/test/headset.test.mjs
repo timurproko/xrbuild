@@ -37,6 +37,16 @@ test('discovery/setup is safe and unconfigured, preserving global environment an
  assert.equal(p.name,'headset');assert.equal(p.target,'webxr');assert.equal(p.label,'Headset');assert.equal((await p.setupStatus()).state,'setup-required');await assert.rejects(p.setup({acceptTerms:true,log(){}}),/unconfigured/);await assert.rejects(p.build(f.options),/unconfigured/);
  assert.equal(JSON.stringify(process.env),before);assert.deepEqual(await fs.readFile(f.context.config.file),config);assert.deepEqual(await fs.readFile(path.join(f.keyDir,'android.keystore')),f.key);
 });
+test('discovery accepts a missing plain user root without initializing it',async t=>{
+ const f=await fixture(t),workspace=path.join(f.root,'missing','user');
+ const context={...f.context,workspace,config:{...f.context.config,file:path.join(workspace,'config/plugins/platform-headset/config.json')}};
+ const p=await createPackager(context);assert.equal((await p.setupStatus()).state,'setup-required');
+ await assert.rejects(fs.access(path.join(f.root,'missing')));
+ const outside=path.join(f.root,'outside');await fs.mkdir(outside);const linked=path.join(f.root,'linked');await fs.symlink(outside,linked,'junction');
+ const badWorkspace=path.join(linked,'missing');await assert.rejects(createPackager({...context,workspace:badWorkspace,config:{...context.config,file:path.join(badWorkspace,'config/plugins/platform-headset/config.json')}}),/plain and unlinked/);
+ assert.deepEqual(await fs.readdir(outside),[]);
+});
+
 test('context/config/source aliases fail closed',async t=>{
  const f=await fixture(t);await assert.rejects(createPackager({...f.context,config:{...f.context.config,file:path.join(f.root,'foreign.json')}}),/context/);
  await assert.rejects(createPackager({...f.context,workspace:f.core}),/context/);

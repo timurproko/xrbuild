@@ -27,14 +27,21 @@ export async function writeJson(file,value){
   const handle=await fs.open(temp,'wx',0o600);try{await handle.writeFile(JSON.stringify(value,null,2)+'\n');await handle.sync();}finally{await handle.close();}
   await plain(file);await fs.rename(temp,file);
 }
+async function futurePath(file){
+  try{return await fs.realpath(file);}catch(error){
+    const parent=path.dirname(file);if(error.code!=='ENOENT'||parent===file)throw error;
+    return path.join(await futurePath(parent),path.basename(file));
+  }
+}
 export async function contextPaths(context){
   if(!context?.plugin||!context.config||!path.isAbsolute(context.workspace??'')||!path.isAbsolute(context.plugin.sourceRoot??''))throw Error('Publisher requires an explicit owner, user workspace and config');
   const id=context.plugin.id;if(!/^[a-z0-9][a-z0-9._-]*$/.test(id))throw Error('Publisher owner ID is invalid');
   await plain(context.workspace);await plain(context.plugin.sourceRoot);
-  const workspace=await fs.realpath(context.workspace),source=await fs.realpath(context.plugin.sourceRoot);
+  const workspace=await futurePath(context.workspace),source=await fs.realpath(context.plugin.sourceRoot);
   if(within(source,workspace))throw Error('Publisher workspace must be outside product source');
   const configRoot=path.join(workspace,'config','plugins',id),stateRoot=path.join(workspace,'.xrb','publication',id),workRoot=path.join(workspace,'build','publication',id);
-  if(path.resolve(context.config.file)!==path.join(configRoot,'config.json'))throw Error('Publisher config belongs to another workspace');
+  await plain(context.config.file);
+  if(await futurePath(path.resolve(context.config.file))!==path.join(configRoot,'config.json'))throw Error('Publisher config belongs to another workspace');
   for(const file of [configRoot,stateRoot,workRoot]){if(within(source,file))throw Error('Publisher state cannot be product source');await plain(file);}
   return{workspace,source,configRoot,stateRoot,workRoot,values:context.config.values};
 }

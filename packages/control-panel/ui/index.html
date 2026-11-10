@@ -136,22 +136,6 @@
     <button type="button" role="menuitem" class="danger-item" data-act="remove-icon" hidden>Remove</button>
   </div>
 
-  <dialog id="workspace-setup" class="xrb-dialog workspace-setup" aria-labelledby="workspace-title" aria-describedby="workspace-message">
-    <h1 class="workspace-brand">XR Build <span>Setup</span></h1>
-    <div class="workspace-panel">
-      <h3 id="workspace-title">Create your workspace</h3>
-      <p id="workspace-message" class="muted">Projects and plugins live in your workspace, separate from the XR Build core. Create it with the standard folders and a starter app.</p>
-      <div class="workspace-folder">
-        <span class="label">Workspace folder</span>
-        <code id="workspace-folder"></code>
-      </div>
-      <p id="workspace-error" class="field-error" role="alert" hidden></p>
-      <div class="row ask-buttons"><span class="spacer"></span>
-        <button type="button" class="action-button primary" id="ws-create" autofocus>Create workspace</button>
-      </div>
-    </div>
-  </dialog>
-
   <dialog id="job-progress" class="xrb-dialog xrb-progress-dialog xrb-job-progress-dialog" aria-labelledby="job-progress-title" aria-describedby="job-progress-message">
       <div class="xrb-progress-status"><span id="job-progress-status-icon" class="xrb-progress-status-icon" data-state="running" aria-hidden="true">
           <span class="xrb-spinner xrb-spinner-accent xrb-progress-running"></span>

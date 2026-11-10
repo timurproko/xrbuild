@@ -49,7 +49,6 @@ const state = {
   activityTab: localStorage.getItem('panel.activityTab') === 'jobs' ? 'jobs' : 'log',
   page: ['plugins', 'settings'].includes(initialNavigationRequest.page) ? initialNavigationRequest.page : 'projects',
   dashboardScroll: 0,
-  emptyProjectPrompted: false,
   fieldErrors: {},
   savingPlatform: null,
   queuedPlatform: null,
@@ -258,7 +257,7 @@ const iconSrc = (p) => `${projectUrl(p.id)}/icon?t=${p.icon?.mtimeMs ?? 0}${p.ic
 const listed = () => (state.view === 'archive' ? state.archived : state.projects);
 const allProjects = () => [...state.projects, ...state.archived];
 const emptyProjectInventory = () => !state.projects.length && !state.archived.length && !state.unregistered.length;
-const emptyUserProjectWorkspace = () => state.workspace?.exists && state.workspace.kind === 'user' && emptyProjectInventory();
+const emptyUserProjectWorkspace = () => state.workspace?.kind === 'user' && emptyProjectInventory();
 
 function syncEmptyProjectUi() {
   const empty = emptyUserProjectWorkspace();
@@ -266,55 +265,11 @@ function syncEmptyProjectUi() {
   $('#project-content').hidden = empty;
   $('#side').hidden = empty;
   document.body.classList.toggle('projects-empty', empty);
-  if (!empty) {
-    state.emptyProjectPrompted = false;
-    return;
-  }
-  syncRunDock(null);
-  if (state.page !== 'projects' || state.emptyProjectPrompted) return;
-  state.emptyProjectPrompted = true;
-  queueMicrotask(() => {
-    if (emptyUserProjectWorkspace() && state.page === 'projects' && !$('#ask').open) void newProject().catch(report);
-  });
+  if (empty) syncRunDock(null);
 }
 
-function syncWorkspaceUi() {
-  const ws = state.workspace;
-  if (!ws) return;
-  const split = ws.integrationPath && ws.integrationPath !== ws.path;
-  $('#workspace-folder').textContent = split ? `Projects ${ws.path} · Integrations ${ws.integrationPath}` : ws.path;
-  $('#workspace-folder').title = split ? `Project repository: ${ws.path}\nIntegration workspace: ${ws.integrationPath}` : ws.path;
-
-  const dialog = $('#workspace-setup');
-  if (!ws.exists && !dialog.open && !document.body.classList.contains('workspace-pending')) dialog.showModal();
-  else if (ws.exists && dialog.open) dialog.close();
-}
-
-async function loadWorkspace(sync = true) {
+async function loadWorkspace() {
   state.workspace = await api('GET', '/api/workspace');
-  if (sync) syncWorkspaceUi();
-}
-
-/** Creates the workspace (standard folders and a starter app); only adds missing files. */
-async function createWorkspace() {
-  const button = $('#ws-create');
-  const error = $('#workspace-error');
-  button.disabled = true;
-  button.textContent = 'Creating…';
-  error.hidden = true;
-  try {
-    await api('POST', '/api/workspace/create');
-    // Keep the modal in place until its starter project is ready behind it.
-    await loadWorkspace(false);
-    await loadProjects();
-    syncWorkspaceUi();
-  } catch (e) {
-    error.textContent = e.message;
-    error.hidden = false;
-  } finally {
-    button.disabled = false;
-    button.textContent = 'Create workspace';
-  }
 }
 
 /** A new app from the core's template, in the workspace's projects/unsorted/. */
@@ -340,6 +295,7 @@ async function newProject() {
   if (!name || !project) return false;
   state.selected = project.id;
   localStorage.setItem('panel.selected', project.id);
+  await loadWorkspace();
   await loadProjects();
   return true;
 }
@@ -1523,7 +1479,7 @@ function publicationFields(p) {
     const destination = effectivePublicationStatus(p, name, p.publicationDestinations?.[name]?.status ?? null);
     return [name, destination?.state === 'published' ? 'ok' : destination?.state === 'failed' ? 'warn' : null];
   }).filter(([, mark]) => mark));
-  const selectedPublisher = pub.publisher || (publisherNames.length === 1 ? publisherNames[0] : '');
+  const selectedPublisher = pub.publisher || '';
   const status = effectivePublicationStatus(p, selectedPublisher, p.publicationDestinations?.[selectedPublisher]?.status ?? info.status);
   // 'failed' from a publisher's status: published (it has a record), but the site does not serve it. Still published:
   // the action is Unpublish, and the note says why it is not reachable.
@@ -1666,6 +1622,14 @@ async function selectProjectSurface(p, surface) {
     if (!hasProjectPublishers(p)) return;
     localStorage.setItem(surfaceKey(), surface);
     animateDetailHeights(() => renderDetail(true));
+    // Persist an unambiguous default only on this explicit action, never on startup/re-render.
+    if (state.savingPlatform !== p.id && !p.manifest.publication?.publisher && p.publication?.publishers.length === 1) {
+      const publisher = $('#build-settings [name="publication.publisher"]');
+      if (publisher) {
+        publisher.value = p.publication.publishers[0].name;
+        publisher.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
     return;
   }
   const options = choicesForSurface(p, surface);
@@ -2030,10 +1994,6 @@ function renderDetail(force = false) {
         return showFieldErrors({ [event.target.name]: 'package title is required' });
       await saveSettings(p, new FormData(form), event.target.name);
     }));
-  }
-  // A single installed publisher is the unambiguous default; persist it so Publish is immediately usable.
-  if (state.savingPlatform !== p.id && !m.publication?.publisher && p.publication?.publishers.length === 1) {
-    $('#build-settings [name="publication.publisher"]')?.dispatchEvent(new Event('change', { bubbles: true }));
   }
 }
 
@@ -3488,8 +3448,6 @@ $('#job-progress-view-job').addEventListener('click', () => {
 });
 $('#job-progress-close').addEventListener('click', () => $('#job-progress').close());
 $('#job-progress').addEventListener('cancel', (event) => { if ($('#job-progress-actions').classList.contains('is-building')) event.preventDefault(); });
-$('#ws-create').addEventListener('click', createWorkspace);
-$('#workspace-setup').addEventListener('cancel', (event) => event.preventDefault());
 $('#jobs-clear').addEventListener('click', action(async (e) => {
   e.preventDefault();
   const r = await api('POST', '/api/jobs/clear');
@@ -3631,14 +3589,13 @@ const navigationRequest=initialNavigationRequest;
 if(navigationRequest.page==='plugins'&&location.pathname!=='/plugins/'&&!navigationRequest.maintenance){location.replace('/plugins/');}
 if(navigationRequest.page==='settings'&&location.pathname!=='/settings/'&&!navigationRequest.maintenance){location.replace('/settings/');}
 if(navigationRequest.cleanUrl!==location.href)history.replaceState(null,'',navigationRequest.cleanUrl);
-const initialPage = navigationRequest.page === 'plugins' && state.workspace?.exists ? 'plugins' : navigationRequest.page === 'settings' && state.workspace?.exists ? 'settings' : 'projects';
+const initialPage = ['plugins', 'settings'].includes(navigationRequest.page) ? navigationRequest.page : 'projects';
 await showPage(initialPage).catch(report);
 if(navigationRequest.job)await openJobInActivity(navigationRequest.job);
 await loadNavigation().catch(report);
 // Reveal only the fully populated layout, after its web fonts settle, so refresh has no card or text jumps.
 await Promise.race([document.fonts.ready, new Promise((resolve) => setTimeout(resolve, 1500))]);
 document.body.classList.remove('workspace-pending');
-syncWorkspaceUi();
 connect();
 // A maintenance link is an explicit one-shot action; shared tool navigation normally handles it in place.
 if(navigationRequest.maintenance){

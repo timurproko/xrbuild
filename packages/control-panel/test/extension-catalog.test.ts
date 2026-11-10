@@ -161,6 +161,18 @@ test('configuration initializes once, preserves user bytes/unknown fields and ap
   await assert.rejects(fs.access(f.embedded), 'defaults only belong to the selected user root');
 });
 
+test('read-only config discovery uses validated defaults without creating missing paths', async t => {
+  const f = await fixture(t), missing = path.join(f.root, 'missing/user');
+  const config = await readUserPluginConfig(missing, 'publisher', fields, { create: false });
+  assert.equal(config.created, false); assert.deepEqual(config.values, { enabled: false, destination: '' });
+  await assert.rejects(fs.access(path.join(f.root, 'missing')));
+  const initialized = await readUserPluginConfig(missing, 'publisher', fields);
+  assert.equal(initialized.created, true);
+  const bytes = await fs.readFile(initialized.file);
+  assert.deepEqual((await readUserPluginConfig(missing, 'publisher', fields, { create: false })).values, config.values);
+  assert.deepEqual(await fs.readFile(initialized.file), bytes);
+});
+
 test('concurrent first-run initialization publishes exactly one complete config', async t => {
   const f = await fixture(t);
   const results = await Promise.all(Array.from({ length: 24 }, () => readUserPluginConfig(f.workspace, 'publisher', fields)));
@@ -188,6 +200,7 @@ test('malformed, invalid and oversized configs fail without replacement or secre
     await assert.rejects(readUserPluginConfig(f.workspace, 'publisher', fields), error => {
       assert.ok(error instanceof Error); assert.doesNotMatch(error.message, /private-value-not-json/); return true;
     });
+    await assert.rejects(readUserPluginConfig(f.workspace, 'publisher', fields, { create: false }));
     assert.equal(await fs.readFile(first.file, 'utf8'), text);
   }
 });
@@ -197,6 +210,7 @@ test('configuration rejects linked directories and files without modifying their
   await fs.mkdir(outside);
   await fs.symlink(outside, path.join(f.workspace, 'config'), process.platform === 'win32' ? 'junction' : 'dir');
   await assert.rejects(readUserPluginConfig(f.workspace, 'publisher', fields), /plain directory/);
+  await assert.rejects(readUserPluginConfig(f.workspace, 'publisher', fields, { create: false }), /plain directory/);
   assert.deepEqual(await fs.readdir(outside), []);
   await fs.unlink(path.join(f.workspace, 'config'));
   const config = await readUserPluginConfig(f.workspace, 'publisher', fields);
@@ -216,6 +230,8 @@ test('publisher factories use selected source and user config; conflicts disable
   assert.equal(result.found[0].publisher.label, 'bundled:web:false');
   assert.equal(result.found[0].plugin?.sourceRoot, dir);
   const config = path.join(f.workspace, 'config/plugins/web/config.json');
+  await assert.rejects(fs.access(config), 'discovery keeps missing defaults in memory');
+  await readUserPluginConfig(f.workspace, 'web', fields);
   await fs.writeFile(config, '{"enabled":true}');
   result = await discoverPublishers(f.workspace, f.core);
   assert.equal(result.found[0].publisher.label, 'bundled:web:true');

@@ -58,8 +58,9 @@ Authorized developers clone the independent private `.xrbuild` repository at `<c
 A combined workspace or separate project repository keeps its own `package.json` and `pnpm-workspace.yaml`; neither is part of the core pnpm workspace. Projects may live in the private workspace or in a separately selected project repository, but are not duplicated between them.
 Source, manifests and lock files are versioned by their owning repository. The private workspace tracks pinned `third_party/`
 dependencies through its own Git LFS configuration, while ordinary user workspaces and core dependencies do not. `node_modules/`,
-plugin `bin/`, builds, credentials and generated output stay ignored. On first start the user-mode panel offers to create the workspace
-with a starter app; "New project" adds apps from [`templates/app`](templates/app). Apps get the SDK straight from
+plugin `bin/`, builds, credentials and generated output stay ignored. A missing or empty user workspace opens normally, with no setup dialog
+or automatic starter app. Confirming "New project" creates the missing workspace files and only the requested app from
+[`templates/app`](templates/app); explicit settings/build actions create their needed user storage lazily. Apps get the SDK straight from
 this repo's sources: the panel sets `XRB_CORE` and the app's Vite config maps `@xr-build/sdk` and
 `@xr-build/ui-kit` to it ([SDK](packages/sdk/README.md#getting-the-sdk-into-an-app)).
 

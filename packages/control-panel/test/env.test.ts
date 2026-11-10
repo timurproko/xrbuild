@@ -13,7 +13,7 @@ test('default workspace is .xrbuild in the user folder', () => {
   assert.equal(workspaceDir({ USERPROFILE: 'C:/Users/u' }), path.join('C:/Users/u', '.xrbuild'));
 });
 
-test('auto shortcut always opens the selected user workspace or its setup flow', async () => {
+test('auto shortcut keeps the selected user root even when absent or empty', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'panel-shortcut-'));
   try {
     const home = path.join(root, 'home');
@@ -22,9 +22,9 @@ test('auto shortcut always opens the selected user workspace or its setup flow',
     await fs.mkdir(path.join(checkout, '.xrbuild'), { recursive: true });
     const env = { USERPROFILE: home };
     assert.equal(workspaceDir(env), user);
-    assert.equal(shortcutWorkspace(env, checkout), undefined, 'a missing user workspace opens user setup, not the checkout workspace');
+    assert.equal(shortcutWorkspace(env, checkout), undefined, 'a missing user root stays selected instead of using the checkout workspace');
     await fs.mkdir(user, { recursive: true });
-    assert.equal(shortcutWorkspace(env, checkout), undefined, 'an empty user workspace opens user setup');
+    assert.equal(shortcutWorkspace(env, checkout), undefined, 'an empty user root stays selected');
     const alternate = path.join(root, 'other-user');
     assert.equal(shortcutWorkspace({ ...env, XRB_HOME: alternate }, checkout), undefined, 'XRB_HOME keeps user mode before the directory exists');
   } finally {
