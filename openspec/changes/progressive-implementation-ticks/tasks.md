@@ -1,6 +1,6 @@
 ## 1. Shared progress rule
 
-- [ ] 1.1 Add the shared `Implementation progress` paragraph to `AGENTS.md` and import that file from `.claude/CLAUDE.md` in place of its separate progress wording; verify the agent-guidance test requires the exact paragraph and the import.
+- [x] 1.1 Add the shared `Implementation progress` paragraph to `AGENTS.md` and import that file from `.claude/CLAUDE.md` in place of its separate progress wording; verify the agent-guidance test requires the exact paragraph and the import.
 
 ## 2. Skill and template follow it
 

@@ -8,14 +8,16 @@ private development **workspace** at the ignored `.xrbuild/` path (see [Workspac
 history and instructions; read its `CLAUDE.md` and each affected plugin's instructions before private edits. Ordinary users use `XRB_HOME`, else `%USERPROFILE%\.xrbuild`; explicit
 repository-development commands or the separate XR Build Dev Start-menu shortcut select this checkout's `.xrbuild/`. The plan lives in OpenSpec (`openspec/specs/`, `openspec/changes/`).
 
+@../AGENTS.md
+
 ## Git
 
 - Never add a `Co-Authored-By: Claude` (or any Claude/Anthropic) trailer to commit messages,
   and no "Generated with Claude Code" lines in commits or PR descriptions.
 - Commit only when asked.
 - Keep commit messages concise: a short subject line, then a few bullets only if needed.
-- Keep draft Implementation outcomes truthful: check them when code/tests and detailed pre-ready bookkeeping are
-  written, add plain Acceptance before the final item, and leave post-ready CI/integration pending until observed.
+- Tick tasks and PR outcomes as the `Implementation progress` paragraph of `AGENTS.md` (imported above) says.
+  Add plain Acceptance before the final item and leave post-ready CI/integration pending until observed.
   Only trusted automation promotes completed exact snapshots; do not invoke ready or mark unfinished tasks done.
   Run focused changed-code checks rather than broad repeated validation loops before pushing.
 
