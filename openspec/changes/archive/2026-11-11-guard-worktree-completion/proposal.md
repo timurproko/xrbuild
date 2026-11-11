@@ -10,7 +10,7 @@ A1 gains `a1 worktree complete`, which returns the session to the primary checko
 
 - Replace the shared Worktrees block with the version that keeps the task attached through review and uses `a1 worktree complete` after a verified merge instead of cleaning the attached checkout directly.
 - State in the delivery skill's after-merge step that an attached A1 session finishes with `a1 worktree complete`, and that cleanup itself stays `pnpm worktree sweep --apply` with every private-workspace and `.artifacts/KEEP` protection unchanged.
-- Document the machine-owner setting that lets completion run this repository's sweep, and what completion does without it.
+- Commit the `.a1/worktree.json` declaration that lets completion run this repository's sweep, with no per-machine setup.
 - Update the focused instruction test.
 
 ## Impact

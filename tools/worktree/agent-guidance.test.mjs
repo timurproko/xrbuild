@@ -22,6 +22,8 @@ test('shared guidance retains task attachment through implementation and review 
   assert.match(delivery, /\.xrbuild\/.*\.artifacts\/KEEP/s);
   assert.match(delivery, /Never merge, arm auto-merge or push to `main`/);
   assert.match(delivery, /`a1 worktree complete` instead and never cleans its own\s+attached checkout/);
-  assert.match(delivery, /a1\.worktreeCleanup "node tools\/worktree\/worktree\.mjs sweep --apply"/);
+  assert.match(delivery, /declared in the committed `\.a1\/worktree\.json`/);
+  assert.doesNotMatch(delivery, /git config --local a1\.worktreeCleanup/);
+  assert.deepEqual(JSON.parse(await read('.a1/worktree.json')), { cleanup: ['node', 'tools/worktree/worktree.mjs', 'sweep', '--apply'] });
   assert.match(agents, /Never clean up a worktree containing private workspace data/);
 });

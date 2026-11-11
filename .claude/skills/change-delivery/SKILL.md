@@ -116,10 +116,8 @@ command for the maintainer.
   change as delivered; never edit a merged PR's body.
 - Local cleanup is the next session's `pnpm worktree sweep --apply` (or `pnpm worktree remove <short-desc>`).
 - An A1 session still attached to the merged task runs `a1 worktree complete` instead and never cleans its own
-  attached checkout: the command returns the session to primary first and relays the cleanup report. It runs
-  this repository's sweep only where the machine owner configured it once from primary with
-  `git config --local a1.worktreeCleanup "node tools/worktree/worktree.mjs sweep --apply"`; without that setting
-  it detaches, keeps the checkout and reports cleanup unavailable. Sweep's rules are unchanged: only merged,
-  clean worktrees go, and a task holding `.xrbuild/` or `.artifacts/KEEP` is preserved.
+  attached checkout: the command returns the session to primary first, then runs this repository's sweep as
+  declared in the committed `.a1/worktree.json` and relays its report. No machine setup is needed. Sweep's rules
+  are unchanged: only merged, clean worktrees go, and a task holding `.xrbuild/` or `.artifacts/KEEP` is preserved.
 - A PR closed unmerged: `pnpm worktree remove <short-desc> --discard`, only when the maintainer says its work is not
   needed.
