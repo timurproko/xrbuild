@@ -3,7 +3,7 @@
 import { spawn, type SpawnOptions } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 
-export type JobKind = 'web-build' | 'package' | 'packager-setup' | 'tool-setup' | 'publication' | 'host-rebuild' | 'icon-render' | 'cache-cleanup';
+export type JobKind = 'web-build' | 'package' | 'packager-setup' | 'tool-setup' | 'publication' | 'host-rebuild' | 'icon-render' | 'cache-cleanup' | 'desktop-setup';
 export type JobState = 'queued' | 'running' | 'done' | 'failed';
 export type JobOperation = 'publish' | 'update' | 'activate' | 'delete-release' | 'unpublish';
 
@@ -29,6 +29,8 @@ export interface JobRelease {
 export interface Job {
   id: number;
   kind: JobKind;
+  /** Fixed prerequisite action for associating desktop setup output with its checklist rows. */
+  setupAction?: 'toolchain' | 'native-deps';
   projectId: string | null;
   title: string;
   state: JobState;
@@ -141,6 +143,7 @@ export class JobRunner extends EventEmitter {
    */
   conflict(kind: JobKind, projectId: string | null): string | null {
     for (const j of this.active()) {
+      if (kind === 'desktop-setup' || j.kind === 'desktop-setup') return `${j.title} is active: desktop setup cannot overlap other jobs`;
       if (kind === 'cache-cleanup' || j.kind === 'cache-cleanup') return `${j.title} is active: cache maintenance cannot overlap other jobs`;
       if (j.kind === kind) {
         if (kind === 'publication') continue;

@@ -33,6 +33,12 @@ Toolchain (dev machine):
 - Visual Studio 2022 Build Tools with the C++ workload (CMake ships with it, see [Build](#build))
 - `gh`, authenticated, only for `pnpm preview:readme`
 
+The panel's **Rebuild** action checks desktop prerequisites first and offers an explicit
+[setup checklist with background progress](docs/desktop-setup.md). Browser-only use does not require the native
+toolchain. Installation requires your consent and may show an administrator prompt; it never requests an automatic reboot.
+
+**Settings → Apps (core) → Theme** offers System, Light and Dark, applied immediately and saved only in this browser. The **Dev shortcut** (or repository-development CLI) exposes **Design** in the app menu. Its [gallery](packages/control-panel/ui/DESIGN-SYSTEM.md#appearance-and-case-gallery) at `/design` collects shared components in Main and simulated workflow cases without installing anything; normal user launches do not show that menu entry.
+
 The core runs without any device: the `desktop` display shows the page in a window and the `simulated`
 or `replay` input stands in for hands. A 3D display, a hand tracker or a station platform comes from a
 plugin, and each plugin lists the hardware and runtimes it needs.
@@ -58,8 +64,9 @@ Authorized developers clone the independent private `.xrbuild` repository at `<c
 A combined workspace or separate project repository keeps its own `package.json` and `pnpm-workspace.yaml`; neither is part of the core pnpm workspace. Projects may live in the private workspace or in a separately selected project repository, but are not duplicated between them.
 Source, manifests and lock files are versioned by their owning repository. The private workspace tracks pinned `third_party/`
 dependencies through its own Git LFS configuration, while ordinary user workspaces and core dependencies do not. `node_modules/`,
-plugin `bin/`, builds, credentials and generated output stay ignored. On first start the user-mode panel offers to create the workspace
-with a starter app; "New project" adds apps from [`templates/app`](templates/app). Apps get the SDK straight from
+plugin `bin/`, builds, credentials and generated output stay ignored. A missing or empty user workspace opens normally, with no setup dialog
+or automatic starter app. Confirming "New project" creates the missing workspace files and only the requested app from
+[`templates/app`](templates/app); explicit settings/build actions create their needed user storage lazily. Apps get the SDK straight from
 this repo's sources: the panel sets `XRB_CORE` and the app's Vite config maps `@xr-build/sdk` and
 `@xr-build/ui-kit` to it ([SDK](packages/sdk/README.md#getting-the-sdk-into-an-app)).
 

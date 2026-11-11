@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'none'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+  <title>Main · Design</title>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/design-system.css"><link rel="stylesheet" href="/design-system/components.css">
+  <script type="module" src="/design-system/components.js"></script>
+</head>
+<body>
+<main class="component-catalog xrb-stack">
+  <section id="typography" class="xrb-card" data-component-section>
+    <h2 class="xrb-card-heading row">Typography</h2>
+    <h3>Dialog heading</h3><h1>Page heading</h1><h2>Section label</h2>
+    <p>Body text for descriptions and content.</p><p class="muted">Muted supporting text.</p>
+    <p class="xrb-supporting-text">Supporting text beside a control or card.</p>
+    <p class="xrb-help field-error">A value needs attention.</p><p class="xrb-help">Field help and guidance.</p><code>Monospace code and paths</code>
+    <div class="row"><span class="xrb-glyph-detail" data-component-glyph>🎛️</span><span class="xrb-path">projects/example</span><small>Small text</small></div>
+  </section>
+  <section id="actions" class="xrb-card" data-component-section>
+    <h2 class="xrb-card-heading row">Buttons and actions</h2>
+    <div class="xrb-button-row"><button type="button" class="primary">Primary</button><button type="button">Secondary</button><button type="button" class="danger">Danger</button><button type="button" class="ghost">Ghost</button><button type="button" disabled>Disabled</button></div>
+    <div class="row"><button type="button" class="action-button">Action</button><button type="button" class="small">Small</button><button type="button" class="small" disabled>Small disabled</button><button type="button" class="action-button launching">Preparing…</button><button type="button" class="xrb-icon-button" aria-label="Open folder" data-xrb-icon="folder"></button></div>
+    <button type="button" class="xrb-tool-button"><span data-xrb-icon="play"></span><span>Tool action</span></button>
+    <div id="icon-samples" class="row" aria-label="Shared icons"></div>
+  </section>
+  <section id="fields" class="xrb-card" data-component-section>
+    <h2 class="xrb-card-heading row">Fields and controls</h2>
+    <div class="xrb-field-grid">
+      <label>Text<input id="example-text" value="Example"></label>
+      <label>Disabled<input value="Unavailable" disabled></label>
+      <label>Read only<input value="Read only" readonly></label>
+      <label>Number<input id="example-number" type="number" value="2" min="0" max="10" step="1"></label>
+      <label>Dropdown<select id="example-select"><option>First</option><option>Second</option><option disabled>Unavailable</option></select></label>
+      <label>Loading<select aria-busy="true" disabled><option>Checking…</option></select></label>
+      <label>Validation<input id="example-invalid" value="Invalid value" aria-invalid="true"><span class="xrb-help field-error">Choose a valid value.</span></label>
+      <label>Marked options<div class="dropdown" data-options="ready|warning|failed" data-marks='{"ready":"ok","warning":"warn","failed":"err"}' data-details='{"ready":"Verified","warning":"Needs review","failed":"Retry"}'><input type="hidden" value="ready"><button type="button" class="dropdown-btn" aria-label="Marked options" aria-haspopup="listbox" aria-expanded="false">Ready</button></div></label>
+      <label>Multiple choices<div class="dropdown" data-options="one|two|three" data-multi="1"><input type="hidden" value='["one"]'><button type="button" class="dropdown-btn" aria-label="Multiple choices" aria-haspopup="listbox" aria-expanded="false">One</button></div></label>
+    </div>
+    <div class="xrb-toggle-grid"><label class="toggle"><input type="checkbox">Checkbox</label><label class="toggle"><input type="checkbox" checked>Checked</label><label class="toggle"><input type="checkbox" disabled>Disabled</label><label class="toggle"><input type="checkbox" checked disabled>Checked disabled</label></div>
+    <div class="row"><label class="xrb-switch"><input type="checkbox" checked>Switch</label><label class="toggle xrb-toggle-pill"><input type="checkbox" checked>Pill</label><label class="toggle xrb-toggle-pill xrb-toggle-pill-compact"><input type="checkbox">Compact pill</label></div>
+    <label>Range<input id="example-range" class="xrb-range" type="range" min="0" max="100" value="40"></label>
+    <div class="xrb-segmented" aria-label="View mode"><button type="button" aria-pressed="true">First</button><button type="button" aria-pressed="false">Second</button><button type="button" disabled>Disabled</button></div>
+    <div class="xrb-swatch-group" aria-label="Colors" id="example-swatches"></div>
+  </section>
+  <section id="navigation" class="xrb-card" data-component-section>
+    <div class="xrb-tab-toolbar"><div class="xrb-tabs activity-tabs" role="tablist" aria-label="Sample tabs"><button id="example-tab-one" type="button" class="xrb-tab" role="tab" aria-selected="true" aria-controls="example-panel">Overview</button><button id="example-tab-two" type="button" class="xrb-tab" role="tab" aria-selected="false" aria-controls="example-panel" tabindex="-1">Details <span class="xrb-tab-count">3</span></button></div><div class="xrb-tab-toolbar-center"></div><div class="xrb-tab-toolbar-end"><button type="button" class="xrb-icon-button" data-xrb-icon="close" aria-label="Clear example"></button></div></div>
+    <div id="example-panel" role="tabpanel" aria-labelledby="example-tab-one">Overview panel</div>
+    <div class="xrb-tabs xrb-tabs-compact xrb-search-bar"><span class="xrb-search-icon" data-xrb-icon="search"></span><input type="search" class="xrb-search-input" placeholder="Search" aria-label="Search examples"><button type="button" class="xrb-icon-button xrb-search-close" data-xrb-icon="close" aria-label="Clear search"></button></div>
+    <div class="xrb-choice-list"><button type="button" aria-pressed="true">Selected row</button><button type="button" aria-pressed="false">Plain row</button></div>
+    <div class="row"><button id="example-menu-button" type="button" aria-haspopup="menu" aria-expanded="false">Menu</button><button id="example-tooltip" type="button" data-tooltip="Shared keyboard and pointer tooltip">Tooltip</button></div>
+  </section>
+  <section id="status" class="xrb-card" data-component-section>
+    <h2 class="xrb-card-heading row">Statuses and feedback</h2>
+    <div class="row"><span class="state neutral">Missing</span><span class="state ok">Ready</span><span class="state err">Blocked</span><span class="state busy">Working</span><span class="state rebuild">Rebuild</span><span class="state live">Live</span><span class="state run">Running</span><span class="state none">None</span></div>
+    <div class="row"><span class="chip good">Success</span><span class="chip warn">Warning</span><span class="chip bad">Error</span><span class="chip rebuild">Rebuild available</span><span class="xrb-spinner xrb-spinner-accent" role="status" aria-label="Loading"></span><span class="xrb-spinner xrb-spinner-small" aria-hidden="true"></span></div>
+    <div class="xrb-filter-group"><button type="button" class="xrb-filter-chip" aria-pressed="true"><span class="xrb-filter-indicator"></span><span class="xrb-filter-count">4</span></button><button type="button" class="xrb-filter-chip" data-tone="warn" aria-label="Warnings" aria-pressed="true"><span class="xrb-filter-indicator"></span><span class="xrb-filter-count">2</span></button><button type="button" class="xrb-filter-chip" data-tone="error" aria-label="Errors" aria-pressed="false"><span class="xrb-filter-indicator"></span><span class="xrb-filter-count">1</span></button></div>
+    <div class="warning">Warning message.</div><div class="xrb-error-banner">Error banner.</div>
+    <div class="stats-dock"><span class="stat good">60 <small>fps</small></span><span class="stat warn">12 <small>ms</small></span><span class="stat bad">2 <small>errors</small></span></div>
+    <div class="metrics"><div class="metric good"><div class="v">60<small>Hz</small></div><div class="k">Rate</div></div><div class="metric warn"><div class="v">12<small>ms</small></div><div class="k">Latency</div></div></div>
+    <div class="facts"><div><b>Ready</b><span>State</span></div><div><b>Local</b><span>Source</span></div></div>
+  </section>
+  <section id="dialogs" class="xrb-card" data-component-section>
+    <h2 class="xrb-card-heading row">Dialogs and progress</h2>
+    <div class="row"><button type="button" data-demo-dialog="confirm">Confirmation</button><button type="button" data-demo-dialog="question">Question</button><button type="button" data-demo-dialog="message">Message</button></div>
+    <div class="row"><button type="button" data-demo-progress="running">Progress</button><button type="button" data-demo-progress="done">Success</button><button type="button" data-demo-progress="failed">Failure</button></div>
+    <div class="xrb-progress-status"><span class="xrb-progress-status-icon" data-xrb-icon="settings" aria-hidden="true"></span><div><h3>Setup heading</h3><p class="muted">Shared dialog description.</p></div></div>
+  </section>
+  <section id="layout" class="xrb-card" data-component-section>
+    <h2 class="xrb-card-heading row">Layout and content</h2>
+    <div class="xrb-field-grid"><div class="xrb-stack"><h2>Stack</h2><p class="xrb-supporting-text">Shared vertical rhythm.</p><div class="xrb-section-divider">Section divider</div></div><div class="xrb-control-group"><h2>Control group</h2><label>Field<input placeholder="Value"></label></div></div>
+    <div class="xrb-stack"><h2>Inline title editing</h2><h3><input class="xrb-inline-edit" aria-label="Editable title" value="Editable title"></h3></div>
+    <dl class="xrb-key-value-list"><dt>Version</dt><dd>1.0.0</dd><dt>Source</dt><dd>Local example</dd></dl>
+    <details class="xrb-disclosure"><summary>Disclosure</summary><p class="xrb-supporting-text">Additional details are revealed here.</p></details>
+    <div class="xrb-sidebar-content"><section class="xrb-sidebar-section"><h2>Sidebar section</h2><p class="xrb-help">Shared spacing and scrolling.</p></section><section class="xrb-sidebar-section"><h2>Next section</h2><p class="xrb-help">No product-specific spacing rules.</p></section></div>
+    <button id="example-reveal" type="button" aria-expanded="false">Toggle reveal</button><div id="example-reveal-content" class="xrb-empty-state" hidden>Animated reveal content.</div>
+  </section>
+  <section id="media" class="xrb-card" data-component-section>
+    <h2 class="xrb-card-heading row">Media and output</h2>
+    <div class="xrb-media-stage"><div class="xrb-media-empty">No media connected.</div></div>
+    <div class="xrb-empty-state">Nothing here yet.</div><div class="checker component-checker" aria-label="Transparency checker"></div>
+    <div class="xrb-copy-block xrb-copy-block-area"><pre class="xrb-code-block" id="example-output">[Example output]
+No process is running.
+Ready for review.</pre><button type="button" id="example-copy" class="xrb-icon-button xrb-copy-action" aria-label="Copy output" data-xrb-icon="copy"></button></div><p id="example-copy-status" class="xrb-copy-status" role="status"></p>
+    <div class="console"><div class="entry"><span class="src badge">app</span><span class="msg">Information</span><span class="time">12:00</span></div><div class="entry warn"><span class="src">app</span><span class="msg">Warning</span><span class="time">12:01</span></div><div class="entry err"><span class="src">app</span><span class="msg">Error</span><span class="time">12:02</span></div></div>
+    <div class="list"><div class="item tone-ok"><span class="stripe"></span><div class="main"><div class="title">Completed item</div><div class="detail">Example detail</div></div><span class="state ok">Done</span></div></div>
+  </section>
+</main>
+<div id="example-menu" class="menu" role="menu" hidden><button type="button" role="menuitem">First action</button><button type="button" role="menuitem">Second action</button><hr role="separator"><button type="button" role="menuitem" disabled>Unavailable</button></div>
+<dialog id="example-dialog" class="xrb-dialog" aria-labelledby="example-dialog-title"><div class="xrb-stack"><header class="xrb-dialog-header"><h3 id="example-dialog-title">Confirmation</h3><button type="button" class="xrb-dialog-close" data-close-dialog aria-label="Close">×</button></header><p id="example-dialog-description" class="muted"></p><label id="example-dialog-field" hidden>Value<input value="Example"></label><div class="xrb-dialog-actions"><button type="button" data-close-dialog>Cancel</button><button type="button" class="primary" data-close-dialog>Continue</button></div></div></dialog>
+</body></html>

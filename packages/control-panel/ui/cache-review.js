@@ -1,6 +1,0 @@
-const esc = value => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-export function workingCacheReview(review) {
-  const notice = '<p class="xrb-help">Only reviewed obsolete working files can be removed. Published runtimes, settings and recordings are preserved.</p>';
-  if (review.problem) return `${notice}<p class="errors" role="alert">${esc(review.problem)}</p>`;
-  return `${notice}${review.candidates.length ? `<form class="working-cache-form xrb-stack">${review.candidates.map(candidate => `<label><input type="checkbox" name="generation" value="${esc(candidate.name)}"> ${esc(candidate.name)} · ${esc(candidate.files)} files · ${(candidate.bytes / 1048576).toFixed(1)} MiB</label>`).join('')}<button type="submit" class="action-button">Remove selected working files</button></form>` : '<p class="empty-note">No obsolete owned working generations can be removed.</p>'}${review.retained.length ? `<details><summary>Preserved working generations (${review.retained.length})</summary><ul>${review.retained.map(item => `<li><code>${esc(item.name)}</code>: ${esc(item.reason)}</li>`).join('')}</ul></details>` : ''}`;
-}

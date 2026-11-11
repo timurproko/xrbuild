@@ -30,6 +30,17 @@ async function digest(root){const result=[];async function walk(dir,prefix=''){f
 
 test('factories keep stable IDs and do not create state, keys, listeners or configured production by discovery/status',async t=>{const f=await fixture(t),before=await digest(f.workspace);const a=await local(f.context),b=await production(f.context);assert.equal(a.name,'local-test');assert.equal(b.name,'production-web');assert.equal((await a.status(pub())).state,'unpublished');assert.equal((await b.status(pub())).state,'unavailable');await assert.rejects(b.publish({app:f.app,publication:pub()}),/Configure/);assert.equal(await digest(f.workspace),before);await absent(f.state);});
 
+test('discovery accepts an absent user root without creating config or runtime state',async t=>{
+  const f=await fixture(t),workspace=path.join(f.root,'missing','user');
+  const context={...f.context,workspace,config:{...f.context.config,file:path.join(workspace,'config/plugins/publisher-webxr/config.json')}};
+  const a=await local(context),b=await production(context);
+  assert.equal((await a.status(pub())).state,'unpublished');assert.equal((await b.status(pub())).state,'unavailable');
+  await absent(path.join(f.root,'missing'));
+  const outside=path.join(f.root,'outside');await fs.mkdir(outside);const linked=path.join(f.root,'linked');await fs.symlink(outside,linked,'junction');
+  const badWorkspace=path.join(linked,'missing');await assert.rejects(local({...context,workspace:badWorkspace,config:{...context.config,file:path.join(badWorkspace,'config/plugins/publisher-webxr/config.json')}}),/plain and unlinked/);
+  assert.deepEqual(await fs.readdir(outside),[]);
+});
+
 test('one package owns both declarations; actual selected-core discovery works against a private read-only product fixture',async t=>{const f=await fixture(t),product=path.join(f.root,'product'),source=path.join(product,'embedded/plugins/publisher-webxr');await fs.mkdir(path.dirname(source),{recursive:true});await fs.cp(candidate,source,{recursive:true});await permissions(source,0o444);const before=await digest(source);const result=await discoverPublishers(f.workspace,product);assert.deepEqual(result.problems,[]);assert.deepEqual(result.found.map(p=>p.publisher.name),['local-test']);assert.equal(result.found[0].plugin.id,'publisher-webxr');assert.equal(result.found[0].plugin.origin,'bundled');assert.equal(result.found[0].plugin.meta.title,'WebXR');assert.equal(result.found[0].plugin.meta.description,'Publish WebXR apps for local testing or on the web.');assert.match(result.found[0].plugin.meta.settingsDescription,/Localhost for testing on this computer/);
   await fs.writeFile(path.join(f.workspace,'xrb-plugins.json'),JSON.stringify({disabled:[],settings:{'publisher-webxr':{production:true}},panelSettings:{}}));const both=await discoverPublishers(f.workspace,product);assert.deepEqual(both.problems,[]);assert.deepEqual(both.found.map(p=>p.publisher.name),['local-test','production-web']);assert.equal((await both.found[1].publisher.status(pub())).state,'unavailable');assert.equal(await digest(source),before);assert.equal(JSON.parse(await fs.readFile(f.context.config.file)).untouched,'keep');await absent(f.state);
 });

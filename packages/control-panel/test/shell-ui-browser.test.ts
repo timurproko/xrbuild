@@ -76,7 +76,7 @@ test('Activity header and Settings remain accessible in narrow/wide and light/da
       assert.ok(decodeURIComponent(appsFavicon).includes(appsEmoji), 'Settings Apps shares the favicon emoji');
       let previousFavicon = '', previousAppsFavicon = '';
       for (const theme of ['light', 'dark']) {
-        await navigate(panel.url, `!document.body.classList.contains('workspace-pending') && !!document.querySelector('.proj')`);
+        await navigate(panel.url, `!!document.body && !document.body.classList.contains('workspace-pending') && !!document.querySelector('.proj')`);
         await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
         await sleep(100);
         const appsIdentity = await evaluate(`({favicon:document.querySelector('link[rel=icon]').href,filter:getComputedStyle(document.documentElement).getPropertyValue('--xrb-glyph-detail-filter').trim()})`);
@@ -123,8 +123,19 @@ test('Activity header and Settings remain accessible in narrow/wide and light/da
       }
       await evaluate(`const input=document.querySelector('#app-preferences [name=cursor]');input.value='system';input.dispatchEvent(new Event('change',{bubbles:true}))`);
       await sleep(200);
-      await navigate(`${panel.url}settings?module=control-panel`, `document.querySelector('#app-preferences [name=cursor]')?.value==='system'`);
+      await navigate(`${panel.url}settings?module=control-panel`, `location.pathname==='/settings/'&&document.querySelector('#app-preferences [name=cursor]')?.value==='system'&&document.querySelector('[data-settings-filter="control-panel"]')?.getAttribute('aria-current')==='true'`);
       assert.equal(await evaluate(`document.querySelector('[data-settings-filter="control-panel"]').getAttribute('aria-current')`), 'true');
+      // A stale local selection must not override a fresh Settings menu destination.
+      await evaluate(`localStorage.setItem('panel.settingsFilter','control-panel');document.querySelector('#panel-menu-button').click();document.querySelector('#settings-open').click()`);
+      for(let i=0;i<80&& !await evaluate(`location.pathname==='/settings/'&&!location.search&&document.querySelector('[data-settings-filter="all"]')?.getAttribute('aria-current')==='true'`);i++)await sleep(50);
+      assert.equal(await evaluate(`document.querySelector('[data-settings-filter="all"]').getAttribute('aria-current')`),'true','Settings menu returns to All after the core selection');
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('[data-settings-module]')].map(section=>section.dataset.settingsModule).sort()`),await evaluate(`[...document.querySelectorAll('[data-settings-filter]:not([data-settings-filter="all"])')].map(row=>row.dataset.settingsFilter).sort()`),'plain Settings includes every available core and plugin section');
+      await navigate(`${panel.url}settings/?module=settings-fixture`, `document.querySelector('[data-settings-filter="settings-fixture"]')?.getAttribute('aria-current')==='true'`);
+      assert.equal(await evaluate(`document.querySelectorAll('[data-settings-module]').length`),1,'explicit plugin settings link remains scoped');
+      await navigate(`${panel.url}settings/?module=settings-fixture`, `document.querySelector('[data-settings-filter="settings-fixture"]')?.getAttribute('aria-current')==='true'`);
+      await evaluate(`localStorage.setItem('panel.settingsFilter','settings-fixture');document.querySelector('#panel-menu-button').click();document.querySelector('#settings-open').click()`);
+      for(let i=0;i<80&& !await evaluate(`location.pathname==='/settings/'&&!location.search&&document.querySelector('[data-settings-filter="all"]')?.getAttribute('aria-current')==='true'`);i++)await sleep(50);
+      assert.equal(await evaluate(`document.querySelector('[data-settings-filter="all"]').getAttribute('aria-current')`),'true','Settings menu returns to All after a plugin selection');
     });
   } finally { await panel.close(); await fs.rm(workspace, { recursive: true, force: true }); }
 });

@@ -72,7 +72,8 @@ test('session HTTP requires exact Host/Origin/capability and allowlisted actions
   assert.equal((await action(m,'/api/start',{body:'arbitrary command'})).status,400);
   assert.equal((await fetch(url.origin+'/package.json',{headers:auth})).status,403);
   assert.equal((await fetch(url.origin+'/api/state?token=secret',{headers:auth})).status,400);
-  assert.equal((await fetch(url.origin+'/startup.js')).status,200);assert.equal(calls,0);
+  assert.equal((await fetch(url.origin+'/startup.js')).status,200);
+  const scrollbars=await fetch(url.origin+'/scrollbars.js');assert.equal(scrollbars.status,200);assert.match(scrollbars.headers.get('content-type'),/javascript/);assert.match(await scrollbars.text(),/installOverlayScrollbars/);assert.equal(calls,0);
   const response=await fetch(url.origin+'/');assert.match(response.headers.get('content-security-policy'),/frame-ancestors 'none'/);assert.equal(response.headers.get('access-control-allow-origin'),null);
 });
 test('unknown/malformed IPC owners are not trusted and no lock/process cleanup happens',async t=>{

@@ -8,8 +8,9 @@ persistent publication history and temporary working files belong to the selecte
 
 ## Configuration and state
 
-The core creates missing `config/plugins/publisher-webxr/config.json` in the selected writable user workspace, preserving
-existing bytes and unknown fields. Product defaults contain no production site, repository, deployment identity or key.
+The core reads `config/plugins/publisher-webxr/config.json` in the selected user workspace, preserving existing bytes
+and unknown fields. If absent, discovery uses validated defaults in memory without creating the user folder or file;
+explicit configuration initialization can create missing defaults without replacement. Product defaults contain no production site, repository, deployment identity or key.
 `localhost` defaults enabled; `production` defaults disabled. Enabling a destination setting is not sufficient to
 configure production: `productionConfigured` and complete validated destination fields are required explicitly.
 

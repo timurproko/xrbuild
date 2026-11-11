@@ -21,7 +21,7 @@ test('shared tooltips replace native hints across dynamic controls and modal dia
     <dialog id="dialog"><button id="modal" title="Modal hint">Modal action</button></dialog>
     <script type="module">import {installTooltips} from '/design-system.js';window.disposeTooltips=installTooltips(document);window.ready=true;</script>`;
   const server = createServer(async (req, res) => {
-    if (req.url === '/design-system.js' || req.url === '/design-system.css') {
+    if (req.url === '/design-system.js' || req.url === '/design-system.css' || req.url === '/scrollbars.js') {
       res.setHeader('Content-Type', req.url.endsWith('.js') ? 'text/javascript' : 'text/css');
       res.end(await readFile(new URL(`../ui${req.url}`, import.meta.url)));
     } else { res.setHeader('Content-Type', 'text/html'); res.end(html); }

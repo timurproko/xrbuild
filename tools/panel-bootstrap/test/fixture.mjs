@@ -34,5 +34,5 @@ export async function until(read, predicate, timeout = 3000) {
 export function copyBootstrap(f) {
   for(const file of ['runtime.mjs','bootstrap.mjs','child.mjs','package.json']) f.put('tools/panel-bootstrap/'+file,fs.readFileSync(path.join(task,'tools/panel-bootstrap',file)));
   fs.cpSync(path.join(task,'tools/panel-bootstrap/ui'),path.join(f.root,'tools/panel-bootstrap/ui'),{recursive:true});
-  for(const file of ['design-system.css','design-system.js']) f.put('packages/control-panel/ui/'+file,fs.readFileSync(path.join(task,'packages/control-panel/ui',file)));
+  for(const file of ['design-system.css','design-system.js','scrollbars.js']) f.put('packages/control-panel/ui/'+file,fs.readFileSync(path.join(task,'packages/control-panel/ui',file)));
 }

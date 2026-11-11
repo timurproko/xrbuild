@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <title>XR Build · Apps</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="/theme.js"></script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Ctext%20y%3D%2250%22%20x%3D%2232%22%20text-anchor%3D%22middle%22%20font-size%3D%2250%22%3E%F0%9F%8E%9B%EF%B8%8F%3C%2Ftext%3E%3C%2Fsvg%3E">
   <script>{const route=location.pathname.replace(/\/$/,'');if(route==='/plugins'){document.title='XR Build · Plugins';document.querySelector('link[rel="icon"]').href='data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cstyle%3Etext%7Bfilter%3Abrightness(0)%20saturate(100%25)%20invert(31%25)%20sepia(78%25)%20saturate(1794%25)%20hue-rotate(213deg)%20brightness(85%25)%20contrast(90%25)%7D%40media(prefers-color-scheme%3Adark)%7Btext%7Bfilter%3Abrightness(0)%20saturate(100%25)%20invert(70%25)%20sepia(39%25)%20saturate(1071%25)%20hue-rotate(194deg)%20brightness(101%25)%20contrast(103%25)%7D%7D%3C%2Fstyle%3E%3Ctext%20y%3D%2250%22%20x%3D%2232%22%20text-anchor%3D%22middle%22%20font-size%3D%2250%22%3E%F0%9F%A7%A9%3C%2Ftext%3E%3C%2Fsvg%3E'}else if(route==='/settings'){document.title='XR Build · Settings';document.querySelector('link[rel="icon"]').href='data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Ctext%20y%3D%2250%22%20x%3D%2232%22%20text-anchor%3D%22middle%22%20font-size%3D%2250%22%3E%E2%9A%99%EF%B8%8F%3C%2Ftext%3E%3C%2Fsvg%3E'}}</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -106,7 +107,6 @@
   <div id="ctx-menu" class="menu xrb-menu" role="menu" hidden>
     <button type="button" role="menuitem" data-act="favicon" class="submenu-item" aria-haspopup="menu" aria-expanded="false">Favicon</button>
     <button type="button" role="menuitem" data-act="rebuild-app">Rebuild</button>
-    <button type="button" role="menuitem" data-act="cache" hidden>Review build cache</button>
     <button type="button" role="menuitem" data-act="rename">Rename</button>
     <button type="button" role="menuitem" data-act="archive">Archive</button>
     <button type="button" role="menuitem" data-act="delete" class="danger-item">Delete</button>
@@ -136,22 +136,6 @@
     <button type="button" role="menuitem" data-act="render-icon" hidden>Render 3D…</button>
     <button type="button" role="menuitem" class="danger-item" data-act="remove-icon" hidden>Remove</button>
   </div>
-
-  <dialog id="workspace-setup" class="xrb-dialog workspace-setup" aria-labelledby="workspace-title" aria-describedby="workspace-message">
-    <h1 class="workspace-brand">XR Build <span>Setup</span></h1>
-    <div class="workspace-panel">
-      <h3 id="workspace-title">Create your workspace</h3>
-      <p id="workspace-message" class="muted">Projects and plugins live in your workspace, separate from the XR Build core. Create it with the standard folders and a starter app.</p>
-      <div class="workspace-folder">
-        <span class="label">Workspace folder</span>
-        <code id="workspace-folder"></code>
-      </div>
-      <p id="workspace-error" class="field-error" role="alert" hidden></p>
-      <div class="row ask-buttons"><span class="spacer"></span>
-        <button type="button" class="action-button primary" id="ws-create" autofocus>Create workspace</button>
-      </div>
-    </div>
-  </dialog>
 
   <dialog id="job-progress" class="xrb-dialog xrb-progress-dialog xrb-job-progress-dialog" aria-labelledby="job-progress-title" aria-describedby="job-progress-message">
       <div class="xrb-progress-status"><span id="job-progress-status-icon" class="xrb-progress-status-icon" data-state="running" aria-hidden="true">

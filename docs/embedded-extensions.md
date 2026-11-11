@@ -97,9 +97,10 @@ An optional `config` field in `xrb-plugin.json` uses the existing bounded settin
 }
 ```
 
-When the service is loaded, defaults initialize `<user-workspace>/config/plugins/<id>/config.json` only if missing.
-Catalog listing alone creates no config. A complete temporary file is published with an exclusive hard link; an
-existing file is never replaced. Filesystems without hard-link support fail rather than falling back to partial writes.
+Service and catalog discovery read `<user-workspace>/config/plugins/<id>/config.json` when present and otherwise use
+validated defaults in memory without creating the workspace or configuration. Explicit configuration initialization
+can publish missing defaults: a complete temporary file is published with an exclusive hard link, and an existing
+file is never replaced. Filesystems without hard-link support fail rather than falling back to partial writes.
 Malformed JSON, invalid known values, unsafe links and oversized files are diagnosed without echoing their contents.
 Unknown fields remain on disk; new missing fields use defaults in memory without rewriting the user's file.
 New workspace templates ignore `config/plugins/`; an existing workspace's `.gitignore` is not rewritten automatically.

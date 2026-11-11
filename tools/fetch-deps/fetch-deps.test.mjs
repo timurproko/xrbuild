@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { syncSources, HashMismatchError } from './fetch-deps.mjs';
+import { spawnSync } from 'node:child_process';
+import { syncSources, HashMismatchError, freshOutputRoot, LOCK_PATH } from './fetch-deps.mjs';
 
 async function fixture() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'fetch-deps-'));
@@ -19,6 +20,57 @@ async function fixture() {
   ];
   return { dir, src, root: path.join(dir, 'third_party'), sources };
 }
+
+test('managed core output must be fresh and plain, preserving unknown and linked trees', async t => {
+  const artifacts = path.resolve(import.meta.dirname, '../../.artifacts'); await fs.mkdir(artifacts, { recursive: true });
+  const root = await fs.mkdtemp(path.join(artifacts, 'fetch-output-')); t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const output = path.join(root, 'output');
+  assert.equal(await freshOutputRoot(output), output); await assert.rejects(fs.access(output));
+  await fs.mkdir(output); assert.equal(await freshOutputRoot(output), output);
+  await fs.writeFile(path.join(output, 'KEEP'), 'preserve');
+  await assert.rejects(freshOutputRoot(output), /fresh empty/);
+  assert.equal(await fs.readFile(path.join(output, 'KEEP'), 'utf8'), 'preserve');
+  const link = path.join(root, 'link'); await fs.symlink(output, link, process.platform === 'win32' ? 'junction' : 'dir');
+  await assert.rejects(freshOutputRoot(path.join(link, 'missing')), /plain directories/);
+});
+
+test('managed fetch preserves newly appeared output and forbids repinning or workspace routing', async t => {
+  const artifacts = path.resolve(import.meta.dirname, '../../.artifacts'); await fs.mkdir(artifacts, { recursive: true });
+  const root = await fs.mkdtemp(path.join(artifacts, 'fetch-managed-')); t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.mkdir(path.join(root, 'cef')); await fs.writeFile(path.join(root, 'cef/KEEP'), 'preserve');
+  await assert.rejects(syncSources([{ id:'cef',kind:'archive',dest:'cef',url:'https://example.invalid/no-download.tar.bz2' }], {root,lock:{},fresh:true}), /Fresh dependency output changed/);
+  assert.equal(await fs.readFile(path.join(root,'cef/KEEP'),'utf8'),'preserve');
+  await fs.writeFile(path.join(root,'header.hpp'),'user data');
+  await assert.rejects(syncSources([{id:'header',kind:'download',dest:'header.hpp',url:'https://example.invalid/no-download'}],{root,lock:{},fresh:true}),/Fresh dependency output changed/);
+  assert.equal(await fs.readFile(path.join(root,'header.hpp'),'utf8'),'user data');
+  const pins = await fs.readFile(LOCK_PATH);
+  for (const flags of [['--update-lock'], ['--workspace'], ['--only','cef']]) {
+    const output = path.join(root,'not-created');
+    const result = spawnSync(process.execPath,[path.join(import.meta.dirname,'fetch-deps.mjs'),`--output=${output}`,...flags],{encoding:'utf8'});
+    assert.equal(result.status,1);assert.match(result.stderr,/only for pinned complete core inputs/);
+    await assert.rejects(fs.access(output));
+  }
+  assert.deepEqual(await fs.readFile(LOCK_PATH),pins);
+});
+
+test('managed archive failures preserve foreign cache files and their own failed download', async t => {
+  const artifacts = path.resolve(import.meta.dirname, '../../.artifacts'); await fs.mkdir(artifacts, { recursive: true });
+  const root = await fs.mkdtemp(path.join(artifacts, 'fetch-archive-')); t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.mkdir(path.join(root, '.cache'));
+  const foreign = path.join(root, '.cache/runtime.tar.bz2'); await fs.writeFile(foreign, 'foreign data');
+  const original = globalThis.fetch; let downloads = 0;
+  globalThis.fetch = async url => { assert.equal(url, 'https://example.invalid/runtime.tar.bz2'); downloads++; return new Response('synthetic bad archive'); };
+  try {
+    await assert.rejects(syncSources([{id:'cef',kind:'archive',dest:'cef',url:'https://example.invalid/runtime.tar.bz2'}],
+      {root,lock:{'archive:cef':'a'.repeat(64)},fresh:true}), HashMismatchError);
+    assert.equal(downloads, 1);
+    assert.equal(await fs.readFile(foreign, 'utf8'), 'foreign data');
+    const caches = (await fs.readdir(root)).filter(name => name.startsWith('.cache-'));
+    assert.equal(caches.length, 1);
+    assert.equal(await fs.readFile(path.join(root, caches[0], 'runtime.tar.bz2'), 'utf8'), 'synthetic bad archive');
+    await assert.rejects(fs.access(path.join(root, 'cef')));
+  } finally { globalThis.fetch = original; }
+});
 
 test('pins, installs and re-verifies a clean tree', async () => {
   const { root, sources } = await fixture();

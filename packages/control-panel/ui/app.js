@@ -1,7 +1,6 @@
 // XR Build control panel UI: plain ES module, no build step. Talks to the panel server
 // (same origin) over JSON and a Server-Sent Events stream.
 import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
-import { workingCacheReview } from './cache-review.js';
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
 import {requestedNavigation,menuKeyboard,renderNavigationMenu,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
 import {rebuildHostInPlace} from './rebuild-dialog.js';
@@ -28,7 +27,6 @@ const state = {
   status: null,
   runLog: [],
   jobs: new Map(),
-  workingCacheReviews: new Map(),
   publicationOverrides: new Map(),
   publicationEffects: new Map(),
   savingPublication: new Map(),
@@ -47,11 +45,10 @@ const state = {
   managedPlugins: [],
   managedId: localStorage.getItem('panel.managedPlugin'),
   appSettings: { cursor: 'system' },
-  settingsFilter: new URLSearchParams(location.search).get('module') || localStorage.getItem('panel.settingsFilter') || 'all',
+  settingsFilter: new URLSearchParams(location.search).get('module') || 'all',
   activityTab: localStorage.getItem('panel.activityTab') === 'jobs' ? 'jobs' : 'log',
   page: ['plugins', 'settings'].includes(initialNavigationRequest.page) ? initialNavigationRequest.page : 'projects',
   dashboardScroll: 0,
-  emptyProjectPrompted: false,
   fieldErrors: {},
   savingPlatform: null,
   queuedPlatform: null,
@@ -260,7 +257,7 @@ const iconSrc = (p) => `${projectUrl(p.id)}/icon?t=${p.icon?.mtimeMs ?? 0}${p.ic
 const listed = () => (state.view === 'archive' ? state.archived : state.projects);
 const allProjects = () => [...state.projects, ...state.archived];
 const emptyProjectInventory = () => !state.projects.length && !state.archived.length && !state.unregistered.length;
-const emptyUserProjectWorkspace = () => state.workspace?.exists && state.workspace.kind === 'user' && emptyProjectInventory();
+const emptyUserProjectWorkspace = () => state.workspace?.kind === 'user' && emptyProjectInventory();
 
 function syncEmptyProjectUi() {
   const empty = emptyUserProjectWorkspace();
@@ -268,55 +265,11 @@ function syncEmptyProjectUi() {
   $('#project-content').hidden = empty;
   $('#side').hidden = empty;
   document.body.classList.toggle('projects-empty', empty);
-  if (!empty) {
-    state.emptyProjectPrompted = false;
-    return;
-  }
-  syncRunDock(null);
-  if (state.page !== 'projects' || state.emptyProjectPrompted) return;
-  state.emptyProjectPrompted = true;
-  queueMicrotask(() => {
-    if (emptyUserProjectWorkspace() && state.page === 'projects' && !$('#ask').open) void newProject().catch(report);
-  });
+  if (empty) syncRunDock(null);
 }
 
-function syncWorkspaceUi() {
-  const ws = state.workspace;
-  if (!ws) return;
-  const split = ws.integrationPath && ws.integrationPath !== ws.path;
-  $('#workspace-folder').textContent = split ? `Projects ${ws.path} · Integrations ${ws.integrationPath}` : ws.path;
-  $('#workspace-folder').title = split ? `Project repository: ${ws.path}\nIntegration workspace: ${ws.integrationPath}` : ws.path;
-
-  const dialog = $('#workspace-setup');
-  if (!ws.exists && !dialog.open && !document.body.classList.contains('workspace-pending')) dialog.showModal();
-  else if (ws.exists && dialog.open) dialog.close();
-}
-
-async function loadWorkspace(sync = true) {
+async function loadWorkspace() {
   state.workspace = await api('GET', '/api/workspace');
-  if (sync) syncWorkspaceUi();
-}
-
-/** Creates the workspace (standard folders and a starter app); only adds missing files. */
-async function createWorkspace() {
-  const button = $('#ws-create');
-  const error = $('#workspace-error');
-  button.disabled = true;
-  button.textContent = 'Creating…';
-  error.hidden = true;
-  try {
-    await api('POST', '/api/workspace/create');
-    // Keep the modal in place until its starter project is ready behind it.
-    await loadWorkspace(false);
-    await loadProjects();
-    syncWorkspaceUi();
-  } catch (e) {
-    error.textContent = e.message;
-    error.hidden = false;
-  } finally {
-    button.disabled = false;
-    button.textContent = 'Create workspace';
-  }
 }
 
 /** A new app from the core's template, in the workspace's projects/unsorted/. */
@@ -342,6 +295,7 @@ async function newProject() {
   if (!name || !project) return false;
   state.selected = project.id;
   localStorage.setItem('panel.selected', project.id);
+  await loadWorkspace();
   await loadProjects();
   return true;
 }
@@ -827,11 +781,8 @@ function openMenu(x, y, projectId) {
   menu.querySelector('[data-act="rename"]').hidden = !p?.manifest;  // a broken manifest can only be deleted
   menu.querySelector('[data-act="favicon"]').hidden = !p?.manifest;
   menu.querySelector('[data-act="rebuild-app"]').hidden = p?.manifest?.kind !== 'app' || !p.manifest.scripts?.build;
-  menu.querySelector('[data-act="cache"]').hidden = p?.origin !== 'bundled';
   const deletion = menu.querySelector('[data-act="delete"]');
-  deletion.hidden = !!p?.running;
-  deletion.disabled = p?.origin === 'bundled';
-  deletion.dataset.tooltip = deletion.disabled ? 'Embedded projects cannot be deleted. Use Archive instead.' : '';
+  deletion.hidden = p?.origin === 'bundled' || !!p?.running;
   // Archive for live projects, Unarchive for archived ones
   const arch = menu.querySelector('[data-act="archive"]');
   arch.textContent = p?.archived ? 'Unarchive' : 'Archive';
@@ -952,7 +903,6 @@ $('#ctx-menu').addEventListener('click', (e) => {
   closeMenu();
   if (act === 'rename') startRename(id);
   if (act === 'rebuild-app') rebuildApp(id).catch(report);
-  if (act === 'cache') openProjectCache(id);
   if (act === 'delete') deleteProject(id).catch(report);
   if (act === 'archive') archiveProject(id).catch(report);
 });
@@ -1529,7 +1479,7 @@ function publicationFields(p) {
     const destination = effectivePublicationStatus(p, name, p.publicationDestinations?.[name]?.status ?? null);
     return [name, destination?.state === 'published' ? 'ok' : destination?.state === 'failed' ? 'warn' : null];
   }).filter(([, mark]) => mark));
-  const selectedPublisher = pub.publisher || (publisherNames.length === 1 ? publisherNames[0] : '');
+  const selectedPublisher = pub.publisher || '';
   const status = effectivePublicationStatus(p, selectedPublisher, p.publicationDestinations?.[selectedPublisher]?.status ?? info.status);
   // 'failed' from a publisher's status: published (it has a record), but the site does not serve it. Still published:
   // the action is Unpublish, and the note says why it is not reachable.
@@ -1672,6 +1622,14 @@ async function selectProjectSurface(p, surface) {
     if (!hasProjectPublishers(p)) return;
     localStorage.setItem(surfaceKey(), surface);
     animateDetailHeights(() => renderDetail(true));
+    // Persist an unambiguous default only on this explicit action, never on startup/re-render.
+    if (state.savingPlatform !== p.id && !p.manifest.publication?.publisher && p.publication?.publishers.length === 1) {
+      const publisher = $('#build-settings [name="publication.publisher"]');
+      if (publisher) {
+        publisher.value = p.publication.publishers[0].name;
+        publisher.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
     return;
   }
   const options = choicesForSurface(p, surface);
@@ -1760,45 +1718,6 @@ async function stopManagedRun() {
 function vscodeLink(workspaceRelative) {
   const root = (state.repo ?? '').replace(/\\/g, '/');
   return `vscode://file/${root}/${workspaceRelative}`.replace(/ /g, '%20');
-}
-
-function wireWorkingCacheReview(button, content, url) {
-  if (!button || !content) return;
-  content.dataset.cacheReviewUrl = url;
-  const render = review => {
-    content.innerHTML = workingCacheReview(review);
-    content.querySelector('.working-cache-form')?.addEventListener('submit', action(async event => {
-      event.preventDefault();
-      const generations = new FormData(event.currentTarget).getAll('generation');
-      if (!generations.length) return;
-      if (!await ask({ title: 'Remove reviewed working cache?', message: `Remove ${generations.length} obsolete working generations? Published runtimes, settings and recordings are preserved.`, ok: 'Remove', danger: true })) return;
-      const job = await api('DELETE', url, { revision: review.revision, generations, confirm: true });
-      state.workingCacheReviews.delete(url); state.jobs.set(job.id, { ...job, lines: [] });
-      content.innerHTML = '<p class="xrb-help">Cache maintenance started; see Jobs. Review again after it finishes.</p>';
-    }));
-  };
-  content.addEventListener('cache-review-update', event => render(event.detail));
-  if (state.workingCacheReviews.has(url)) render(state.workingCacheReviews.get(url));
-  button.addEventListener('click', action(async () => {
-    button.disabled = true;
-    try {
-      const review = await api('GET', url); state.workingCacheReviews.set(url, review);
-      // A live project/status refresh may have replaced the original card while the request was pending.
-      for (const target of document.querySelectorAll('[data-cache-review-url]')) if (target.dataset.cacheReviewUrl === url) target.dispatchEvent(new CustomEvent('cache-review-update', { detail: review }));
-    } finally { if (button.isConnected) button.disabled = false; }
-  }));
-}
-
-function openProjectCache(id) {
-  const dialog = document.createElement('dialog');
-  dialog.className = 'xrb-dialog';
-  dialog.innerHTML = `<div class="xrb-dialog-header"><h3>Build cache</h3><button type="button" class="xrb-icon-button" data-cache-close aria-label="Close">${iconSvg('close')}</button></div><div class="xrb-stack"><button type="button" class="action-button" id="bundled-cache-review">Refresh review</button><div id="bundled-cache-content"></div></div>`;
-  document.body.append(dialog);
-  dialog.addEventListener('close', () => dialog.remove(), { once: true });
-  dialog.querySelector('[data-cache-close]').addEventListener('click', () => dialog.close());
-  wireWorkingCacheReview(dialog.querySelector('#bundled-cache-review'), dialog.querySelector('#bundled-cache-content'), `${projectUrl(id)}/cache`);
-  dialog.showModal();
-  dialog.querySelector('#bundled-cache-review').click();
 }
 
 function renderDetail(force = false) {
@@ -2075,10 +1994,6 @@ function renderDetail(force = false) {
         return showFieldErrors({ [event.target.name]: 'package title is required' });
       await saveSettings(p, new FormData(form), event.target.name);
     }));
-  }
-  // A single installed publisher is the unambiguous default; persist it so Publish is immediately usable.
-  if (state.savingPlatform !== p.id && !m.publication?.publisher && p.publication?.publishers.length === 1) {
-    $('#build-settings [name="publication.publisher"]')?.dispatchEvent(new Event('change', { bubbles: true }));
   }
 }
 
@@ -2531,8 +2446,8 @@ function drawCameraFrame(buffer) {
   slot.label.textContent = `${label}${nBoxes || !rgb ? ` · ${boxes.length} box${boxes.length === 1 ? '' : 'es'}` : ''}`;
 }
 
-// Header metrics and the mirrored Run/Stop control are one unit: they become visible in the same
-// observer callback, avoiding a partial header while the page crosses the sticky bar.
+// Header metrics and the mirrored Run/Stop control share one visibility decision, both when
+// rebinding the current action and when it crosses above the sticky bar.
 let runDockVisible = false;
 
 function renderStatsDock(s) {
@@ -3199,7 +3114,6 @@ function renderManagedPlugins() {
       await Promise.all([loadManagedPlugins(), loadPlugins(), loadNavigation(), loadProjects()]);
     } finally { if (form.isConnected) form.querySelector('button[type="submit"]').disabled = false; }
   }));
-  el.querySelector('.plugin-hero-settings')?.addEventListener('click', () => localStorage.setItem('panel.settingsFilter', p.id));
   el.querySelector('#open-plugin-folder').addEventListener('click', action(() => api('POST', `/api/plugins/manage/${encodeURIComponent(p.id)}/open-folder`)));
   el.querySelectorAll('[data-import-sample]').forEach((button) => button.addEventListener('click', action(() => {
     const sample = samples.find((item) => item.id === button.dataset.importSample);
@@ -3267,13 +3181,8 @@ function renderGlobalSettings() {
   const defaultFilter = plugins.length ? 'all' : 'control-panel';
   const filters = new Set([...(plugins.length ? ['all'] : []), 'control-panel', ...plugins.map((plugin) => plugin.id)]);
   const requestedFilter = new URLSearchParams(location.search).get('module');
-  if (requestedFilter && filters.has(requestedFilter)) {
-    state.settingsFilter = requestedFilter;
-    localStorage.setItem('panel.settingsFilter', requestedFilter);
-  } else if (!filters.has(state.settingsFilter)) {
-    state.settingsFilter = defaultFilter;
-    localStorage.setItem('panel.settingsFilter', defaultFilter);
-  }
+  // Route intent wins: the plain menu destination always opens All, not the last sidebar module.
+  state.settingsFilter = requestedFilter && filters.has(requestedFilter) ? requestedFilter : defaultFilter;
   if (requestedFilter && !filters.has(requestedFilter)) {
     const url = new URL(location.href);
     url.searchParams.delete('module');
@@ -3288,7 +3197,6 @@ function renderGlobalSettings() {
   nav.innerHTML = `<div class="nav-tabs xrb-section-label settings-module-heading"><span>Module</span></div><div class="nav-list">${rows.map((row) => `<button type="button" class="proj xrb-focus-inset ${row.id === state.settingsFilter ? 'selected' : ''} ${row.enabled === false ? 'plugin-disabled' : ''}" data-settings-filter="${esc(row.id)}" aria-current="${row.id === state.settingsFilter}"><span class="stripe"></span>${row.icon}<span class="text"><span class="name">${esc(row.name)}</span><span class="meta">${esc(row.meta)}</span></span></button>`).join('')}</div>`;
   nav.querySelectorAll('[data-settings-filter]').forEach((button) => button.addEventListener('click', () => {
     state.settingsFilter = button.dataset.settingsFilter;
-    localStorage.setItem('panel.settingsFilter', state.settingsFilter);
     const url = new URL(location.href);
     if (state.settingsFilter === 'all') url.searchParams.delete('module');
     else url.searchParams.set('module', state.settingsFilter);
@@ -3297,11 +3205,15 @@ function renderGlobalSettings() {
   }));
   const shownPlugins = state.settingsFilter === 'all' ? plugins : plugins.filter((plugin) => plugin.id === state.settingsFilter);
   const apps = ['all', 'control-panel'].includes(state.settingsFilter) ? settingsOwnerSection('control-panel', 'Apps',
-    `<form id="app-preferences" class="card"><div class="settings-card-fields">${field('Cursor', 'cursor', state.appSettings.cursor, {
+    `<div class="card"><form id="panel-appearance" class="settings-card-fields">${field('Theme', 'theme', window.xrbTheme.get(), {
+      options: ['system', 'light', 'dark'], raw: true,
+      optionLabels: { system: 'System', light: 'Light', dark: 'Dark' },
+    })}</form><form id="app-preferences" class="xrb-section-divider"><div class="settings-card-fields">${field('Cursor', 'cursor', state.appSettings.cursor, {
       options: ['system', 'ring', 'ring-dot'], raw: true,
       optionLabels: { system: 'System', ring: 'Ring', 'ring-dot': 'Ring with hover dot' },
-    })}</div><p class="xrb-help">Applies on the next run. Mouse must be selected in the app’s Input options.</p></form>`) : '';
+    })}</div><p class="xrb-help">Applies on the next run. Mouse must be selected in the app’s Input options.</p></form></div>`) : '';
   $('#settings-content').innerHTML = apps + shownPlugins.map(pluginSettingsSection).join('');
+  $('#panel-appearance')?.addEventListener('change', event => window.xrbTheme.set(event.currentTarget.elements.namedItem('theme').value));
   $('#app-preferences')?.addEventListener('change', action(async (event) => {
     const form = event.currentTarget, cursor = form.elements.namedItem('cursor').value;
     form.querySelectorAll('input,button').forEach(control => { control.disabled = true; });
@@ -3392,6 +3304,11 @@ function syncPanelIdentity() {
   else setPageIdentity(plugins ? 'Plugins' : 'Apps', plugins ? '🧩' : APPS_GLYPH, plugins ? tint : detailTint);
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncPanelIdentity);
+window.addEventListener('xrb-theme-change', () => {
+  syncPanelIdentity();
+  const input = $('#panel-appearance [name="theme"]');
+  if (input) input.value = window.xrbTheme.get();
+});
 
 // ---- header -------------------------------------------------------------------------------
 
@@ -3533,8 +3450,6 @@ $('#job-progress-view-job').addEventListener('click', () => {
 });
 $('#job-progress-close').addEventListener('click', () => $('#job-progress').close());
 $('#job-progress').addEventListener('cancel', (event) => { if ($('#job-progress-actions').classList.contains('is-building')) event.preventDefault(); });
-$('#ws-create').addEventListener('click', createWorkspace);
-$('#workspace-setup').addEventListener('cancel', (event) => event.preventDefault());
 $('#jobs-clear').addEventListener('click', action(async (e) => {
   e.preventDefault();
   const r = await api('POST', '/api/jobs/clear');
@@ -3674,16 +3589,15 @@ await loadProjects().catch(report);
 // Plugins and Settings are standalone routes; legacy ?page= links are consumed once.
 const navigationRequest=initialNavigationRequest;
 if(navigationRequest.page==='plugins'&&location.pathname!=='/plugins/'&&!navigationRequest.maintenance){location.replace('/plugins/');}
-if(navigationRequest.page==='settings'&&location.pathname!=='/settings/'&&!navigationRequest.maintenance){location.replace('/settings/');}
+if(navigationRequest.page==='settings'&&location.pathname!=='/settings/'&&!navigationRequest.maintenance){const destination=new URL(navigationRequest.cleanUrl);destination.pathname='/settings/';location.replace(destination.href);}
 if(navigationRequest.cleanUrl!==location.href)history.replaceState(null,'',navigationRequest.cleanUrl);
-const initialPage = navigationRequest.page === 'plugins' && state.workspace?.exists ? 'plugins' : navigationRequest.page === 'settings' && state.workspace?.exists ? 'settings' : 'projects';
+const initialPage = ['plugins', 'settings'].includes(navigationRequest.page) ? navigationRequest.page : 'projects';
 await showPage(initialPage).catch(report);
 if(navigationRequest.job)await openJobInActivity(navigationRequest.job);
 await loadNavigation().catch(report);
 // Reveal only the fully populated layout, after its web fonts settle, so refresh has no card or text jumps.
 await Promise.race([document.fonts.ready, new Promise((resolve) => setTimeout(resolve, 1500))]);
 document.body.classList.remove('workspace-pending');
-syncWorkspaceUi();
 connect();
 // A maintenance link is an explicit one-shot action; shared tool navigation normally handles it in place.
 if(navigationRequest.maintenance){
@@ -3715,6 +3629,7 @@ function syncRunDock(p) {
   const dock = $('#run-dock');
   const src = $('#act-stop') ?? $('#act-run');
   syncRunDock.observer?.disconnect();
+  syncRunDock.observer = null;
   if (!src) {
     runDockVisible = false;
     dock.hidden = true;
@@ -3729,13 +3644,21 @@ function syncRunDock(p) {
   btn.textContent = pending ? '...' : src.id === 'act-stop' ? 'Stop' : 'Run';
   btn.title = src.textContent;
   btn.disabled = src.disabled;
-  // Hidden while the real button shows below the top bar.
+  // A workflow animation can clip the action below the header without any scrolling.
+  // Only an action above the app bar belongs in the dock; below-viewport actions do not.
   const top = getComputedStyle(document.documentElement).getPropertyValue('--top-h').trim() || '54px';
-  syncRunDock.observer = new IntersectionObserver(([e]) => {
-    runDockVisible = !e.isIntersecting;
+  const update = () => {
+    const rect = src.getBoundingClientRect(), edge = $('.top').getBoundingClientRect().bottom;
+    runDockVisible = src.isConnected && rect.width > 0 && rect.height > 0 && rect.bottom <= edge;
     dock.hidden = !runDockVisible;
     renderStatsDock(state.run && state.run.phase !== 'idle' ? state.status : null);
+  };
+  const observer = new IntersectionObserver(() => {
+    if (syncRunDock.observer !== observer || !src.isConnected) return;
+    update();
   }, { rootMargin: `-${top} 0px 0px 0px` });
-  syncRunDock.observer.observe(src);
+  syncRunDock.observer = observer;
+  update();
+  observer.observe(src);
 }
 $('#run-dock button').addEventListener('click', () => ($('#act-stop') ?? $('#act-run'))?.click());

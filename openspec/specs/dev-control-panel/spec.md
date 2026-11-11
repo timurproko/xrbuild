@@ -580,11 +580,35 @@ The Log card SHALL show the host log live like a game-engine console: one row pe
 - **THEN** the Clear link stays in place (disabled while the log is empty) and the log keeps one height, so the page does not move
 
 ### Requirement: Panel dialogs and controls
-Confirmations, questions and messages SHALL use the panel's own dialogs, not the browser's alert, confirm or prompt. Buttons follow one style: secondary (raised, bordered), primary (filled accent) and danger (filled red), with the same hover (fill tinted, border highlighted) and pressed states for all. Dropdowns use the panel's own list. Light and dark follow the system theme.
+Confirmations, questions and messages SHALL use the panel's own dialogs, not the browser's alert, confirm or prompt. Buttons follow one style: secondary (raised, bordered), primary (filled accent) and danger (filled red), with the same hover (fill tinted, border highlighted) and pressed states for all. Dropdowns use the panel's own list. Light and dark SHALL follow the system theme by default, with an explicit System/Light/Dark choice in core settings that applies immediately and persists only in the browser. Shared palette, native control color-scheme and page identity SHALL follow that choice without workspace initialization or runtime-setting writes.
 
 #### Scenario: Delete confirmation
 - **WHEN** the developer chooses Delete on a project
 - **THEN** a panel dialog asks for confirmation with equal-width Cancel and red Delete buttons
+
+#### Scenario: Settings menu default
+- **WHEN** the user opens Settings from the shared app menu after previously visiting a core or plugin section
+- **THEN** All is selected whenever plugin settings are available, regardless of remembered browser selection; explicit module links still open their requested section across reload and route canonicalization, with a core-only fallback when no other settings exist
+
+#### Scenario: Explicit panel appearance
+- **WHEN** the user selects Light or Dark in core settings
+- **THEN** panel routes and the same-origin design gallery use that theme despite the OS preference, preserve it on reload and synchronize open same-origin documents
+
+#### Scenario: Default system appearance
+- **WHEN** the saved theme is missing/invalid or the user selects System
+- **THEN** the panel follows OS theme changes without writing workspace or runtime settings
+
+#### Scenario: Unified controls and semantic colors
+- **WHEN** shared controls are rendered in the panel, gallery or registered tools
+- **THEN** maintenance menu captions retain normal foreground while only their bulbs carry status colors, Small is the single reduced control size, primary buttons do not stretch by default, error/warning banners share geometry and typography, and ranges use thumb-level keyboard focus instead of an outer rectangle
+
+#### Scenario: Scroll without layout shift
+- **WHEN** page or nested content overflows
+- **THEN** shared enhanced scrollbars overlay content without reserving a gutter, retain pointer/wheel/touch/keyboard operation and accessible scrollbar semantics, and fall back to native scrolling when enhancement is unavailable or forced colors are active
+
+#### Scenario: Readable physical display choices
+- **WHEN** the panel enumerates connected physical screens
+- **THEN** it maps active source/target identities to reported friendly names or confirmed built-in connection types, uses readable primary/numbered fallbacks when names are unavailable, and preserves routing identifiers and saved numeric selections instead of presenting raw GDI paths
 
 ### Requirement: Camera debug view
 When the developer runs a project with the Cameras option and its input provider publishes debug images, the panel SHALL show each image stream the provider labels (for example per-camera infrared, depth or colour images at a reduced rate and size, with the 2D hand detections drawn on them when the tracker provides them) and each camera's frame rate. The host SHALL send debug images only for a run started with that option.
@@ -945,35 +969,35 @@ The Start-menu installer SHALL create one current-user shortcut, defaulting to a
 - **THEN** their shortcut launches the ordinary panel using `XRB_HOME` or the home default without changing other users' installations or workspace folders
 
 ### Requirement: Auto-routing Start shortcut
-The auto-routing Start-menu launcher SHALL always select the user workspace named by `XRB_HOME`, else `%USERPROFILE%\.xrbuild`, on port 5180. A missing, empty or otherwise uninitialized selected directory SHALL display the normal Create your workspace setup, even when the current checkout contains an embedded `.xrbuild/`. Repository development SHALL remain available only through its explicit launcher or workspace argument. Top-level browser refreshes from an older auto-routed repository panel SHALL silently start or reuse the selected user panel and redirect there without mutating either server's workspace. The launcher SHALL NOT create or remove workspace folders before the user confirms setup.
+The auto-routing Start-menu launcher SHALL always select the user workspace named by `XRB_HOME`, else `%USERPROFILE%\.xrbuild`, on port 5180. A missing, empty or otherwise uninitialized selected directory SHALL open the normal panel without requiring workspace setup, even when the current checkout contains its own `.xrbuild/`. Repository development SHALL remain available only through its explicit launcher or workspace argument. Top-level browser refreshes from an older auto-routed repository panel SHALL silently start or reuse the selected user panel and redirect there without mutating either server's workspace. Launch and read-only browsing SHALL NOT initialize or remove workspace folders.
 
 #### Scenario: Absent user directory
 - **WHEN** the selected user `.xrbuild` directory does not exist and the checkout contains its own `.xrbuild/`
-- **THEN** the shortcut opens user mode on port 5180 and displays Create your workspace instead of repository projects
+- **THEN** the shortcut opens user mode on port 5180 without creating that directory, requesting setup or falling back to repository projects
 
 #### Scenario: Existing empty user directory
 - **WHEN** the selected user `.xrbuild` directory exists but is empty or uninitialized
-- **THEN** the shortcut displays Create your workspace and does not treat the checkout workspace as a fallback
+- **THEN** the shortcut opens the normal panel without setup or initialization writes and does not treat the checkout workspace as a fallback
 
 #### Scenario: User environment precedence
 - **WHEN** `XRB_HOME` names a missing, empty or initialized workspace
-- **THEN** the shortcut selects that path in user mode and either displays setup or the initialized workspace as appropriate
+- **THEN** the shortcut selects that path in user mode and opens the panel without requiring workspace creation
 
 #### Scenario: Home default
 - **WHEN** `XRB_HOME` is unset and `%USERPROFILE%\.xrbuild` is initialized
 - **THEN** the shortcut opens that ordinary user workspace
 
 #### Scenario: No embedded workspace
-- **WHEN** the selected user workspace directory and the checkout's embedded workspace are both absent
-- **THEN** the shortcut opens the normal user setup flow on the selected user path
+- **WHEN** the selected user workspace directory and the checkout's private workspace are both absent
+- **THEN** the shortcut opens the normal panel on the selected user path, showing available public embedded apps or the empty project state without mandatory setup
 
 #### Scenario: Toggle without reinstalling
 - **WHEN** the developer creates or removes the selected home workspace directory between shortcut launches
-- **THEN** the next launch continues to select that user path and displays either its initialized workspace or setup flow without changing the installed shortcut
+- **THEN** the next launch continues to select that user path and opens the panel without changing the installed shortcut or initializing missing folders
 
 #### Scenario: Refresh an older repository auto-route
 - **WHEN** an older auto-routed repository panel receives a top-level document refresh
-- **THEN** it silently starts or reuses user mode on port 5180 and redirects the browser to the selected user workspace or setup flow
+- **THEN** it silently starts or reuses user mode on port 5180 and redirects the browser to the normal panel for that selected user path
 
 #### Scenario: Explicit repository launch remains fixed
 - **WHEN** a panel was opened through the explicit repository launcher or workspace argument
@@ -1158,35 +1182,39 @@ The shared application header background and bottom edge SHALL fill the complete
 - **THEN** the page uses the browser's normal vertical scrolling without introducing a horizontal scrollbar
 
 ### Requirement: Empty user project workspace
-When an initialized ordinary user workspace contains no live, archived or unregistered projects, the Control Panel SHALL make project creation the focused next action. It SHALL open the existing New project dialog once when entering that empty state and focus a `Project name` input. The dialog SHALL include the one-sentence description `Create a new app project in your workspace.` and present `Letters, digits, spaces, and dashes.` as helper text below the input, preserve the entered project name including its casing and spaces, and derive its lowercase folder name automatically by replacing each whitespace run with a dash. Project-folder uniqueness SHALL be case-insensitive; a colliding name SHALL validate while the creation dialog remains continuously open, mark the input invalid and replace the reserved helper line with `A project with this name already exists.` in red using the same size, weight and line height, instead of resizing, closing, flashing, reopening or opening a generic error dialog. The project sidebar SHALL show a non-interactive `Projects` heading without active-tab styling, a counter, Archive tab or search, followed by the shared `No project yet.` placeholder and `+ New project` action using the same shared design-system add-action component as non-empty project lists, with centered action text and standard stack spacing, including while the creation dialog is open. The Project and Activity regions SHALL render no heading, card, dock or placeholder. The dialog SHALL include Cancel and allow Escape dismissal; the same `+ New project` action SHALL remain available after dismissal. Dialogs opened after a project exists SHALL retain the same Cancel behavior. Repository-development workspaces and non-empty project inventories SHALL retain their existing layouts.
+When an ordinary user workspace is missing, empty or uninitialized and contains no live, archived or unregistered projects, the Control Panel SHALL make project creation available without automatically opening a dialog. The project sidebar SHALL show a non-interactive `Projects` heading without active-tab styling, a counter, Archive tab or search, followed by the shared `No project yet.` placeholder and `+ New project` action using the same shared design-system add-action component as non-empty project lists, with centered action text and standard stack spacing. The Project and Activity regions SHALL render no heading, card, dock or placeholder. Only choosing New project SHALL open the existing creation dialog and focus its `Project name` input. The dialog SHALL include `Create a new app project in your workspace.` and `Letters, digits, spaces, and dashes.` helper text, preserve the entered name including casing and spaces, and derive its lowercase folder by replacing whitespace runs with a dash. Project-folder uniqueness SHALL remain case-insensitive; collisions SHALL validate in the continuously open dialog with `A project with this name already exists.` replacing the reserved helper line in red without resizing, flashing or changing typography. Cancel and Escape SHALL dismiss creation without creating files. Non-empty inventories, including public embedded apps, SHALL retain their normal project layout regardless of whether the user folder has been initialized.
 
 #### Scenario: Open an empty user workspace
-- **WHEN** the Control Panel loads an initialized ordinary user workspace with no project inventory
-- **THEN** the New project dialog opens with its one-sentence description, the `Project name` input focused and character guidance below it, the plain counter-free `Projects` heading, `No project yet.` placeholder and `+ New project` remain visible in the project sidebar behind the dialog, while the Project and Activity regions are blank
+- **WHEN** the panel loads an absent, empty or initialized ordinary user workspace with no project inventory
+- **THEN** the plain counter-free Projects heading, No project yet. and + New project are visible without an open setup or creation dialog, while Project and Activity remain blank
+
+#### Scenario: Explicitly open first-project creation
+- **WHEN** the user chooses + New project in an empty workspace
+- **THEN** the creation dialog opens with its one-sentence description, focused Project name input and character guidance, without initializing the workspace yet
 
 #### Scenario: Dismiss first-project creation
-- **WHEN** the New project dialog opens while the project inventory is empty and the user chooses Cancel or presses Escape
-- **THEN** the dialog closes, the plain counter-free `Projects` heading, `No project yet.` placeholder and `+ New project` remain available in the project sidebar, and the Project and Activity regions remain blank
+- **WHEN** the user chooses Cancel or presses Escape in New project
+- **THEN** the dialog closes, the empty sidebar action remains available and the selected folder remains unchanged
 
 #### Scenario: Later project creation is optional
 - **WHEN** at least one project exists and the user opens New project from the sidebar
 - **THEN** the dialog includes Cancel and can be dismissed without creating another project
 
 #### Scenario: Create a project name with spaces
-- **WHEN** the user enters `My Project` in the Project name field and creates it
-- **THEN** the visible app name remains `My Project` while its package and project folder use `my-project`
+- **WHEN** the user enters My Project and confirms creation
+- **THEN** the visible name remains My Project while its package and project folder use my-project
 
 #### Scenario: Case-insensitive duplicate name
-- **WHEN** a project folder already exists and the user enters the same name with any letter casing
-- **THEN** the creation dialog never closes, flashes or changes height, and the input retains its entered value and active blue focus outline while only `A project with this name already exists.` replaces the helper copy in red with identical typography
+- **WHEN** a project folder exists and the user enters the same name with any casing
+- **THEN** the creation dialog retains its value, focus and geometry and shows the inline duplicate-name error rather than closing or opening a generic error dialog
 
 #### Scenario: Create the first project
-- **WHEN** the user creates a valid project from the empty-workspace dialog
-- **THEN** the normal project list, project content and activity layout return with the new project selected
+- **WHEN** the user explicitly confirms a valid template project in the empty workspace
+- **THEN** the normal project list, content and activity layout return with only the requested new app added and selected
 
 #### Scenario: Empty repository-development workspace
 - **WHEN** an explicit repository-development workspace has no projects
-- **THEN** the panel does not automatically open the ordinary-user first-project flow
+- **THEN** the panel opens normally without automatically opening workspace setup or first-project creation
 
 ### Requirement: Project selection recovery
 When the project inventory is non-empty but the remembered selected project is absent, stale or belongs to an empty inventory view, the Control Panel SHALL select an available project, switch to that project's live or archived view, persist the repaired selection and render its project details. It SHALL NOT show the retired `No projects yet` instructional card while any project exists. When no project is selected, the project-detail region SHALL remain blank instead of restoring that retired card.
@@ -1902,3 +1930,141 @@ The Apps UI SHALL render embedded and ordinary projects through the same compact
 #### Scenario: Layout parity
 - **WHEN** equivalent embedded and ordinary apps are viewed at desktop and narrow viewport sizes
 - **THEN** their tabs, identity rows, fields and primary actions follow the same shared compact geometry without the former tall embedded-only form
+
+### Requirement: Simplified project context menu
+The project-row context menu SHALL NOT offer Review build cache, and the Apps UI SHALL NOT expose its build-cache review modal. Delete SHALL be hidden for embedded projects in Projects and Archive rather than shown disabled. Ordinary idle project deletion and existing active-use restrictions SHALL remain unchanged. Switching between project menus SHALL NOT retain embedded-only disabled state or tooltips.
+
+#### Scenario: Embedded project menu
+- **WHEN** the user opens the context menu for an embedded project in Projects or Archive
+- **THEN** neither Review build cache nor Delete is offered, and other supported actions retain their normal behavior
+
+#### Scenario: Ordinary project after embedded project
+- **WHEN** the user opens an idle ordinary project's menu after opening an embedded project's menu
+- **THEN** Delete is visible and enabled under its ordinary rules, without an embedded deletion tooltip, and Review build cache remains absent
+
+#### Scenario: Running project menu
+- **WHEN** the user opens the context menu for a running project
+- **THEN** Delete remains hidden under the existing active-use restriction
+
+### Requirement: UI simplification preserves backend safeguards
+Removing project cache-review controls SHALL NOT remove cache-maintenance APIs, initiate cleanup or relax preservation checks. Server-side embedded deletion refusal SHALL remain authoritative and explanatory.
+
+#### Scenario: Backend safety remains enforced
+- **WHEN** a client directly requests embedded project deletion or cache maintenance
+- **THEN** embedded deletion is refused with its existing explanation, and cache maintenance retains explicit review, confirmation and all preservation checks
+
+### Requirement: Lazy workspace initialization
+The panel SHALL initialize missing package-workspace scaffold only when template project creation is confirmed, adding only the requested app without a companion starter. Scaffolding SHALL preserve existing files and respect separate project/integration roots. Invalid or colliding project names SHALL be refused before initialization. Other explicit writable actions MAY create their required user-owned state without workspace setup; writable-path and dependency-install safeguards SHALL remain unchanged.
+
+#### Scenario: Create in a missing combined workspace
+- **WHEN** the user confirms a template project in a missing combined workspace
+- **THEN** the selected root receives missing standard workspace/package files, editor mapping and the requested app, with no extra starter app or Git metadata
+
+#### Scenario: Separate project root
+- **WHEN** template creation targets a separate project repository
+- **THEN** only the project root receives project-only scaffold and the requested app, without initializing integration folders or overwriting existing root files
+
+#### Scenario: Embedded writable action before template creation
+- **WHEN** the user explicitly saves an embedded app setting or requests a build before creating any personal template project
+- **THEN** its necessary writable working/configuration/build state is prepared lazily without requesting workspace setup or generating a starter app, and product sources remain unchanged
+
+#### Scenario: Browse direct panel routes
+- **WHEN** the user visits Apps, Plugins or Settings with an uninitialized selected root
+- **THEN** that route opens normally and may display available embedded content without a setup overlay, project-creation prompt or workspace initialization writes
+
+#### Scenario: Unsafe destination
+- **WHEN** a write targets a linked root or embedded product source
+- **THEN** the existing ownership checks refuse it without modifying linked targets or installed sources
+
+### Requirement: Design system case gallery
+The core SHALL provide a reusable gallery labeled Design at /design using the standard XR Build app bar/product menu and a case dropdown. Main SHALL collect the documented shared UI primitives with category navigation and interactive local-only examples; Install dependencies SHALL remain a separate case. The dropdown SHALL retain an accessible name without a visible Cases label; the header SHALL omit the simulated-components subtitle. Scenario choices SHALL use compact borderless shared rows with a subtle selected state. It SHALL retain scenario navigation without separate View/Theme/Width/Reload controls. The preview SHALL contain a neutral background and the dialog's dimming layer, not a fake app header or sample app. Installation/build interactions SHALL be in-memory simulations, with no delegation to real APIs and network/form restrictions on the preview.
+
+#### Scenario: Developer-only menu entry
+- **WHEN** the panel is started by the Dev shortcut or equivalent explicit repository-development CLI launch
+- **THEN** its shared navigation metadata includes Design System immediately after Settings, before the separator and Restart/Rebuild, while normal user/auto launches do not; launch mode cannot be enabled by browser query or workspace tool registration, and no running panel is restarted to change that mode
+
+#### Scenario: Gallery product navigation
+- **WHEN** the developer opens the Design System product menu
+- **THEN** it reads same-origin navigation metadata to provide the same app/registered-tool navigation and explicit Restart/Rebuild actions as other pages; Design System follows Settings before the maintenance separator, same-origin maintenance uses the shared in-place handlers, separate-origin previews return to the selected panel for maintenance, and case frames never send real API calls
+
+#### Scenario: Shared component catalog
+- **WHEN** a developer opens Design without selecting a case
+- **THEN** Main shows the shared typography, actions, fields, navigation, status, dialog/progress, layout and media/output primitives, with interactive examples that never call real maintenance/install/device APIs
+
+#### Scenario: Short links and compatibility
+- **WHEN** the developer follows the Design or hand diagnostic menu entry
+- **THEN** it uses /design or /hands/ respectively, while old document links redirect locally with their query preserved; plugin-owned legacy aliases remain bounded, collision-checked and unavailable when the plugin is unselected, without changing provider IDs or user storage
+
+#### Scenario: Inspect dependency setup
+- **WHEN** a developer chooses Install dependencies and a checklist or progress scenario
+- **THEN** the real shared dialog is rendered with simulated data, inherits same-origin core appearance and fits the available browser width without installing software
+
+### Requirement: Desktop setup checklist
+Before a panel rebuild, read-only probes SHALL identify core desktop build-tool, native-library and runtime readiness. Missing prerequisites SHALL open an actionable checklist instead of starting a predictably failing build. Ready/Missing/Blocked/Installing/Restart required states and actionable blocked/failure reasons SHALL remain accessible. Browser-only use SHALL NOT require native setup. Optional plugin prerequisites SHALL remain separately owned.
+
+#### Scenario: Grouped build tools
+- **WHEN** toolchain checks are displayed
+- **THEN** one foreground Build tools header contains the shared command-backed Install/Repair action above the compact CMake/compiler/SDK checks, with instructions and output shown once for the group rather than repeated per check; included labels use subordinate typography and statuses align right; both prerequisite cards share borders/padding and aligned heading/Install actions, omit routine descriptions and output links, and retain compact included checks; core native libraries is a compact title/status/action summary without an included-library description list; Install/Repair actions match status-tag sizing and typography, with Repair used for a partially installed toolchain and the bottom action row retains deliberate spacing
+
+#### Scenario: Missing compiler tools
+- **WHEN** the user chooses Rebuild without a usable CMake/compiler/desktop SDK
+- **THEN** the checklist explains missing prerequisites and offers supported command-backed setup or a concrete blocked reason without creating a failed rebuild job
+
+#### Scenario: Stable setup workflow order
+- **WHEN** a prerequisite is installed or its readiness changes during refresh, reopen or browser reload
+- **THEN** the row keeps its fixed prerequisite position: core native libraries first, then toolchain checks; completed rows are not moved to the bottom and no redundant Host runtime Missing row is shown before Rebuild
+
+#### Scenario: Read-only recheck
+- **WHEN** setup status is checked or refreshed
+- **THEN** no packages are installed, dependencies downloaded, user folders initialized or project files changed
+
+#### Scenario: Refresh in progress
+- **WHEN** Refresh checks is reading prerequisite/job state
+- **THEN** its button remains disabled and shows Checking... until success or failure, duplicate refresh/install/rebuild actions are prevented and the normal label/state is restored afterward
+
+#### Scenario: Existing native tools
+- **WHEN** a compatible toolchain is already installed outside the current PATH
+- **THEN** supported explicit installation locations are probed before offering installation, without changing global PATH
+
+### Requirement: Explicit bounded desktop installation
+Desktop setup SHALL accept only fixed server-owned actions after explicit download/license/system-change consent and revision revalidation. System packages SHALL use an allowlisted trusted package-manager source with its normal integrity checks, or a fixed official HTTPS installer with valid provider Authenticode signature and checked download-to-execution hash continuity. The direct installer SHALL use fresh exclusive storage, bounded downloads, fixed components, normal system elevation and no automatic reboot. Native libraries SHALL retain pinned hashes. Setup SHALL stream bounded logs through shared progress/Jobs, recheck readiness and report failures/restart requirements truthfully. It SHALL NOT execute browser-supplied commands, bypass elevation or automatically reboot.
+
+#### Scenario: Unconfirmed or stale setup request
+- **WHEN** consent is absent, the action is unknown or the checked prerequisite revision has changed
+- **THEN** setup is refused without starting a process or download
+
+#### Scenario: Install in the background
+- **WHEN** the user clicks Install or Repair for a supported missing prerequisite
+- **THEN** that click supplies explicit consent without a separate checkbox or disclosure paragraph, and the fixed setup job streams progress without a terminal, while any required trusted system elevation prompt remains visible
+
+#### Scenario: Output stays in progress and Jobs
+- **WHEN** a setup job installed or attempted a prerequisite
+- **THEN** its output remains available through shared progress and Jobs, while the prerequisite checklist shows no View setup output links or redundant description paragraphs
+
+#### Scenario: Interrupted status request
+- **WHEN** a read-only setup/job status request loses its connection
+- **THEN** the UI retries that read a bounded number of times without repeating installation requests, recovers verified job outcomes when possible and otherwise shows concise reconnection guidance rather than claiming installation failed or is running
+
+#### Scenario: Concurrent or interrupted setup
+- **WHEN** another writer owns the setup lock or native work is active
+- **THEN** conflicting setup/work is refused without deleting locks or interrupting the existing operation; active setup also blocks panel quit/restart
+
+#### Scenario: Restart or failed installation
+- **WHEN** an installer reports a restart requirement or failure
+- **THEN** the UI preserves the result and actionable guidance, does not label the machine ready from exit code alone and never initiates a reboot; restart badges/progress remain visible without a duplicate red restart message in the checklist
+
+#### Scenario: Missing system package manager
+- **WHEN** Windows toolchain prerequisites are missing and the supported package manager cannot be used but system signature verification/elevation is available
+- **THEN** the same explicit Install action downloads the fixed official bootstrapper, verifies its provider signature and hash continuity before execution, and streams its setup phases through the existing background job without installing a package manager
+
+#### Scenario: Unsafe direct installer
+- **WHEN** a bootstrapper download is oversized, redirected outside approved HTTPS hosts, linked, changed, unsigned or signed by another provider
+- **THEN** it is never executed, failed state is preserved and an actionable failure reason is shown
+
+#### Scenario: One command-backed installation flow
+- **WHEN** supported toolchain prerequisites are missing or a toolchain installation failed
+- **THEN** the Build tools header offers the same command-backed Install/Repair action and shared progress, without a separate manual-install state or website link
+
+#### Scenario: Automatic setup is blocked
+- **WHEN** neither automatic mechanism is available or prerequisite state is unsafe to change
+- **THEN** setup is Blocked with a concrete reason in the checklist error area rather than offering another installation route, and resolving refresh checks clear that message

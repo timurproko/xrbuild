@@ -67,14 +67,16 @@ export class ProjectRefused extends Error {}
 /** Folder names a new project may have: lower case words with dashes (also its package name). */
 export const PROJECT_FOLDER = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
-/** A new app from templates/app in `<workspace>/projects/unsorted/<folder>`; refused when a project has that name. */
-export async function createProject(core: string, workspace: string, folder: string, name = folder): Promise<string[]> {
+/** A new app from templates/app; optional lazy root scaffold never adds a companion starter app. */
+export async function createProject(core: string, workspace: string, folder: string, name = folder, scaffold?: 'combined' | 'projects'): Promise<string[]> {
   if (!PROJECT_FOLDER.test(folder)) throw new ProjectRefused(`"${folder}" is not a project folder name (lower case letters, digits, dashes)`);
   const dir = path.join(workspace, PROJECTS, UNSORTED, folder);
   assertWritablePath(core, workspace, dir);
   const taken = (await discoverAll(workspace)).find((p) => liveId(p.id).toLowerCase() === folder.toLowerCase());
   if (taken) throw new ProjectRefused(`a project named ${folder} already exists (${path.relative(workspace, taken.dir).split(path.sep).join('/')})`);
   if (await exists(dir)) throw new ProjectRefused(`${PROJECTS}/${UNSORTED}/${folder} already exists`);
+  // Validate names/collisions before initializing an absent or empty selected root.
+  if (scaffold) await copyMissing(core, path.join(core, scaffold === 'combined' ? WORKSPACE_TEMPLATE : PROJECTS_TEMPLATE), workspace);
   const json = (s: string) => JSON.stringify(s).slice(1, -1);
   const html = (s: string) => s.replace(/[&<>"]/g, (c) => `&${({ '&': 'amp', '<': 'lt', '>': 'gt', '"': 'quot' } as Record<string, string>)[c]};`);
   return copyMissing(core, path.join(core, APP_TEMPLATE), dir, (rel, text) =>

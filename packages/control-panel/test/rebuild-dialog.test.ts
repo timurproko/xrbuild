@@ -22,6 +22,16 @@ test('rebuild presentation has stable running, success and failure states',()=>{
   assert.equal(startFailure.state,'failed');assert.equal(startFailure.output,'The job could not start.');assert.equal(startFailure.viewJobDisabled,true);
 });
 
+test('setup action descriptions use sentence capitalization without changing job metadata',()=>{
+  for(const raw of ['install desktop build tools','install desktop build tools…']){
+    const job={kind:'desktop-setup',title:raw,state:'running',id:1};
+    assert.equal(rebuildPresentation(job).message,'Install desktop build tools…');
+    assert.equal(job.title,raw);
+  }
+  assert.equal(rebuildPresentation({kind:'desktop-setup',title:'install core native libraries',state:'running'}).message,'Install core native libraries…');
+  assert.equal(rebuildPresentation({kind:'desktop-setup',state:'running'}).message,'Installing desktop prerequisites…');
+});
+
 test('all host rebuild entry points consume one full dialog component',async()=>{
   const ui=path.resolve(import.meta.dirname,'../ui');
   const [component,navigation,app,index,system,product]=await Promise.all(['rebuild-dialog.js','navigation.js','app.js','index.html','design-system.css','style.css'].map(file=>fs.readFile(path.join(ui,file),'utf8')));

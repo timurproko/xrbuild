@@ -5,7 +5,8 @@ project(xrb_host LANGUAGES C CXX)
 # Third-party binaries come from third_party/ (run `pnpm fetch-deps` first).
 
 set(XRB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." CACHE PATH "Repository root")
-set(THIRD_PARTY "${XRB_ROOT}/third_party")
+set(XRB_THIRD_PARTY "${XRB_ROOT}/third_party" CACHE PATH "Core native dependency root")
+set(THIRD_PARTY "${XRB_THIRD_PARTY}")
 set(CEF_ROOT "${THIRD_PARTY}/cef")
 if(NOT EXISTS "${CEF_ROOT}/cmake/FindCEF.cmake")
   message(FATAL_ERROR "CEF not found in ${CEF_ROOT} - run `pnpm fetch-deps` at the repo root")

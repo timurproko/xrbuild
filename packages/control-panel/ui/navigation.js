@@ -10,6 +10,7 @@ export function panelDestination(origin,page) {
   const u=new URL(safe);if(page==='projects')u.pathname='/';
   else if(page==='plugins')u.pathname='/plugins/';
   else if(page==='settings')u.pathname='/settings/';
+  else if(page==='design-system')u.pathname='/design';
   else if(['rebuild','restart'].includes(page))u.searchParams.set('maintenance',page);
   else throw new Error('Unknown panel destination');return u.href;
 }
@@ -20,7 +21,7 @@ export function toolDestination(url,origin,passPanelOrigin=true) {
 }
 export function managedToolDestination(route,origin) {
   const safe=panelOrigin(origin);
-  if(!safe||typeof route!=='string'||!/^\/(?:[a-z][a-z0-9-]*\/)+$/.test(route)||['/api/','/plugins/','/settings/','/preview/','/vendor/','/sdk/'].some(prefix=>route.startsWith(prefix)))throw new Error('Invalid managed tool destination');
+  if(!safe||typeof route!=='string'||!/^\/(?:[a-z][a-z0-9-]*\/)+$/.test(route)||['/api/','/plugins/','/settings/','/preview/','/vendor/','/sdk/','/design-system/','/design/'].some(prefix=>route.startsWith(prefix)))throw new Error('Invalid managed tool destination');
   return new URL(route,safe).href;
 }
 /** A stale panel already has one actionable state: restart to load its newer code. */
@@ -34,20 +35,22 @@ export function requestedNavigation(url) {
   return {page:['projects','plugins','settings'].includes(legacyPage)?legacyPage:routePage,maintenance:['rebuild','restart'].includes(maintenance)?maintenance:null,job:/^[1-9]\d*$/.test(jobValue??'')?Number(jobValue):null,cleanUrl:u.href};
 }
 /** One menu model for the panel and every standalone workspace tool. */
-export function navigationItems(origin,tools=[],current='projects') {
+export function navigationItems(origin,tools=[],current='projects',{maintenance=true}={}) {
+  const design=tools.some(tool=>tool.id==='design-system');
   return [{id:'projects',label:'Apps',href:panelDestination(origin,'projects')},
-    ...tools.map(t=>({id:t.id,label:t.label,href:t.route?managedToolDestination(t.route,origin):toolDestination(t.url,origin,t.passPanelOrigin!==false)})),
+    ...tools.filter(tool=>tool.id!=='design-system').map(t=>({id:t.id,label:t.label,href:t.route?managedToolDestination(t.route,origin):toolDestination(t.url,origin,t.passPanelOrigin!==false)})),
     {id:'plugins',label:'Plugins',href:panelDestination(origin,'plugins')},
     {id:'settings',label:'Settings',href:panelDestination(origin,'settings')},
-    {separator:true},
-    {id:'restart',label:'Restart',href:panelDestination(origin,'restart')},
-    {id:'rebuild',label:'Rebuild',href:panelDestination(origin,'rebuild')}]
+    ...(design?[{id:'design-system',label:'Design',href:panelDestination(origin,'design-system')}]:[]),
+    ...(maintenance?[{separator:true},
+      {id:'restart',label:'Restart',href:panelDestination(origin,'restart')},
+      {id:'rebuild',label:'Rebuild',href:panelDestination(origin,'rebuild')}]:[])]
     .map(item=>({...item,current:item.id===current}));
 }
-export function renderNavigationMenu(menu,{origin,tools=[],current='projects',indicators=false}={}) {
+export function renderNavigationMenu(menu,{origin,tools=[],current='projects',indicators=false,maintenance=true}={}) {
   menu.replaceChildren();
-  const ids={projects:'panel-home',plugins:'plugin-manager-open',settings:'settings-open',rebuild:'host-rebuild',restart:'panel-restart'};
-  for(const item of navigationItems(origin,tools,current)){
+  const ids={projects:'panel-home',plugins:'plugin-manager-open',settings:'settings-open','design-system':'design-system-open',rebuild:'host-rebuild',restart:'panel-restart'};
+  for(const item of navigationItems(origin,tools,current,{maintenance})){
     const el=document.createElement(item.separator?'hr':'a');
     if(item.separator)el.setAttribute('role','separator');
     else{
@@ -73,9 +76,18 @@ export function menuKeyboard(event,menu,close) {
   items[next].focus();
 }
 /** Standalone tools keep native-camera framing/CORS policy unchanged: ordinary same-tab links. */
-export function mountToolNavigation(button,menu,{origin,tools,current}) {
+export function mountToolNavigation(button,menu,{origin,tools,current,maintenance=true,discover=true}) {
   const events=new AbortController(),signal=events.signal;
-  renderNavigationMenu(menu,{origin,tools,current,indicators:true});
+  renderNavigationMenu(menu,{origin,tools,current,indicators:maintenance,maintenance});
+  // Registered tools share the panel's full navigation (including Dev-only entries), not a hardcoded subset.
+  const safe=panelOrigin(origin);
+  if(discover&&safe)void fetch(new URL('/api/navigation',safe),{cache:'no-store',signal}).then(async response=>{
+    if(!response.ok)return;
+    const data=await response.json();if(signal.aborted||!Array.isArray(data.tools))return;
+    const focused=menu.contains(document.activeElement)?document.activeElement?.dataset.navigation:null;
+    renderNavigationMenu(menu,{origin,tools:data.tools,current,indicators:maintenance,maintenance});
+    if(focused)menu.querySelector(`[data-navigation="${CSS.escape(focused)}"]`)?.focus();
+  }).catch(()=>{/* Existing local links remain usable when discovery is unavailable. */});
   const close=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false');};
   const dismiss=()=>{close();button.focus();};
   button.addEventListener('click',()=>{if(!menu.hidden){close();return;}openFloating(menu,{anchor:button});button.setAttribute('aria-expanded','true');menu.querySelector('[aria-current="page"]')?.focus();},{signal});

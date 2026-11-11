@@ -530,7 +530,7 @@ test('auto routes serve only the selected workspace and keep separate defaults',
       assert.equal(started.result, 'started');
       try {
         assert.equal((await fetch(`http://127.0.0.1:${livePort}/api/ping`).then((r) => r.json())).workspace, chosen);
-        assert.equal((await fetch(`http://127.0.0.1:${livePort}/api/workspace`).then((r) => r.json())).exists, false, 'missing and empty user roots stay in workspace setup');
+        assert.equal((await fetch(`http://127.0.0.1:${livePort}/api/workspace`).then((r) => r.json())).exists, false, 'missing and empty roots remain uninitialized without forcing setup');
         const reused = await launch({ port: livePort, open: true, workspace: chosen, browser: (u) => opened.push(u) });
         assert.equal(reused.result, 'already-running');
         const refused = await launch({ port: livePort, open: true, workspace: dev, browser: (u) => opened.push(u) });
@@ -851,17 +851,33 @@ test('unknown routes are 404, bad JSON is 400', async () => {
   assert.equal((await request('PUT', '/api/projects/demo/manifest', { body: '{oops' })).status, 400);
 });
 
-test('reports the workspace and creates a new project from the core template', async () => {
-  const ws = await request('GET', '/api/workspace');
-  assert.deepEqual(ws.json, { path: repo, integrationPath: repo, exists: true, kind: 'explicit', autoRoute: false });
-  const r = await request('POST', '/api/projects/new', { body: JSON.stringify({ folder: 'globe', name: 'Globe' }) });
+test('reports the workspace and creates a new project from the core template', async t => {
+  // Lazy scaffolding changes the package graph: keep it out of the shared app-script fixtures.
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'panel-template-')), templatePort = await freePort();
+  let templatePanel: PanelServer | undefined;
+  t.after(async () => { await templatePanel?.close(); await fs.rm(workspace, { recursive: true, force: true }); });
+  await fs.mkdir(path.join(workspace, 'projects/Apps/demo'), { recursive: true });
+  await fs.writeFile(path.join(workspace, 'projects/Apps/demo/xrb-project.json'), JSON.stringify({ name: 'Demo', kind: 'app', entry: '.' }));
+  const started = await launch({ port: templatePort, open: false, workspace });
+  assert.equal(started.result, 'started');
+  templatePanel = started.server!;
+  const api = async (method: string, route: string, data?: unknown) => {
+    const response = await fetch(`http://127.0.0.1:${templatePort}${route}`, { method,
+      headers: { origin: `http://127.0.0.1:${templatePort}`, 'content-type': 'application/json' },
+      body: data === undefined ? undefined : JSON.stringify(data) });
+    const body = await response.text();
+    return { status: response.status, body, json: JSON.parse(body) };
+  };
+  const ws = await api('GET', '/api/workspace');
+  assert.deepEqual(ws.json, { path: workspace, integrationPath: workspace, exists: true, kind: 'explicit', autoRoute: false });
+  const r = await api('POST', '/api/projects/new', { folder: 'globe', name: 'Globe' });
   assert.equal(r.status, 200, r.body);
   assert.equal(r.json.id, 'globe');
   assert.equal(r.json.manifest.name, 'Globe');
   assert.deepEqual(r.json.manifest.inputs, ['mouse']);
-  assert.ok((await request('GET', '/api/projects')).json.projects.some((p: any) => p.id === 'globe'));
-  assert.equal((await request('POST', '/api/projects/new', { body: JSON.stringify({ folder: 'globe' }) })).status, 409, 'never overwrites');
-  assert.equal((await request('POST', '/api/projects/new', { body: JSON.stringify({ folder: '../x' }) })).status, 409);
+  assert.ok((await api('GET', '/api/projects')).json.projects.some((p: any) => p.id === 'globe'));
+  assert.equal((await api('POST', '/api/projects/new', { folder: 'globe' })).status, 409, 'never overwrites');
+  assert.equal((await api('POST', '/api/projects/new', { folder: '../x' })).status, 409);
 });
 
 test('separate project and integration roots keep project discovery out of the private workspace', async () => {
@@ -916,7 +932,7 @@ test('app scripts run with the core source environment only', async () => {
   const r = await request('POST', '/api/projects/envcheck/build-web', { body: '{}' });
   assert.equal(r.status, 202, r.body);
   const done = await panel.panel.jobs.wait(panel.panel.jobs.list().find((j) => j.id === r.json.id)!);
-  assert.equal(done.state, 'done', done.error ?? '');
+  assert.equal(done.state, 'done', [done.error, ...done.lines].join('\n'));
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(repo, 'projects/Apps/envcheck/env.json'), 'utf8')), { core: panel.panel.repo });
 });
 
@@ -933,7 +949,7 @@ test('explicit app rebuild always runs current source and keeps the last success
     assert.equal(started.status, 202, started.body);
     assert.equal(started.json.title, 'rebuild: Force rebuild');
     const done = await panel.panel.jobs.wait(panel.panel.jobs.get(started.json.id)!);
-    assert.equal(done.state, 'done', done.error ?? '');
+    assert.equal(done.state, 'done', [done.error, ...done.lines].join('\n'));
     assert.equal(await fs.readFile(path.join(repo, 'projects/Apps/force-rebuild/count.txt'), 'utf8'), expected,
       'an explicit rebuild executes even while the previous build receipt is current');
   }

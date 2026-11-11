@@ -112,7 +112,7 @@ nav h2:not(:first-child) { margin-top: 6px; }
 #act-unpublish.publication-secondary, #act-delete-release.publication-secondary { width: auto; color: var(--err); }
 .run-control { width: 100%; display: grid; }
 .run-main { display: flex; align-items: center; justify-content: flex-start; gap: 8px; flex-wrap: wrap; }
-.version { width: 110px; font-family: var(--font-mono); }
+.version { width: 110px; }
 .package-inline { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: end; }
 .package-inline > *, .package-extra-fields { min-width: 0; }
 .package-extra-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
@@ -187,17 +187,6 @@ button.publication-hero-menu.disabled .publication-status-dot { background: var(
 .studio-actions { display: flex; flex-direction: column; gap: 8px; }
 
 /* ---- dialogs (ask(): confirm / prompt / message; the archive list) */
-/* First run is a real modal on an opaque backdrop: none of the inactive dashboard is visible. */
-dialog.workspace-setup { width: min(520px, calc(100vw - 32px)); padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: visible; }
-dialog.workspace-setup::backdrop { background: var(--bg); }
-.workspace-brand { margin-bottom: 18px; text-align: center; }
-.workspace-brand span { color: var(--muted); font-weight: 500; }
-.workspace-panel { padding: 26px 28px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: 0 14px 40px rgba(0, 0, 0, .25); }
-dialog.workspace-setup h3 { font-size: 1.3rem; }
-.workspace-panel > p { margin: 10px 0 0; }
-.workspace-folder { display: grid; gap: 6px; margin-top: 22px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
-.workspace-folder code { overflow-wrap: anywhere; color: var(--fg); }
-dialog.workspace-setup .ask-buttons { margin-top: 22px; }
 dialog.ask { width: min(460px, 92vw); padding: 20px 22px; }
 dialog.ask form { display: flex; flex-direction: column; gap: 12px; }
 dialog.ask #ask-input[aria-invalid="true"] { background: var(--surface-2); border-color: transparent; }
@@ -285,8 +274,9 @@ dialog.ask .log { max-height: 200px; }
 
 /* ---- project colours (right-click menu; xrb-panel.json) */
 :root { --c-blue: #2c58cf; --c-green: #23724a; --c-amber: #b07a0c; --c-red: #b0261d; --c-purple: #7a45c9; --c-teal: #12808a; --c-grey: #7d8796; }
+:root[data-theme="dark"] { --c-blue: #86a4ff; --c-green: #71c995; --c-amber: #e3aa3f; --c-red: #ff8f85; --c-purple: #b99bff; --c-teal: #5fd3c4; --c-grey: #97a2b3; }
 @media (prefers-color-scheme: dark) {
-  :root { --c-blue: #86a4ff; --c-green: #71c995; --c-amber: #e3aa3f; --c-red: #ff8f85; --c-purple: #b99bff; --c-teal: #5fd3c4; --c-grey: #97a2b3; }
+  :root:not([data-theme="light"]) { --c-blue: #86a4ff; --c-green: #71c995; --c-amber: #e3aa3f; --c-red: #ff8f85; --c-purple: #b99bff; --c-teal: #5fd3c4; --c-grey: #97a2b3; }
 }
 #projects .nav-list > h2 { margin: 16px 0 0; padding: 0 2px 8px; }
 
@@ -317,8 +307,7 @@ input.rename:focus-visible, .sec-input:focus-visible { outline: none; }
 /* Log filters: icon + count per kind; off = dimmed */
 #activity-log, #activity-jobs { min-width: 0; }
 #camera-toggle { margin: 0; }
-.log-debug { display: inline-flex; gap: 4px; max-width: 150px; overflow-x: auto; scrollbar-width: none; }
-.log-debug::-webkit-scrollbar { display: none; }
+.log-debug { display: inline-flex; gap: 4px; max-width: 150px; overflow-x: auto; }
 .log-debug .log-filter { flex: none; }
 .log-clear { margin-left: auto; }
 .log-clear[aria-disabled="true"] { opacity: .4; cursor: default; pointer-events: none; }
@@ -354,7 +343,7 @@ input.rename:focus-visible, .sec-input:focus-visible { outline: none; }
 /* One row: Next version (draft, Patch/Minor/Major on its context menu) beside the verified Live version. */
 .publication-version { display: grid; grid-template-columns: minmax(145px, .85fr) minmax(145px, .85fr); gap: 12px; align-items: end; }
 .publication-version label { min-width: 0; }
-.publication-version input { width: 100%; font-family: var(--font-mono); }
+.publication-version input { width: 100%; }
 .publication-result { min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
 .publication-result.good { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
 .publication-result.good .publication-hero-link { color: var(--ok); }

@@ -3,14 +3,15 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { effectiveSettings, validateSettings, type PluginSetting, type SettingValue } from './plugin-manager.ts';
 
-async function configDirectory(workspace: string, id: string, create: boolean): Promise<string> {
+async function configDirectory(workspace: string, id: string, create: boolean, allowMissing = false): Promise<string> {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(id)) throw new Error('Invalid plugin config ID');
   let dir = path.resolve(workspace);
   if (create) await fs.mkdir(dir, { recursive: true });
   for (const part of ['', 'config', 'plugins', id]) {
     if (part) dir = path.join(dir, part);
     if (create && part) await fs.mkdir(dir, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'EEXIST') throw error; });
-    const stat = await fs.lstat(dir);
+    const stat = await fs.lstat(dir).catch((error: NodeJS.ErrnoException) => { if (allowMissing && error.code === 'ENOENT') return null; throw error; });
+    if (!stat) continue;
     if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`Plugin config path must be a plain directory: ${dir}`);
   }
   return dir;
@@ -50,13 +51,15 @@ async function readConfig(file: string): Promise<Record<string, unknown>> {
 }
 
 export interface UserPluginConfig { file: string; created: boolean; values: Record<string, SettingValue> }
-/** Publish complete defaults exclusively; never replace existing settings or generate signing material. */
-export async function readUserPluginConfig(workspace: string, id: string, fields: PluginSetting[]): Promise<UserPluginConfig> {
+/** Discovery can use defaults in memory; explicit initialization publishes them exclusively without replacement. */
+export async function readUserPluginConfig(workspace: string, id: string, fields: PluginSetting[], options: { create?: boolean } = {}): Promise<UserPluginConfig> {
   const defaults = Object.fromEntries(fields.filter(field => field.default !== undefined).map(field => [field.key, field.default!]));
   validateSettings(fields, defaults);
-  const dir = await configDirectory(workspace, id, true), file = path.join(dir, 'config.json');
+  const create = options.create !== false;
+  const dir = await configDirectory(workspace, id, create, !create), file = path.join(dir, 'config.json');
   let created = false;
   const present = await fs.lstat(file).then(() => true, (error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return false; throw error; });
+  if (!present && !create) return { file, created: false, values: effectiveSettings(fields, {}) };
   if (!present) {
     const staging = await fs.mkdtemp(path.join(dir, '.defaults-')), temporary = path.join(staging, 'config.json');
     try {

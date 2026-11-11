@@ -79,7 +79,8 @@ before(async () => {
   await write('plugins/incomplete/package.json', JSON.stringify({ name: 'incomplete', xrBuild: { publisher: './publisher.mjs' } }));
   await write('plugins/incomplete/publisher.mjs', `export const publisher={name:'incomplete-fixture',origin:'https://incomplete.example.test',validate(){return []},async status(){return {state:'unpublished',selectedUrl:''}},async publish(){return {}},async unpublish(){return {}},releases:{async catalog(){return {revision:'1',releases:[]}}}};`);
   port = await freePort();
-  const r = await launch({ port, open: false, workspace: repo });
+  // These fixtures own the publisher inventory; do not inherit the installed public publishers.
+  const r = await launch({ port, open: false, repo, workspace: repo });
   assert.equal(r.result, 'started');
   panel = r.server!;
   panel.panel.awaitPublicationStatus = true;

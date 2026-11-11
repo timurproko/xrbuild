@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { once } from 'node:events';
 import { test } from 'node:test';
-import { createServer } from '../src/server.ts';
+import { createServer, developerModeForLaunch } from '../src/server.ts';
 import { freePort } from '../src/host-runner.ts';
 import { REPO } from '../src/env.ts';
 import { resolvePluginCatalog } from '../src/extension-catalog.ts';
@@ -21,6 +21,35 @@ const waitFor = async (check: () => Promise<boolean>) => {
   throw new Error('timed out');
 };
 
+test('developer navigation follows the explicit shortcut marker before workspace kind', () => {
+  assert.equal(developerModeForLaunch('repository', 'repository'), true);
+  assert.equal(developerModeForLaunch('user', 'repository'), false);
+  assert.equal(developerModeForLaunch('auto', 'repository'), false);
+  assert.equal(developerModeForLaunch(undefined, 'repository'), true, 'explicit repository CLI is the Dev equivalent');
+  assert.equal(developerModeForLaunch(undefined, 'user'), false);
+  assert.equal(developerModeForLaunch(undefined, 'explicit'), false);
+});
+
+test('only Dev navigation includes the reserved Design System entry without initializing storage', async () => {
+  await fs.mkdir(parent, { recursive: true });
+  const root = await fs.mkdtemp(path.join(parent, 'developer-navigation-')), repo = path.join(root, 'core'), workspace = path.join(root, 'absent');
+  await fs.mkdir(repo);
+  try {
+    for (const developerMode of [false, true]) {
+      const port = await freePort(), panel = createServer({ repo, workspace, port, developerMode });
+      panel.server.listen(port, '127.0.0.1'); await once(panel.server, 'listening');
+      try {
+        const data = await fetch(`http://127.0.0.1:${port}/api/navigation?developerMode=true&launch=repository`).then(response => response.json());
+        const entry = data.tools.find((tool: {id: string}) => tool.id === 'design-system');
+        assert.equal(!!entry, developerMode, 'browser query cannot enable the built-in entry');
+        if (entry) { assert.equal(entry.label, 'Design'); assert.equal(entry.url, `http://127.0.0.1:${port}/design`); }
+        assert.equal(panel.panel.jobs.list().length, 0);
+        await assert.rejects(fs.stat(workspace), {code:'ENOENT'});
+      } finally { await panel.close(); }
+    }
+  } finally { await fs.rm(root, {recursive:true,force:true}); }
+});
+
 test('navigation API reads only the selected integration workspace and starts nothing', async () => {
   await fs.mkdir(parent, { recursive: true });
   const root = await fs.mkdtemp(path.join(parent, 'navigation-http-')), workspace = path.join(root, 'integration'), projects = path.join(root, 'projects');
@@ -37,17 +66,38 @@ test('navigation API reads only the selected integration workspace and starts no
   } finally { await panel.close(); await fs.rm(root, { recursive: true, force: true }); }
 });
 
+test('Design short route and legacy redirect preserve queries without exposing a normal-user menu entry',async()=>{
+  await fs.mkdir(parent,{recursive:true});const root=await fs.mkdtemp(path.join(parent,'design-route-'));
+  const port=await freePort(),panel=createServer({workspace:root,port});panel.server.listen(port,'127.0.0.1');await once(panel.server,'listening');
+  try{
+    const base=`http://127.0.0.1:${port}`;
+    for(const route of ['/design/','/design-system.html']){
+      const response=await fetch(`${base}${route}?case=install-dependencies&state=partial`,{redirect:'manual'});
+      assert.equal(response.status,302);assert.equal(response.headers.get('location'),'/design?case=install-dependencies&state=partial');
+    }
+    const response=await fetch(base+'/design');assert.equal(response.status,200);assert.match(await response.text(),/<title>XR Build · Design<\/title>/);
+    assert.equal((await fetch(base+'/design',{method:'POST',headers:{Origin:base}})).status,405);
+    const navigation=await fetch(base+'/api/navigation').then(response=>response.json());assert.ok(!navigation.tools.some((tool:{id:string})=>tool.id==='design-system'));
+  }finally{await panel.close();await fs.rm(root,{recursive:true,force:true});}
+});
+
 test('managed tool starts once on its panel route and owns only declared paths', async () => {
   await fs.mkdir(parent, { recursive: true });
   const root = await fs.mkdtemp(path.join(parent, 'managed-tool-http-')), workspace = path.join(root, 'integration');
   await fs.mkdir(path.join(workspace, 'tools'), { recursive: true });
   await workspaceToolsOnly(workspace);
   await fs.writeFile(path.join(workspace, 'tools', 'fixture.mjs'), `let starts=0;export async function createWorkspaceTool(){starts++;return{handle(req,res,next){if(req.url.startsWith('/managed/')){res.setHeader('content-type','application/json');res.end(JSON.stringify({starts,path:req.url}));return;}if(req.url.startsWith('/__fixture/')){res.end('endpoint');return;}next();}}}`);
-  await fs.writeFile(path.join(workspace, 'xrb-tools.json'), JSON.stringify({ tools: [{ id: 'managed', label: 'Managed Tool', route: '/managed/', module: 'tools/fixture.mjs', endpoints: ['/__fixture/'] }] }));
+  await fs.writeFile(path.join(workspace, 'xrb-tools.json'), JSON.stringify({ tools: [{ id: 'managed', label: 'Managed Tool', route: '/managed/', aliases: ['/old-managed/'], module: 'tools/fixture.mjs', endpoints: ['/__fixture/'] }] }));
   const port = await freePort(), panel = createServer({ workspace, port }); panel.server.listen(port, '127.0.0.1'); await once(panel.server, 'listening');
   try {
     const base = `http://127.0.0.1:${port}`, navigation = await fetch(base + '/api/navigation').then((response) => response.json());
     assert.deepEqual(navigation.tools, [{ id: 'managed', label: 'Managed Tool', route: '/managed/' }]);
+    for (const [from,to] of [['/old-managed','/managed/'],['/old-managed/?source=test','/managed/?source=test'],['/old-managed/assets/example.js?x=1','/managed/assets/example.js?x=1']]) {
+      const redirected=await fetch(base+from,{redirect:'manual'});assert.equal(redirected.status,302);assert.equal(redirected.headers.get('location'),to);
+    }
+    assert.equal((await fetch(base+'/old-managed/',{method:'HEAD',redirect:'manual'})).status,302);
+    assert.equal((await fetch(base+'/old-managed/',{method:'POST',headers:{Origin:base},redirect:'manual'})).status,405);
+    assert.equal((await fetch(base+'/api/tools/managed/status').then(response=>response.json())).state,'idle','aliases do not start a tool');
     const starts = await Promise.all([fetch(base + '/managed/'), fetch(base + '/managed/')]);
     assert.deepEqual(starts.map((response) => response.status), [200, 200]);
     assert.deepEqual(await starts[0].json(), { starts: 1, path: '/managed/' });
