@@ -32,6 +32,9 @@ test('direct setup downloads into exclusive storage and uses fixed signature/ele
     assert.equal(options?.env?.XRB_SETUP_SHA256,createHash('sha256').update(payload).digest('hex'));
     assert.match(DIRECT_INSTALLER_SCRIPT,/FileShare\]::Read/); assert.match(DIRECT_INSTALLER_SCRIPT,/Get-AuthenticodeSignature/);
     assert.match(DIRECT_INSTALLER_SCRIPT,/-Verb RunAs -Wait -PassThru/);
+    assert.match(DIRECT_INSTALLER_SCRIPT,/\$env:PSModulePath = \$moduleRoot/);
+    for (const name of ['Microsoft.PowerShell.Utility','Microsoft.PowerShell.Security','Microsoft.PowerShell.Management']) assert.ok(DIRECT_INSTALLER_SCRIPT.includes(name));
+    assert.match(DIRECT_INSTALLER_SCRIPT,/Import-Module -Name \(\[System.IO.Path\]::Combine\(\$moduleRoot/);
     assert.ok(directInstallerArgs().includes('--norestart')); assert.doesNotMatch(DIRECT_INSTALLER_SCRIPT,/ExecutionPolicy|allow-reboot|ignore-hash/);
     line('synthetic verified installer'); return 3010;
   }});
@@ -69,16 +72,25 @@ test('direct setup refuses linked storage and preserves foreign installer genera
 });
 
 const canVerify = process.platform==='win32' && existsSync(systemPowerShell());
-for (const scenario of ['unsigned','changed','wrong-publisher','verified'] as const) test(`system verification ${scenario}: only the verified case reaches synthetic elevation`, {skip:!canVerify}, async t => {
+for (const isolatedModules of [false,true]) for (const scenario of ['unsigned','changed','wrong-publisher','verified'] as const) test(`system verification ${scenario}${isolatedModules?' with isolated module path':''}: only the verified case reaches synthetic elevation`, {skip:!canVerify}, async t => {
   const f = await fixture(t), file = path.join(f.root,'synthetic.exe'); await fs.writeFile(file,payload);
   const hash = createHash('sha256').update(payload).digest('hex');
   const signature = scenario==='unsigned' ? '' : `function Get-AuthenticodeSignature { [pscustomobject]@{Status='Valid';SignerCertificate=[pscustomobject]@{Subject='CN=${scenario==='wrong-publisher'?'Other Provider':'Microsoft Corporation'}, O=Microsoft Corporation, C=US'}} }`;
   const elevation = `function Start-Process { param($FilePath,$ArgumentList,$Verb,[switch]$Wait,[switch]$PassThru)
+    if ($env:PSModulePath -ne [System.IO.Path]::Combine($PSHOME, 'Modules')) { throw 'Verification must use this engine module root' }
     if ($Verb -ne 'RunAs' -or !$Wait -or !$PassThru -or $ArgumentList -ne '${directInstallerArgs().join(' ')}') { throw 'Unexpected elevation arguments' }
     [Console]::WriteLine('SYNTHETIC_ELEVATION_ONLY'); [pscustomobject]@{ExitCode=3010}
   }`;
-  const script = signature+'\n'+elevation+'\n'+DIRECT_INSTALLER_SCRIPT;
+  const moduleFixture = isolatedModules ? `$env:PSModulePath = '${path.join(f.root,'isolated-modules').replaceAll("'", "''")}'
+    $PSModuleAutoloadingPreference = 'None'
+    Get-Module Microsoft.PowerShell.Utility,Microsoft.PowerShell.Security,Microsoft.PowerShell.Management | Remove-Module
+    function Write-Output { param($InputObject) [Console]::WriteLine([string]$InputObject) }
+    if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) { throw 'Fixture did not isolate module discovery' }
+    [Console]::WriteLine('ISOLATED_MODULE_DISCOVERY')
+  ` : '';
+  const script = moduleFixture+signature+'\n'+elevation+'\n'+DIRECT_INSTALLER_SCRIPT;
   const code = await runProcess(systemPowerShell(),['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],line=>f.lines.push(line),{env:{...process.env,XRB_SETUP_FILE:file,XRB_SETUP_SHA256:scenario==='changed'?'a'.repeat(64):hash}});
+  if(isolatedModules)assert.match(f.lines.join('\n'),/ISOLATED_MODULE_DISCOVERY/,'the regression starts without the verification cmdlet');
   if(scenario==='verified'){assert.equal(code,3010,f.lines.join('\n')); assert.match(f.lines.join('\n'),/SYNTHETIC_ELEVATION_ONLY/);}
   else {assert.equal(code,1,f.lines.join('\n'));assert.doesNotMatch(f.lines.join('\n'),/SYNTHETIC_ELEVATION_ONLY/);assert.match(f.lines.join('\n'),scenario==='changed'?/changed after download/:/signature is not valid/);}
   assert.equal(await fs.readFile(file,'utf8'),payload);

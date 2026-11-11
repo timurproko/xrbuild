@@ -17,6 +17,12 @@ export function directInstallerArgs(): string[] {
 export const DIRECT_INSTALLER_SCRIPT = `$ErrorActionPreference = 'Stop'
 $lease = $null
 try {
+  # The launcher may inherit a newer shell's module paths. Use this engine's trusted built-ins only.
+  $moduleRoot = [System.IO.Path]::Combine($PSHOME, 'Modules')
+  $env:PSModulePath = $moduleRoot
+  foreach ($name in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Security', 'Microsoft.PowerShell.Management')) {
+    Import-Module -Name ([System.IO.Path]::Combine($moduleRoot, $name, ($name + '.psd1'))) -ErrorAction Stop
+  }
   $file = $env:XRB_SETUP_FILE
   $lease = [System.IO.File]::Open($file, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
   $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
