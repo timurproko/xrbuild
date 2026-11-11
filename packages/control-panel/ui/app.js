@@ -1795,7 +1795,7 @@ function renderDetail(force = false) {
         </div><div class="hero-actions">${projectActions}</div></div>
         ${p.errors.length ? `<ul class="errors">${p.errors.map((e) => `<li>${esc(e.field ? `${e.field}: ` : '')}${esc(e.message)}</li>`).join('')}</ul>` : ''}
       </div>
-    </div>${p.sourceUpdate ? `<div class="xrb-stack"><p class="xrb-help">Installed sources changed. Your working sources are preserved at ${esc(p.sourceUpdate.path)}. Review them before continuing.</p><button type="button" class="action-button" id="keep-working-sources">Keep my working sources</button></div>` : ''}`;
+    </div>`;
   // The surface's primary action (Run/Stop, Publish/Update with Unpublish, Build) sits left-aligned below all content.
   const actionRow = heroButton ? `<div class="project-actions">${heroButton}</div>` : '';
   if (!m) {
@@ -1833,11 +1833,6 @@ function renderDetail(force = false) {
     setRevealed(block, block.dataset.publicationEffect === 'enter', { elapsed: Number(block.dataset.publicationElapsed) || 0 });
   }
 
-  $('#keep-working-sources')?.addEventListener('click', action(async () => {
-    if (!await ask({ title: 'Keep working sources?', message: 'Keep your existing editable sources and settings instead of replacing them with updated product defaults. The next action will rebuild output with the current core.', ok: 'Keep sources' })) return;
-    await api('POST', `${projectUrl(p.id)}/keep-working-sources`, { revision: p.sourceUpdate.revision, confirm: true });
-    await loadProjects();
-  }));
   if (p.origin === 'bundled') $('#open-manifest')?.addEventListener('click', action(() => api('POST', `${projectUrl(p.id)}/open-manifest`)));
   // The icon itself has no menu: its actions live under Favicon in the project row's right-click menu.
   $('#open-dir')?.addEventListener('click', action(async (e) => { e.preventDefault(); await api('POST', `${projectUrl(p.id)}/open-folder`); }));

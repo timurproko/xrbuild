@@ -10,6 +10,8 @@ The desired normal flow is pull/update, launch the shortcut, and Run/Build using
 
 Catalog reads remain read-only. They can identify outdated inputs internally but do not install, copy or rewrite working state. All entry points consuming effective sources must resolve the same refresh path before selecting inputs, including development, builds, native/browser runs, icons, packaging and publication. Valid unmaterialized packaged previews retain their existing read-only path. Source changes invalidate old finalized output rather than silently launching it; rebuild requirements use normal project behavior.
 
+Static entry content is compared separately from the shared package-build digest, which deliberately omits dist/. A current installed static entry can be finalized and receipted without requiring a nonexistent compilation script; edited unbuilt static content retains the existing explicit-build rule. After a build refreshes the working generation, run/preview handlers rediscover the effective project instead of reusing a stale pre-build directory.
+
 Refresh uses the existing project operation lock and respects active leases/jobs. A running development server keeps its selected working generation until stopped. No process is restarted and no foreign lock is removed to update code.
 
 ### 2. Baseline-aware generations
@@ -17,6 +19,8 @@ Refresh uses the existing project operation lock and respects active leases/jobs
 New working records capture a bounded content/membership baseline of source inputs and the installed manifest, separately from effective personal configuration. Refresh stages a fresh contained generation with current installed public inputs and validates the same frozen graph, package-manager restrictions and containment rules. Installed added/changed/deleted files become the candidate defaults.
 
 For known baselines, compare installed-old, working-current and installed-new content. Upstream-only changes update; local-only edits survive; identical concurrent changes are accepted. Conflicting edits, removals or incompatible dependency/manifest changes stop the requested action without publishing the candidate. Do not add a general text-conflict-marker merge or silently keep a conflicting old source. Refreshing shared SDK/build inputs must not freeze their previous snapshot just because the app's personal manifest differs.
+
+Static app finalization can stamp managed favicon/card metadata into its entry HTML. Record the exact before/after content hashes of only these managed files, bound to the generation's baseline, so a later refresh does not mistake unchanged panel-generated stamping for a user source edit. Any subsequent external change remains a real edit; do not strip arbitrary HTML or normalize other files.
 
 ### 3. Personal state is not old code
 
@@ -32,7 +36,7 @@ This transition is automatic for ordinary legacy states containing only normal U
 
 ### 5. Atomic publication and output binding
 
-Revalidate installed inputs and the working/configuration revision before publishing a staged generation through atomic state replacement. Preserve the previous state and generation on failures or races. Only a successfully validated generation becomes effective. Bind new builds to the new effective input fingerprint and ensure old successful output is not selected as current after refresh. Preserve old output already pinned by a consumer; no generation cleanup is part of this change.
+Revalidate installed inputs and the working/configuration revision before publishing a staged generation through atomic state replacement. Preserve the previous state and generation on failures or races. Only a successfully validated generation becomes effective. Keep the first effective output-storage key in versioned state across source generations, including upgrade from older state. Generation-pinned immutable receipts remain addressable after a refresh, but only current receipts must match the current source directory. Bind new builds to the new effective input fingerprint and ensure old successful output is not selected as current after refresh. Preserve old output already pinned by a consumer; no generation cleanup is part of this change.
 
 ### 6. Remove the misleading normal UI, not safety
 
