@@ -1,0 +1,3 @@
+{
+  "cleanup": ["node", "tools/worktree/worktree.mjs", "sweep", "--apply"]
+}
