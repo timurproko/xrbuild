@@ -67,7 +67,7 @@ Catalog instances SHALL have origin-qualified identities while retaining compati
 - **THEN** stale/overlapping source updates are rejected without overwriting preferences, and a changed tool is invalidated and requires restart rather than executing the previous source under the new metadata
 
 ### Requirement: Embedded projects and writable user projects
-The project catalog SHALL distinguish embedded and user project identities, including matching folder names. Embedded projects SHALL support the same capability-based development, settings, rename, icon, run, build, package, publication and organization operations as user projects without requiring an independent copy. Deletion SHALL be the only restriction based solely on embedded project origin, enforced both at HTTP boundaries and direct operation entry points. Normal operations SHALL NOT mutate installed embedded sources or product-default configuration. Mutable manifests, editable working sources, icons, publication/signing state and recordings SHALL use durable contained user-owned state, scoped by canonical installation, selected workspace, selected project repository and qualified logical project identity. Discovery SHALL NOT initialize working sources or install dependencies. Effective manifest saves SHALL compare complete content-bound revisions, including not-yet-imported personal settings, and use cooperating-writer locks with atomic replacement so equal timestamps do not allow stale edits. New independent projects and optional explicit copies SHALL default to the selected writable project repository.
+The project catalog SHALL distinguish embedded and user project identities, including matching folder names. Embedded projects SHALL support the same capability-based development, settings, rename, icon, run, build, package, publication and organization operations as user projects without requiring an independent copy. Deletion SHALL be the only restriction based solely on embedded project origin, enforced both at HTTP boundaries and direct operation entry points. Normal operations SHALL NOT mutate installed embedded sources or product-default configuration. Mutable manifests, editable working sources, icons, publication/signing state and recordings SHALL use durable contained user-owned state, scoped by canonical installation, selected workspace, selected project repository and qualified logical project identity. Discovery SHALL NOT initialize working sources or install dependencies. Effective manifest saves SHALL compare complete content-bound revisions, including not-yet-imported personal settings, and use cooperating-writer locks with atomic replacement so equal timestamps do not allow stale edits. New independent projects and optional explicit copies SHALL default to the selected writable project repository. Installed input changes SHALL use automatic safe refresh at explicit source-consuming action boundaries rather than require routine acknowledgement of an old working snapshot; genuine conflicts and incompatible state SHALL remain non-destructive action failures.
 
 #### Scenario: Normal embedded project actions
 - **WHEN** a user develops, changes settings or name/icon, runs, builds, packages or publishes a valid embedded app with the necessary ordinary capabilities and configuration
@@ -107,7 +107,7 @@ The project catalog SHALL distinguish embedded and user project identities, incl
 
 #### Scenario: Restart and installed source update
 - **WHEN** the panel restarts or installed defaults change after a user edits an embedded project
-- **THEN** durable user sources/settings and deployment identity are preserved, and any incompatible source-baseline change, including an installed default-section relocation, is reported for explicit non-destructive reconciliation instead of overwriting edits or silently resetting defaults
+- **THEN** personal settings and deployment identity survive, compatible current sources are adopted automatically on the next explicit source-consuming action, logical identity survives installed default-section relocation, and incompatible source edits are preserved without silently running an acknowledged old snapshot
 
 #### Scenario: Separate project repository
 - **WHEN** a project repository is selected independently from the integration workspace
@@ -366,3 +366,46 @@ Embedded projects SHALL participate in the same section list, project order and 
 #### Scenario: Concurrent organization changes
 - **WHEN** another writer changes a project's organization while a stale layout or archive request is being prepared
 - **THEN** the stale operation is refused or safely serialized without lost updates, identity collisions or source-folder mutations
+
+### Requirement: Automatic safe refresh of embedded working sources
+Explicit source-consuming actions SHALL refresh changed embedded inputs under project locks using validated atomic generations and content baselines. Refresh SHALL preserve personal state and compatible edits, refuse conflicts or unsafe state without data loss, retain legacy generations and active consumers, and invalidate stale output. Discovery SHALL remain read-only; refresh SHALL NOT authorize cleanup.
+
+#### Scenario: Upstream-only source update
+- **WHEN** installed sources add, modify or remove files after working inputs were prepared and those files have no conflicting local edits
+- **THEN** the next explicit action uses the current installed membership/content with compatible local settings retained and no manual source acknowledgement
+
+#### Scenario: Shared source update
+- **WHEN** the installed shared SDK or build inputs change while the selected project's own sources and personal choices do not
+- **THEN** preparation uses the current shared inputs without freezing the old snapshot or mistaking saved settings for an app-source conflict
+
+#### Scenario: Compatible actual source edit
+- **WHEN** a known-baseline local edit does not conflict with an installed update, or both sides make the same change
+- **THEN** the refreshed generation retains the local edit and adopts current compatible installed changes
+
+#### Scenario: Conflicting actual source edit
+- **WHEN** the same known-baseline input is incompatibly changed or deleted locally and upstream
+- **THEN** the requested action fails with a recovery diagnostic, preserves all local inputs and previous state, and does not publish partial or falsely current output
+
+#### Scenario: Legacy working state
+- **WHEN** an older working-state record lacks a recoverable per-file baseline and contains ordinary validated personal choices
+- **THEN** preparation automatically stages current installed sources, carries those choices forward, retains the complete old generation with durable recovery metadata, and never claims unknown old sources were unedited or deletes them
+
+#### Scenario: Ambiguous legacy source configuration
+- **WHEN** an older record contains source/build configuration that cannot be distinguished safely from local customization
+- **THEN** the action refuses the ambiguous transition without discarding that configuration or falsely reporting that the current installed code was selected
+
+#### Scenario: Refresh during active use
+- **WHEN** a working generation is leased by a run, development server, job or another writer
+- **THEN** the conflicting refresh is serialized or refused without rewriting active inputs, stopping the consumer or removing foreign locks
+
+#### Scenario: Input race or interrupted publication
+- **WHEN** installed inputs or effective configuration change while a candidate is staged, or staging/publication fails
+- **THEN** the candidate is not made effective, prior data remains preserved and the next action cannot treat incomplete state as successfully refreshed
+
+#### Scenario: Current output after refresh
+- **WHEN** sources refresh after an earlier successful build
+- **THEN** new consumers require output bound to refreshed inputs rather than automatically falling back to old or packaged output, while existing consumers retain already pinned generations
+
+#### Scenario: Personal and product separation
+- **WHEN** a source refresh carries personal choices, identity, icons or recordings across an installed default-section relocation or restart
+- **THEN** those values remain in their proper user-owned scope, inherit current compatible source defaults, keep logical organization/identity, and do not rewrite installed product files or ordinary projects
