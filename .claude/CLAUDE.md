@@ -129,7 +129,8 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   Cleanup refuses `.xrbuild/` or `.artifacts/KEEP`, even with clean outer Git status; sweep preserves them as dirty.
   `pnpm task:repos` routes core/embedded/private/paired tasks, explicitly provisions independent private clones only when
   needed, and records exact tested HEAD/work state in ignored artifacts. No implicit export/stage/PR/push/merge/cleanup;
-  private instructions and native session/worktree checks still apply. Spec prerequisites are recorded in the active change.
+  private instructions still apply. Follow the shared Worktrees guidance in `AGENTS.md`; do not add another linkage gate.
+  Spec prerequisites are recorded in the active change.
 - `tools/pr-automation` - the PR body link (`pr-body.mjs`), delivery check, OpenSpec finalization, docs auto-merge,
   unarchived-change report and nightly triage that the workflows run.
 - `tools/repo-governance` + `config/github-repository-governance.json` - repository settings as code (`pnpm governance`).
