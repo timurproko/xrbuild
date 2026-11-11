@@ -38,21 +38,17 @@ ledger with the observed baseline. Approval grants no private export, hosting mu
   merged, clean worktrees; never remove a `dirty`, `active`, `closed` or `unknown` one by hand. A task containing
   `.xrbuild/` or `.artifacts/KEEP` is preserved as dirty even when outer Git is clean. Preserve private repositories
   and marked backups separately before cleanup; never remove the protection just to make sweep pass.
-- Reuse only when branch, change and PR are exactly this task's. For a new task, run `pnpm worktree enter
-  <type>/<short-desc>` (types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `ci`, `perf`) to create or cleanly
-  re-enter its registered checkout from `origin/main`, and capture the absolute path it prints. On resume, use the
-  exact previously assigned registered path; never create or adopt another task's checkout.
-- In an active A1 shell-tool session, run `a1 session link-worktree <absolute-path>`, then `a1 session worktrees`.
-  **Before any planning or implementation edit**, require that inventory to display the exact path and branch as
-  `current`. Re-link and confirm on resume or task switch. A missing command, inactive runtime, failed native claim,
-  foreign path, busy checkout or mismatched display of this task's worktree blocks task edits; do not fall back to the
-  primary checkout. A stale entry for some other worktree (its directory is gone; `git worktree list` marks it
-  `prunable`) is never a blocker, even when it makes the inventory fail: run `git -C <primary> worktree prune`, rerun
-  `a1 session worktrees`, and continue once it shows this task's path as `current`.
-  Claude Code's native `EnterWorktree` uses `<type>--<short-desc>` and enters that worktree directly.
-- Native linkage owns session presentation and cooperative claims; it does **not** authorize cleanup or merge and
-  may not change every live tool cwd. Work only in `.worktrees/<short-desc>/` using absolute paths for file tools and
-  `git -C`/explicit cwd for commands. Never edit the primary checkout or another task's worktree.
+- Follow the shared Worktrees guidance in `AGENTS.md`. Continue the same task's branch, change and PR.
+  A1 owns attachment verification, coordination and recovery; do not add an inventory approval gate or a manual
+  linkage retry procedure. External agents use ordinary Git worktrees from `origin/main`; the existing repository
+  helper remains available for their creation/setup.
+- After entry, prepare this checkout's public dependencies using the repository helper's enter operation when needed.
+  Dependency setup is separate from attachment; the helper's clean re-entry restriction does not prohibit continuing
+  existing task edits or require a second worktree. For edited resumes, install task-local dependencies directly
+  rather than invoking clean re-entry. Provision private clones independently and only when needed.
+- Attachment does not authorize cleanup or merge. Built-in tools follow the attached root; custom extensions and
+  independent terminals may retain their own cwd, so use the returned explicit root for those integrations.
+  Never edit the primary checkout or another task's worktree.
 - Scratch (PR bodies, logs, patches, captured output) goes in the worktree's `.artifacts/` (git-ignored), never the
   system temp folder, the home folder or another checkout.
 
@@ -119,5 +115,9 @@ command for the maintainer.
 - Verify: the PR merged, the archive and synced specs are on `main`, the remote branch is gone. Only then report the
   change as delivered; never edit a merged PR's body.
 - Local cleanup is the next session's `pnpm worktree sweep --apply` (or `pnpm worktree remove <short-desc>`).
+- An A1 session still attached to the merged task runs `a1 worktree complete` instead and never cleans its own
+  attached checkout: the command returns the session to primary first, then runs this repository's sweep as
+  declared in the committed `.a1/worktree.json` and relays its report. No machine setup is needed. Sweep's rules
+  are unchanged: only merged, clean worktrees go, and a task holding `.xrbuild/` or `.artifacts/KEEP` is preserved.
 - A PR closed unmerged: `pnpm worktree remove <short-desc> --discard`, only when the maintainer says its work is not
   needed.
