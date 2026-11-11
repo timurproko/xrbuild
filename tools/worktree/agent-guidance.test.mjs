@@ -38,3 +38,14 @@ test('every agent runtime reads one shared rule for ticking outcomes while imple
   assert.ok(!instructions.includes(progress));
   assert.match(instructions, /`Implementation progress` paragraph of `AGENTS\.md`/);
 });
+
+test('the delivery skill and PR template follow the shared progress rule without restating it', async () => {
+  const read = file => fs.readFile(path.join(root, file), 'utf8');
+  const [delivery, template] = await Promise.all(['.claude/skills/change-delivery/SKILL.md', '.github/pull_request_template.md'].map(read));
+  assert.match(delivery, /`Implementation progress` paragraph of `AGENTS[.]md`/);
+  assert.match(delivery, /one task group per PR Implementation outcome, in the same order/);
+  assert.match(delivery, /No task is about ticking PR\s+outcomes or handing off/);
+  assert.ok(!delivery.includes('Never save ticks for handoff'));
+  assert.doesNotMatch(delivery, /only when its verify clause holds/);
+  assert.match(template, /`Implementation progress` in AGENTS[.]md/);
+});
