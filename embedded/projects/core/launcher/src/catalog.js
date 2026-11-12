@@ -58,8 +58,9 @@ export function workspaceCatalogBase(runtimeHref) {
     const runtime = new URL(runtimeHref);
     const raw = runtime.searchParams.get('xrb-panel');
     if (!raw) return null;
-    const panel = new URL(raw, runtime);
-    if (!['http:', 'https:'].includes(panel.protocol) || !isLoopbackDevelopment(panel.href) || panel.username || panel.password) return null;
+    const panel = new URL(raw);
+    if (!['http:', 'https:'].includes(panel.protocol) || !isLoopbackDevelopment(panel.href) || panel.username || panel.password
+      || panel.pathname !== '/' || panel.search || panel.hash) return null;
     panel.pathname = '/';
     panel.search = '';
     panel.hash = '';
@@ -229,6 +230,7 @@ export async function loadWorkspaceCatalog({ fetchImpl = fetch, baseHref, signal
         icon: { default: !project.manifest.icon, color: project.manifest.iconColor ?? 'blue', shape: project.manifest.iconShape ?? 'sphere', model: !!project.icon?.model },
       };
       return {
+        projectId: project.id,
         id: project.manifest.publication?.id ?? project.id,
         slug: project.manifest.publication?.slug ?? project.id,
         title: card.name,
@@ -251,12 +253,22 @@ export function excludeCurrentPublication(catalog, currentHref, embeddedIdentity
   const previewKey = current.pathname.match(/^\/preview\/([^/]+)(?:\/|$)/)?.[1];
   let previewId = null;
   try { previewId = previewKey ? decodeURIComponent(previewKey) : null; } catch { /* not a valid catalog key */ }
+  // Local logical identity is independent of deployment IDs and generation-pinned routes.
+  const localProject = workspaceCatalogBase(currentHref) ? current.searchParams.get('xrb-project') ?? previewId : isPanelPreview(currentHref) ? previewId : null;
+  if (localProject) return catalog.filter((app) => (app.projectId ?? app.id) !== localProject);
   const publishedRoute = /^\/apps(?:\/|$)/.test(current.pathname);
   const embeddedId = !publishedRoute && typeof embeddedIdentity.id === 'string' ? embeddedIdentity.id : null;
   const currentSlug = currentPublicationSlug(current.pathname)
     ?? (!publishedRoute && !embeddedId && typeof embeddedIdentity.slug === 'string' ? embeddedIdentity.slug : null);
   return catalog.filter((app) => app.id !== previewId && app.id !== embeddedId && app.slug !== currentSlug
     && new URL(app.route).pathname.replace(/\/$/, '') !== currentPath);
+}
+
+/** Explicit panel context is authoritative: a local failure must never substitute another library. */
+export async function loadRuntimeCatalog({ runtimeHref, publishedBase = runtimeHref, fetchImpl = fetch, signal }) {
+  const workspaceBase = workspaceCatalogBase(runtimeHref);
+  if (workspaceBase || isPanelPreview(runtimeHref)) return loadWorkspaceCatalog({ baseHref: workspaceBase ?? runtimeHref, fetchImpl, signal });
+  return loadCatalog({ baseHref: publishedBase, fetchImpl, signal });
 }
 
 export async function loadCatalog({ fetchImpl = fetch, baseHref, signal, token = String(Date.now()) }) {

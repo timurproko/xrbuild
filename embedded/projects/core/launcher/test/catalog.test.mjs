@@ -9,6 +9,7 @@ import {
   isLoopbackDevelopment,
   isPanelPreview,
   loadCatalog,
+  loadRuntimeCatalog,
   loadWorkspaceCatalog,
   normalizeInventory,
   titleFromHtml,
@@ -69,6 +70,61 @@ test('only loopback origins enable development catalog fixtures', () => {
   assert.equal(catalogBaseHref('http://localhost:5173/'), 'http://localhost:5173/', 'plain development stays local unless explicitly configured');
   for (const origin of ['http://external.example/', 'https://user:secret@example.test/', 'https://example.test/?private=1']) assert.throws(() => catalogBaseHref('https://app.local/', origin), /clean HTTPS/);
   assert.equal(catalogBaseHref('http://localhost:5173/', 'https://staging.example/apps/'), 'https://staging.example/apps/', 'an explicit development catalog wins');
+});
+
+test('panel context rejects non-loopback, credentialed, relative and dirty URLs', () => {
+  for (const panel of ['https://remote.test/', 'http://user@localhost:5180/', '/relative', 'ftp://localhost/', 'http://localhost:5180/path', 'http://localhost:5180/?query=1', 'http://localhost:5180/#fragment']) {
+    assert.equal(workspaceCatalogBase(`https://app.local/?xrb-panel=${encodeURIComponent(panel)}`), null, panel);
+  }
+});
+
+test('explicit local catalog context is authoritative, ordered and recoverable across Browser/Desktop modes', async () => {
+  const projects = [
+    { id: 'bundled:launcher', manifest: { kind: 'app', name: 'Launcher', scripts: { build: 'build' } } },
+    { id: 'custom', entryExists: true, manifest: { kind: 'app', name: 'Custom', publication: { id: 'configured-id', slug: 'custom' } } },
+    { id: 'bundled:sample', entryExists: true, manifest: { kind: 'app', name: 'Sample' } },
+    { id: 'loose', entryExists: true, manifest: { kind: 'app', name: 'Loose' } },
+    { id: 'archive/old', archived: true, entryExists: true, manifest: { kind: 'app', name: 'Old' } },
+    { id: 'broken', manifest: null },
+    { id: 'test', entryExists: true, manifest: { kind: 'test', name: 'Test' } },
+  ];
+  const layout = { sections: [{ name: 'empty', items: [] }, { name: 'core', items: ['bundled:launcher', 'bundled:sample', 'custom'] }] };
+  const requests = [];
+  let available = false;
+  const fetchImpl = async input => {
+    requests.push(String(input));
+    assert.equal(String(input), 'http://127.0.0.1:5191/api/projects');
+    return available ? Response.json({ projects, layout }) : new Response('', { status: 503 });
+  };
+  for (const runtime of ['http://localhost:54321/', 'https://app.local/index.html', 'http://127.0.0.1:5191/preview/bundled%3Alauncher/@r-generation/']) {
+    const href = new URL(runtime);
+    href.searchParams.set('xrb-panel', 'http://127.0.0.1:5191/');
+    href.searchParams.set('xrb-project', 'bundled:launcher');
+    available = false;
+    await assert.rejects(loadRuntimeCatalog({ runtimeHref: href.href, fetchImpl }), /workspace apps \(503\)/);
+    available = true;
+    const catalog = await loadRuntimeCatalog({ runtimeHref: href.href, fetchImpl });
+    // Stale compiled publication identity must not exclude another local project.
+    const visible = excludeCurrentPublication(catalog, href.href, { id: 'configured-id', slug: 'custom' });
+    assert.deepEqual(visible.map(app => app.projectId), ['bundled:sample', 'custom', 'loose']);
+    assert.equal(visible[1].id, 'configured-id');
+    assert.equal(visible[1].route, 'http://127.0.0.1:5191/preview/custom/');
+  }
+  assert.equal(requests.length, 6, 'one local read per failed attempt or refresh, never publication inventory fallback');
+  const configured = await loadWorkspaceCatalog({ baseHref: 'http://127.0.0.1:5191/', fetchImpl });
+  assert.deepEqual(excludeCurrentPublication(configured, 'http://127.0.0.1:5191/preview/custom/@r-generation/').map(app => app.projectId), ['bundled:launcher', 'bundled:sample', 'loose'], 'preview self-exclusion is independent of publication ID');
+});
+
+test('runtime without panel context retains publisher inventory selection', async () => {
+  for (const runtimeHref of ['https://app.local/', 'https://example.test/apps/launch/']) {
+    const requests = [];
+    const result = await loadRuntimeCatalog({ runtimeHref, fetchImpl: async input => {
+      requests.push(new URL(input).pathname);
+      return Response.json({ version: 1, publications: [] });
+    } });
+    assert.deepEqual(result, []);
+    assert.deepEqual(requests, ['/.xrb-publications.json']);
+  }
 });
 
 test('titles are readable with or without publication metadata', () => {

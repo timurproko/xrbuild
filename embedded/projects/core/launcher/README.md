@@ -2,7 +2,7 @@
 
 Spatial app catalog using the core SDK and UI kit. The authored icon is rendered by `src/icon.js`.
 
-In a panel preview or a native run carrying explicit loopback panel context, the launcher lists active apps from that panel. A published launcher reads its own publisher's inventory and canonical app routes. An external inventory requires explicit `VITE_CATALOG_ORIGIN` (clean HTTPS, or loopback HTTP for development). No production site, user deployment identity or private workspace is built in; a plain dev server does not silently contact a production service.
+In a panel preview or a Browser/Desktop development run carrying explicit loopback panel context, the launcher lists eligible active embedded and user apps in sidebar order, excluding itself by logical project identity. An unavailable bound panel shows a library error and is retried without substituting a published library. A published launcher reads its own publisher's inventory and canonical app routes. An external inventory requires explicit `VITE_CATALOG_ORIGIN` (clean HTTPS, or loopback HTTP for development). No production site, user deployment identity or private workspace is built in; a plain dev server does not silently contact a production service.
 
 Build through the selected core's frozen embedded lane. Product source is read-only in ordinary panel use: Rebuild writes to user cache; Copy to workspace creates an independently editable/publication-ready app. The product manifest has desktop/no-input defaults, no publication UUID, package/signing identity or machine settings. Configure those only in the editable copy/user workspace.
 

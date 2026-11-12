@@ -59,7 +59,10 @@ test('sidebar combines origins, hides empty groups and retains section action in
     for (let i = 0; i < 100 && !(await library()).layout.sections.some((s: any) => s.name === 'vacant'); i++) await sleep(50);
     await navigate(panel.url, `document.querySelectorAll('#projects .proj').length===5`);
     assert.deepEqual((await groups()).map((s: any) => s.name), ['tools', 'samples', 'Unsorted']);
-    for (const id of ['bundled:test', 'tool', 'bundled:sample', 'user', 'loose']) {
+    assert.equal(await evaluate(`(async()=>{const r=await fetch('/api/projects/bundled%3Atest/archive',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});return r.status})()`), 200);
+    await navigate(panel.url, `document.querySelectorAll('#projects .proj').length===4`);
+    assert.deepEqual((await groups()).map((s: any) => s.name), ['tools', 'samples'], 'no Unsorted heading when only named sections remain');
+    for (const id of ['tool', 'bundled:sample', 'user', 'loose']) {
       assert.equal(await evaluate(`(async()=>{const r=await fetch('/api/projects/${encodeURIComponent(id)}/archive',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});return r.status})()`), 200);
     }
     await navigate(panel.url, `document.querySelector('[data-view="archive"] .xrb-tab-count')?.textContent==='5'`);

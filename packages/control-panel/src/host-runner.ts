@@ -373,7 +373,10 @@ export class HostRunner extends EventEmitter {
       const args = [...req.hostArgs, '--status=stdout', ...(this.s.cameraAvailable ? ['--camera-view=on', `--camera-stream=${req.cameraView ? 'on' : 'off'}`] : [])];
       if (req.mode === 'dev') {
         const devUrl = new URL(await this.startDev(req));
-        if (req.panelUrl) devUrl.searchParams.set('xrb-panel', req.panelUrl);
+        if (req.panelUrl) {
+          devUrl.searchParams.set('xrb-panel', req.panelUrl);
+          devUrl.searchParams.set('xrb-project', req.projectId);
+        }
         if (req.mouseEnabled !== undefined) devUrl.searchParams.set('xrb-mouse', req.mouseEnabled ? '1' : '0');
         if (req.cursor) devUrl.searchParams.set('xrb-cursor', req.cursor);
         args.push(`--url=${devUrl.href}`);

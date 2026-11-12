@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ChevronLeft, ChevronRight, Glasses } from 'lucide';
 import { appLaunchUrl, createXrbApp, fitIcon, loadAppIcon, rendererOptions, updateIcon } from '@xr-build/sdk';
 import { Button, COLORS, Dialog, Label, material, roundedBox, roundedDisc } from '@xr-build/ui-kit';
-import { catalogBaseHref, excludeCurrentPublication, isLoopbackDevelopment, isPanelPreview, isPublishedHosting, loadCatalog, loadWorkspaceCatalog, workspaceCatalogBase } from './catalog.js';
+import { catalogBaseHref, excludeCurrentPublication, isLoopbackDevelopment, isPanelPreview, isPublishedHosting, loadRuntimeCatalog, workspaceCatalogBase } from './catalog.js';
 import createIcon from './icon.js';
 import './style.css';
 
@@ -471,23 +471,15 @@ async function updateCatalog() {
     const panelPreview = isPanelPreview(location.href);
     const workspaceBase = workspaceCatalogBase(location.href);
     const development = isLoopbackDevelopment(location.href);
-    let catalog;
-    if (panelPreview || workspaceBase) {
-      try {
-        catalog = await loadWorkspaceCatalog({ baseHref: workspaceBase ?? location.href, signal: controller.signal });
-      } catch (error) {
-        if (!workspaceBase || error?.name === 'AbortError') throw error;
-        console.warn('[launcher] local workspace unavailable; using published library:', error);
-        catalog = await loadCatalog({ baseHref: catalogBase(), signal: controller.signal });
-      }
-    } else catalog = await loadCatalog({ baseHref: catalogBase(), signal: controller.signal });
+    const publishedBase = panelPreview || workspaceBase ? location.href : catalogBase();
+    const catalog = await loadRuntimeCatalog({ runtimeHref: location.href, publishedBase, signal: controller.signal });
     let nextApps = excludeCurrentPublication(catalog, location.href, {
       id: import.meta.env.VITE_XRB_PUBLICATION_ID,
       slug: import.meta.env.VITE_XRB_PUBLICATION_SLUG,
     });
     catalogError = null;
     catalogLoaded = true;
-    if (development && !panelPreview) nextApps = nextApps.map(localizePublishedApp);
+    if (development && !panelPreview && !workspaceBase) nextApps = nextApps.map(localizePublishedApp);
     const signature = JSON.stringify(nextApps.map(({ id, title, description, route, launchUrl, iconUrl, iconColor, defaultSphere }) =>
       [id, title, description, route, launchUrl, iconUrl, iconColor, defaultSphere]));
     if (signature !== catalogSignature) {
@@ -501,6 +493,7 @@ async function updateCatalog() {
       console.warn('[launcher] library unavailable:', error);
       catalogError = error;
       catalogLoaded = true;
+      catalogSignature = '';  // recovery must redraw even when the library has not changed
       apps = [];
       page = 0;
       renderPage();

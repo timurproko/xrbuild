@@ -53,6 +53,25 @@ test('built mode: streams status and log, reports the exit', async () => {
     'the host can serve the local build while opening it with panel workspace context');
 });
 
+test('Desktop dev URL carries selected-panel and logical project context without publication identity', async () => {
+  const host = await fakeHost(`console.log(process.argv.find(a => a.startsWith('--url=')));`);
+  const runner = new HostRunner(async () => [], async () => {});
+  (runner as any).startDev = async () => 'http://127.0.0.1:54321/?existing=1';
+  const exited = new Promise(resolve => runner.once('exit', resolve));
+  await runner.start({ projectId: 'bundled:launcher', mode: 'dev', hostExe: process.execPath, projectDir: '.', entryDir: '.',
+    panelUrl: 'http://127.0.0.1:5191/', mouseEnabled: true, cursor: 'system', hostArgs: [host] });
+  await exited;
+  const output = runner.logLines().find(line => line.startsWith('--url='));
+  assert.ok(output);
+  const url = new URL(output.slice('--url='.length));
+  assert.equal(url.origin, 'http://127.0.0.1:54321');
+  assert.equal(url.searchParams.get('xrb-panel'), 'http://127.0.0.1:5191/');
+  assert.equal(url.searchParams.get('xrb-project'), 'bundled:launcher');
+  assert.equal(url.searchParams.get('existing'), '1');
+  assert.equal(url.searchParams.get('xrb-mouse'), '1');
+  assert.equal(url.searchParams.get('xrb-cursor'), 'system');
+});
+
 test('2D/3D: the view follows the host status, and a switch goes to the host channel', async () => {
   const entry = await fs.mkdtemp(path.join(os.tmpdir(), 'panel-entry-'));
   await fs.writeFile(path.join(entry, 'index.html'), 'x');

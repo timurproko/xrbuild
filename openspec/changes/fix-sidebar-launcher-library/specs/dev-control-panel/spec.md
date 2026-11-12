@@ -73,7 +73,7 @@ The Projects sidebar SHALL combine embedded and user projects into one group per
 #### Scenario: Create a section
 
 - **WHEN** the developer starts creating a section
-- **THEN** the inline naming interaction remains usable and a completed section with no active projects is hidden until occupied
+- **THEN** the existing naming dialog remains usable and a completed section with no active projects is hidden until occupied
 
 #### Scenario: Empty active library
 

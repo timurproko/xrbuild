@@ -23,7 +23,7 @@ The shared effective layout remains the source for Launcher ordering; do not add
 
 ### 2. Carry explicit local catalog context in all panel-owned previews
 
-Use the existing `xrb-panel` contract for panel-owned Browser dev previews as well as Desktop dev/built runs. Identify the current local project through explicit preview/project context rather than relying on a deployment identity that unconfigured embedded apps may not have. Validate loopback panel URLs, exclude the current Launcher by stable project identity, and preserve all other eligible projects.
+Use the existing `xrb-panel` contract for panel-owned Browser dev previews as well as Desktop dev/built runs. Carry `xrb-project` alongside `xrb-panel` for the current local project and retain each catalog entry's project ID independently of publication identity. Prefer this explicit context or a generation-pinned preview route over compiled deployment identity for self-exclusion. Validate loopback panel URLs, exclude the current Launcher by stable project identity, and preserve all other eligible projects.
 
 Treat an explicitly panel-bound run as local even when its page is served at a different dev-server port. Keep packaged/published runs without this context on publisher inventory. Avoid silently substituting an unrelated published library when a bound panel library cannot be read; report the local error and use the existing refresh behavior to recover.
 
