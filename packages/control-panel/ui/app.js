@@ -3246,7 +3246,7 @@ function renderGlobalSettings() {
     `<div class="card"><form id="panel-appearance" class="settings-card-fields">${field('Theme', 'theme', window.xrbTheme.get(), {
       options: ['system', 'light', 'dark'], raw: true,
       optionLabels: { system: 'System', light: 'Light', dark: 'Dark' },
-    })}</form><form id="app-preferences" class="xrb-section-divider"><div class="settings-card-fields">${field('Cursor', 'cursor', state.appSettings.cursor, {
+    })}</form><form id="app-preferences"><div class="settings-card-fields">${field('Cursor', 'cursor', state.appSettings.cursor, {
       options: ['system', 'ring', 'ring-dot'], raw: true,
       optionLabels: { system: 'System', ring: 'Ring', 'ring-dot': 'Ring with hover dot' },
     })}</div><p class="xrb-help">Applies on the next run. Mouse must be selected in the app’s Input options.</p></form></div>`) : '';
