@@ -55,12 +55,13 @@ test('the production build contains website and headset launch assets', async ()
   assert.match(main, /xrb\.bindMouse\(\)/);
   assert.match(main, /catalogBaseHref\(location\.href, import\.meta\.env\.VITE_CATALOG_ORIGIN\)/,
     'packaged native hosting resolves the canonical published catalog instead of its local app origin');
-  assert.match(main, /workspaceCatalogBase\(location\.href\)[\s\S]*loadWorkspaceCatalog\(\{ baseHref: workspaceBase \?\? location\.href/,
-    'a panel-launched native launcher resolves rebuilt workspace apps through the bounded panel context');
-  assert.match(main, /local workspace unavailable; using published library/,
-    'a stopped panel falls back to the published library');
+  assert.match(main, /const publishedBase = panelPreview \|\| workspaceBase \? location\.href : catalogBase\(\)/);
+  assert.match(main, /loadRuntimeCatalog\(\{ runtimeHref: location\.href, publishedBase,/,
+    'a panel-launched Launcher uses authoritative bounded panel context in dev and built modes');
+  assert.doesNotMatch(main, /local workspace unavailable; using published library/,
+    'an unavailable selected panel never substitutes an unrelated published library');
   assert.match(main, /const development = isLoopbackDevelopment\(location\.href\)/);
-  assert.match(main, /if \(development && !panelPreview\) nextApps = nextApps\.map\(localizePublishedApp\)/,
+  assert.match(main, /if \(development && !panelPreview && !workspaceBase\) nextApps = nextApps\.map\(localizePublishedApp\)/,
     'local route substitution remains loopback-only outside a panel workspace preview');
   assert.doesNotMatch(main, /previewSlots|Empty slot/,
     'workspace previews show real active projects instead of synthetic empty cards');

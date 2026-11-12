@@ -1124,6 +1124,8 @@ test('native Run reaches the host runner, while a WebXR Run must open the browse
     assert.equal(new URL(builtPreview.json.url).searchParams.get('xrb-preview-route'), '/preview/browser-run/');
     assert.equal(new URL(builtPreview.json.url).searchParams.get('xrb-preview-token'), builtToken);
     assert.equal(new URL(builtPreview.json.url).searchParams.get('xrb-preview-panel'), new URL(panel.url).origin);
+    assert.equal(new URL(builtPreview.json.url).searchParams.get('xrb-panel'), panel.url);
+    assert.equal(new URL(builtPreview.json.url).searchParams.get('xrb-project'), 'browser-run');
     const projectionPath = `/api/preview/projection?route=${encodeURIComponent('/preview/browser-run/')}&token=${builtToken}`;
     assert.equal((await request('GET', projectionPath)).json.projection, 'orthographic');
     const changedProjection = await request('POST', '/api/preview/projection', { body: JSON.stringify({ route: '/preview/browser-run/', token: builtToken, projection: 'perspective' }) });
@@ -1179,6 +1181,8 @@ test('native Run reaches the host runner, while a WebXR Run must open the browse
       assert.equal(new URL(dev.json.url).origin, 'http://127.0.0.1:54321');
       assert.equal(new URL(dev.json.url).searchParams.get('xrb-preview-route'), '/preview/browser-run/');
       assert.equal(new URL(dev.json.url).searchParams.get('xrb-preview-token'), 'preview-token-1234');
+      assert.equal(new URL(dev.json.url).searchParams.get('xrb-panel'), panel.url);
+      assert.equal(new URL(dev.json.url).searchParams.get('xrb-project'), 'browser-run');
       assert.equal(new URL(dev.json.url).searchParams.get('xrb-mouse'), '0', 'dev previews respect the same input selection');
       assert.equal(new URL(dev.json.url).searchParams.get('xrb-cursor'), 'ring');
       assert.equal(previewed.projectId, 'browser-run');
@@ -1210,7 +1214,7 @@ test('native Run reaches the host runner, while a WebXR Run must open the browse
     assert.equal(started?.mode, 'built');
     assert.ok(started?.hostExe.endsWith('xrb-host.exe'));
     assert.ok(started?.hostArgs.includes('--title=native-run'));
-    assert.equal(started?.builtUrl, `https://app.local/index.html?xrb-panel=${encodeURIComponent(`http://127.0.0.1:${port}/`)}&xrb-mouse=1&xrb-cursor=ring-dot`,
+    assert.equal(started?.builtUrl, `https://app.local/index.html?xrb-panel=${encodeURIComponent(`http://127.0.0.1:${port}/`)}&xrb-project=native-run&xrb-mouse=1&xrb-cursor=ring-dot`,
       'panel native runs carry workspace and Mouse selection while still serving the built app at app.local');
     assert.equal(started?.mouseEnabled, true);
   } finally { runner.start = originalStart; panel.panel.repo = originalCore; }
@@ -1233,6 +1237,29 @@ test('app.local may read local catalog and preview responses without opening pan
   assert.equal(unrelated.headers['access-control-allow-origin'], undefined, 'the native app origin receives only catalog and preview reads');
   const writeFromHost = await request('POST', '/api/projects/new', { origin: 'https://app.local', body: JSON.stringify({ folder: 'blocked' }) });
   assert.equal(writeFromHost.status, 403);
+});
+
+test('development catalog CORS is restricted to clean loopback read origins and bounded resources', async () => {
+  for (const origin of ['http://127.0.0.1:54321', 'http://localhost:54321', 'https://localhost:54321', 'http://[::1]:54321']) {
+    for (const url of ['/api/projects', '/api/projects/demo/icon', '/preview/rig-check/']) {
+      const response = await request('GET', url, { origin });
+      assert.equal(response.headers['access-control-allow-origin'], origin, `${origin} ${url}: ${response.body}`);
+      assert.equal(response.headers.vary, 'Origin');
+      assert.equal(response.headers['access-control-allow-credentials'], undefined);
+    }
+    const write = await request('POST', '/api/layout', { origin, body: '{"sections":[]}' });
+    assert.equal(write.status, 403);
+    assert.equal(write.headers['access-control-allow-origin'], undefined);
+    const unrelated = await request('GET', '/api/app-settings', { origin });
+    assert.equal(unrelated.headers['access-control-allow-origin'], undefined);
+  }
+  for (const origin of ['https://remote.test', 'null', 'file://localhost', 'ftp://localhost', 'http://user@localhost:54321', 'http://localhost:54321/path', 'http://localhost:54321?query=1', 'http://localhost:54321#fragment', 'http://localhost:54321/', 'not-a-url']) {
+    assert.equal((await request('GET', '/api/projects', { origin })).headers['access-control-allow-origin'], undefined, origin);
+    assert.equal((await request('GET', '/api/preview/projection?token=missing', { origin })).headers['access-control-allow-origin'], undefined, origin);
+  }
+  const foreignHost = await request('GET', '/api/projects', { host: `remote.test:${port}`, origin: 'http://localhost:54321' });
+  assert.equal(foreignHost.status, 403);
+  assert.equal(foreignHost.headers['access-control-allow-origin'], undefined);
 });
 
 test('restart and panel launchers create no terminal process', async () => {

@@ -47,6 +47,25 @@ test('sections are the folders under projects/, in the saved order; Unsorted is 
   assert.equal(await fs.readFile(path.join(ws, LAYOUT_FILE), 'utf8'), '{ broken', 'invalid user state is preserved for review');
 });
 
+test('mixed origins share case-insensitive sections and never make a named Unsorted group', async t => {
+  const { ws, project } = await workspace();
+  t.after(() => fs.rm(ws, { recursive: true, force: true }));
+  await project('Demos/user');
+  await project('Unsorted/loose');
+  const user = (await discoverProjects(ws)).find(p => p.id === 'user')!;
+  const bundled = { ...user, id: 'bundled:sample', origin: 'bundled' as const, section: 'demos' };
+  const unsorted = { ...bundled, id: 'bundled:loose', section: 'unsorted' };
+  const live = [...await discoverProjects(ws), bundled, unsorted];
+  await fs.writeFile(path.join(ws, LAYOUT_FILE), JSON.stringify({ sections: [{ name: 'DEMOS', items: [bundled.id, user.id] }] }));
+  const before = await fs.readdir(path.join(ws, 'projects'));
+  for (let i = 0; i < 2; i++) {
+    const layout = await readLayout(ws, live);
+    assert.deepEqual(layout.sections, [{ name: 'Demos', items: ['bundled:sample', 'user'] }]);
+    assert.deepEqual(live.filter(p => !layout.sections.some(s => s.items.includes(p.id))).map(p => p.id), ['loose', 'bundled:loose']);
+  }
+  assert.deepEqual(await fs.readdir(path.join(ws, 'projects')), before, 'read-only normalization never moves sources');
+});
+
 test('layout ignores orphan empty folders but keeps explicitly saved empty sections', async () => {
   const { ws } = await workspace();
   await fs.mkdir(path.join(ws, 'projects', 'orphan'), { recursive: true });

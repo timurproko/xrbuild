@@ -666,10 +666,11 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
     let loopbackOrigin = '';
     try {
       const origin = new URL(req.headers.origin ?? '');
-      if (['127.0.0.1', 'localhost', '::1', '[::1]'].includes(origin.hostname.toLowerCase())) loopbackOrigin = origin.origin;
+      if (['http:', 'https:'].includes(origin.protocol) && origin.origin === req.headers.origin
+        && ['127.0.0.1', 'localhost', '[::1]'].includes(origin.hostname.toLowerCase())) loopbackOrigin = origin.origin;
     } catch { /* no CORS origin */ }
-    if ((localRead && req.headers.origin === 'https://app.local' || previewProjectionRead && loopbackOrigin)
-      && ['GET', 'HEAD', 'OPTIONS'].includes(req.method ?? 'GET')) {
+    if ((localRead && (req.headers.origin === 'https://app.local' || loopbackOrigin) || previewProjectionRead && loopbackOrigin)
+      && ['GET', 'HEAD', 'OPTIONS'].includes(req.method ?? 'GET') && !checkRequest(req.method ?? 'GET', req.headers, port)) {
       res.setHeader('access-control-allow-origin', localRead && req.headers.origin === 'https://app.local' ? 'https://app.local' : loopbackOrigin);
       res.setHeader('vary', 'Origin');
     }
