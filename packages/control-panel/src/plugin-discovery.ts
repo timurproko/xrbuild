@@ -53,5 +53,12 @@ export async function pluginDiscoverySnapshot(core: string, workspace: string): 
     };
     await visit(root);
   }
+  // Services are created from the user's plugin configuration: an edit outside Settings must refresh them too
+  // (this is configuration, not code, so it never requires a restart).
+  for (const plugin of catalog.selected.filter(plugin => pluginEnabled(plugin, catalog.prefs) && plugin.meta.config?.length)) {
+    const file = path.join(workspace, 'config', 'plugins', plugin.id, 'config.json');
+    const stamp = await fs.lstat(file).then(stat => `${stat.ino}:${stat.size}:${stat.mtimeMs}`, (error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return 'absent'; throw error; });
+    hash.update(`config\0${plugin.key}\0${stamp}\0`);
+  }
   return { revision: hash.digest('hex'), code, roots, problem };
 }
