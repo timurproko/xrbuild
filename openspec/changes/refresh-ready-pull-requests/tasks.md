@@ -5,7 +5,7 @@
 
 ## 2. Trusted post-merge workflow
 
-- [ ] 2.1 Add the trusted-default-branch refresh workflow for merged main PRs and the dormant documentation-auto-merge completion bridge, using a scoped App token, global non-canceling concurrency and a bounded timeout; verify workflow-policy tests require trusted checkout, read-only workflow permissions, no candidate execution and normal downstream PR events rather than status writes or PR merges.
+- [x] 2.1 Add the trusted-default-branch refresh workflow for merged main PRs and the dormant documentation-auto-merge completion bridge, using a scoped App token, global non-canceling concurrency and a bounded timeout; verify workflow-policy tests require trusted checkout, read-only workflow permissions, no candidate execution and normal downstream PR events rather than status writes or PR merges.
 
 ## 3. Governance and operator guidance
 
