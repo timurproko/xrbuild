@@ -1,7 +1,7 @@
 ## 1. Shared header/menu maintenance ordering
 
-- [ ] 1.1 Reuse the shared maintenance menu order for header labels while preserving logical DOM order, stable IDs and existing handlers; verify unit fixtures put Restart before Rebuild without changing navigation tool order or menu separators.
-- [ ] 1.2 Apply the ordering to panel and approved embedded hand-view headers, including default markup and any shared runtime ordering path; verify source/public fixtures bind the corresponding badges to the same menu order and headers without labels remain unchanged.
+- [x] 1.1 Reuse the shared maintenance menu order for header labels while preserving logical DOM order, stable IDs and existing handlers; verify unit fixtures put Restart before Rebuild without changing navigation tool order or menu separators.
+- [x] 1.2 Apply the ordering to panel and approved embedded hand-view headers, including default markup and any shared runtime ordering path; verify source/public fixtures bind the corresponding badges to the same menu order and headers without labels remain unchanged.
 
 ## 2. State and refresh safeguards
 

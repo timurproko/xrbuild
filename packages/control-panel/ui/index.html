@@ -16,8 +16,8 @@
 <body class="workspace-pending" data-xrb-scrollbar="none">
   <header class="top xrb-app-bar">
     <h1 class="xrb-brand">XR Build <button id="panel-menu-button" class="panel-menu-button xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Apps</button></h1>
-    <span id="host-chip" class="chip" hidden></span>
-    <span id="panel-chip" class="chip warn" hidden>restart available</span>
+    <span id="panel-chip" class="chip warn" data-maintenance="restart" hidden>restart available</span>
+    <span id="host-chip" class="chip" data-maintenance="rebuild" hidden></span>
     <span class="spacer"></span>
     <!-- Page fps and hands Hz of the running app, shown here once the Running card scrolled out of view -->
     <div id="stats-dock" class="stats-dock" hidden></div>

@@ -2,6 +2,21 @@
 import {openFloating} from './design-system.js';
 import {rebuildHostInPlace} from './rebuild-dialog.js';
 export {rebuildHostInPlace};
+export const MAINTENANCE_ACTIONS = Object.freeze([
+  Object.freeze({id:'restart',label:'Restart'}),
+  Object.freeze({id:'rebuild',label:'Rebuild'}),
+]);
+/** Move existing label nodes into menu order, preserving their slots, bindings and unrelated header content. */
+export function orderMaintenanceLabels(header, order = MAINTENANCE_ACTIONS.map(item=>item.id)) {
+  const labels = [...header.children].filter(node=>node.dataset.maintenance && order.includes(node.dataset.maintenance));
+  const sorted = order.flatMap(id=>labels.filter(node=>node.dataset.maintenance === id));
+  if (labels.every((node,index)=>node === sorted[index])) return;
+  const doc = header.ownerDocument, focused = doc.activeElement;
+  const restoreFocus = labels.some(node=>node.contains(focused));
+  const slots = labels.map(node=>{const slot=doc.createComment('maintenance label');node.before(slot);return slot;});
+  sorted.forEach((node,index)=>slots[index].replaceWith(node));
+  if (restoreFocus) focused.focus({preventScroll:true});
+}
 export function panelOrigin(value) {
   try { const u=new URL(value);return u.protocol==='http:'&&['127.0.0.1','localhost'].includes(u.hostname)&&u.port&&!u.username&&!u.password&&u.pathname==='/'&&!u.search&&!u.hash?u.origin:null; } catch { return null; }
 }
@@ -42,15 +57,15 @@ export function navigationItems(origin,tools=[],current='projects',{maintenance=
     {id:'plugins',label:'Plugins',href:panelDestination(origin,'plugins')},
     {id:'settings',label:'Settings',href:panelDestination(origin,'settings')},
     ...(design?[{id:'design-system',label:'Design',href:panelDestination(origin,'design-system')}]:[]),
-    ...(maintenance?[{separator:true},
-      {id:'restart',label:'Restart',href:panelDestination(origin,'restart')},
-      {id:'rebuild',label:'Rebuild',href:panelDestination(origin,'rebuild')}]:[])]
+    ...(maintenance?[{separator:true}, ...MAINTENANCE_ACTIONS.map(item=>({...item,href:panelDestination(origin,item.id)}))]:[])]
     .map(item=>({...item,current:item.id===current}));
 }
 export function renderNavigationMenu(menu,{origin,tools=[],current='projects',indicators=false,maintenance=true}={}) {
+  const items = navigationItems(origin,tools,current,{maintenance});
+  for (const header of menu.ownerDocument.querySelectorAll('.xrb-app-bar')) orderMaintenanceLabels(header,items.filter(item=>item.id).map(item=>item.id));
   menu.replaceChildren();
   const ids={projects:'panel-home',plugins:'plugin-manager-open',settings:'settings-open','design-system':'design-system-open',rebuild:'host-rebuild',restart:'panel-restart'};
-  for(const item of navigationItems(origin,tools,current,{maintenance})){
+  for(const item of items){
     const el=document.createElement(item.separator?'hr':'a');
     if(item.separator)el.setAttribute('role','separator');
     else{
