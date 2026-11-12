@@ -65,6 +65,69 @@ test('full activation is idempotent but does not certify App permissions or exac
   assert.equal(f.writes.some(write => /visibility|billing|pulls/.test(write.p)), false);
 });
 
+test('refresh is a privileged full-activation role with trusted entrypoints and unchanged protection', () => {
+  assert.equal(config.automation.workflows['.github/workflows/ready-pull-request-refresh.yml'], 'refresh');
+  for (const file of ['tools/pr-automation/ready-pull-request-refresh.mjs', 'tools/pr-automation/refresh-ready-pull-requests.mjs']) {
+    assert.ok(config.automation.trusted_files.includes(file), file);
+  }
+  assert.deepEqual(config.rulesets[0].bypass_actors, []);
+  const rules = config.rulesets[0].rules;
+  assert.deepEqual(rules.find(rule => rule.type === 'required_status_checks').parameters, {
+    strict_required_status_checks_policy: false,
+    required_status_checks: [{ context: 'CI required', integration_id: 15368 }],
+  });
+  assert.deepEqual(rules.find(rule => rule.type === 'pull_request').parameters.allowed_merge_methods, ['squash']);
+  assert.equal(config.repository.allow_update_branch, false);
+  const f = fixture(), refresh = f.state.workflows.find(workflow => workflow.path.endsWith('/ready-pull-request-refresh.yml'));
+  refresh.state = 'disabled_manually';
+  assert.equal(f.command('activate', false), 0);
+  assert.deepEqual(f.writes, []);
+  assert.ok(f.lines.some(line => line.includes(`/workflows/${refresh.id}/enable`)));
+  assert.equal(f.command('activate'), 0);
+  assert.equal(refresh.state, 'active');
+  assert.deepEqual(f.state.workflows.filter(workflow => workflow.state === 'active').map(workflow => workflow.path).sort(),
+    Object.entries(config.automation.workflows).filter(([, role]) => ['ci', 'promotion', 'probe', 'refresh'].includes(role)).map(([file]) => file).sort());
+});
+
+test('CI-only disables refresh and protection-only leaves every workflow state alone', () => {
+  const f = fixture(), refresh = f.state.workflows.find(workflow => workflow.path.endsWith('/ready-pull-request-refresh.yml'));
+  assert.equal(f.command('activate-ci'), 0);
+  assert.equal(refresh.state, 'disabled_manually');
+  assert.ok(f.writes.some(write => write.p.endsWith(`/workflows/${refresh.id}/disable`)));
+  for (const initial of ['active', 'disabled_manually']) {
+    const g = fixture(); g.state.workflows.find(workflow => workflow.path.endsWith('/ready-pull-request-refresh.yml')).state = initial;
+    const before = structuredClone(g.state.workflows);
+    assert.equal(g.command('protect'), 0);
+    assert.deepEqual(g.state.workflows, before);
+    assert.equal(g.writes.some(write => write.p.includes('/actions/workflows/')), false);
+  }
+});
+
+test('missing trusted refresh policy blocks full activation but not CI-only or protection-only', () => {
+  for (const file of ['.github/workflows/ready-pull-request-refresh.yml', 'tools/pr-automation/ready-pull-request-refresh.mjs', 'tools/pr-automation/refresh-ready-pull-requests.mjs']) {
+    const f = fixture(); f.state.missing.add(file);
+    assert.equal(f.command('activate'), 2); assert.deepEqual(f.writes, []);
+    assert.match(f.lines.join('\n'), /trusted-policy-bootstrap/);
+    assert.equal(f.command('activate-ci'), 0);
+    assert.equal(f.state.workflows.find(workflow => workflow.path.endsWith('/ready-pull-request-refresh.yml')).state, 'disabled_manually');
+    assert.equal(f.command('protect'), 0);
+  }
+});
+
+test('unreviewed role fails closed and failed refresh enablement is caught by readback', () => {
+  const f = fixture(), wrong = structuredClone(config);
+  wrong.automation.workflows['.github/workflows/ready-pull-request-refresh.yml'] = 'unreviewed';
+  assert.equal(run(['activate', '--confirm', CONFIRM], { api: f.api, repo, config: wrong, out: line => f.lines.push(line) }), 2);
+  assert.deepEqual(f.writes, []); assert.match(f.lines.join('\n'), /workflow-policy-missing/);
+  const g = fixture(), refresh = g.state.workflows.find(workflow => workflow.path.endsWith('/ready-pull-request-refresh.yml'));
+  refresh.state = 'disabled_manually';
+  const api = (method, p, body) => method === 'PUT' && p.endsWith(`/workflows/${refresh.id}/enable`) ? {} : g.api(method, p, body);
+  assert.equal(run(['activate', '--confirm', CONFIRM], { api, repo, config, out: line => g.lines.push(line) }), 2);
+  assert.match(g.lines.at(-1), /partial-or-blocked/);
+  assert.equal(refresh.state, 'disabled_manually');
+  assert.deepEqual(g.state.rulesets[0].bypass_actors, []);
+});
+
 test('missing bot configuration blocks full activation without writes', () => {
   const f = fixture(); f.state.secrets = []; assert.equal(f.command('activate'), 2);
   assert.deepEqual(f.writes, []); assert.match(f.lines.join('\n'), /bot-configuration-required/);

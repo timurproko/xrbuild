@@ -136,12 +136,15 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   needed, and records exact tested HEAD/work state in ignored artifacts. No implicit export/stage/PR/push/merge/cleanup;
   private instructions still apply. Follow the shared Worktrees guidance in `AGENTS.md`; do not add another linkage gate.
   Spec prerequisites are recorded in the active change.
-- `tools/pr-automation` - the PR body link (`pr-body.mjs`), delivery check, OpenSpec finalization, docs auto-merge,
-  unarchived-change report and nightly triage that the workflows run.
+- `tools/pr-automation` - the PR body link (`pr-body.mjs`), delivery check, OpenSpec finalization, guarded ready-PR
+  branch refresh after main merges, docs auto-merge, unarchived-change report and nightly triage that the workflows run.
 - `tools/repo-governance` + `config/github-repository-governance.json` - repository settings as code (`pnpm governance`).
 - `.github/` - CI (`ci.yml`: ready PRs keep fast selected checks; full Windows host build/tests run nightly on
   `main` or by explicit CI dispatch, not on PRs or `main` pushes), the bot workflows (OpenSpec finalization and
-  reconcile, docs auto-merge, nightly triage, bot probe; App token from `actions/app-token`), PR template.
+  reconcile, ready-PR refresh, docs auto-merge, nightly triage, bot probe; scoped App token for refresh, `actions/app-token`
+  for other bots), PR template. Refresh updates only stale ready same-repository PRs with expected-head guards, emitting
+  ordinary CI events without merging PRs; drafts/forks are skipped and conflicts need manual resolution. See
+  `docs/pr-delivery-governance.md` for activation and stalled-run limits.
 - `.xrbuild` - ignored independent private clone: projects, plugins and pinned Git LFS dependencies, with its own
   `.git` and LFS hooks; credentials, installed packages and generated builds stay ignored in that repository.
 - `tools/add-to-start.vbs` - adds the ordinary "XR Build" user-workspace shortcut; `--repo` and `--user` can

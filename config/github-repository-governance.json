@@ -48,11 +48,18 @@
   ],
   "automation": {
     "bot": { "app_id_variable": "XRB_BOT_APP_ID", "private_key_secret": "XRB_BOT_PRIVATE_KEY" },
-    "trusted_files": ["tools/pr-automation/promote.mjs", "tools/pr-automation/finalize.mjs", ".github/actions/app-token/action.yml"],
+    "trusted_files": [
+      "tools/pr-automation/promote.mjs",
+      "tools/pr-automation/finalize.mjs",
+      ".github/actions/app-token/action.yml",
+      "tools/pr-automation/ready-pull-request-refresh.mjs",
+      "tools/pr-automation/refresh-ready-pull-requests.mjs"
+    ],
     "workflows": {
       ".github/workflows/ci.yml": "ci",
       ".github/workflows/openspec-finalization.yml": "promotion",
       ".github/workflows/bot-probe.yml": "probe",
+      ".github/workflows/ready-pull-request-refresh.yml": "refresh",
       ".github/workflows/docs-auto-merge.yml": "disabled",
       ".github/workflows/nightly-triage.yml": "disabled",
       ".github/workflows/openspec-reconcile.yml": "disabled"

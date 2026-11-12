@@ -10,6 +10,20 @@ Trusted main policy inspects the exact PR head as data with read-only credential
 
 The App's ready event starts ordinary CI. The finalizer uses trusted tools, archives/synchronizes on the PR branch and rechecks before publishing and updating the body. Ordinary PR events validate the final head. Drafts do not emit a successful protected aggregate; selected gates that unexpectedly skip, fail or cancel cannot make `CI required` green. A green gate is not acceptance or permission for an agent to merge.
 
+## Ready-PR refresh after merges
+
+`Ready pull-request refresh` reconciles open ready PRs after a PR merges into `main`. It also listens to completion of `Docs auto-merge` as a safe reconciliation bridge if that separately declared workflow is enabled later; this does not enable documentation auto-merge. It runs only trusted default-branch scripts, never candidate code or completed-run artifacts, with globally serialized, non-canceling passes and a ten-minute job limit.
+
+Each pass lists candidates with bounded pagination, re-reads their state and head, and compares against fresh main. Only open, non-draft PRs whose head and base both belong to this repository and whose base is main may be updated. Drafts, forks, closed PRs and other base branches are skipped. Current branches receive no write. Stale branches use GitHub's update-branch API with `expected_head_sha`, preserving author changes without force pushes or rebases. `allow_update_branch: false` remains the UI preference; it does not prohibit authorized API branch updates.
+
+The workflow mints a current-repository installation token from `XRB_BOT_APP_ID` and `XRB_BOT_PRIVATE_KEY`, scoped to Contents and Pull requests write. There is deliberately no `GITHUB_TOKEN` fallback: App updates produce ordinary PR `synchronize` events, which start existing finalization/delivery and applicable CI checks on the updated heads. Refresh never sets a passing status, marks a draft ready, edits PR bodies, merges a PR or arms auto-merge.
+
+Its job summary distinguishes accepted updates (`updated`, not validated), already-current branches, skipped candidates, deferred head races, conflicts (`blocked`, requiring manual resolution), and operational failures. Expected races and conflicts are not force-retried; independent candidates continue. Credential/authorization failures abort the pass, while operational failures fail the job. Fix conflicts on the affected PR and inspect App setup for credential failures. A later merge runs another fresh pass; duplicate events are idempotent.
+
+A refresh is not a rerun of an old workflow. If a PR already contains main but an old job stalled, no branch update is made and no pass is fabricated; inspect/retry that run separately when authorized. Main-push CI still checks main, while refreshed PR events check their updated integration heads. Existing required checks, squash-only main integration and no-bypass protection remain unchanged.
+
+Rollout needs this workflow and both refresh entrypoints on trusted main and a functioning installed App. Read-only preflight on an unmerged policy branch reports the expected `trusted-policy-bootstrap` blocker. After maintainer merge, inspect preflight and the registered workflow state; in an already-enabled repository normal workflow registration can activate it, but source presence alone is not certification. If activation drift needs repair, review the dry-run and obtain explicit confirmation before applying settings. Keep unrelated auxiliary workflows disabled. Observe a real authorized merge with an eligible stale ready PR and retain the accepted update, resulting head and downstream CI run identities before claiming live refresh acceptance. Do not create/merge a canary or change hosting merely to complete implementation bookkeeping.
+
 ## Accepted public contract checkpoints
 
 A missing canonical baseline after public bootstrap may be reconciled only through an explicitly approved,
@@ -29,8 +43,8 @@ Unsupported private protection is a hard account-capability blocker. Keep the re
 
 - `pnpm governance preflight`: read-only capability/settings inspection for full automation. Reports missing bot setup and trusted-main bootstrap separately from ordinary drift.
 - `pnpm governance protect`: dry-run PR-only protection and declared settings. It can proceed without bot credentials but requires supported protection and a trusted CI workflow on main.
-- `pnpm governance activate-ci`: dry-run protection plus ordinary CI. Promotion/probe and explicitly inactive auxiliary workflows stay disabled; no automatic readiness is claimed.
-- `pnpm governance activate`: dry-run reviewed protection/CI/promotion/probe activation after bot setup and trusted-main prerequisites exist.
+- `pnpm governance activate-ci`: dry-run protection plus ordinary CI. Promotion/probe/refresh and explicitly inactive auxiliary workflows stay disabled; no automatic readiness or branch refresh is claimed.
+- `pnpm governance activate`: dry-run reviewed protection/CI/promotion/probe/refresh activation after bot setup and trusted-main prerequisites exist.
 - Add `--confirm apply-xr-build-governance` to a mutation mode only after reviewing its exact target and writes. Readbacks distinguish partial configuration from configured-but-not-certified automation.
 - `pnpm governance check` and legacy `apply` compare/apply declared repository settings only. They are not complete automation certification. Legacy apply also refuses bypass actors.
 
