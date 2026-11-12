@@ -10,6 +10,15 @@ body.plugins-page .run-dock, body.plugins-page .stats-dock, body.settings-page .
 .settings-card-fields > label { min-width: 0; }
 .settings-card-fields > .settings-boolean-field { grid-column: 1 / -1; }
 .settings-section { margin: 4px 0 0; }
+/* Destination sections: the same heading and divider as other settings sections, with a switch on the right;
+   the configuration opens beneath it with its own Save. */
+.settings-card-fields > .settings-destination { grid-column: 1 / -1; }
+.settings-destination { display: grid; gap: var(--xrb-space-stack); }
+.settings-destination-head { display: flex; align-items: center; gap: 12px; }
+.settings-destination-title { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.settings-destination-body, .settings-config { display: grid; gap: var(--xrb-space-stack); }
+.settings-destination-body > .errors, .settings-config > .errors, .settings-destination-problem { margin: 0; }
+.settings-config-actions { display: flex; justify-content: flex-start; }
 .settings-card-disabled { opacity: .72; }
 @media (max-width: 700px) { .settings-card-fields { grid-template-columns: minmax(0, 1fr); } }
 

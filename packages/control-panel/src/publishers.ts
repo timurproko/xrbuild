@@ -91,6 +91,10 @@ export interface Publisher {
   label?: string;
   origin: string;
   routePrefix?: string;
+  /** False while a destination still needs explicit user configuration; its origin is then not a real destination. */
+  configured?: boolean;
+  /** Bounded user-facing reason shown while `configured` is false. */
+  configurationProblem?: string;
   validate(publication: PublicationIdentity): PublisherError[];
   status(publication: PublicationIdentity): Promise<PublisherStatus>;
   publish(o: { app: string; publication: PublicationIdentity; card?: PublicationCard; log(message: string): void }): Promise<PublisherResult>;
@@ -128,7 +132,8 @@ export function normalizeReleaseCatalog(value: unknown): PublisherReleaseCatalog
   };
   return { revision: c.revision, releases, requestedReleaseId: ref(c.requestedReleaseId, 'request'), liveReleaseId: ref(c.liveReleaseId, 'live release'), legacyLive: c.legacyLive === true };
 }
-export interface PublisherDiscovery { found: Array<{ publisher: Publisher; dir: string; plugin?: ResolvedPlugin }>; problems: string[] }
+/** `setting` is the plugin runtime setting that enables this publisher, when its declaration names one. */
+export interface PublisherDiscovery { found: Array<{ publisher: Publisher; dir: string; plugin?: ResolvedPlugin; setting?: string }>; problems: string[] }
 function isPublisherDeclaration(value: unknown): value is { module: string; setting?: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
@@ -137,6 +142,8 @@ function isPublisherDeclaration(value: unknown): value is { module: string; sett
 function isPublisher(value: unknown): value is Publisher {
   const p = value as Partial<Publisher> | null;
   if (!p || typeof p.name !== 'string' || !/^[a-z0-9-]+$/.test(p.name) || (p.label !== undefined && (typeof p.label !== 'string' || !p.label.trim())) || typeof p.origin !== 'string') return false;
+  if (p.configured !== undefined && typeof p.configured !== 'boolean') return false;
+  if (p.configurationProblem !== undefined && (typeof p.configurationProblem !== 'string' || !p.configurationProblem.trim() || p.configurationProblem.length > 300 || /[\x00-\x1f\x7f]/.test(p.configurationProblem))) return false;
   try {
     const origin = new URL(p.origin);
     if (origin.protocol !== 'https:' || origin.username || origin.password || (p.routePrefix !== undefined && !/^[a-z0-9-]+$/.test(p.routePrefix))) return false;
@@ -179,12 +186,15 @@ export async function discoverPublishers(workspace: string, core?: string): Prom
           conflicts.add(publisher.name);
           throw new Error(`conflicting publishers named "${publisher.name}": all implementations are unavailable`);
         }
-        found.push({ publisher, dir, plugin });
+        found.push({ publisher, dir, plugin, ...(declaration.setting ? { setting: declaration.setting } : {}) });
       } catch (error) { problems.push(`${where}: ${(error as Error).message}`); }
     }
   }
   return { found: found.filter(item => !conflicts.has(item.publisher.name)), problems };
 }
+/** A publisher that reports it still needs configuration; publishers omitting the field are configured. */
+export const publisherUnconfigured = (publisher: Pick<Publisher, 'configured' | 'configurationProblem'>): string | null =>
+  publisher.configured === false ? publisher.configurationProblem ?? 'This publisher is not configured' : null;
 export const publisherFor = (discovery: PublisherDiscovery, name: string) => discovery.found.find((item) => item.publisher.name === name) ?? null;
 export function publicationUrl(publisher: Pick<Publisher, 'origin' | 'routePrefix'>, slug: string): string {
   const prefix = `/${(publisher.routePrefix ?? 'apps').replace(/^\/+|\/+$/g, '')}/`;

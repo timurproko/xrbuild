@@ -64,8 +64,8 @@ test('source refresh reserves consumers, publishes services together and refuses
   const p = {} as any;
   await assert.rejects(f.panel.packageBuild(p, {}), /changing/);
   await assert.rejects(f.panel.publish(p), /changing/);
-  await assert.rejects(f.panel.run(p, 'built'), /preparation/);
-  await assert.rejects(f.panel.saveRunSettings(p, {}, 'revision'), /preparation/);
+  await assert.rejects(f.panel.run(p, 'built'), /Plugin services are being updated/);
+  await assert.rejects(f.panel.saveRunSettings(p, {}, 'revision'), /Plugin services are being updated/);
   await assert.rejects(f.panel.selectPluginSource('workspace:shared', 'workspace', revision), /Stop running/);
   release(); await selection; delete (globalThis as any).__sourceGate;
   assert.equal(f.panel.publishers.found[0].publisher.label, 'Bundled'); assert.equal(f.panel.packagers.found[0].packager.label, 'Bundled');
@@ -136,7 +136,7 @@ test('automatic discovery refreshes idle preference changes, defers busy work an
   await fs.writeFile(module, (await fs.readFile(module, 'utf8')).replaceAll("label:'Workspace'", "label:'Updated after restart'"));
   await f.plugins();
   assert.equal(f.panel.publishers.found.length, 0); assert.match(f.panel.pluginServiceStatus().problem!, /restart/);
-  await assert.rejects(f.panel.publish({} as any), /restart/);
+  await assert.rejects(f.panel.publish({} as any), /restart/i);
   const script = `import {discoverPublishers} from ${JSON.stringify(import.meta.resolve('../src/publishers.ts'))}; const result=await discoverPublishers(process.argv[1],process.argv[2]); console.log(result.found[0]?.publisher.label);`;
   const child = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script, f.workspace, f.core]);
   assert.equal(child.stdout.trim(), 'Updated after restart');
@@ -230,4 +230,42 @@ test('real plugin-source form resolves conflict and switches services without re
     }
     assert.equal(f.panel.instanceId, instance);
   });
+});
+
+test('Settings configuration API saves declared fields, refreshes services and refuses stale, invalid and busy saves', async t => {
+  const f = await fixture(t), revision = (await f.plugins())[0].sourceRevision;
+  assert.equal((await f.request('PUT', 'api/plugins/manage/bundled%3Ashared/origin', { origin: 'bundled', revision })).status, 200);
+  const listed = (await f.plugins()).find((p: any) => p.selected);
+  assert.deepEqual(listed.config.map((field: any) => field.key), ['active']);
+  assert.deepEqual(listed.configValues, { active: false }); assert.equal(listed.configRevision, 'absent');
+  const url = 'api/plugins/manage/bundled%3Ashared/config', file = path.join(f.workspace, 'config/plugins/shared/config.json');
+  assert.deepEqual((await f.request('GET', url)).data, { revision: 'absent', values: { active: false } });
+
+  const invalid = await f.request('PUT', url, { values: { active: 'yes' }, revision: 'absent' });
+  assert.equal(invalid.status, 400); assert.equal(invalid.data.details.fields[0].field, 'active');
+  await assert.rejects(fs.access(file));
+
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  const job = f.panel.jobs.start('web-build', 'fixture', 'fixture work', () => gate);
+  assert.equal((await f.request('PUT', url, { values: { active: true }, revision: 'absent' })).status, 409, 'services stay unchanged while work runs');
+  release(); await f.panel.jobs.wait(job);
+  await assert.rejects(fs.access(file));
+
+  const saved = await f.request('PUT', url, { values: { active: true }, revision: 'absent' });
+  assert.equal(saved.status, 200); assert.deepEqual(saved.data.values, { active: true });
+  assert.equal(f.panel.publishers.found[0].plugin!.key, 'bundled:shared', 'services refreshed after the save');
+  assert.equal((await f.request('PUT', url, { values: { active: false }, revision: 'absent' })).data.details.stale, 'config');
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { active: true });
+  assert.equal((await f.request('PUT', url, { values: { active: false }, revision: saved.data.revision, extra: 1 })).status, 400);
+});
+
+test('a plugin change that needs a restart refuses settings saves with the Restart reason', async t => {
+  const f = await fixture(t), revision = (await f.plugins())[0].sourceRevision;
+  assert.equal((await f.request('PUT', 'api/plugins/manage/workspace%3Ashared/origin', { origin: 'workspace', revision })).status, 200);
+  const services = path.join(f.workspace, 'plugins/shared/services.mjs');
+  await fs.writeFile(services, `${await fs.readFile(services, 'utf8')}\n// edited while the panel runs\n`);
+  const refused = await f.request('PUT', 'api/plugins/manage/workspace%3Ashared', { settings: {} });
+  assert.equal(refused.status, 409);
+  assert.deepEqual(refused.data.details, { reason: 'restart-required', restart: true });
+  assert.match(refused.data.error, /Restart the panel/);
 });

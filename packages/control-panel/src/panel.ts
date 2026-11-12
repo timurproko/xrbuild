@@ -22,12 +22,14 @@ import { cleanWorkingCache, reviewWorkingCache } from './cache-maintenance.ts';
 import { requireProjectOutput, projectPreviewRoute } from './project-build.ts';
 import { assertEditableProject, assertUserRoot, assertWritablePath } from './project-access.ts';
 import { projectStateKey, readProjectRunSettings, saveProjectRunSettings, validateRunOverrides, withRunSettings } from './project-run-settings.ts';
+import { launchBlocker, type LaunchState } from './launch-blockers.ts';
 import { log } from './env.ts';
 import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHost, clearProviderCache } from './host-build.ts';
 import { DesktopSetup } from './desktop-setup.ts';
 import { panelFreshness, panelSourceRoots, type PanelFreshness } from './panel-freshness.ts';
 import { HostRunner, type RunMode } from './host-runner.ts';
-import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings } from './plugin-manager.ts';
+import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings, type PluginSetting, type SettingValue } from './plugin-manager.ts';
+import { PluginConfigConflict, PluginConfigInvalid, readUserPluginConfigState, writeUserPluginConfig, type UserPluginConfigState } from './plugin-config.ts';
 import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, discoverProjectCatalog, containedPath, type PluginCatalog } from './extension-catalog.ts';
 import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
 import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
@@ -35,7 +37,7 @@ import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatu
 import { PackageList } from './packages.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
 import { archiveProject, readLayout, removeEmptyProjectSection, unarchiveProject } from './layout.ts';
-import { discoverPublishers, normalizeReleaseCatalog, publicationUrl, publisherFor, releaseIdProblem, type PublicationCard, type PublicationIdentity, type Publisher, type PublisherDiscovery, type PublisherReleaseCatalog, type PublisherStatus } from './publishers.ts';
+import { discoverPublishers, normalizeReleaseCatalog, publicationUrl, publisherFor, publisherUnconfigured, releaseIdProblem, type PublicationCard, type PublicationIdentity, type Publisher, type PublisherDiscovery, type PublisherReleaseCatalog, type PublisherStatus } from './publishers.ts';
 import { compareVersions as compareReleaseVersions, highestVersion, publicationCard, publicationIdentity, receiptMatchesOutput, suggestedVersion, verifyBuildReceipt, versionProblem, writeBuildReceipt, type PublicationConfig } from './publication.ts';
 import { importPluginSample, ProjectRefused } from './workspace.ts';
 import { projectIconSource } from './project-icons.ts';
@@ -210,6 +212,8 @@ export class Panel {
   private servicesRevision: string | null = null;
   private servicesPending = false;
   private servicesProblem: string | null = null;
+  /** Set when executed plugin module code changed: only a panel restart clears servicesPending. */
+  private servicesNeedRestart = false;
   private servicesSync: Promise<void> | null = null;
   private servicesCheckedMs = 0;
   private readonly executedPluginCode = new Map<string, string>();
@@ -281,9 +285,16 @@ export class Panel {
 
   private async withPluginServices<T>(work: () => Promise<T>): Promise<T> {
     await this.synchronizePluginServices(true);
-    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending) throw new HttpError(409, this.servicesProblem ?? 'Plugin services are changing; retry after the update');
+    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending) throw this.servicesRefusal('Plugin services are changing; retry after the update');
     this.pluginConsumers++;
     try { return await work(); } finally { this.pluginConsumers--; }
+  }
+
+  /** A plugin-services refusal; when only a restart helps it carries the same reason the UI turns into a Restart action. */
+  private servicesRefusal(fallback = 'Plugin services are unavailable'): HttpError {
+    return this.servicesPending && this.servicesNeedRestart
+      ? new HttpError(409, launchBlocker({ servicesPending: true, servicesNeedRestart: true })!.message, { reason: 'restart-required', restart: true })
+      : new HttpError(409, this.servicesProblem ?? fallback);
   }
 
   private async withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
@@ -346,6 +357,7 @@ export class Panel {
         const restartRequired = this.codeChanged(snapshot);
         await this.onPluginSourcesChanged(restartRequired);
         if (snapshot.problem || restartRequired) {
+          this.servicesNeedRestart = !snapshot.problem && restartRequired;
           this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel before using plugins';
           this.packagers = { found: [], problems: [this.servicesProblem] }; this.publishers = { found: [], problems: [this.servicesProblem] };
           this.publicationStatuses.clear(); clearProviderCache(); return;
@@ -371,8 +383,8 @@ export class Panel {
     if (expected && before !== expected) throw new HttpError(409, 'Plugin declarations changed; reload and select the source again');
     const snapshot = await pluginDiscoverySnapshot(this.repo, this.workspace);
     if (snapshot.problem || this.codeChanged(snapshot)) {
-      this.servicesPending = true; this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel before using plugins';
-      throw new HttpError(409, this.servicesProblem);
+      this.servicesPending = true; this.servicesNeedRestart = !snapshot.problem; this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel before using plugins';
+      throw this.servicesRefusal();
     }
     this.rememberPluginCode(snapshot);
     const [packagers, publishers] = await Promise.all([discoverPackagers(this.repo, this.workspace), discoverPublishers(this.workspace, this.repo)]);
@@ -380,13 +392,13 @@ export class Panel {
     const after = await pluginDiscoverySnapshot(this.repo, this.workspace);
     if (after.revision !== snapshot.revision) { this.servicesPending = true; this.servicesProblem = 'Plugin sources changed during refresh; restart or set up services again'; throw new HttpError(409, this.servicesProblem); }
     this.packagers = packagers; this.publishers = publishers;
-    this.servicesRevision = after.revision; this.servicesPending = false; this.servicesProblem = null; this.servicesCheckedMs = Date.now();
+    this.servicesRevision = after.revision; this.servicesPending = false; this.servicesNeedRestart = false; this.servicesProblem = null; this.servicesCheckedMs = Date.now();
     await this.onPluginSourcesChanged();
   }
 
   private startJob(...args: Parameters<JobRunner['start']>): Job {
     if (this.restartPending) throw new HttpError(409, 'The panel is restarting');
-    if (this.servicesPending) throw new HttpError(409, this.servicesProblem ?? 'Plugin discovery is awaiting refresh');
+    if (this.servicesPending) throw this.servicesRefusal('Plugin discovery is awaiting refresh');
     if (this.changingPlugins) throw new HttpError(409, 'Plugin services are changing; retry after the update');
     try {
       const [kind, projectId, , work] = args;
@@ -625,7 +637,7 @@ export class Panel {
     if (p.origin === 'bundled') {
       const m = this.manifestOf(p);
       if (!m.scripts?.build) throw new HttpError(409, `${p.id} has no build script`);
-      if (this.preparingNativeRun || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
+      this.refuseIfLaunchBlocked(p, { preparingNativeRun: this.preparingNativeRun, preparingPreview: this.preparingPreview });
       this.refuseIfBusy(p.id);
       return this.startJob('web-build', p.id, `rebuild: ${m.name}`, async ctx => {
         const effective = await this.prepareProject(p);
@@ -727,6 +739,12 @@ export class Panel {
         problem, providers: presentedProviders,
         packager: isPackager, built: !native.length || native.every((p) => p.built && !p.outdated),
         settings: meta.settings, values: effectiveSettings(meta.settings ?? [], pluginPreferenceValues(plugin, prefs)),
+        ...await this.pluginConfigView(plugin),
+        // Per enabling setting: whether the publisher it turns on still needs configuration.
+        destinationStatus: Object.fromEntries(this.publishers.found.filter(item => item.plugin?.key === plugin.key && item.setting).map(item => {
+          const problem = publisherUnconfigured(item.publisher);
+          return [item.setting, problem ? { configured: false, problem } : { configured: true }];
+        })),
         panelSettings: meta.panelSettings, panelValues: effectiveSettings(meta.panelSettings ?? [], pluginPreferenceValues(plugin, prefs, 'panelSettings')),
         samples: (meta.panelSamples ?? []).map(({ id: sampleId, name: sampleName, kind, description }) => ({ id: sampleId, name: sampleName, kind, description })),
         dir: `${plugin.origin === 'bundled' ? 'embedded/' : ''}plugins/${plugin.id}`,
@@ -803,9 +821,9 @@ export class Panel {
   private async acceptExplicitServiceLoad(): Promise<void> {
     const snapshot = await pluginDiscoverySnapshot(this.repo, this.workspace);
     if (snapshot.problem || this.codeChanged(snapshot)) {
-      this.servicesPending = true; this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel'; return;
+      this.servicesPending = true; this.servicesNeedRestart = !snapshot.problem; this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel'; return;
     }
-    this.servicesRevision = snapshot.revision; this.servicesPending = false; this.servicesProblem = null;
+    this.servicesRevision = snapshot.revision; this.servicesPending = false; this.servicesNeedRestart = false; this.servicesProblem = null;
     this.rememberPluginCode(snapshot); this.servicesCheckedMs = Date.now();
   }
 
@@ -841,12 +859,19 @@ export class Panel {
     return found.publisher.validate(publicationIdentity(publication)).map((error) => ({ field: `publication.${error.field}`, message: error.message }));
   }
 
-  async publicationOf(m: Manifest | null): Promise<{ available: boolean; publishers: Array<{ name: string; label?: string; origin: string; routePrefix?: string; releases: boolean }>; status: PublisherStatus | null; releases: PublicationReleases | null; reason: string | null }> {
-    const list = this.publishers.found.map(({ publisher }) => ({ name: publisher.name, label: publisher.label, origin: publisher.origin, routePrefix: publisher.routePrefix, releases: !!publisher.releases }));
+  async publicationOf(m: Manifest | null): Promise<{ available: boolean; publishers: Array<{ name: string; label?: string; origin: string; routePrefix?: string; releases: boolean; configured: boolean; configurationProblem?: string; settingsModule?: string }>; status: PublisherStatus | null; releases: PublicationReleases | null; reason: string | null }> {
+    const list = this.publishers.found.map(({ publisher, plugin }) => {
+      const unconfigured = publisherUnconfigured(publisher);
+      // An unconfigured destination's origin is a placeholder: never present it as a destination.
+      return { name: publisher.name, label: publisher.label, origin: unconfigured ? '' : publisher.origin, routePrefix: publisher.routePrefix, releases: !!publisher.releases && !unconfigured,
+        configured: !unconfigured, ...(unconfigured ? { configurationProblem: unconfigured } : {}), ...(plugin ? { settingsModule: plugin.key } : {}) };
+    });
     if (m && !publicationTargetOf(m)) return { available: false, publishers: list, status: null, releases: null, reason: 'publication is available only for app projects' };
     if (!m?.publication) return { available: false, publishers: list, status: null, releases: null, reason: 'publication is not configured' };
     const found = publisherFor(this.publishers, m.publication.publisher);
     if (!found) return { available: false, publishers: list, status: null, releases: null, reason: `publisher "${m.publication.publisher}" is unavailable` };
+    const unconfigured = publisherUnconfigured(found.publisher);
+    if (unconfigured) return { available: false, publishers: list, status: null, releases: null, reason: unconfigured };
     const identity = publicationIdentity(m.publication);
     const status = await this.cachedStatus(found.publisher, identity);
     return { available: true, publishers: list, status, releases: this.releasesOf(found.publisher, identity, m.publication), reason: null };
@@ -868,7 +893,8 @@ export class Panel {
   async publicationDestinationsOf(m: Manifest | null): Promise<Record<string, { slug: string; status: PublisherStatus }>> {
     if (!m?.publication || !publicationTargetOf(m)) return {};
     const publication = m.publication;
-    return Object.fromEntries(await Promise.all(this.publishers.found.map(async ({ publisher }) => {
+    // An unconfigured destination has no real route to check or show.
+    return Object.fromEntries(await Promise.all(this.publishers.found.filter(({ publisher }) => !publisherUnconfigured(publisher)).map(async ({ publisher }) => {
       const slug = publication.routes?.[publisher.name] ?? publication.slug;
       return [publisher.name, { slug, status: await this.cachedStatus(publisher, { id: publication.id, slug }) }];
     })));
@@ -947,6 +973,8 @@ export class Panel {
   }
   private async preparePublish(p: Project, body: { version?: unknown; expectedRevision?: unknown }): Promise<Job> {
     const { m, publisher, identity, snapshot } = this.publicationTarget(p);
+    const unconfigured = publisherUnconfigured(publisher);
+    if (unconfigured) throw new HttpError(409, unconfigured, { configuration: true });
     const errors = publisher.validate(identity);
     if (errors.length) throw new HttpError(400, errors.map((e) => e.message).join('; '), { errors });
     const entry = this.entryOf(p, m);
@@ -1230,7 +1258,7 @@ export class Panel {
   }
 
   async saveRunSettings(p: Project, overrides: unknown, revision: unknown) {
-    if (this.changingPlugins || this.maintainingCache || this.preparingNativeRun || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
+    this.refuseIfLaunchBlocked(p, { changingPlugins: this.changingPlugins, maintainingCache: this.maintainingCache, preparingNativeRun: this.preparingNativeRun, preparingPreview: this.preparingPreview });
     this.refuseIfBusy(p.id);
     this.settingsWrites.add(p.id);
     try {
@@ -1269,7 +1297,7 @@ export class Panel {
   async preview(p: Project, mode: RunMode, flat: boolean | undefined, token: string, options: { fullscreen?: boolean; monitor?: number; clientPort: number }): Promise<string> {
     if (mode === 'dev' && !p.manifest?.scripts?.dev) throw new HttpError(409, `${p.id} has no dev script`);
     await this.synchronizePluginServices(true);
-    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending || this.preparingPreview || this.preparingNativeRun || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
+    this.refuseIfLaunchBlocked(p, this.launchState(p));
     if (p.readOnly) this.refuseIfBusy(p.id);
     this.preparingPreview = true;
     try {
@@ -1341,8 +1369,7 @@ export class Panel {
     if (mode === 'dev' && !p.manifest?.scripts?.dev) throw new HttpError(409, `${p.id} has no dev script`);
     await this.synchronizePluginServices(true);
     const desktopSetupBusy = await this.desktopSetup.isBusy();
-    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
-    if (this.preparingNativeRun) throw new HttpError(409, 'another native launch is being prepared');
+    this.refuseIfLaunchBlocked(p, this.launchState(p));
     if (this.jobs.active().some(job => job.kind === 'host-rebuild')) throw new HttpError(409, 'wait for the native rebuild to finish before running');
     if (this.jobs.active().some(job => job.kind === 'desktop-setup') || desktopSetupBusy) throw new HttpError(409, 'wait for desktop setup to finish before running');
     if (p.readOnly) this.refuseIfBusy(p.id);
@@ -1395,6 +1422,30 @@ export class Panel {
       const output = last?.projectId === p.id && last.endedMs >= attemptedAt ? last.lines : null;
       throw new HttpError(400, (e as Error).message, output?.length ? output.join('\n') : undefined);
     }
+  }
+
+  private launchState(p: Project): LaunchState {
+    return {
+      restartPending: this.restartPending, changingPlugins: this.changingPlugins, maintainingCache: this.maintainingCache,
+      servicesPending: this.servicesPending, servicesProblem: this.servicesProblem, servicesNeedRestart: this.servicesNeedRestart,
+      preparingNativeRun: this.preparingNativeRun, preparingPreview: this.preparingPreview, settingsSaving: this.settingsWrites.has(p.id),
+    };
+  }
+
+  /** Refuses with the first specific cause; `details.reason` lets the UI offer Restart when only a restart helps. */
+  private refuseIfLaunchBlocked(p: Project, state: LaunchState): void {
+    const blocked = launchBlocker({ ...state, settingsSaving: this.settingsWrites.has(p.id) });
+    if (blocked) throw new HttpError(409, blocked.message, { reason: blocked.reason, restart: blocked.restart });
+  }
+
+  /** Declared user configuration for Settings; a malformed file is reported, never replaced. */
+  private async pluginConfigView(plugin: { id: string; meta: { config?: PluginSetting[] } }): Promise<{ config?: PluginSetting[]; configValues?: Record<string, SettingValue>; configRevision?: string; configProblem?: string }> {
+    const fields = plugin.meta.config;
+    if (!fields?.length) return {};
+    try {
+      const state = await readUserPluginConfigState(this.workspace, plugin.id, fields);
+      return { config: fields, configValues: state.values, configRevision: state.revision };
+    } catch (error) { return { config: fields, configProblem: (error as Error).message }; }
   }
 
   /** Settings and organization cannot overlap launch preparation or that project's active work. */
@@ -1586,6 +1637,28 @@ export class Panel {
           panel: effectiveSettings(meta.panelSettings ?? [], pluginPreferenceValues(plugin, prefs, 'panelSettings')),
         });
         return true;
+      }
+      if (api.length === 4 && api[3] === 'config' && (method === 'GET' || method === 'PUT')) {
+        const fields = plugin.meta.config;
+        if (!fields?.length) throw new HttpError(404, `plugin ${id} declares no configuration`);
+        if (method === 'GET') { sendJson(res, 200, await readUserPluginConfigState(this.workspace, plugin.id, fields)); return true; }
+        const body = await readJson<{ values?: unknown; revision?: unknown }>(req);
+        if (Object.keys(body).some(key => !['values', 'revision'].includes(key))) throw new HttpError(400, 'Only values and revision are accepted');
+        let saved: UserPluginConfigState | undefined;
+        try {
+          // Publishers and packagers read this file when services load: change it only while they are idle.
+          await this.withPluginMutation(async () => {
+            saved = await writeUserPluginConfig(this.workspace, plugin.id, fields, body.values, body.revision);
+            await this.refreshPluginServices();
+          });
+        } catch (error) {
+          if (error instanceof PluginConfigInvalid) throw new HttpError(400, error.message, { fields: [{ field: error.field, message: error.message }] });
+          if (error instanceof PluginConfigConflict) throw new HttpError(409, error.message, { stale: 'config' });
+          if (saved && error instanceof HttpError) throw new HttpError(409, `Configuration saved, but plugin services could not refresh: ${error.message}`, { saved: true });
+          throw error;
+        }
+        this.hub.send('plugins-changed', { id }); this.hub.send('projects-changed', {});
+        sendJson(res, 200, saved); return true;
       }
       if (method === 'POST' && api.length === 4 && api[3] === 'open-folder') {
         const dir = plugin.sourceRoot;

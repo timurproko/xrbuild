@@ -582,7 +582,7 @@ test('settings updates refuse active project work and launch preparation, then r
   gate = new Promise<void>(resolve => { release = resolve; });
   f.panel.runner.startPreview = async () => { starting(); await gate; };
   const launch = f.panel.preview(p, 'built', undefined, 'fixture-token', { clientPort: 1 }); await ready;
-  await assert.rejects(f.panel.saveRunSettings(p, {}, settings.revision), /launch preparation/);
+  await assert.rejects(f.panel.saveRunSettings(p, {}, settings.revision), /browser preview is being prepared/);
   release(); await launch;
   Object.defineProperty(f.panel.runner, 'projectId', { configurable: true, value: p.id });
   await assert.rejects(f.panel.saveRunSettings(p, {}, settings.revision), /running/);

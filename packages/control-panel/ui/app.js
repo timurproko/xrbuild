@@ -142,7 +142,14 @@ async function confirmable(path, body = {}) {
 function report(e) {
   console.error(e);
   const rawMessage = String(e?.message ?? e ?? 'Unknown error');
-  const rawDetails = e?.data?.details && !e.data.details.needsConfirm ? e.data.details : '';
+  const blocked = e?.data?.details && typeof e.data.details.reason === 'string' ? e.data.details : null;
+  if (blocked?.restart) {
+    // Waiting cannot clear this cause; offer the one action that does.
+    void ask({ title: 'Restart needed', message: rawMessage, ok: 'Restart', cancel: 'Close' })
+      .then((yes) => { if (yes) return restartPanel(); }).catch(report);
+    return;
+  }
+  const rawDetails = !blocked && e?.data?.details && !e.data.details.needsConfirm ? e.data.details : '';
   const data = typeof rawDetails === 'string' ? rawDetails : rawDetails ? JSON.stringify(rawDetails, null, 2) : '';
   const details = [rawMessage, data].filter((value, index, values) => value && values.indexOf(value) === index).join('\n\n');
   ask({ title: 'Something went wrong', message: 'XR Build could not complete this action. Review or copy the details below.', details, closeOnly: true });
@@ -1279,6 +1286,8 @@ function identityFields(p, titleOnly = false) {
  * platform, or a standalone app) the package action is omitted.
  */
 function publisherDisplayName(item) {
+  // An unconfigured destination has only a placeholder origin: name it and say what is missing instead.
+  if (item.configured === false) return `${item.label ?? item.name} (not configured)`;
   try { return new URL(item.origin).hostname || item.label || item.name; }
   catch { return item.label ?? item.name; }
 }
@@ -1546,7 +1555,9 @@ function publicationFields(p) {
   // A status problem is not a failed action: the publisher says why the app is not live, or cannot be asked.
   const failureTitle = status?.state === 'unavailable' ? 'Publisher unavailable' : 'Publication failed';
   const failure = status?.error && status.state !== 'failed' ? `<div class="publication-result error"><div class="publication-result-head"><span>${failureTitle}</span></div><span class="field-error">${esc(status.error)}</span></div>` : '';
-  const result = failure;
+  const selectedItem = info.publishers.find((item) => item.name === selectedPublisher);
+  const configure = selectedItem?.configured === false ? `<div class="publication-result error"><div class="publication-result-head"><span>Publisher not configured</span></div><span class="field-error">${esc(selectedItem.configurationProblem ?? info.reason ?? 'This publisher is not configured')}</span>${selectedItem.settingsModule ? `<a class="publication-configure" href="/settings/?module=${encodeURIComponent(selectedItem.settingsModule)}">Configure…</a>` : ''}</div>` : '';
+  const result = configure || failure;
   const selectedSlug = published && typeof status?.deployedSlug === 'string'
     ? status.deployedSlug
     : typeof pub.slug === 'string' ? pub.slug : defaultProjectSlug(p.id);
@@ -3114,7 +3125,7 @@ function renderManagedPlugins() {
   const servicesProblem = state.pluginServices?.problem;
   const description = p.description || (p.packager ? `Builds packages for ${managerName(p)} apps.` : 'No description provided.');
   const version = p.version || p.providers.find((v) => v.version)?.version;
-  const hasSettings = (p.settings?.length ?? 0) > 0 || (p.panelSettings?.length ?? 0) > 0;
+  const hasSettings = (p.settings?.length ?? 0) > 0 || (p.panelSettings?.length ?? 0) > 0 || (p.config?.length ?? 0) > 0;
   el.innerHTML = `${servicesProblem ? `<p class="errors" role="alert">${esc(servicesProblem)}</p>` : ''}<div class="card hero plugin-hero-card">
     <div class="hero-top plugin-hero-top"><div class="plugin-hero-icon">${managerIcon(p)}</div>
       <div class="plugin-identity"><h3>${esc(managerName(p))}</h3></div>
@@ -3189,7 +3200,9 @@ function pluginSettingsForm(plugin, scope, fields, values, divided = false) {
   const controls = fields.map((field) => {
     const heading = field.section && field.section !== section ? `<h2 class="settings-section ${hasContent ? 'xrb-section-divider' : ''}">${esc(field.section)}</h2>` : '';
     if (field.section) section = field.section;
-    const control = pluginSettingControl(field, values[field.key], !plugin.enabled);
+    const control = scope === 'settings' && configGroupFields(plugin, field.key).length
+      ? destinationRow(plugin, field, values[field.key] === true, hasContent)
+      : pluginSettingControl(field, values[field.key], !plugin.enabled);
     hasContent = true;
     return `${heading}${control}`;
   }).join('');
@@ -3202,7 +3215,124 @@ function pluginSettingsCard(plugin) {
     ${plugin.settingsDescription ? `<p class="xrb-supporting-text">${esc(plugin.settingsDescription)}</p>` : ''}
     ${pluginSettingsForm(plugin, 'settings', runtime, plugin.values ?? {})}
     ${pluginSettingsForm(plugin, 'panelSettings', panel, plugin.panelValues ?? {}, runtime.length > 0)}
+    ${generalConfigBlock(plugin)}
+    ${configForms(plugin)}
   </div>`;
+}
+
+/** Unsaved typed configuration values per plugin; they survive switch changes and redraws until saved. */
+const pluginConfigDrafts = new Map();
+
+/** Fields whose controlling runtime setting is on; a field without `shownWhen` is always shown. */
+function shownConfigFields(plugin) {
+  return (plugin.config ?? []).filter((setting) => !setting.shownWhen || plugin.values?.[setting.shownWhen] === true);
+}
+/** Configuration fields a runtime setting controls (`''` for fields shown regardless of settings). */
+function configGroupFields(plugin, group) {
+  return (plugin.config ?? []).filter((setting) => (setting.shownWhen ?? '') === group);
+}
+const configFormId = (plugin, group) => `plugin-config-${plugin.id}-${group || 'general'}`;
+const configDisabled = (plugin) => !plugin.enabled || !!plugin.configProblem;
+
+function configControl(plugin, setting, formId) {
+  const draft = pluginConfigDrafts.get(plugin.id) ?? {};
+  const value = Object.hasOwn(draft, setting.key) ? draft[setting.key] : plugin.configValues?.[setting.key] ?? setting.default;
+  // Fields belong to their group's own form, so typing never triggers the instant runtime-settings save.
+  return pluginSettingControl(setting, value, configDisabled(plugin)).replaceAll(' name="', ` form="${esc(formId)}" name="`);
+}
+
+/** Fields, folded Advanced fields, problems, the inline error and Save for one configuration group. */
+function configBody(plugin, group, problem = '') {
+  const fields = configGroupFields(plugin, group), formId = configFormId(plugin, group);
+  const basic = fields.filter((setting) => !setting.advanced), advanced = fields.filter((setting) => setting.advanced);
+  const controls = (list) => `<div class="settings-card-fields">${list.map((setting) => configControl(plugin, setting, formId)).join('')}</div>`;
+  return `${plugin.configProblem ? `<p class="errors" role="alert">${esc(plugin.configProblem)}</p>` : ''}
+    ${basic.length ? controls(basic) : ''}
+    ${advanced.length ? `<details class="xrb-disclosure settings-config-advanced"><summary>Advanced</summary>${controls(advanced)}</details>` : ''}
+    ${problem ? `<p class="xrb-help settings-destination-problem">${esc(problem)}</p>` : ''}
+    <p class="errors" id="${esc(formId)}-error" data-config-error role="alert" hidden></p>
+    <div class="settings-config-actions"><button type="submit" form="${esc(formId)}" class="action-button" ${configDisabled(plugin) ? 'disabled' : ''}>Save</button></div>`;
+}
+
+/** One destination as a settings section: heading, description, status and switch; its configuration opens below while on. */
+function destinationRow(plugin, setting, on, divided = false) {
+  const status = on ? plugin.destinationStatus?.[setting.key] : null;
+  const chip = !status ? '' : status.configured
+    ? '<span class="state ok">ready</span>'
+    : `<span class="state busy" title="${esc(status.problem)}">not configured</span>`;
+  return `<section class="settings-destination ${divided ? 'xrb-section-divider' : ''}" data-destination="${esc(setting.key)}">
+    <div class="settings-destination-head">
+      <div class="settings-destination-title"><h2 class="settings-section">${esc(setting.label)}</h2>${setting.hint ? `<span class="xrb-help">${esc(setting.hint)}</span>` : ''}</div>
+      ${chip}
+      <label class="xrb-switch"><input type="checkbox" role="switch" name="${esc(setting.key)}" aria-label="${esc(setting.label)}" ${on ? 'checked' : ''} ${plugin.enabled ? '' : 'disabled'}></label>
+    </div>
+    ${on ? `<div class="settings-destination-body">${configBody(plugin, setting.key, status && !status.configured ? status.problem : '')}</div>` : ''}
+  </section>`;
+}
+
+/** Configuration not tied to a runtime setting. */
+function generalConfigBlock(plugin) {
+  return configGroupFields(plugin, '').length ? `<div class="settings-config">${configBody(plugin, '')}</div>` : '';
+}
+
+/** One empty form per shown group; its fields and Save button attach through the `form` attribute. */
+function configForms(plugin) {
+  const groups = [...new Set(shownConfigFields(plugin).map((setting) => setting.shownWhen ?? ''))];
+  return groups.map((group) => `<form id="${esc(configFormId(plugin, group))}" data-plugin-config="${esc(plugin.id)}" data-config-group="${esc(group)}" hidden></form>`).join('');
+}
+
+function configControlValue(setting, input) {
+  return setting.type === 'boolean' ? input.checked : setting.type === 'number' ? (input.value.trim() === '' ? input.value : Number(input.value)) : input.value.trim();
+}
+
+function bindPluginConfig(form) {
+  form.addEventListener('submit', action((event) => { event.preventDefault(); return savePluginConfig(form); }));
+}
+
+/** Remembers typed configuration so a switch change or redraw keeps it. */
+function rememberConfigDraft(event) {
+  const owner = event.target.form?.dataset?.pluginConfig;
+  const plugin = owner && state.managedPlugins.find((candidate) => candidate.id === owner);
+  const setting = plugin?.config?.find((item) => item.key === event.target.name);
+  if (setting) pluginConfigDrafts.set(plugin.id, { ...pluginConfigDrafts.get(plugin.id), [setting.key]: configControlValue(setting, event.target) });
+}
+
+async function savePluginConfig(form) {
+  const plugin = state.managedPlugins.find((candidate) => candidate.id === form.dataset.pluginConfig);
+  const group = form.dataset.configGroup ?? '';
+  const fields = plugin ? shownConfigFields(plugin).filter((setting) => (setting.shownWhen ?? '') === group) : [];
+  if (!fields.length) return;
+  // Hidden destinations keep their stored values: only shown fields are sent.
+  const values = Object.fromEntries(fields.map((setting) => [setting.key, configControlValue(setting, form.elements.namedItem(setting.key))]));
+  const status = document.getElementById(`plugin-settings-status-${plugin.id}`);
+  const showError = (formId, message) => { const box = document.getElementById(`${formId}-error`); if (box) { box.textContent = message; box.hidden = !message; } };
+  const controls = () => [...form.elements];
+  showError(form.id, '');
+  controls().forEach((control) => { control.disabled = true; });
+  try {
+    const saved = await api('PUT', `/api/plugins/manage/${encodeURIComponent(plugin.id)}/config`, { values, revision: plugin.configRevision });
+    plugin.configValues = saved.values; plugin.configRevision = saved.revision;
+    pluginConfigDrafts.delete(plugin.id);
+    if (status) { status.hidden = false; status.className = 'state ok'; status.textContent = 'saved'; }
+    // Services refreshed: the destination's ready/not configured chip may have changed.
+    await loadManagedPlugins().catch(() => {});
+    renderGlobalSettings();
+    await loadProjects().catch(() => {});
+  } catch (error) {
+    if (!(error instanceof ApiError) || ![400, 409].includes(error.status)) throw error;
+    if (error.status === 409 && (error.data?.details?.stale === 'config' || error.data?.details?.saved)) {
+      // Show what is on disk now; never overwrite another editor's change.
+      const current = await api('GET', `/api/plugins/manage/${encodeURIComponent(plugin.id)}/config`);
+      plugin.configValues = current.values; plugin.configRevision = current.revision;
+      pluginConfigDrafts.delete(plugin.id);
+      renderGlobalSettings();
+      showError(form.id, error.message);
+      return;
+    }
+    showError(form.id, error.message);
+  } finally {
+    if (form.isConnected) controls().forEach((control) => { control.disabled = configDisabled(plugin); });
+  }
 }
 
 function settingsOwnerSection(id, title, card, status = '') {
@@ -3215,10 +3345,12 @@ function pluginSettingsSection(plugin) {
 }
 
 function renderGlobalSettings() {
-  const plugins = state.managedPlugins.filter((plugin) => !plugin.problem && ((plugin.settings?.length ?? 0) || (plugin.panelSettings?.length ?? 0)));
+  const plugins = state.managedPlugins.filter((plugin) => !plugin.problem && ((plugin.settings?.length ?? 0) || (plugin.panelSettings?.length ?? 0) || (plugin.config?.length ?? 0)));
   const defaultFilter = plugins.length ? 'all' : 'control-panel';
   const filters = new Set([...(plugins.length ? ['all'] : []), 'control-panel', ...plugins.map((plugin) => plugin.id)]);
-  const requestedFilter = new URLSearchParams(location.search).get('module');
+  const requestedModule = new URLSearchParams(location.search).get('module');
+  // Links from other pages may name a plugin by its origin-qualified key; select that plugin's own entry.
+  const requestedFilter = requestedModule && !filters.has(requestedModule) ? plugins.find((plugin) => plugin.key === requestedModule)?.id ?? requestedModule : requestedModule;
   // Route intent wins: the plain menu destination always opens All, not the last sidebar module.
   state.settingsFilter = requestedFilter && filters.has(requestedFilter) ? requestedFilter : defaultFilter;
   if (requestedFilter && !filters.has(requestedFilter)) {
@@ -3259,7 +3391,13 @@ function renderGlobalSettings() {
     try { state.appSettings = await api('PUT', '/api/app-settings', { cursor }); }
     finally { renderGlobalSettings(); }
   }));
-  $('#settings-content').querySelectorAll('[data-plugin-settings]').forEach((form) => form.addEventListener('change', action(() => savePluginSettings(form))));
+  $('#settings-content').querySelectorAll('[data-plugin-settings]').forEach((form) => form.addEventListener('change', action((event) => {
+    if (event.target.form !== form) return; // a configuration field inside a destination row
+    return savePluginSettings(form);
+  })));
+  $('#settings-content').addEventListener('input', rememberConfigDraft);
+  $('#settings-content').addEventListener('change', rememberConfigDraft);
+  $('#settings-content').querySelectorAll('[data-plugin-config]').forEach(bindPluginConfig);
 }
 
 async function savePluginSettings(form) {
@@ -3271,7 +3409,7 @@ async function savePluginSettings(form) {
     const input = form.elements.namedItem(setting.key);
     return [setting.key, setting.type === 'boolean' ? input.checked : setting.type === 'number' ? Number(input.value) : input.value];
   }));
-  form.querySelectorAll('input,button').forEach((control) => { control.disabled = true; });
+  form.querySelectorAll('input[name],button').forEach((control) => { if (!control.form || control.form === form) control.disabled = true; });
   const status = document.getElementById(`plugin-settings-status-${plugin.id}`), timerKey = plugin.id;
   clearTimeout(pluginSettingsTimers.get(timerKey));
   status.hidden = true;
@@ -3286,7 +3424,15 @@ async function savePluginSettings(form) {
     await api('PUT', `/api/plugins/manage/${encodeURIComponent(plugin.id)}`, { [scope]: values });
     clearTimeout(pluginSettingsTimers.get(timerKey));
     if (scope === 'panelSettings') plugin.panelValues = values;
-    else plugin.values = values;
+    else {
+      plugin.values = values;
+      if (plugin.config?.some((setting) => setting.shownWhen)) {
+        // A destination opened or closed: reload its ready/not configured state and redraw (drafts are kept).
+        await loadManagedPlugins().catch(() => {});
+        renderGlobalSettings();
+        return;
+      }
+    }
     status.hidden = false;
     status.className = 'state ok';
     status.textContent = 'saved';
@@ -3302,7 +3448,7 @@ async function savePluginSettings(form) {
     status.textContent = 'save failed';
     throw error;
   } finally {
-    form.querySelectorAll('input,button').forEach((control) => { control.disabled = false; });
+    form.querySelectorAll('input[name],button').forEach((control) => { if (!control.form || control.form === form) control.disabled = false; });
   }
 }
 
