@@ -11,9 +11,9 @@ persistent publication history and temporary working files belong to the selecte
 The core reads `config/plugins/publisher-webxr/config.json` in the selected user workspace, preserving existing bytes
 and unknown fields. If absent, discovery uses validated defaults in memory without creating the user folder or file;
 explicit configuration initialization can create missing defaults without replacement. Product defaults contain no production site, repository, deployment identity or key.
-`localhost` defaults enabled; `production` defaults disabled. Enabling a destination setting is not sufficient to
-configure production: `productionConfigured` and complete validated destination fields are required explicitly.
-Fill them in under Settings > WebXR > Production ("Use this destination" sets `productionConfigured`). Until then the production service reports `configured: false`
+`localhost` defaults enabled; `production` defaults disabled. Turning Production on is not sufficient: the user must
+also save its HTTPS origin, output repository and output branch under Settings > WebXR > Production (the initial branch
+is optional and defaults to the output branch). Until then the production service reports `configured: false`
 with what is missing, so the panel lists it as "Production (not configured)" instead of a placeholder origin.
 
 Local HTTPS uses `localhost-cert.pem` and `localhost-key.pem` in that user config directory. They must already exist;

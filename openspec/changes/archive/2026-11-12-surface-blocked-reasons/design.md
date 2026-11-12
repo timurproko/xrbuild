@@ -42,8 +42,9 @@ Manager ownership of enablement, or automatically restarting the panel.
   configured)`, disables Publish, and links to `Settings?module=<plugin-id>`. Publishers without the field behave as
   today. The WebXR publisher sets it instead of relying on a placeholder origin (the origin stays a syntactically
   valid reserved value only to satisfy the existing contract shape).
-- **Explicit enablement stays.** Filling configuration does not enable production by itself: the existing
-  `productionConfigured` flag remains a field the user turns on, now visible next to the other fields.
+- **Switch plus saved fields is explicit.** Production is configured once its switch is on and its required fields
+  (origin, repository, output branch) are saved; the initial branch defaults to the output branch. A separate
+  confirmation checkbox only duplicated the switch, so it was removed; malformed values report what to fix.
 
 ## Risks / Trade-offs
 

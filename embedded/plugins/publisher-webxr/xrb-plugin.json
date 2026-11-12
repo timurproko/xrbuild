@@ -14,9 +14,8 @@
     { "key": "localPort", "label": "Loopback HTTPS port", "type": "number", "default": 8443, "min": 1024, "max": 65535, "step": 1, "shownWhen": "localhost" },
     { "key": "productionOrigin", "label": "HTTPS origin", "type": "text", "default": "", "shownWhen": "production", "hint": "The site address, for example https://apps.example." },
     { "key": "productionRepository", "label": "Output repository", "type": "text", "default": "", "shownWhen": "production", "hint": "owner/name of the repository the site is served from." },
-    { "key": "productionBranch", "label": "Output branch", "type": "text", "default": "", "shownWhen": "production", "hint": "The branch the hosting serves." },
-    { "key": "productionSeedBranch", "label": "Initial branch", "type": "text", "default": "", "shownWhen": "production", "hint": "Creates the output branch from this one when missing; otherwise the same as the output branch." },
-    { "key": "productionConfigured", "label": "Use this destination", "type": "boolean", "default": false, "shownWhen": "production", "hint": "Turn on once the fields above are filled in. Publishing uses your Git sign-in; no credentials are stored here." },
+    { "key": "productionBranch", "label": "Output branch", "type": "text", "default": "", "shownWhen": "production", "hint": "The branch the hosting serves. Publishing uses your Git sign-in; no credentials are stored here." },
+    { "key": "productionSeedBranch", "label": "Initial branch", "type": "text", "default": "", "shownWhen": "production", "advanced": true, "hint": "Optional: creates a missing output branch from this one. Empty uses the output branch." },
     { "key": "productionRoutePrefix", "label": "App route prefix", "type": "text", "default": "apps", "shownWhen": "production", "advanced": true, "hint": "Apps are published at <origin>/<prefix>/<slug>/." },
     { "key": "productionSitePath", "label": "Site subtree", "type": "text", "default": "/", "shownWhen": "production", "advanced": true, "hint": "/ or the one repository folder the hosting serves." },
     { "key": "productionTimeoutMs", "label": "Verification timeout (ms)", "type": "number", "default": 300000, "min": 1, "max": 600000, "step": 1, "shownWhen": "production", "advanced": true, "hint": "How long to wait for a published app to become reachable." }

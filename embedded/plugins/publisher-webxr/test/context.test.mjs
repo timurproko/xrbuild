@@ -102,3 +102,12 @@ test('a source change during explicit publication leaves failed state and blocks
   const p=await local(f.context,{startServer:async()=>{await fs.writeFile(path.join(f.app,'index.html'),'changed-during-publication');return{close(cb){cb();}};}});t.after(()=>p.close());
   await assert.rejects(p.publish({app:f.app,publication:pub()}),/changed|corrupt/);assert.equal(JSON.parse(await fs.readFile(path.join(f.state,'transaction.json'))).state,'failed');assert.equal((await p.status(pub())).state,'unavailable');await assert.rejects(p.publish({app:f.app,publication:pub()}),/incomplete or failed/);
 });
+
+test('saving the required destination fields configures production; missing or malformed values say what to fix',async t=>{const f=await fixture(t);
+  const make=values=>production({...f.context,config:{...f.context.config,values:{...defaults,...values}}});
+  const empty=await make({});assert.equal(empty.configured,false);assert.match(empty.configurationProblem,/fill in the HTTPS origin, output repository and output branch, then save/);
+  const partial=await make({productionOrigin:'https://apps.example',productionRepository:'owner/site'});assert.equal(partial.configured,false);assert.match(partial.configurationProblem,/fill in the output branch, then save/);
+  const malformed=await make({productionOrigin:'https://apps.example',productionRepository:'not a repository',productionBranch:'pages'});assert.equal(malformed.configured,false);assert.match(malformed.configurationProblem,/owner\/name/);
+  const ready=await make({productionOrigin:' https://apps.example ',productionRepository:'owner/site',productionBranch:'pages'});assert.notEqual(ready.configured,false);assert.equal(ready.origin,'https://apps.example');
+  assert.equal(meta.config.some(field=>field.key==='productionConfigured'),false,'no separate "use this destination" checkbox');
+  assert.equal(meta.config.find(field=>field.key==='productionSeedBranch').advanced,true,'the initial branch is optional');});
