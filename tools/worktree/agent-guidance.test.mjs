@@ -27,3 +27,25 @@ test('shared guidance retains task attachment through implementation and review 
   assert.deepEqual(JSON.parse(await read('.a1/worktree.json')), { cleanup: ['node', 'tools/worktree/worktree.mjs', 'sweep', '--apply'] });
   assert.match(agents, /Never clean up a worktree containing private workspace data/);
 });
+
+const progress = 'Plan `tasks.md` as one task group per PR `## Implementation` outcome, in the same order. Then work one outcome at a time: write its code and tests, tick its `tasks.md` tasks, commit and push, and tick that outcome in the PR body (`[ ]` to `[x]`, nothing else) before starting the next one. A tick means the code and tests are written: CI, broad test runs, and manual validation never delay it, and a later defect is fixed in a new commit. Never save ticks for handoff.';
+
+test('every agent runtime reads one shared rule for ticking outcomes while implementing', async () => {
+  const read = async file => (await fs.readFile(path.join(root, file), 'utf8')).replaceAll('\r\n', '\n');
+  const [agents, instructions] = await Promise.all(['AGENTS.md', '.claude/CLAUDE.md'].map(read));
+  assert.ok(agents.includes(`## Implementation progress\n\n${progress}\n`));
+  assert.match(instructions, /^@\.\.\/AGENTS\.md$/m);
+  assert.ok(!instructions.includes(progress));
+  assert.match(instructions, /`Implementation progress` paragraph of `AGENTS\.md`/);
+});
+
+test('the delivery skill and PR template follow the shared progress rule without restating it', async () => {
+  const read = file => fs.readFile(path.join(root, file), 'utf8');
+  const [delivery, template] = await Promise.all(['.claude/skills/change-delivery/SKILL.md', '.github/pull_request_template.md'].map(read));
+  assert.match(delivery, /`Implementation progress` paragraph of `AGENTS[.]md`/);
+  assert.match(delivery, /one task group per PR Implementation outcome, in the same order/);
+  assert.match(delivery, /No task is about ticking PR\s+outcomes or handing off/);
+  assert.ok(!delivery.includes('Never save ticks for handoff'));
+  assert.doesNotMatch(delivery, /only when its verify clause holds/);
+  assert.match(template, /`Implementation progress` in AGENTS[.]md/);
+});

@@ -5,8 +5,8 @@
 ## Implementation
 
 <!-- For a linked implementation draft: use at least two outcome-sized checkboxes; two to five is recommended
-     for readability, not enforced as a maximum. Check each after its code, tests and related detailed tasks are
-     complete; do not mark the PR ready yourself. -->
+     for readability, not enforced as a maximum. Tick each as `Implementation progress` in AGENTS.md says: after its
+     own push and before starting the next one; do not mark the PR ready yourself. -->
 
 - [ ]
 
