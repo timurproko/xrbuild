@@ -3636,6 +3636,7 @@ await loadNavigation().catch(report);
 // Reveal only the fully populated layout, after its web fonts settle, so refresh has no card or text jumps.
 await Promise.race([document.fonts.ready, new Promise((resolve) => setTimeout(resolve, 1500))]);
 document.body.classList.remove('workspace-pending');
+document.body.removeAttribute('data-xrb-scrollbar');
 connect();
 // A maintenance link is an explicit one-shot action; shared tool navigation normally handles it in place.
 if(navigationRequest.maintenance){

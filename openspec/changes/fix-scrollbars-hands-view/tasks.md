@@ -1,7 +1,7 @@
 ## 1. Remove stale/inert shared scrollbar overlays
 
-- [ ] 1.1 Correct shared region visibility and document/region lifecycle handling without changing native overflow; verify CSS-hidden/pending views, closed output, removed regions and retired documents have no visible or interactive stale bars.
-- [ ] 1.2 Add Jobs/tab/navigation browser regressions and preserve needed list/output scrolling; verify Jobs/Log and Apps/Plugins/Settings switches, live updates/filter/clear, short lists and expanded output target real scrollable regions using wheel/track/thumb/keyboard input with no gutters and native forced-colors fallback.
+- [x] 1.1 Correct shared region visibility and document/region lifecycle handling without changing native overflow; verify CSS-hidden/pending views, closed output, removed regions and retired documents have no visible or interactive stale bars.
+- [x] 1.2 Add Jobs/tab/navigation browser regressions and preserve needed list/output scrolling; verify Jobs/Log and Apps/Plugins/Settings switches, live updates/filter/clear, short lists and expanded output target real scrollable regions using wheel/track/thumb/keyboard input with no gutters and native forced-colors fallback.
 
 ## 2. Align Apps and Design scrollbar behavior
 

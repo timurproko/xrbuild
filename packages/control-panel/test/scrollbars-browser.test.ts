@@ -17,6 +17,18 @@ test('shared scrollbars overlay document, nested, dropdown and modal content wit
     await send('Emulation.setDeviceMetricsOverride',{width:1000,height:800,deviceScaleFactor:1,mobile:false});
     await navigate(`http://127.0.0.1:${port}/`,`document.documentElement.classList.contains('xrb-overlay-scrollbars')&&!!document.querySelector('.xrb-scrollbar-y[aria-controls=nested]')`);
     await send('Page.bringToFront');
+    await evaluate(`document.querySelector('main').style.visibility='hidden'`);
+    await wait(evaluate,`!document.querySelector('.xrb-scrollbar[aria-controls=nested]')`);
+    await evaluate(`document.querySelector('main').style.visibility=''`);
+    await wait(evaluate,`!!document.querySelector('.xrb-scrollbar-y[aria-controls=nested]')`);
+    await evaluate(`document.body.setAttribute('data-xrb-scrollbar','none')`);
+    await wait(evaluate,`!document.querySelector('.xrb-scrollbar')`);
+    await evaluate(`document.body.removeAttribute('data-xrb-scrollbar')`);
+    await wait(evaluate,`!!document.querySelector('.xrb-scrollbar-y[aria-controls=nested]')`);
+    await evaluate(`window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}))`);
+    assert.equal(await evaluate(`!!document.querySelector('.xrb-scrollbar-layer')`),false,'departed documents have no overlay or capture target');
+    await evaluate(`window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}))`);
+    await wait(evaluate,`!!document.querySelector('.xrb-scrollbar-y[aria-controls=nested]:not([hidden])')`);
     const geometry=()=>evaluate(`(()=>{const e=document.querySelector('#nested'),s=getComputedStyle(e);return {page:innerWidth-document.documentElement.clientWidth,nested:e.offsetWidth-e.clientWidth-parseFloat(s.borderLeftWidth)-parseFloat(s.borderRightWidth)};})()`);
     assert.deepEqual(await geometry(),{page:0,nested:0});
     const thumb=await evaluate(`(()=>{const r=document.querySelector('.xrb-scrollbar-y[aria-controls=nested] .xrb-scrollbar-thumb').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
