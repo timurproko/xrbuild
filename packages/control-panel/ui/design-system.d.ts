@@ -13,6 +13,7 @@ export function emojiFavicon(emoji:string,filter?:string):string;
 export function setPageIdentity(product:string,emoji:string,filter?:string):void;
 export function updateRebuildChip(chip:HTMLElement,status:{exists:boolean;outdated:boolean},readyLabel?:string):boolean;
 export function updateRestartChip(chip:HTMLElement,outdated:boolean):boolean;
+export function renderField(labelHtml:string,controlHtml:string,options?:{hint?:string;error?:string|null}):string;
 export function sentenceText(value:unknown):string;
 export function enhanceHelpText(root?:Document|Element):()=>void;
 export function setFieldError(input:HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement,message?:string):HTMLElement|null;

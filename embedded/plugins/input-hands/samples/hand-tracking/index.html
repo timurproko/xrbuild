@@ -25,8 +25,8 @@
   <noscript>Hand tracking requires JavaScript.</noscript>
   <header class="top xrb-app-bar">
     <h1 class="xrb-brand">XR Build <button id="panel-menu-button" class="panel-menu-button xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Hands</button></h1>
-    <span id="host-chip" class="chip rebuild" hidden>rebuild available</span>
-    <span id="panel-chip" class="chip warn" hidden>restart available</span>
+    <span id="panel-chip" class="chip warn" data-maintenance="restart" hidden>restart available</span>
+    <span id="host-chip" class="chip rebuild" data-maintenance="rebuild" hidden>rebuild available</span>
     <span class="spacer"></span><div id="stats-dock" class="stats-dock" hidden><span id="csv-header-recording" class="stat bad" hidden><span class="csv-rec-dot" aria-hidden="true"></span><strong>Rec</strong><time id="csv-header-recording-time">00:00</time></span><span id="render-stat" class="stat good" title="Viewport render rate, not camera rate"></span><span id="tracking-stat" class="stat good" title="Measured hand-tracking results per second; Fusion shows the average camera rate"></span></div><button id="capture-header-stop" class="danger-solid action-button" hidden>Stop capture</button>
   </header>
   <div id="panel-menu" class="menu panel-menu" role="menu" aria-label="XR Build navigation" hidden></div>

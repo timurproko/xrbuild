@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { readAppSettings, saveAppSettings } from '../src/app-settings.ts';
+import { renderField } from '../ui/design-system.js';
+
+test('shared field component owns hint/error slots and escapes their copy', () => {
+  const field = renderField('<span>Cursor</span>', '<input name="cursor">', { hint: '<script>hint & copy</script>', error: 'invalid "choice"' });
+  assert.equal(field, '<label class="xrb-field-label"><span>Cursor</span><input name="cursor"><span class="xrb-help">&lt;script&gt;hint &amp; copy&lt;/script&gt;</span><span class="xrb-help field-error">invalid &quot;choice&quot;</span></label>');
+  assert.equal(renderField('Theme', '<select></select>'), '<label class="xrb-field-label">Theme<select></select></label>');
+});
 
 test('Apps cursor preference persists, rejects invalid writes and preserves unrelated fields', async () => {
   const artifacts = path.resolve(import.meta.dirname, '../../../.artifacts');

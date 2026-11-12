@@ -18,6 +18,9 @@ test('diagnostic workspace uses shared layout rhythm without redefining spacing'
 });
 
 test('diagnostic maintenance actions consume the shared status helpers', () => {
+  const header = html.match(/<header\b[^>]*>[\s\S]*?<\/header>/)![0];
+  assert.deepEqual([...header.matchAll(/data-maintenance="([^"]+)"/g)].map(match => match[1]), ['restart', 'rebuild']);
+  assert.ok(header.indexOf('id="panel-chip"') < header.indexOf('id="host-chip"'));
   assert.match(status, /updateRebuildChip\(host,status\.host\)/);
   assert.match(status, /updateRestartChip\(panel,status\.panel\.outdated\)/);
   assert.doesNotMatch(status, /chip \$\{!status\.host\.exists\?'bad':'warn'\}/);

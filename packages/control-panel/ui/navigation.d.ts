@@ -1,6 +1,8 @@
 export interface ExternalToolLink {id:string;label:string;url:string;passPanelOrigin?:boolean}
 export interface ManagedToolLink {id:string;label:string;route:string}
 export type ToolLink=ExternalToolLink|ManagedToolLink;
+export const MAINTENANCE_ACTIONS:readonly Readonly<{id:'restart'|'rebuild';label:string}>[];
+export function orderMaintenanceLabels(header:HTMLElement,order?:readonly string[]):void;
 export interface NavigationItem {id?:string;label?:string;href?:string;separator?:boolean;current:boolean}
 export function panelOrigin(value:unknown):string|null;
 export function panelDestination(origin:string,page:'projects'|'plugins'|'settings'|'design-system'|'rebuild'|'restart'):string;
