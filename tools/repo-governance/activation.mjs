@@ -1,5 +1,8 @@
 // Read-only capability inspection and explicitly scoped activation. Never handles secret values.
 const requiredPermission = 'Repository administration permission is required';
+const PRIVILEGED_ROLES = ['promotion', 'probe', 'refresh'];
+// One decision owns both write planning and readback; CI-only must never enable privileged automation.
+const workflowEnabled = (role, mode) => role === 'ci' || mode === 'activate' && PRIVILEGED_ROLES.includes(role);
 const query = (api, path) => {
   try { return { state: 'available', value: api('GET', path) }; }
   catch (error) {
@@ -49,7 +52,7 @@ export function inspectActivation({ api, repo, config, mode = 'activate' }) {
   if (actions.state !== 'available') pending.push(problem('actions-unverified', 'Repository Actions permissions could not be verified'));
   if (workflows.state !== 'available') pending.push(problem('workflows-unverified', 'Workflow inventory could not be verified'));
   const inventory = workflows.value?.workflows ?? [], declared = automation?.workflows ?? {};
-  if (!Object.values(declared).includes('ci') || Object.values(declared).some(role => !['ci', 'promotion', 'probe', 'disabled'].includes(role))) pending.push(problem('workflow-policy-missing', 'Reviewed workflow roles must be explicitly declared'));
+  if (!Object.values(declared).includes('ci') || Object.values(declared).some(role => !['ci', ...PRIVILEGED_ROLES, 'disabled'].includes(role))) pending.push(problem('workflow-policy-missing', 'Reviewed workflow roles must be explicitly declared'));
   if (workflows.state === 'available' && (workflows.value.total_count > 100 || inventory.some(workflow => workflow.state === 'active' && !Object.hasOwn(declared, workflow.path)))) pending.push(problem('unreviewed-workflows', 'An active workflow is outside the reviewed allowlist; no workflow is disabled implicitly'));
   const trusted = [];
   for (const [file, role] of Object.entries(declared)) {
@@ -84,7 +87,7 @@ export function runActivation(command, { api, repo, config, confirmed, out, plan
   if (mode !== 'protect') {
     // Disable only explicitly reviewed workflows BEFORE enabling repository Actions.
     for (const [file, role] of Object.entries(config.automation.workflows)) {
-      const enabled = role === 'ci' || mode === 'activate' && ['promotion', 'probe'].includes(role);
+      const enabled = workflowEnabled(role, mode);
       const workflow = inspected.state.workflows.find(item => item.path === file);
       if (!workflow) {
         if (enabled) { out('blocked: a required workflow has not been registered on main'); return 2; }
@@ -102,7 +105,7 @@ export function runActivation(command, { api, repo, config, confirmed, out, plan
     const after = inspectActivation({ api, repo, config, mode });
     const drift = checkSettings(config, readSettings(api, repo));
     const workflowDrift = mode !== 'protect' && Object.entries(config.automation.workflows).some(([file, role]) => {
-      const enabled = role === 'ci' || mode === 'activate' && ['promotion', 'probe'].includes(role);
+      const enabled = workflowEnabled(role, mode);
       const workflow = after.state.workflows.find(item => item.path === file);
       return enabled ? workflow?.state !== 'active' : workflow?.state === 'active';
     });

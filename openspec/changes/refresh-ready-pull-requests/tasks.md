@@ -9,5 +9,5 @@
 
 ## 3. Governance and operator guidance
 
-- [ ] 3.1 Declare the refresh role and trusted files and extend activation validation, planning and readback; verify governance fixtures enable refresh only in full activation, disable it in CI-only activation, preserve protect-only workflow state, reject unknown roles/missing trusted policy and retain existing required checks and no-bypass rules.
-- [ ] 3.2 Document eligibility, conflict/race handling, event-producing credentials, rollout prerequisites and stalled-run limits; verify focused automation/governance tests, the name guard and strict change validation pass and guidance does not claim unobserved live refresh or authorize merges/hosting applies.
+- [x] 3.1 Declare the refresh role and trusted files and extend activation validation, planning and readback; verify governance fixtures enable refresh only in full activation, disable it in CI-only activation, preserve protect-only workflow state, reject unknown roles/missing trusted policy and retain existing required checks and no-bypass rules.
+- [x] 3.2 Document eligibility, conflict/race handling, event-producing credentials, rollout prerequisites and stalled-run limits; verify focused automation/governance tests, the name guard and strict change validation pass and guidance does not claim unobserved live refresh or authorize merges/hosting applies.
