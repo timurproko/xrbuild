@@ -1273,9 +1273,9 @@ export class Panel {
     if (p.readOnly) this.refuseIfBusy(p.id);
     this.preparingPreview = true;
     try {
-      await this.prepareCatalogIcons(p);
       return await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
         const effective = mode === 'dev' || p.workingRoot ? await this.prepareProject(p) : p;
+        await this.prepareCatalogIcons(effective);
         return this.preparePreview(effective, mode, flat ?? effective.runDefaults?.flat, token, options);
       }, release => this.holdProjectRun(release));
     }
@@ -1348,13 +1348,13 @@ export class Panel {
     if (p.readOnly) this.refuseIfBusy(p.id);
     this.preparingNativeRun = true;
     try {
-      await this.prepareCatalogIcons(p);
       await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
         if (mode === 'built' && p.readOnly && p.manifest?.host?.args?.length) {
           p = await this.prepareProject(p);
           const done = await this.jobs.wait(this.webBuild(p));
           if (done.state === 'failed') throw new HttpError(409, done.error ?? 'Project build failed');
         } else if (mode === 'dev' || p.workingRoot) p = await this.prepareProject(p);
+        await this.prepareCatalogIcons(p);
         const settings = p.readOnly ? await readProjectRunSettings(this.repo, this.workspace, p) : null;
         const screen = desktop || settings ? { fullscreen: desktop?.fullscreen ?? settings?.values.fullscreen ?? false, monitor: desktop?.monitor ?? settings?.values.monitor ?? 0 } : undefined;
         await this.runNative(settings ? withRunSettings(p, settings) : p, mode, flat ?? settings?.values.flat ?? p.runDefaults?.flat ?? false, cameraView ?? settings?.values.cameraView ?? p.runDefaults?.cameraView ?? false, screen);

@@ -22,6 +22,24 @@ test('cold template icon detection is read-only and does not misclassify authore
   assert.ok(validateManifest({ ...p.manifest, catalog: 'yes' }, root).some(e => e.field === 'catalog'));
 });
 
+test('catalog capability is read from refreshed project state before a development preview opens', async t => {
+  const root = await fs.mkdtemp(path.join(REPO, '.artifacts/refreshed-catalog-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const panel = new Panel(REPO, root, new EventHub());
+  panel.panelUrl = 'http://127.0.0.1:5191/';
+  const dir = path.join(root, 'projects/core/demo');
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, 'xrb-project.json'), '{}');
+  const p = { id: 'demo', dir, section: 'core', errors: [], manifestMtimeMs: 0,
+    manifest: { name: 'Demo', kind: 'app' as const, target: 'webxr' as const, scripts: { dev: 'dev' } } };
+  panel.prepareProject = async () => ({ ...p, manifest: { ...p.manifest, catalog: true } });
+  (panel as any).ensureDevInstalled = async () => {};
+  let prepared = false;
+  panel.prepareCatalogIcons = async effective => { assert.equal(effective.manifest?.catalog, true); prepared = true; };
+  panel.runner.startPreview = async () => { assert.equal(prepared, true); };
+  await panel.preview(p, 'dev', false, 'fixture-preview-token', { clientPort: 0 });
+});
+
 test('only explicit catalog launch prepares active authored icons; ordinary launches and discovery do not', async t => {
   const root = await fs.mkdtemp(path.join(REPO, '.artifacts/catalog-preparation-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
