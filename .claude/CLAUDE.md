@@ -108,7 +108,7 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   agree; prerequisite builds precede tests/project builds. Root test and public Node CI invoke this lane explicitly.
   Approved embedded modules include consolidated Publisher, the authored hand implementation/diagnostic with its
   plugin-owned nested sample package (`plugins/*/samples/*`), and the explicitly configured headset packager.
-  Eight public project groups preserve core/unsorted/archive sections with desktop/no-input defaults and no deployment identity.
+  Seven public project groups preserve core/archive sections with desktop/no-input defaults and no deployment identity. The duplicate embedded starter is retired; New project still uses the canonical core template with its 3D icon/theme and required notices. Existing user projects and retained embedded working state are never deleted by product retirement.
   Headset tools/signing are explicitly provisioned user state, never global discovery/downloads or bundled binary payloads.
   Hand source/build descriptors use public reviewed dependencies, user-owned state and synthetic default validation;
   unverified model/device payloads remain external and never start/download implicitly. Publisher local/production

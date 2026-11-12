@@ -5,8 +5,9 @@ import type { Project } from './projects.ts';
 
 /** Read-only source hints; discovery never prepares output or installs packages. */
 export async function projectIconSource(core: string, p: Project) {
-  const source = await projectFile(p, 'src/icon.js').then(file => fs.readFile(file, 'utf8'), () => null);
-  if (source === null) return { authored: false, generated: false };
+  const read = (relative: string) => projectFile(p, relative).then(file => fs.readFile(file, 'utf8'), () => null);
+  const source = await read('src/icon.js');
+  if (source === null) return { authored: await read('src/icon.ts') !== null, generated: false };
   const normalize = (text: string) => text.replaceAll('\r\n', '\n');
   const same = async (relative: string, actual?: string) => {
     try {

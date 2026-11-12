@@ -53,7 +53,7 @@ const omitted = (name: string, hasBuild: boolean) => {
 /** Deliberately allowlist portable fields: future/unknown identity or machine fields must not leak into a new app. */
 export function portableProjectManifest(source: Manifest, name: string): Manifest {
   const manifest: Manifest = { name, kind: source.kind };
-  for (const key of ['description', 'entry', 'scripts', 'icon', 'iconColor', 'iconShape', 'target'] as const)
+  for (const key of ['description', 'entry', 'scripts', 'icon', 'iconColor', 'iconShape', 'target', 'catalog'] as const)
     if (source[key] !== undefined) Object.assign(manifest, { [key]: structuredClone(source[key]) });
   return manifest;
 }

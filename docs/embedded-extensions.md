@@ -5,7 +5,7 @@
 The initial implementation supplies a shared plugin resolver, qualified project catalog records, origin-aware plugin
 management, publisher/packager factories, managed-tool loading and selected native binary paths. It also standardizes
 `projects/unsorted/` without migration logic. Approved source includes consolidated Publisher, the authored hand
-implementation/diagnostic, the explicitly configured headset packager and eight public project groups, including archives.
+implementation/diagnostic, the explicitly configured headset packager and seven public project groups, including archives.
 No private configuration, deployment identity, credentials, model weights, prebuilt device payloads or Git history accompany those snapshots.
 
 The panel lists embedded and ordinary projects in one normal Develop / Publish / Build workflow. Both support runs,
@@ -186,17 +186,21 @@ legacy run-choice import, Copy and generation-pinned assets without native devic
 
 ### Embedded package setup, build and test
 
-The core-owned `embedded/` registers **seven packages**: WebXR publisher under `plugins/publisher-webxr` (local/production destinations,
+The core-owned `embedded/` registers **six packages**: WebXR publisher under `plugins/publisher-webxr` (local/production destinations,
 no external npm dependencies), the hand diagnostic under `plugins/input-hands/samples/hand-tracking`, the headset packager under
-`plugins/platform-headset/packager`, and four buildable projects. Four additional archived static diagnostics need no package installation.
+`plugins/platform-headset/packager`, and three buildable projects. Four additional archived static diagnostics need no package installation.
 Publisher production defaults disabled/unconfigured; local TLS setup is explicit. The hand plugin owns authored native
 provider/diagnostic/tests/build descriptors; default use is synthetic and requires no private source, cameras or model.
 The exact public vision runtime and marker source have reviewed pins/notices; explicit preparation places assets in core
 `third_party`. User configuration/calibration/preferences, recordings and caches remain in the selected workspace.
 Unverified device SDK inputs and model weights are optional external contracts, not shipped/fetched payloads.
-Eight standalone project groups retain core/unsorted/archive membership, portable desktop/no-input defaults and no live deployment/device identity.
-The launcher has no ambient production catalog or sibling/private workspace traversal; external catalog selection is explicit. The starter source
-is checked against the canonical template and retains the font license. The hand diagnostic remains a plugin-owned sample.
+Seven standalone project groups retain core/archive membership, portable desktop/no-input defaults and no live deployment/device identity.
+The launcher has no ambient production catalog or sibling/private workspace traversal; external catalog selection is explicit. The duplicate embedded
+starter is retired; New project still uses the canonical core template with its 3D icon/theme and font license. Existing user projects and retained
+working state are not removed by this product update. The hand diagnostic remains a plugin-owned sample. Local catalog apps explicitly declare the neutral `catalog` capability: launch preparation readies
+active authored icon output (including typed icon sources) through managed jobs before opening the catalog, while generated template geometry needs no
+build or first destination-app run. Cards consume checked model URLs, retain image fallback and discard late loads after disposal. Ordinary settings edits
+use serialized field intent with classified stale-revision retries and inline unresolved-conflict controls rather than the routine reload modal.
 The headset factory discovers safely as unconfigured. Its source/provenance/version/license/file-inventory descriptor, native tools and existing
 signing identities are explicitly user-provisioned. No global package lookup, PATH mutation, automatic tool/key installation or hosting exists.
 Explicit builds use exclusive user-owned generations/locks/receipts, offline build options, bounded loopback icon serving, password redaction,

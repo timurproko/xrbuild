@@ -2,8 +2,8 @@
 
 This is the core-owned, public embedded workspace. It includes **consolidated WebXR publisher** with local/explicit production
 destinations, **the authored hand implementation/diagnostic**, including its plugin-owned sample and tests, and
-**the explicitly configured headset launcher packager**. Eight standalone project groups preserve their core/unsorted/archive placement:
-launcher, UI showcase, starter, cube example and four archived capability-aware diagnostics. Portable defaults select desktop/no input;
+**the explicitly configured headset launcher packager**. Seven standalone project groups preserve their core/archive placement:
+launcher, UI showcase, cube example and four archived capability-aware diagnostics. Portable defaults select desktop/no input;
 there are no live publication, package/signing or machine identities. Optional hardware remains an explicit choice. The independent user/private workspace
 is never enrolled here. Each additional source promotion requires an audited file/dependency
 allowlist and explicit export approval; a buildable package is not evidence of redistribution permission.
@@ -14,7 +14,7 @@ and provides an isolated writable `XRB_TEST_ROOT`. Sources/defaults stay here; u
 caches and persistent publication history stay in the selected workspace. See [WebXR](plugins/publisher-webxr/README.md)
 and [Hands](plugins/input-hands/README.md), plus [Headset](plugins/platform-headset/README.md).
 The packager requires an explicitly inventoried user-provisioned toolchain and existing signing identity; it performs no hosting/global-tool discovery or implicit installation.
-Project dependencies pin three/Vite and lucide; the starter retains the upstream font notice and a canonical template-source check.
+Project dependencies pin three/Vite and lucide. New user projects still use the canonical core template, including its 3D icon and upstream font notice; the duplicate embedded starter is no longer shipped.
 Hand default validation is synthetic/mocked; model weights and
 private prebuilt/device payloads are not transferred or downloaded implicitly.
 The returned working tree is retained diagnostic/development state, not a distributable or an activated runtime.

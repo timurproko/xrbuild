@@ -33,6 +33,11 @@ Local Launcher cards SHALL show generated default 3D icons without requiring the
 
 Local catalog entries SHALL expose checked authored-model readiness and stable output identity. Source-consuming preparation SHALL occur at explicit managed action boundaries, not catalog discovery GETs or destination app launch. Ready cards SHALL NOT trigger silent full builds through unpinned icon imports. Loading SHALL be deduplicated and visible when necessary; transient failures SHALL allow bounded recovery and retain usable fallback icons.
 
+#### Scenario: Explicit catalog capability
+
+- **WHEN** an app declares the neutral boolean `catalog` capability and is launched explicitly from the panel
+- **THEN** required active library authored-icon preparation runs before opening it, while ordinary apps and catalog discovery GETs do not install or prepare other projects
+
 #### Scenario: Cold authored icon
 
 - **WHEN** an explicit local Launcher/preview action needs an authored icon whose required output is not prepared

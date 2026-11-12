@@ -19,6 +19,8 @@ test('cold template icon detection is read-only and does not misclassify authore
   await assert.rejects(fs.access(path.join(root, 'dist')));
   await fs.appendFile(path.join(root, 'src/icon.js'), '\n// authored change');
   assert.deepEqual(await projectIconSource(REPO, p), { authored: true, generated: false });
+  await fs.rename(path.join(root, 'src/icon.js'), path.join(root, 'src/icon.ts'));
+  assert.deepEqual(await projectIconSource(REPO, p), { authored: true, generated: false }, 'typed authored icons are prepared too');
   assert.ok(validateManifest({ ...p.manifest, catalog: 'yes' }, root).some(e => e.field === 'catalog'));
 });
 

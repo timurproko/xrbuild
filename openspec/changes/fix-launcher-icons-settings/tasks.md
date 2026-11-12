@@ -12,6 +12,6 @@
 
 ## 3. Remove embedded Test while keeping template creation
 
-- [ ] 3.1 Remove only the tracked embedded starter subtree and its exact lock importer, updating current catalog assertions, documentation and counts; verify discovery contains the remaining seven shipped projects and the frozen managed workspace resolves six packages without the retired starter.
-- [ ] 3.2 Preserve canonical template/icon/theme/license inputs and add direct New project coverage independent of any embedded starter; verify a fresh named app is generated normally, has its immediate 3D default icon, and existing ordinary projects plus user-owned retained embedded state are untouched.
-- [ ] 3.3 Perform focused final checks; verify strict TypeScript, name guard, strict OpenSpec change validation and the applicable managed embedded/catalog/template suites pass, reporting native visual acceptance separately if not observed.
+- [x] 3.1 Remove only the tracked embedded starter subtree and its exact lock importer, updating current catalog assertions, documentation and counts; verify discovery contains the remaining seven shipped projects and the frozen managed workspace resolves six packages without the retired starter.
+- [x] 3.2 Preserve canonical template/icon/theme/license inputs and add direct New project coverage independent of any embedded starter; verify a fresh named app is generated normally, has its immediate 3D default icon, and existing ordinary projects plus user-owned retained embedded state are untouched.
+- [x] 3.3 Perform focused final checks; verify strict TypeScript, name guard, strict OpenSpec change validation and the applicable managed embedded/catalog/template suites pass, reporting native visual acceptance separately if not observed.
