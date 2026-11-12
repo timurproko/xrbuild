@@ -1,6 +1,7 @@
 {
   "name": "Launcher",
   "kind": "app",
+  "catalog": true,
   "entry": "dist",
   "scripts": {
     "build": "build",

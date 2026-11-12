@@ -38,6 +38,7 @@ import { effectiveProjectOutput, effectiveOutputRoot } from './embedded-project-
 import { discoverProjectCatalog } from './extension-catalog.ts';
 import { bundledBuildPlan, resolveProjectOutput, requireProjectOutput, projectPreviewRoute, projectBuildRoot } from './project-build.ts';
 import { copyBundledProject, projectFile, projectPath } from './embedded-projects.ts';
+import { projectIconSource } from './project-icons.ts';
 import { assertEditableProject, assertUserRoot, assertWritablePath } from './project-access.ts';
 import { projectRunSettingsFile, readProjectRunSettings, withRunSettings } from './project-run-settings.ts';
 import { publicationCard } from './publication.ts';
@@ -215,6 +216,7 @@ export async function describeProject(projects: string, p: Project, panel: Panel
   // The build's 3D icon (icon.js next to index.html), which a launcher imports from the preview route.
   const iconModelMs = entry ? output ? await mtime(path.join(entry, 'icon.js')) : await assetTime(`${relativeEntry}/icon.js`) : null;
   const iconMs = m?.icon ? await assetTime(m.icon) : null;
+  const iconSource = await projectIconSource(panel.repo, p);
   const packageId = m ? identityOf(m)?.id : undefined;
   const zipMs = typeof packageId === 'string' ? await mtime(path.join(panel.workspace, 'builds', `${packageId}.zip`)) : null;
   const publicationPromise = panel.publicationOf(m);
@@ -249,6 +251,8 @@ export async function describeProject(projects: string, p: Project, panel: Panel
     entryExists: webBuildMs !== null,
     webBuildMs,
     icon: {
+      generated: iconSource.generated,
+      authored: iconSource.authored,
       custom: iconMs !== null, mtimeMs: iconMs, changedSincePackage: iconMs !== null && zipMs !== null && iconMs > zipMs,
       model: iconModelMs !== null ? `${projectPreviewRoute(p, output ?? undefined)}icon.js` : null,
     },

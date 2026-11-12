@@ -1,8 +1,8 @@
 ## 1. Launcher icons ready without first launching destination apps
 
-- [ ] 1.1 Correct live/disposed card handling and default icon presentation before scene attachment; verify cold and built template apps show compact 3D icons in their selected colour without first launching or building the app, and late completions release resources after disposal.
-- [ ] 1.2 Carry checked authored-model readiness/URLs into the catalog and prepare required cold inputs at an explicit managed action boundary, with deduplicated loads, image fallback and bounded recovery; verify ready cards do not trigger hidden unpinned full builds, authored models remain preferred, and failures recover without running destination apps or mutating installed sources.
-- [ ] 1.3 Add focused catalog/render-lifecycle and real-browser regressions; verify cold/warm/generated/authored/generation-pinned icons, metadata refresh and no-first-launch behavior pass alongside the isolated managed Launcher build/tests.
+- [x] 1.1 Correct live/disposed card handling and default icon presentation before scene attachment; verify cold and built template apps show compact 3D icons in their selected colour without first launching or building the app, and late completions release resources after disposal.
+- [x] 1.2 Carry checked authored-model readiness/URLs into the catalog and prepare required cold inputs at an explicit managed action boundary, with deduplicated loads, image fallback and bounded recovery; verify ready cards do not trigger hidden unpinned full builds, authored models remain preferred, and failures recover without running destination apps or mutating installed sources.
+- [x] 1.3 Add focused catalog/render-lifecycle and real-browser regressions; verify cold/warm/generated/authored/generation-pinned icons, metadata refresh and no-first-launch behavior pass alongside the isolated managed Launcher build/tests.
 
 ## 2. Non-blocking ordinary settings persistence
 

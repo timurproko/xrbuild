@@ -180,6 +180,17 @@ test('generated template icon modules retain compact sphere classification and a
   assert.equal(apps.find(app => app.title === 'Authored').defaultSphere, false, 'authored artwork keeps its own sizing and colours');
 });
 
+test('local icons use checked model URLs and canonical generated hints independently of built output', async () => {
+  const apps = await loadWorkspaceCatalog({ baseHref: 'http://localhost:5181/', fetchImpl: async () => Response.json({ projects: [
+    { id: 'fresh', manifest: { kind: 'app', name: 'Fresh', scripts: { build: 'build' } }, icon: { generated: true, authored: true, model: null } },
+    { id: 'warm', manifest: { kind: 'app', name: 'Warm', scripts: { build: 'build' } }, icon: { generated: true, authored: true, model: '/preview/warm/icon.js' } },
+    { id: 'art', manifest: { kind: 'app', name: 'Art', scripts: { build: 'build' } }, icon: { authored: true, generated: false, model: '/preview/art/@r-pinned/icon.js' } },
+  ] }) });
+  assert.equal(apps[0].defaultIcon3d, true); assert.equal(apps[1].defaultIcon3d, true);
+  assert.equal(apps[2].defaultSphere, false); assert.equal(apps[2].defaultIcon3d, false);
+  assert.equal(apps[2].iconModelUrl, 'http://localhost:5181/preview/art/@r-pinned/icon.js');
+});
+
 test('panel preview does not wait for publisher checks', async () => {
   let calls = 0;
   const fetchImpl = async () => {
