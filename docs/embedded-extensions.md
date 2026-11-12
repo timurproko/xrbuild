@@ -102,7 +102,8 @@ validated defaults in memory without creating the workspace or configuration. Ex
 can publish missing defaults: a complete temporary file is published with an exclusive hard link, and an existing
 file is never replaced. Filesystems without hard-link support fail rather than falling back to partial writes.
 Malformed JSON, invalid known values, unsafe links and oversized files are diagnosed without echoing their contents.
-Unknown fields remain on disk; new missing fields use defaults in memory without rewriting the user's file. Settings shows declared fields in a Configuration section; only that explicit Save rewrites the file, requiring the
+Unknown fields remain on disk; new missing fields use defaults in memory without rewriting the user's file. Settings shows declared fields as tabs, one per `section`; a field with `shownWhen: <boolean runtime setting>` is
+shown only while that setting is on, and Save sends only shown fields; only that explicit Save rewrites the file, requiring the
 loaded content revision, validating declared values, keeping unknown fields and replacing it atomically while plugins
 are idle. A publisher may report `configured: false` with a bounded reason; the panel then shows it as not
 configured, without its origin, and refuses publication.

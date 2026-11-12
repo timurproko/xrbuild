@@ -3217,33 +3217,83 @@ function pluginSettingsCard(plugin) {
   </div>`;
 }
 
-/** Declared user configuration (for example a publication destination): saved explicitly, never on each keystroke. */
+/** Selected configuration tab and unsaved typed values per plugin; they survive tab and checkbox changes. */
+const pluginConfigTabs = new Map();
+const pluginConfigDrafts = new Map();
+const CONFIG_GENERAL = 'General';
+
+/** Fields whose controlling runtime setting is on; a field without `shownWhen` is always shown. */
+function shownConfigFields(plugin) {
+  return (plugin.config ?? []).filter((setting) => !setting.shownWhen || plugin.values?.[setting.shownWhen] === true);
+}
+
+/** Declared user configuration (for example a publication destination): one tab per section, saved explicitly. */
 function pluginConfigForm(plugin, divided = false) {
-  const fields = plugin.config ?? [];
+  const fields = shownConfigFields(plugin);
   if (!fields.length) return '';
   const disabled = !plugin.enabled || !!plugin.configProblem;
-  let section = null;
-  const controls = fields.map((setting) => {
-    const heading = setting.section && setting.section !== section ? `<h3 class="settings-subsection">${esc(setting.section)}</h3>` : '';
-    if (setting.section) section = setting.section;
-    return `${heading}${pluginSettingControl(setting, plugin.configValues?.[setting.key] ?? setting.default, disabled)}`;
-  }).join('');
-  return `<form class="settings-card-fields ${divided ? 'xrb-section-divider' : ''}" data-plugin-config="${esc(plugin.id)}">
-    <h2 class="settings-section">Configuration</h2>
+  const draft = pluginConfigDrafts.get(plugin.id) ?? {};
+  const sectionOf = (setting) => setting.section ?? CONFIG_GENERAL;
+  const sections = [...new Set(fields.map(sectionOf))];
+  const active = sections.includes(pluginConfigTabs.get(plugin.id)) ? pluginConfigTabs.get(plugin.id) : sections[0];
+  const tabs = `<div class="xrb-tabs settings-config-tabs" role="tablist" aria-label="Configuration">${sections.map((section) =>
+    `<button type="button" class="xrb-tab" role="tab" data-config-tab="${esc(section)}" aria-selected="${section === active}" ${section === active ? 'data-active' : ''}>${esc(section)}</button>`).join('')}</div>`;
+  const panels = sections.map((section) => `<div class="settings-card-fields" role="tabpanel" data-config-panel="${esc(section)}" ${section === active ? '' : 'hidden'}>${
+    fields.filter((setting) => sectionOf(setting) === section).map((setting) =>
+      pluginSettingControl(setting, Object.hasOwn(draft, setting.key) ? draft[setting.key] : plugin.configValues?.[setting.key] ?? setting.default, disabled)).join('')}</div>`).join('');
+  return `<form class="settings-config ${divided ? 'xrb-section-divider' : ''}" data-plugin-config="${esc(plugin.id)}">
+    ${tabs}
     ${plugin.configProblem ? `<p class="errors" role="alert">${esc(plugin.configProblem)}</p>` : ''}
-    ${controls}
+    ${panels}
     <p class="errors" data-config-error role="alert" hidden></p>
     <div class="settings-config-actions"><button type="submit" class="action-button" ${disabled ? 'disabled' : ''}>Save configuration</button></div>
   </form>`;
 }
 
+function configControlValue(setting, input) {
+  return setting.type === 'boolean' ? input.checked : setting.type === 'number' ? (input.value.trim() === '' ? input.value : Number(input.value)) : input.value.trim();
+}
+
+function bindPluginConfig(form) {
+  const plugin = state.managedPlugins.find((candidate) => candidate.id === form.dataset.pluginConfig);
+  if (!plugin) return;
+  form.addEventListener('submit', action((event) => { event.preventDefault(); return savePluginConfig(form); }));
+  const remember = (event) => {
+    const setting = plugin.config?.find((item) => item.key === event.target.name);
+    if (setting) pluginConfigDrafts.set(plugin.id, { ...pluginConfigDrafts.get(plugin.id), [setting.key]: configControlValue(setting, event.target) });
+  };
+  form.addEventListener('input', remember);
+  form.addEventListener('change', remember);
+  form.querySelectorAll('[data-config-tab]').forEach((tab) => tab.addEventListener('click', () => {
+    pluginConfigTabs.set(plugin.id, tab.dataset.configTab);
+    form.querySelectorAll('[data-config-tab]').forEach((item) => {
+      const selected = item === tab;
+      item.setAttribute('aria-selected', String(selected));
+      item.toggleAttribute('data-active', selected);
+    });
+    form.querySelectorAll('[data-config-panel]').forEach((panel) => { panel.hidden = panel.dataset.configPanel !== tab.dataset.configTab; });
+  }));
+}
+
+/** A runtime checkbox changed which configuration is shown: redraw only that form, keeping drafts and the open tab. */
+function refreshPluginConfig(plugin) {
+  const card = document.querySelector(`[data-settings-owner="${CSS.escape(plugin.id)}"]`);
+  if (!card) return;
+  const runtime = plugin.settings ?? [], panel = plugin.panelSettings ?? [];
+  const html = pluginConfigForm(plugin, runtime.length + panel.length > 0);
+  const current = card.querySelector('[data-plugin-config]');
+  if (current) current.outerHTML = html || '';
+  else if (html) card.insertAdjacentHTML('beforeend', html);
+  const form = card.querySelector('[data-plugin-config]');
+  if (form) bindPluginConfig(form);
+}
+
 async function savePluginConfig(form) {
   const plugin = state.managedPlugins.find((candidate) => candidate.id === form.dataset.pluginConfig);
-  if (!plugin?.config?.length) return;
-  const values = Object.fromEntries(plugin.config.map((setting) => {
-    const input = form.elements.namedItem(setting.key);
-    return [setting.key, setting.type === 'boolean' ? input.checked : setting.type === 'number' ? (input.value.trim() === '' ? input.value : Number(input.value)) : input.value.trim()];
-  }));
+  const fields = plugin ? shownConfigFields(plugin) : [];
+  if (!fields.length) return;
+  // Hidden destinations keep their stored values: only shown fields are sent.
+  const values = Object.fromEntries(fields.map((setting) => [setting.key, configControlValue(setting, form.elements.namedItem(setting.key))]));
   const status = document.getElementById(`plugin-settings-status-${plugin.id}`);
   const showError = (target, message) => { const box = target.querySelector('[data-config-error]'); if (box) { box.textContent = message; box.hidden = !message; } };
   showError(form, '');
@@ -3251,6 +3301,7 @@ async function savePluginConfig(form) {
   try {
     const saved = await api('PUT', `/api/plugins/manage/${encodeURIComponent(plugin.id)}/config`, { values, revision: plugin.configRevision });
     plugin.configValues = saved.values; plugin.configRevision = saved.revision;
+    pluginConfigDrafts.delete(plugin.id);
     if (status) { status.hidden = false; status.className = 'state ok'; status.textContent = 'saved'; }
     await loadProjects().catch(() => {});
   } catch (error) {
@@ -3259,6 +3310,7 @@ async function savePluginConfig(form) {
       // Show what is on disk now; never overwrite another editor's change.
       const current = await api('GET', `/api/plugins/manage/${encodeURIComponent(plugin.id)}/config`);
       plugin.configValues = current.values; plugin.configRevision = current.revision;
+      pluginConfigDrafts.delete(plugin.id);
       renderGlobalSettings();
       const fresh = document.querySelector(`[data-plugin-config="${CSS.escape(plugin.id)}"]`);
       if (fresh) showError(fresh, error.message);
@@ -3327,7 +3379,7 @@ function renderGlobalSettings() {
     finally { renderGlobalSettings(); }
   }));
   $('#settings-content').querySelectorAll('[data-plugin-settings]').forEach((form) => form.addEventListener('change', action(() => savePluginSettings(form))));
-  $('#settings-content').querySelectorAll('[data-plugin-config]').forEach((form) => form.addEventListener('submit', action((event) => { event.preventDefault(); return savePluginConfig(form); })));
+  $('#settings-content').querySelectorAll('[data-plugin-config]').forEach(bindPluginConfig);
 }
 
 async function savePluginSettings(form) {
@@ -3354,7 +3406,10 @@ async function savePluginSettings(form) {
     await api('PUT', `/api/plugins/manage/${encodeURIComponent(plugin.id)}`, { [scope]: values });
     clearTimeout(pluginSettingsTimers.get(timerKey));
     if (scope === 'panelSettings') plugin.panelValues = values;
-    else plugin.values = values;
+    else {
+      plugin.values = values;
+      if (plugin.config?.some((setting) => setting.shownWhen)) refreshPluginConfig(plugin);
+    }
     status.hidden = false;
     status.className = 'state ok';
     status.textContent = 'saved';

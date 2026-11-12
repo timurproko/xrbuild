@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test, type TestContext } from 'node:test';
 import { REPO } from '../src/env.ts';
 import { PluginConfigConflict, PluginConfigInvalid, readUserPluginConfigState, writeUserPluginConfig } from '../src/plugin-config.ts';
-import type { PluginSetting } from '../src/plugin-manager.ts';
+import { pluginMeta, type PluginSetting } from '../src/plugin-manager.ts';
 
 const fields: PluginSetting[] = [
   { key: 'configured', label: 'Configured', type: 'boolean', default: false },
@@ -64,4 +64,20 @@ test('invalid and undeclared values are refused per field', async t => {
   await assert.rejects(writeUserPluginConfig(w.root, 'publisher', fields, { configured: 'yes' }, 'absent'), (error: unknown) => error instanceof PluginConfigInvalid && error.field === 'configured');
   await assert.rejects(writeUserPluginConfig(w.root, 'publisher', fields, { token: 'x' }, 'absent'), (error: unknown) => error instanceof PluginConfigInvalid && error.field === 'token');
   await assert.rejects(fs.access(w.file));
+});
+
+async function metaWith(t: TestContext, config: unknown[], settings: unknown[] = [{ key: 'production', label: 'Production', type: 'boolean', default: false }, { key: 'mode', label: 'Mode', type: 'text', default: '' }]) {
+  const w = await workspace(t), dir = path.join(w.root, 'plugins', 'publisher');
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, 'xrb-plugin.json'), JSON.stringify({ title: 'Publisher', type: 'publisher', version: '0.1.0', settings, config }));
+  return pluginMeta(w.root, 'publisher');
+}
+
+test('config fields may be shown only while one of the plugin\'s boolean settings is on', async t => {
+  const meta = await metaWith(t, [{ key: 'origin', label: 'Origin', type: 'text', default: '', section: 'Production', shownWhen: 'production' }]);
+  assert.equal(meta.config![0].shownWhen, 'production');
+  await assert.rejects(metaWith(t, [{ key: 'origin', label: 'Origin', type: 'text', shownWhen: 'missing' }]), /shownWhen must name a boolean runtime setting/);
+  await assert.rejects(metaWith(t, [{ key: 'origin', label: 'Origin', type: 'text', shownWhen: 'mode' }]), /shownWhen must name a boolean runtime setting/);
+  await assert.rejects(metaWith(t, [{ key: 'origin', label: 'Origin', type: 'text', shownWhen: 'bad key' }]), /invalid shownWhen/);
+  await assert.rejects(metaWith(t, [], [{ key: 'production', label: 'Production', type: 'boolean', shownWhen: 'production' }]), /invalid shownWhen/, 'only configuration fields are scoped');
 });

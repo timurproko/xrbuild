@@ -5,21 +5,21 @@
   "description": "Publish WebXR apps for local testing or on the web.",
   "panel": {
     "targets": ["webxr"],
-    "settingsDescription": "Choose where to publish your WebXR apps: Localhost for testing on this computer, or Production for your website. Production also needs its destination below."
+    "settingsDescription": "Choose where to publish your WebXR apps: Localhost for testing on this computer, or Production for your website. Each enabled destination has its own tab below."
   },
   "settings": [
     { "key": "localhost", "label": "Localhost", "type": "boolean", "default": true },
     { "key": "production", "label": "Production", "type": "boolean", "default": false }
   ],
   "config": [
-    { "key": "localPort", "label": "Loopback HTTPS port", "type": "number", "default": 8443, "min": 1024, "max": 65535, "step": 1, "section": "Localhost" },
-    { "key": "productionConfigured", "label": "Production configured explicitly", "type": "boolean", "default": false, "section": "Production", "hint": "Turn on after filling in the destination. Publishing pushes with your Git sign-in; no credentials are stored here." },
-    { "key": "productionOrigin", "label": "Production HTTPS origin", "type": "text", "default": "", "section": "Production", "hint": "The site address, for example https://apps.example." },
-    { "key": "productionRepository", "label": "Output repository", "type": "text", "default": "", "section": "Production", "hint": "owner/name of the repository whose branch the site serves." },
-    { "key": "productionBranch", "label": "Output branch", "type": "text", "default": "", "section": "Production", "hint": "The branch the hosting serves the site from." },
-    { "key": "productionSeedBranch", "label": "Initial branch", "type": "text", "default": "", "section": "Production", "hint": "Creates the output branch from this one if it does not exist yet; use the output branch otherwise." },
-    { "key": "productionRoutePrefix", "label": "App route prefix", "type": "text", "default": "apps", "section": "Production", "hint": "Apps are published at <origin>/<prefix>/<slug>/." },
-    { "key": "productionSitePath", "label": "Site subtree", "type": "text", "default": "/", "section": "Production", "hint": "/ or the one repository folder the hosting serves." },
-    { "key": "productionTimeoutMs", "label": "Verification timeout", "type": "number", "default": 300000, "min": 1, "max": 600000, "step": 1, "section": "Production", "hint": "Milliseconds to wait for the published app to become reachable." }
+    { "key": "localPort", "label": "Loopback HTTPS port", "type": "number", "default": 8443, "min": 1024, "max": 65535, "step": 1, "section": "Localhost", "shownWhen": "localhost" },
+    { "key": "productionConfigured", "label": "Production configured explicitly", "type": "boolean", "default": false, "section": "Production", "shownWhen": "production", "hint": "Turn on after filling in the destination. Publishing pushes with your Git sign-in; no credentials are stored here." },
+    { "key": "productionOrigin", "label": "Production HTTPS origin", "type": "text", "default": "", "section": "Production", "shownWhen": "production", "hint": "The site address, for example https://apps.example." },
+    { "key": "productionRepository", "label": "Output repository", "type": "text", "default": "", "section": "Production", "shownWhen": "production", "hint": "owner/name of the repository whose branch the site serves." },
+    { "key": "productionBranch", "label": "Output branch", "type": "text", "default": "", "section": "Production", "shownWhen": "production", "hint": "The branch the hosting serves the site from." },
+    { "key": "productionSeedBranch", "label": "Initial branch", "type": "text", "default": "", "section": "Production", "shownWhen": "production", "hint": "Creates the output branch from this one if it does not exist yet; use the output branch otherwise." },
+    { "key": "productionRoutePrefix", "label": "App route prefix", "type": "text", "default": "apps", "section": "Production", "shownWhen": "production", "hint": "Apps are published at <origin>/<prefix>/<slug>/." },
+    { "key": "productionSitePath", "label": "Site subtree", "type": "text", "default": "/", "section": "Production", "shownWhen": "production", "hint": "/ or the one repository folder the hosting serves." },
+    { "key": "productionTimeoutMs", "label": "Verification timeout", "type": "number", "default": 300000, "min": 1, "max": 600000, "step": 1, "section": "Production", "shownWhen": "production", "hint": "Milliseconds to wait for the published app to become reachable." }
   ]
 }

@@ -12,3 +12,7 @@
 
 - [x] 3.1 Add optional `configured`/`configurationProblem` to the publisher contract and project status, and have the WebXR publisher report its unconfigured production destination with clear Settings description and field labels; verify publisher and panel tests.
 - [x] 3.2 Show "<label> (not configured)" in the Publish dropdown, disable Publish and link to the plugin's Settings section; verify UI tests and that configured publishers are unchanged.
+
+## 4. Destination-scoped configuration tabs
+
+- [x] 4.1 Add an optional `shownWhen` boolean-setting reference to config fields with schema validation, render config sections as shared tabs showing only fields whose setting is on, keep typed drafts across tab and checkbox changes, save only shown fields, and scope the WebXR fields to Localhost/Production; verify schema, rendering, toggle and save tests.

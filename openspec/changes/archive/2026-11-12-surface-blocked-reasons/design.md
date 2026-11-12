@@ -31,6 +31,10 @@ Manager ownership of enablement, or automatically restarting the panel.
   and replaces the file atomically. Existing hard-link-only *creation* of defaults stays; an explicit user save is
   allowed to replace the user's own file. Saves are refused while plugin consumers, runs or jobs are active, like
   other plugin mutations, and refresh services afterwards.
+- **Destination-scoped tabs.** A config field may declare `shownWhen: <boolean runtime setting key>` (validated
+  against the plugin's own settings). Settings groups shown config fields into shared `xrb-tabs` by `section`, hides
+  fields whose setting is off, keeps unsaved drafts when a checkbox or tab changes, and saves only shown fields so
+  hidden destinations keep their stored values.
 - **Neutral "not configured" contract.** A publisher may expose `configured: false` and a bounded
   `configurationProblem`. The panel never shows the origin of such a publisher, lists it as `<label> (not
   configured)`, disables Publish, and links to `Settings?module=<plugin-id>`. Publishers without the field behave as
