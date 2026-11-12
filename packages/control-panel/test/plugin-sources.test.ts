@@ -269,3 +269,14 @@ test('a plugin change that needs a restart refuses settings saves with the Resta
   assert.deepEqual(refused.data.details, { reason: 'restart-required', restart: true });
   assert.match(refused.data.error, /Restart the panel/);
 });
+
+test('a configuration file edited outside Settings refreshes services without a restart', async t => {
+  const f = await fixture(t), revision = (await f.plugins())[0].sourceRevision;
+  assert.equal((await f.request('PUT', 'api/plugins/manage/workspace%3Ashared/origin', { origin: 'workspace', revision })).status, 200);
+  await f.panel.synchronizePluginServices(true);
+  const before = f.panel.publishers.found[0].publisher;
+  await f.write('user/config/plugins/shared/config.json', { active: true });
+  await f.panel.synchronizePluginServices(true);
+  assert.notEqual(f.panel.publishers.found[0].publisher, before, 'publishers were recreated from the new configuration');
+  assert.deepEqual(f.panel.pluginServiceStatus(), { pending: false, problem: null });
+});
