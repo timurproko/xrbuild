@@ -13,6 +13,7 @@
         "route": "/hands/",
         "aliases": ["/hand-tracking/"],
         "module": "tool.mjs",
+        "independentView": true,
         "endpoints": ["/__handtracking/", "/__xrbuild/"]
       }
     ],

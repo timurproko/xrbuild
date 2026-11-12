@@ -25,7 +25,7 @@ async function fixture(t: {after: (fn: () => Promise<void>) => void}, developerM
 async function until(evaluate: (expression: string) => Promise<any>, expression: string) {
   for(let i=0;i<160;i++){if(await evaluate(expression))return;await sleep(50);}assert.fail(expression);
 }
-const frameReady=`document.querySelector('#preview')?.contentDocument?.documentElement?.dataset.fixtureReady==='true'`;
+const frameReady=`(document.body?.dataset.case==='main' ? document.querySelector('#design-main')?.dataset.fixtureReady==='true' : document.querySelector('#preview')?.contentDocument?.documentElement?.dataset.fixtureReady==='true')`;
 const palette=`(()=>{const s=getComputedStyle(document.documentElement);return Object.fromEntries(['--bg','--surface','--surface-2','--fg','--muted','--line','--accent','--test','--ok','--warn','--rebuild','--err','--scrim','--on-accent','--log-bg','--xrb-glyph-filter','--xrb-glyph-detail-filter','--c-blue','color-scheme'].map(key=>[key,s.getPropertyValue(key).trim()]));})()`;
 
 test('core Theme overrides System immediately, persists across routes and frames without workspace/runtime writes', {skip:!process.env.XRB_TEST_BROWSER,timeout:60000}, async t=>{
@@ -59,8 +59,8 @@ test('core Theme overrides System immediately, persists across routes and frames
     assert.deepEqual(await evaluate(palette),dark);
     await choose('Dark');
     await navigate(`${f.url}design`,frameReady);
-    assert.equal(await evaluate(`document.querySelector('#preview').contentDocument.documentElement.dataset.theme`),'dark');
-    await evaluate(`document.querySelector('#preview').contentWindow.xrbTheme.set('light')`);
+    assert.equal(await evaluate(`document.documentElement.dataset.theme`),'dark');
+    await evaluate(`window.xrbTheme.set('light')`);
     await until(evaluate,`document.documentElement.dataset.theme==='light'`);
     await navigate(settings,`document.querySelector('#panel-appearance [name=theme]')?.value==='light'`);
     await evaluate(`localStorage.setItem('panel.theme','invalid-theme')`);
@@ -120,7 +120,7 @@ test('separate-origin gallery maintenance follows panel links rather than sendin
     await sleep(100);
     assert.deepEqual(await evaluate(`window.__maintenanceLinks`),[`${other}/?maintenance=restart`,`${other}/?maintenance=rebuild`]);
     assert.deepEqual(await evaluate(`window.__maintenanceRequests`),[]);
-    assert.equal(await evaluate(`!!document.querySelector('[data-xrb-restart-dialog],[data-xrb-rebuild-dialog]')`),false);
+    assert.equal(await evaluate(`!!document.querySelector('body > [data-xrb-restart-dialog],body > [data-xrb-rebuild-dialog]')`),false);
   });
   assert.deepEqual(f.apiRequests.filter(request=>request!=='GET /api/navigation'),[]);
   assert.equal(f.panel.panel.jobs.list().length,0);
@@ -132,8 +132,10 @@ test('Design Main collects shared primitives with interactive local-only example
     await navigate(`${f.url}design`,frameReady);
     await send('Page.bringToFront');
     assert.equal(await evaluate(`document.querySelector('#case').value`),'main');
-    assert.equal(await evaluate(`!!document.querySelector('#preview').contentDocument.querySelector('.component-catalog > header')`),false,'no redundant Main title or description');
-    const within=(body:string)=>evaluate(`(()=>{const doc=document.querySelector('#preview').contentDocument;${body}})()`);
+    assert.equal(await evaluate(`!!document.querySelector('.component-catalog > header')`),false,'no redundant Main title or description');
+    assert.equal(await evaluate(`document.querySelector('#preview').parentElement.hidden`),true,'Main has no iframe scroll context');
+    assert.equal(await evaluate(`(()=>{const ids=[...document.querySelectorAll('[id]')].map(e=>e.id);return ids.length===new Set(ids).size;})()`),true,'inline examples retain unique accessible IDs');
+    const within=(body:string)=>evaluate(`(()=>{const doc=document;${body}})()`);
     assert.deepEqual(await within(`return [...doc.querySelectorAll('[data-component-section]')].map(section=>section.id)`),['typography','actions','fields','navigation','status','dialogs','layout','media']);
     for(const selector of ['.xrb-card','.xrb-help.field-error','.xrb-supporting-text','.xrb-inline-edit','.xrb-path','.xrb-glyph-detail','button.primary','button.danger','button.ghost','button:disabled','.xrb-tool-button','.xrb-icon-button','button.small','.xrb-number-control','.xrb-native-select','.dropdown[data-multi]','.dropdown[data-marks]','.xrb-switch','.xrb-toggle-pill','.xrb-range','.xrb-segmented','.xrb-swatch','.xrb-tab-toolbar','.xrb-tabs','.xrb-tab-count','.xrb-search-input','.xrb-choice-list','.state','.chip','.xrb-filter-chip','.xrb-spinner','.xrb-error-banner','.warning','.stats-dock','.metrics','.facts','.xrb-progress-status','.xrb-field-grid','.xrb-stack','.xrb-control-group','.xrb-toggle-grid','.xrb-section-divider','.xrb-key-value-list','.xrb-disclosure','.xrb-sidebar-section','.xrb-media-stage','.xrb-empty-state','.checker','.xrb-copy-block','.xrb-code-block','.console','.list','.menu','.xrb-dialog'])assert.equal(await within(`return !!doc.querySelector(${JSON.stringify(selector)})`),true,selector);
     assert.equal(await within(`const sample=getComputedStyle(doc.querySelector('#example-text'));return [...doc.querySelectorAll('#fields input:not([type=hidden]):not([type=checkbox]):not([type=range]),#fields .dropdown-btn')].every(element=>{const style=getComputedStyle(element);return ['fontFamily','fontSize','fontWeight','lineHeight'].every(key=>style[key]===sample[key]);});`),true,'normal, disabled, read-only and dropdown fields share font metrics');
@@ -148,22 +150,23 @@ test('Design Main collects shared primitives with interactive local-only example
     assert.equal(await within(`return doc.querySelector('#example-panel').textContent`),'Details panel');
     await within(`doc.querySelector('#example-tooltip').scrollIntoView()`);await sleep(100);
     await within(`doc.querySelector('#example-tooltip').focus({preventScroll:true})`);
-    await until(evaluate,`!!document.querySelector('#preview').contentDocument.querySelector('.xrb-tooltip')`);
+    await until(evaluate,`!!document.querySelector('.xrb-tooltip')`);
     await within(`doc.querySelector('[data-demo-dialog=confirm]').click()`);
     assert.equal(await within(`return doc.querySelector('#example-dialog').open`),true);
     await within(`doc.querySelector('#example-dialog [data-close-dialog]').click();doc.querySelector('[data-demo-progress=running]').click()`);
-    await until(evaluate,`document.querySelector('#preview').contentDocument.querySelector('[data-xrb-rebuild-title]').textContent==='Setup complete'`);
+    await until(evaluate,`document.querySelector('#design-main [data-xrb-rebuild-title]').textContent==='Setup complete'`);
     await within(`doc.querySelector('[data-xrb-rebuild-close]').click()`);
     await evaluate(`document.querySelector('[data-state=fields]').click()`);
-    await until(evaluate,`${frameReady}&&document.querySelector('#preview').contentDocument?.querySelector('#example-select')&&document.querySelector('#preview').contentWindow.location.search.includes('state=fields')`);
-    assert.ok(await evaluate(`document.querySelector('#preview').contentWindow.scrollY`)>0);
+    await until(evaluate,`${frameReady}&&document.querySelector('#example-select')&&document.querySelector('#design-main').dataset.state==='fields'`);
+    assert.ok(await evaluate(`scrollY`)>0);
     for(const theme of ['light','dark'])for(const width of [1280,390]){
       await evaluate(`window.xrbTheme.set('${theme}')`);await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
-      await until(evaluate,`document.querySelector('#preview').contentDocument.documentElement.dataset.theme==='${theme}'`);
+      await until(evaluate,`document.documentElement.dataset.theme==='${theme}'`);
       assert.equal(await within(`return doc.documentElement.scrollWidth<=doc.defaultView.innerWidth+1`),true,`${theme}/${width}`);
       if(width===1280){await within(`doc.defaultView.scrollTo(0,0)`);await sleep(200);const image=await send('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(f.artifacts,`design-main-${theme}.png`),Buffer.from(image.data,'base64'));}
     }
-    assert.equal(await evaluate(`new Promise(resolve=>{const frame=document.querySelector('#preview'),request=new frame.contentWindow.XMLHttpRequest();request.open('GET','/api/host/setup');request.onload=()=>resolve(false);request.onerror=()=>resolve(true);request.send();})`),true);
+    assert.equal(await evaluate(`fetch('/api/navigation').then(response=>response.ok)`),true,'inline Main never replaces shell networking with a mock');
+    assert.equal(await evaluate(`document.querySelector('#design-main [data-xrb-rebuild-title]').id===document.querySelector('#design-main [data-xrb-rebuild-dialog]').getAttribute('aria-labelledby')`),true,'mock progress has correctly scoped shared-dialog IDs');
   });
   assert.deepEqual(f.apiRequests.filter(request=>request!=='GET /api/navigation'),[]);
   assert.equal(f.panel.panel.jobs.list().length,0);
@@ -173,11 +176,11 @@ test('field titles stay aligned with controls during validation and checkbox/col
   const f=await fixture(t,true);
   await withBrowser(async({navigate,evaluate,send})=>{
     await navigate(`${f.url}design?case=main&state=fields`,frameReady);
-    const within=(body:string)=>evaluate(`(()=>{const doc=document.querySelector('#preview').contentDocument;${body}})()`);
+    const within=(body:string)=>evaluate(`(()=>{const doc=document;${body}})()`);
     for(const theme of ['light','dark'])for(const width of [1280,390]){
       await evaluate(`window.xrbTheme.set('${theme}')`);
       await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
-      await until(evaluate,`document.querySelector('#preview').contentDocument.documentElement.dataset.theme==='${theme}'`);
+      await until(evaluate,`document.documentElement.dataset.theme==='${theme}'`);
       const geometry=()=>within(`const grid=doc.querySelector('#fields .xrb-field-grid'),input=doc.querySelector('#example-invalid'),marked=grid.querySelector('.dropdown[data-marks]'),label=marked.closest('label'),style=getComputedStyle(label),r=doc.createRange();r.selectNodeContents(label.firstChild);return {gap:marked.getBoundingClientRect().top-r.getBoundingClientRect().bottom,expectedGap:parseFloat(style.rowGap)+(parseFloat(style.lineHeight)-r.getBoundingClientRect().height)/2,offset:marked.getBoundingClientRect().top-label.getBoundingClientRect().top,inputOffset:input.getBoundingClientRect().top-input.closest('label').getBoundingClientRect().top,controlTop:marked.getBoundingClientRect().top-grid.getBoundingClientRect().top,inputTop:input.getBoundingClientRect().top-grid.getBoundingClientRect().top,columns:getComputedStyle(grid).gridTemplateColumns.split(' ').length};`);
       const before=await geometry();
       assert.ok(Math.abs(before.offset-(await within(`const style=getComputedStyle(doc.querySelector('#fields .dropdown[data-marks]').closest('label'));return parseFloat(style.lineHeight)+parseFloat(style.rowGap);`)))<0.2,`${theme}/${width}: one title line plus the standard field gap ${JSON.stringify(before)}`);
@@ -278,10 +281,10 @@ test('Design system offers dependency cases with a clean dimmed background and s
     await until(evaluate,`document.querySelector('[data-xrb-restart-dialog]')?.open&&document.querySelector('[data-xrb-restart-title]').textContent==='Restart failed'`);
     assert.equal(await evaluate(`document.querySelector('[data-xrb-restart-message]').textContent`),'Synthetic maintenance refusal');
     await evaluate(`document.querySelector('[data-xrb-restart-close]').click();document.querySelector('#panel-menu-button').click();document.querySelector('#host-rebuild').click()`);
-    await until(evaluate,`document.querySelector('[data-xrb-rebuild-dialog]')?.open&&document.querySelector('[data-xrb-rebuild-title]').textContent==='Rebuild failed'`);
+    await until(evaluate,`document.querySelector('body > [data-xrb-rebuild-dialog]')?.open&&document.querySelector('body > [data-xrb-rebuild-dialog] [data-xrb-rebuild-title]').textContent==='Rebuild failed'`);
     assert.deepEqual(await evaluate(`window.__maintenanceCalls`),[['/api/restart','POST'],['/api/host/setup','GET'],['/api/host/rebuild','POST']],'gallery shell uses the shared explicit maintenance flow');
     assert.equal(await evaluate(`document.querySelector('#preview').contentDocument.querySelector('[data-desktop-setup]').open`),true,'preview remains isolated from shell maintenance');
-    await evaluate(`document.querySelector('[data-xrb-rebuild-close]').click();window.fetch=window.__originalFetch`);
+    await evaluate(`document.querySelector('body > [data-xrb-rebuild-dialog] [data-xrb-rebuild-close]').click();window.fetch=window.__originalFetch`);
     assert.deepEqual(f.apiRequests.filter(request=>request!=='GET /api/navigation'),[],'maintenance validation never reached the backend');
     await evaluate(`document.querySelector('#panel-menu-button').click();document.querySelector('#panel-home').click()`);
     await until(evaluate,`location.pathname==='/'&&!!document.querySelector('#design-system-open')`);

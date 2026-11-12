@@ -209,7 +209,7 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   running process's mode; never restart active work to change visibility. Keep component visuals in the shared design
   system, including compact xrb-choice-list rows, not copied fixture palettes. Shared scrollbars overlay document,
   nested and modal content without gutters while preserving native scrolling and forced-colors fallback; standalone
-  static adapters must serve scrollbars.js alongside design-system.js. Small is the single reduced control size;
+  static adapters must serve scrollbars.js and workspace-layout.js alongside design-system.js. Apps and Design Main use the shared workspace grid/sidebar/card-stack templates and document scrolling; only isolated workflow demos use preview frames. Layout sizing and rhythm belong in shared primitives, not product-specific copies. Small is the single reduced control size;
   primary buttons do not stretch by default, maintenance colors belong only to bulbs, and warning/error banners
   share geometry and typography.
   See `docs/desktop-setup.md`; actual administrative/native acceptance remains separately provisioned work.

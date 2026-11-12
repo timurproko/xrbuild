@@ -19,8 +19,9 @@ export interface RebuildProgressController {
   render(job:RebuildJob|null,error?:string):RebuildPresentation;
   show(job?:RebuildJob|null,error?:string):void;
   close():void;
+  dispose():void;
 }
 export const REBUILD_AUTOCLOSE_KEY:string;
 export function rebuildPresentation(job:RebuildJob|null,error?:string):RebuildPresentation;
-export function rebuildProgressDialog(options?:{document?:Document;storage?:Storage;onViewJob?:(job:RebuildJob)=>void}):RebuildProgressController;
+export function rebuildProgressDialog(options?:{document?:Document;storage?:Storage|null;container?:HTMLElement;idPrefix?:string;onViewJob?:(job:RebuildJob)=>void}):RebuildProgressController;
 export function rebuildHostInPlace(origin?:string,options?:{onJob?:(job:RebuildJob)=>void;onViewJob?:(job:RebuildJob)=>void;onComplete?:(job:RebuildJob)=>void}):Promise<RebuildJob|null>;

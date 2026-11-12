@@ -8,10 +8,10 @@ export function installOverlayScrollbars(doc = document) {
   const regions = new Map(), layers = new Map(), generatedIds = new Map();
   const events = new win.AbortController(), {signal} = events;
   const forced = win.matchMedia('(forced-colors: active)');
-  let frame = 0, dirty = true, stopped = false;
+  let frame = 0, dirty = true, stopped = false, suspended = false;
   const own = node => node?.nodeType === 1 && (node.matches('.xrb-scrollbar-layer') || node.closest('.xrb-scrollbar-layer'));
   const schedule = (scan = false) => {
-    if (stopped) return;
+    if (stopped || suspended) return;
     dirty ||= scan;
     if (!frame) frame = win.requestAnimationFrame(update);
   };
@@ -21,7 +21,7 @@ export function installOverlayScrollbars(doc = document) {
     if (records.some(record => !own(record.target) && (record.type === 'attributes'
       || [...record.addedNodes, ...record.removedNodes].some(node => !own(node))))) schedule(true);
   });
-  mutations.observe(doc.documentElement, {subtree:true, childList:true, attributes:true, attributeFilter:['class','style','hidden','open']});
+  mutations.observe(doc.documentElement, {subtree:true, childList:true, attributes:true, attributeFilter:['class','style','hidden','open','data-xrb-scrollbar']});
   const setStyle = (element, key, value) => {if (element.style[key] !== value) element.style[key] = value;};
   const idFor = element => {
     if (element.id) return element.id;
@@ -48,8 +48,9 @@ export function installOverlayScrollbars(doc = document) {
     bar.setAttribute('aria-controls',idFor(element));bar.setAttribute('aria-valuemin','0');
     const isPage = element === doc.scrollingElement;
     bar.setAttribute('aria-label',`${axis === 'y' ? 'Vertical' : 'Horizontal'} scroll ${isPage ? 'page' : element.getAttribute('aria-label') || 'region'}`);
-    const state = {bar,thumb,element,axis,max:0,length:0,size:0,position:0,rtl:false,drag:null,dispose:()=>{listeners.abort();bar.remove();}};
+    const state = {bar,thumb,element,axis,max:0,length:0,size:0,position:0,rtl:false,drag:null,suspend:()=>{},dispose:()=>{state.suspend();listeners.abort();bar.remove();}};
     const scroll = position => {
+      if (bar.hidden || !element.isConnected || !visible(element)) return;
       const value = Math.max(0,Math.min(state.max,position));
       state.position = value;
       if (axis === 'y') element.scrollTop = value;
@@ -70,6 +71,12 @@ export function installOverlayScrollbars(doc = document) {
       scroll(state.drag.position + (at - state.drag.at) / Math.max(1,state.length - state.size) * state.max);
     },{signal});
     const stopDrag = () => {state.drag = null;delete bar.dataset.dragging;};
+    state.suspend = () => {
+      const pointer = state.drag?.pointer;
+      stopDrag();bar.hidden = true;
+      if (pointer !== undefined && bar.hasPointerCapture(pointer)) bar.releasePointerCapture(pointer);
+      if (doc.activeElement === bar) bar.blur();
+    };
     bar.addEventListener('pointerup',stopDrag,{signal});bar.addEventListener('pointercancel',stopDrag,{signal});bar.addEventListener('lostpointercapture',stopDrag,{signal});
     bar.addEventListener('click',event=>event.stopPropagation(),{signal});
     bar.addEventListener('wheel',event=>{
@@ -86,8 +93,19 @@ export function installOverlayScrollbars(doc = document) {
     },{signal});
     return state;
   }
+  function visible(element) {
+    if (!element.isConnected || element.closest('[hidden], [data-xrb-scrollbar="none"]')) return false;
+    if (typeof element.checkVisibility === 'function' && !element.checkVisibility({visibilityProperty:true, opacityProperty:true, contentVisibilityAuto:true})) return false;
+    const box = element.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0) return false;
+    for (let parent = element; parent; parent = parent.parentElement) {
+      const style = win.getComputedStyle(parent);
+      if (style.visibility === 'hidden' || style.visibility === 'collapse' || style.display === 'none' || style.contentVisibility === 'hidden' || Number(style.opacity) === 0) return false;
+    }
+    return true;
+  }
   function scan() {
-    const candidates = new Set([doc.scrollingElement]);
+    const candidates = new Set(doc.body.closest('[data-xrb-scrollbar="none"]') ? [] : [doc.scrollingElement]);
     for (const element of doc.body.querySelectorAll('*')) {
       if (own(element) || element.matches('iframe,canvas,svg,option') || element.closest('[data-xrb-scrollbar="none"]')) continue;
       const style = win.getComputedStyle(element);
@@ -116,7 +134,7 @@ export function installOverlayScrollbars(doc = document) {
     return result;
   }
   function update() {
-    frame = 0;if (stopped) return;
+    frame = 0;if (stopped || suspended) return;
     doc.documentElement.classList.toggle('xrb-overlay-scrollbars',!forced.matches);
     if (dirty) {dirty = false;scan();}
     const modal = [...doc.querySelectorAll('dialog:modal')].at(-1);
@@ -126,12 +144,12 @@ export function installOverlayScrollbars(doc = document) {
     const minimum = parseFloat(tokens.getPropertyValue('--xrb-scrollbar-min')) || 24;
     for (const [element,bars] of regions) {
       const isPage = element === doc.scrollingElement,style = win.getComputedStyle(element),box = viewport(element,isPage);
-      const hidden = forced.matches || !element.isConnected || element.closest('[hidden]') || (modal && !modal.contains(element)) || box.right <= box.left || box.bottom <= box.top;
+      const hidden = forced.matches || !visible(element) || (isPage && doc.body.closest('[data-xrb-scrollbar="none"]')) || (modal && !modal.contains(element)) || box.right <= box.left || box.bottom <= box.top;
       const axes = {y:!hidden && (isPage || /auto|scroll|overlay/.test(style.overflowY)) && !/hidden|clip/.test(style.overflowY) && element.scrollHeight > element.clientHeight + 1,
         x:!hidden && (isPage || /auto|scroll|overlay/.test(style.overflowX)) && !/hidden|clip/.test(style.overflowX) && element.scrollWidth > element.clientWidth + 1};
       for (const axis of ['y','x']) {
         let state = bars.find(item=>item.axis === axis);
-        if (!axes[axis]) {if (state) state.bar.hidden = true;continue;}
+        if (!axes[axis]) {if (state) {state.dispose();bars.splice(bars.indexOf(state),1);}continue;}
         if (!state) {state = barFor(element,axis);bars.push(state);}
         const host = element.closest('dialog[open]') ?? doc.body,layer = layerFor(host);
         if (state.bar.parentElement !== layer) layer.append(state.bar);
@@ -155,6 +173,12 @@ export function installOverlayScrollbars(doc = document) {
   doc.addEventListener('load',()=>schedule(true),{capture:true,signal});
   win.addEventListener('resize',()=>schedule(true),{passive:true,signal});
   forced.addEventListener('change',()=>schedule(true),{signal});
+  win.addEventListener('pagehide',()=>{
+    suspended = true;win.cancelAnimationFrame(frame);frame = 0;
+    for (const bars of regions.values()) bars.forEach(state=>state.suspend());
+    for (const layer of layers.values()) layer.remove();layers.clear();
+  },{signal});
+  win.addEventListener('pageshow',()=>{suspended = false;schedule(true);},{signal});
   doc.fonts?.ready.then(()=>schedule(true));
   const dispose = () => {
     stopped = true;win.cancelAnimationFrame(frame);events.abort();resize.disconnect();mutations.disconnect();

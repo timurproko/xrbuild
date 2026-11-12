@@ -27,9 +27,9 @@ test('folder glyph is optically raised without moving its SVG container', () => 
 });
 
 test('column headings share responsive sticky offsets and section-label alignment', () => {
-  assert.match(shared, /--xrb-workspace-sticky-top: calc\(var\(--top-h\) \+ var\(--xrb-workspace-block-start\)\)/);
-  for (const selector of ['.settings-module-heading, .settings-owner-heading', '.col-label', '#projects, #plugin-nav, #settings-nav']) {
-    const rule = css.slice(css.indexOf(`${selector} {`)).split('}')[0];
+  assert.match(shared, /--xrb-workspace-sticky-top: calc\(var\(--xrb-app-bar-height, var\(--top-h\)\) \+ var\(--xrb-workspace-block-start\)\)/);
+  for (const [selector, source] of [['.settings-module-heading, .settings-owner-heading', css], ['.col-label', css], ['.xrb-workspace-sidebar', shared]]) {
+    const rule = source.slice(source.indexOf(`${selector} {`)).split('}')[0];
     assert.match(rule, /top: var\(--xrb-workspace-sticky-top\)/);
     assert.doesNotMatch(rule, /(?:top: calc\(var\(--top-h\) \+ 20px\)|0 -20px)/);
   }

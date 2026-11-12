@@ -1,5 +1,6 @@
 // XR Build interactive design-system components. Framework-neutral and state-model agnostic.
 export {installOverlayScrollbars} from './scrollbars.js';
+export {installWorkspaceLayout} from './workspace-layout.js';
 const controllers=new WeakMap();
 const icons=Object.freeze({
  folder:'<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path transform="translate(0 -1)" d="M1.75 4.25h4l1.5 1.5h7v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',

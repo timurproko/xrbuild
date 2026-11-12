@@ -1,18 +1,5 @@
 /* Product-specific control-panel layout. Shared typography, chrome and components live in design-system.css. */
-main { display: grid; grid-template-columns: var(--sidebar-w) minmax(440px, 1fr) 430px; align-items: start; max-width: 1760px; margin: 0 auto; }
-#workspace-content { display: contents; }
-/* Narrower: the project list keeps the left column at full height; project and activity sections flow together. */
-@media (max-width: 1320px) {
-  main { grid-template-columns: var(--sidebar-compact-w) minmax(0, 1fr); }
-  #projects { grid-column: 1; grid-row: 1; }
-  #workspace-content { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: var(--xrb-workspace-gap); min-width: 0; }
-  #project-content, #side { min-width: 0; }
-  #detail > .card:last-child { margin-bottom: 0; }
-}
-main.plugins-manager, main.global-settings { grid-template-columns: var(--sidebar-w) minmax(440px, 1fr) 430px; }
-@media (max-width: 1320px) { main.plugins-manager, main.global-settings { grid-template-columns: var(--sidebar-compact-w) minmax(0, 1fr); } }
 body.plugins-page .run-dock, body.plugins-page .stats-dock, body.settings-page .run-dock, body.settings-page .stats-dock { display: none; }
-@media (max-width: 700px) { main.plugins-manager, main.global-settings { grid-template-columns: minmax(0, 1fr); } }
 #settings-nav { align-self: start; }
 .settings-module-heading, .settings-owner-heading { position: sticky; top: var(--xrb-workspace-sticky-top); z-index: 3; background: var(--bg); box-shadow: 0 calc(-1 * var(--xrb-workspace-block-start)) 0 var(--bg), 0 var(--xrb-sticky-mask-gap) 0 var(--bg); }
 .settings-owner-heading { justify-content: space-between; width: 100%; }
@@ -211,8 +198,6 @@ dialog.ask .log { max-height: 200px; }
    bottom. Its labels stick to the top of this panel (not of the page). */
 /* exactly the window below the top bar minus main's padding (20 top, 40 bottom): the page itself */
 /* never scrolls because of this column, and the list scrolls on its own */
-#projects, #plugin-nav, #settings-nav { position: sticky; top: var(--xrb-workspace-sticky-top); height: calc(100vh - var(--xrb-workspace-sticky-top) - var(--xrb-workspace-block-end)); display: flex; flex-direction: column; overflow: hidden; transform: translateZ(0); backface-visibility: hidden; }
-@media (max-width: 700px) { #plugin-nav, #settings-nav { position: static; height: auto; max-height: 40vh; } }
 .plugin-symbol { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 6px; background: var(--surface-2); color: var(--accent); }
 .plugin-symbol-emoji { font: 23px/1 "Segoe UI Emoji", "Apple Color Emoji", sans-serif; transform: translateY(-1px); }
 .plugin-symbol-tinted { filter: var(--xrb-glyph-filter); }
@@ -243,7 +228,6 @@ dialog.ask .log { max-height: 200px; }
 @media (max-width: 700px) { .plugin-settings { grid-template-columns: minmax(0, 1fr); } .plugin-setting-text, .plugin-setting-boolean { grid-column: auto; } }
 /* The list scrolls on its own under the heading; section headings stick to its top. */
 .nav-tabs.xrb-section-label { flex: none; }
-.nav-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
 #projects h2, #plugin-nav h2, #settings-nav .settings-module-heading { top: 0; }
 #projects .sec-head, #plugin-nav .sec-head { margin: 0; padding: 0 2px 8px; }
 #projects .proj, #plugin-nav .proj, #settings-nav .proj { flex: none; }
