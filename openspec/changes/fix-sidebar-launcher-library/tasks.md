@@ -1,7 +1,7 @@
 ## 1. Unified nonempty sidebar sections
 
-- [ ] 1.1 Normalize logical section grouping across embedded and selected user projects, keep one trailing Unsorted group and preserve qualified identities and saved ordering; verify layout fixtures with mixed origins, case variants, reserved names and reload.
-- [ ] 1.2 Hide unoccupied groups without deleting stored organization, preserve temporary new-section naming and original action indices, and add sidebar regression tests; verify empty Unsorted/named sections are absent and section creation, drag/reorder, archive/unarchive and context menus still target the intended groups.
+- [x] 1.1 Normalize logical section grouping across embedded and selected user projects, keep one trailing Unsorted group and preserve qualified identities and saved ordering; verify layout fixtures with mixed origins, case variants, reserved names and reload.
+- [x] 1.2 Hide unoccupied groups without deleting stored organization, preserve temporary new-section naming and original action indices, and add sidebar regression tests; verify empty Unsorted/named sections are absent and section creation, drag/reorder, archive/unarchive and context menus still target the intended groups.
 
 ## 2. Selected-panel library in Launcher development runs
 

@@ -17,7 +17,7 @@ Desktop dev launches already receive `xrb-panel` through `HostRunner`. However, 
 
 Use the existing case-insensitive section-name semantics consistently when excluding reserved names, combining section candidates and assigning projects. Keep origin-qualified IDs intact: merging headings must never merge apps with identical display names. Preserve saved section/item ordering; derive remaining order deterministically. Keep Unsorted outside named layout sections and derive it once from unplaced projects.
 
-Do not delete layout entries or folders solely to hide an empty group. Rendering filters empty groups while retaining their original layout indices for rename, move, reorder and context-menu operations. Preserve the existing new-section inline naming interaction as a temporary editing state; once that interaction ends, an unoccupied section is hidden. Do not remove stored empty sections while saving an unrelated drag operation.
+Do not delete layout entries or folders solely to hide an empty group. Rendering filters empty groups while retaining their original layout indices for rename, move, reorder and context-menu operations. Preserve the existing new-section naming dialog and inline rename interaction as temporary editing states; once editing ends, an unoccupied section is hidden. Do not remove stored empty sections while saving an unrelated drag operation.
 
 The shared effective layout remains the source for Launcher ordering; do not add an embedded-only list or another independent ordering rule.
 

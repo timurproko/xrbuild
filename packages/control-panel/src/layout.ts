@@ -137,11 +137,17 @@ export async function readLayout(ws: string, live: Project[]): Promise<Layout> {
   const saved = await readSaved(ws);
   const occupied = new Set(live.map((project) => project.section?.toLowerCase()).filter((name): name is string => !!name));
   const savedNames = new Set(saved.sections.map((section) => section.name.toLowerCase()));
-  const folders = (await sectionFolders(ws)).filter((folder) => folder !== UNSORTED
+  const folders = (await sectionFolders(ws)).filter((folder) => folder.toLowerCase() !== UNSORTED
     && (occupied.has(folder.toLowerCase()) || savedNames.has(folder.toLowerCase())));
-  const names = [...new Set([...folders, ...live.filter(p => p.origin === 'bundled' && p.section && p.section !== UNSORTED).map(p => p.section!)])];
-  const sections = ordered(names, saved.sections.map((s) => s.name)).map((name) => {
-    const items = live.filter((p) => p.section === name).map((p) => p.id);
+  // Section identity is case-insensitive across origins, just like saved layout validation.
+  // Keep the first folder spelling for display without renaming anything during discovery.
+  const names = new Map<string, string>();
+  for (const name of [...folders, ...live.filter(p => p.origin === 'bundled' && p.section).map(p => p.section!)]) {
+    const key = name.toLowerCase();
+    if (key !== UNSORTED && !names.has(key)) names.set(key, name);
+  }
+  const sections = ordered([...names.values()], saved.sections.map((s) => s.name)).map((name) => {
+    const items = live.filter((p) => p.section?.toLowerCase() === name.toLowerCase()).map((p) => p.id);
     const savedItems = saved.sections.find((s) => s.name.toLowerCase() === name.toLowerCase())?.items ?? [];
     return { name, items: ordered(items, savedItems) };
   });
@@ -200,7 +206,7 @@ async function applyLayoutUnlocked(ws: string, l: Layout, live: Project[], recyc
   for (const p of live) {
     const want = sectionOf.get(p.id) ?? UNSORTED;
     if (p.origin === 'bundled') embedded[embeddedPlacementKey(p)] = { section: want, archived: false };
-    else if (p.section !== want) await moveProject(ws, p, want);
+    else if (p.section?.toLowerCase() !== want.toLowerCase()) await moveProject(ws, p, want);
   }
   const keep = new Set([...l.sections.map((s) => s.name.trim().toLowerCase()), UNSORTED.toLowerCase()]);
   for (const f of await sectionFolders(ws)) {

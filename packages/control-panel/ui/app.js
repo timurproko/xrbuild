@@ -499,10 +499,11 @@ function renderProjects() {
       items: s.items.filter((id) => byId.has(id)).map((id) => { placed.add(id); return byId.get(id); }),
     }));
     const unsorted = editable.filter((p) => !placed.has(p.id));
-    if (unsorted.length || !secs.length) secs.push({ name: 'Unsorted', index: -1, items: unsorted });
-    body = secs.map((s) => `<section class="sec" data-sec="${s.index}">
+    if (unsorted.length) secs.push({ name: 'Unsorted', index: -1, items: unsorted });
+    // Hide empty groups, but keep the original layout indices for every section action.
+    body = secs.filter((s) => s.items.length).map((s) => `<section class="sec" data-sec="${s.index}">
         <h2 class="sec-head" data-tooltip="Double-click to rename"><span class="sec-name" data-tooltip-anchor>${esc(s.name)}</span></h2>
-        <div class="sec-items">${s.items.map(item).join('') || '<div class="empty-note">Drag projects here.</div>'}</div>
+        <div class="sec-items">${s.items.map(item).join('')}</div>
       </section>`).join('') +
       '<button type="button" class="xrb-add-action" id="new-project">+ New project</button>' +
       (state.unregistered.length ? `<h2>Without manifest</h2>` + state.unregistered.map((id) =>
@@ -592,6 +593,7 @@ async function saveLayout(layout) {
 }
 
 const cloneLayout = () => ({ revision: state.layout.revision, sections: state.layout.sections.map((s) => ({ name: s.name, items: [...s.items] })), colors: { ...(state.layout.colors ?? {}) }, platformOrder: [...(state.layout.platformOrder ?? [])] });
+const visibleSectionIndices = () => [...$('#projects').querySelectorAll('.sec')].map((sec) => Number(sec.dataset.sec)).filter((index) => index >= 0);
 /** Project id as stored in the layout: archived projects keep their live id there. */
 const layoutId = (id) => id.replace(/^archive\//, '');
 
@@ -652,8 +654,9 @@ function wireSections(nav) {
     closeMenu();
     const menu = $('#sec-menu');
     menu.dataset.sec = String(index);
-    menu.querySelector('[data-act="up"]').hidden = index <= 0;
-    menu.querySelector('[data-act="down"]').hidden = index < 0 || index >= state.layout.sections.length - 1;
+    const visible = visibleSectionIndices(), position = visible.indexOf(index);
+    menu.querySelector('[data-act="up"]').hidden = position <= 0;
+    menu.querySelector('[data-act="down"]').hidden = position < 0 || position >= visible.length - 1;
     menu.querySelector('[data-act="delete"]').hidden = index < 0;  // Unsorted is not a section to delete
     placeMenu(menu, e.clientX, e.clientY);
   }));
@@ -859,8 +862,9 @@ $('#sec-menu').addEventListener('click', action(async (e) => {
     await saveLayout(l);
     return;
   }
-  const to = act === 'up' ? index - 1 : act === 'down' ? index + 1 : -1;
-  if (index < 0 || to < 0 || to >= state.layout.sections.length) return;
+  const visible = visibleSectionIndices(), position = visible.indexOf(index);
+  const to = visible[act === 'up' ? position - 1 : act === 'down' ? position + 1 : -1];
+  if (position < 0 || to === undefined) return;
   const l = cloneLayout();
   [l.sections[index], l.sections[to]] = [l.sections[to], l.sections[index]];
   await saveLayout(l);
