@@ -25,6 +25,8 @@ export interface PluginSetting {
   section?: string;
   /** Config only: the plugin's boolean runtime setting that must be on for this field to be shown. */
   shownWhen?: string;
+  /** Config only: rarely changed; Settings folds it under Advanced. */
+  advanced?: boolean;
   min?: number;
   max?: number;
   step?: number;
@@ -143,7 +145,7 @@ async function sampleProject(workspace: string, pluginId: string, value: unknown
 }
 
 const SETTING_TYPES = ['text', 'number', 'boolean', 'select'] as const;
-const SETTING_KEYS = new Set(['key', 'label', 'type', 'default', 'hint', 'section', 'shownWhen', 'min', 'max', 'step', 'options']);
+const SETTING_KEYS = new Set(['key', 'label', 'type', 'default', 'hint', 'section', 'shownWhen', 'advanced', 'min', 'max', 'step', 'options']);
 const settingText = (value: unknown, max: number): value is string => typeof value === 'string' && !!value.trim() && value.length <= max && !/[\x00-\x1f\x7f]/.test(value);
 const settingValueText = (value: unknown): value is string => typeof value === 'string' && value.length <= 1024 && !/[\x00-\x1f\x7f]/.test(value);
 
@@ -159,11 +161,13 @@ function settingFields(pluginId: string, source: string, value: unknown): Plugin
     if (typeof raw.type !== 'string' || !SETTING_TYPES.includes(raw.type as PluginSetting['type'])) throw new Error(`${pluginId}: ${source}.${raw.key} has an invalid type`);
     if (raw.hint !== undefined && (typeof raw.hint !== 'string' || raw.hint.length > 240 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(raw.hint))) throw new Error(`${pluginId}: ${source}.${raw.key} has an invalid hint`);
     if (raw.section !== undefined && !settingText(raw.section, 80)) throw new Error(`${pluginId}: ${source}.${raw.key} has an invalid section`);
+    if (raw.advanced !== undefined && (source !== 'config' || typeof raw.advanced !== 'boolean')) throw new Error(`${pluginId}: ${source}.${raw.key} has an invalid advanced flag`);
     if (raw.shownWhen !== undefined && (source !== 'config' || typeof raw.shownWhen !== 'string' || !KEY.test(raw.shownWhen))) throw new Error(`${pluginId}: ${source}.${raw.key} has an invalid shownWhen`);
     const field: PluginSetting = { key: raw.key, label: raw.label.trim(), type: raw.type as PluginSetting['type'],
       ...(typeof raw.hint === 'string' && raw.hint.trim() ? { hint: raw.hint.trim() } : {}),
       ...(typeof raw.section === 'string' ? { section: raw.section.trim() } : {}),
-      ...(typeof raw.shownWhen === 'string' ? { shownWhen: raw.shownWhen } : {}) };
+      ...(typeof raw.shownWhen === 'string' ? { shownWhen: raw.shownWhen } : {}),
+      ...(raw.advanced === true ? { advanced: true } : {}) };
     if (field.type === 'number') {
       for (const key of ['min', 'max', 'step'] as const) if (raw[key] !== undefined && (typeof raw[key] !== 'number' || !Number.isFinite(raw[key]))) throw new Error(`${pluginId}: ${source}.${field.key} has an invalid ${key}`);
       if (typeof raw.min === 'number') field.min = raw.min;

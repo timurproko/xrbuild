@@ -81,3 +81,11 @@ test('config fields may be shown only while one of the plugin\'s boolean setting
   await assert.rejects(metaWith(t, [{ key: 'origin', label: 'Origin', type: 'text', shownWhen: 'bad key' }]), /invalid shownWhen/);
   await assert.rejects(metaWith(t, [], [{ key: 'production', label: 'Production', type: 'boolean', shownWhen: 'production' }]), /invalid shownWhen/, 'only configuration fields are scoped');
 });
+
+test('config fields may be folded under Advanced; the flag is config-only and boolean', async t => {
+  const meta = await metaWith(t, [{ key: 'timeout', label: 'Timeout', type: 'number', default: 1, advanced: true }, { key: 'origin', label: 'Origin', type: 'text', default: '' }]);
+  assert.equal(meta.config![0].advanced, true);
+  assert.equal(meta.config![1].advanced, undefined);
+  await assert.rejects(metaWith(t, [{ key: 'timeout', label: 'Timeout', type: 'number', advanced: 'yes' }]), /invalid advanced flag/);
+  await assert.rejects(metaWith(t, [], [{ key: 'production', label: 'Production', type: 'boolean', advanced: true }]), /invalid advanced flag/);
+});

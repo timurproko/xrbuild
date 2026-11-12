@@ -16,3 +16,4 @@
 ## 4. Destination-scoped configuration tabs
 
 - [x] 4.1 Add an optional `shownWhen` boolean-setting reference to config fields with schema validation, render config sections as shared tabs showing only fields whose setting is on, keep typed drafts across tab and checkbox changes, save only shown fields, and scope the WebXR fields to Localhost/Production; verify schema, rendering, toggle and save tests.
+- [x] 4.2 Replace configuration tabs with destination sections (shared heading/divider, description, ready/not-configured chip from the publisher's enabling setting, switch, folded `advanced` fields, per-destination Save through form-associated controls); verify rendering, draft, per-group save, schema and discovery tests.

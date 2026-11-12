@@ -132,7 +132,8 @@ export function normalizeReleaseCatalog(value: unknown): PublisherReleaseCatalog
   };
   return { revision: c.revision, releases, requestedReleaseId: ref(c.requestedReleaseId, 'request'), liveReleaseId: ref(c.liveReleaseId, 'live release'), legacyLive: c.legacyLive === true };
 }
-export interface PublisherDiscovery { found: Array<{ publisher: Publisher; dir: string; plugin?: ResolvedPlugin }>; problems: string[] }
+/** `setting` is the plugin runtime setting that enables this publisher, when its declaration names one. */
+export interface PublisherDiscovery { found: Array<{ publisher: Publisher; dir: string; plugin?: ResolvedPlugin; setting?: string }>; problems: string[] }
 function isPublisherDeclaration(value: unknown): value is { module: string; setting?: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
@@ -185,7 +186,7 @@ export async function discoverPublishers(workspace: string, core?: string): Prom
           conflicts.add(publisher.name);
           throw new Error(`conflicting publishers named "${publisher.name}": all implementations are unavailable`);
         }
-        found.push({ publisher, dir, plugin });
+        found.push({ publisher, dir, plugin, ...(declaration.setting ? { setting: declaration.setting } : {}) });
       } catch (error) { problems.push(`${where}: ${(error as Error).message}`); }
     }
   }

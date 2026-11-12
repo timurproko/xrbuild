@@ -733,6 +733,11 @@ export class Panel {
         packager: isPackager, built: !native.length || native.every((p) => p.built && !p.outdated),
         settings: meta.settings, values: effectiveSettings(meta.settings ?? [], pluginPreferenceValues(plugin, prefs)),
         ...await this.pluginConfigView(plugin),
+        // Per enabling setting: whether the publisher it turns on still needs configuration.
+        destinationStatus: Object.fromEntries(this.publishers.found.filter(item => item.plugin?.key === plugin.key && item.setting).map(item => {
+          const problem = publisherUnconfigured(item.publisher);
+          return [item.setting, problem ? { configured: false, problem } : { configured: true }];
+        })),
         panelSettings: meta.panelSettings, panelValues: effectiveSettings(meta.panelSettings ?? [], pluginPreferenceValues(plugin, prefs, 'panelSettings')),
         samples: (meta.panelSamples ?? []).map(({ id: sampleId, name: sampleName, kind, description }) => ({ id: sampleId, name: sampleName, kind, description })),
         dir: `${plugin.origin === 'bundled' ? 'embedded/' : ''}plugins/${plugin.id}`,

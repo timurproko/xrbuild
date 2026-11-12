@@ -2360,19 +2360,19 @@ plugins, runs or jobs are in use. Configuration SHALL NOT hold credentials.
 - **WHEN** a field value violates its declared type or limits
 - **THEN** the save is refused with a field error and the file is unchanged
 
-### Requirement: Destination-scoped configuration tabs
+### Requirement: Destination configuration sections
 
-A configuration field MAY name a boolean runtime setting of the same plugin that it belongs to. Settings SHALL show
-that field only while the setting is on. Configuration sections SHALL render as shared tabs, one per section with at
-least one shown field; Save SHALL keep values typed in other tabs and SHALL send only shown fields.
+A configuration field MAY name a boolean runtime setting of the same plugin (`shownWhen`) and MAY be marked advanced.
+Settings SHALL render each such setting as a settings section with its heading, description, status and a switch;
+while it is on, its fields open beneath it with Advanced fields folded and its own Save, which sends only its fields.
 
 #### Scenario: Destination turned off
-- **WHEN** a publisher destination checkbox is off
-- **THEN** that destination's configuration tab and fields are hidden and its saved values are left unchanged
+- **WHEN** a publisher destination switch is off
+- **THEN** only its section heading, description and switch are shown and its saved values are left unchanged
 
 #### Scenario: Destination turned on
-- **WHEN** the user turns the destination checkbox on
-- **THEN** its configuration tab appears without discarding values typed in other tabs
+- **WHEN** the user turns the destination switch on
+- **THEN** its fields and ready or not-configured status appear without discarding values typed elsewhere
 
 ### Requirement: Unconfigured publisher presentation
 

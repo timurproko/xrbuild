@@ -58,3 +58,13 @@ test('an unconfigured publisher is listed without its placeholder origin and is 
   (panel as unknown as { editableManifest(): unknown }).editableManifest = () => manifest('prod');
   await assert.rejects((panel as unknown as { preparePublish(p: unknown, body: unknown): Promise<unknown> }).preparePublish({ id: 'app', manifest: manifest('prod'), dir: REPO }, {}), /Configure production in Settings/);
 });
+
+test('discovery records the runtime setting that enables each publisher', async t => {
+  const w = await workspace(t), dir = path.join(w, 'plugins', 'webxr');
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, 'xrb-plugin.json'), JSON.stringify({ title: 'WebXR', type: 'publisher', version: '0.1.0', settings: [{ key: 'production', label: 'Production', type: 'boolean', default: true }] }));
+  await fs.writeFile(path.join(dir, 'package.json'), JSON.stringify({ xrBuild: { publishers: [{ module: './p.mjs', setting: 'production' }] } }));
+  await fs.writeFile(path.join(dir, 'p.mjs'), `export const publisher={name:'prod',origin:'https://unconfigured.invalid',configured:false,configurationProblem:'Configure it',validate(){return []},async status(){return {state:'unavailable'}},async publish(){return {}},async unpublish(){return {}}}`);
+  const found = (await discoverPublishers(w)).found;
+  assert.deepEqual(found.map(item => [item.publisher.name, item.setting]), [['prod', 'production']]);
+});

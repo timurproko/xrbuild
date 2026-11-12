@@ -10,7 +10,7 @@ function unavailable(message){
 }
 export async function createPublisher(context,dependencies={}){
   const paths=await contextPaths(context),v=paths.values;
-  if(v.productionConfigured!==true)return unavailable('Configure production in Settings: fill in the HTTPS origin, output repository and branches, turn on "Production configured explicitly" and save.');
+  if(v.productionConfigured!==true)return unavailable('Configure production in Settings: fill in the HTTPS origin, output repository and branches, turn on "Use this destination" and save.');
   const config={origin:v.productionOrigin,repository:v.productionRepository,branch:v.productionBranch,seedBranch:v.productionSeedBranch,routePrefix:v.productionRoutePrefix,sitePath:v.productionSitePath,verifyTimeoutMs:v.productionTimeoutMs};
   let origin;try{origin=new URL(config.origin);}catch{return unavailable('Configure production in Settings: the HTTPS origin is missing or invalid.');}
   if(origin.pathname!=='/'||origin.search||origin.hash)return unavailable('Configure production in Settings: the HTTPS origin must be a plain origin such as https://apps.example.');

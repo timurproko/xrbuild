@@ -5,64 +5,82 @@ import { test } from 'node:test';
 
 const source = (await fs.readFile(path.resolve(import.meta.dirname, '..', 'ui', 'app.js'), 'utf8')).replace(/\r\n/g, '\n');
 const fn = (name: string) => { const start = source.indexOf(`${name}(`); assert.ok(start >= 0, name); return source.slice(start, source.indexOf('\n}\n', start) + 2); };
+const constant = (name: string) => { const start = source.indexOf(`const ${name} =`); assert.ok(start >= 0, name); return source.slice(start, source.indexOf(';\n', start) + 2); };
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const renderField = (label: string, control: string) => `<label>${label}${control}</label>`;
 const field = () => '<select></select>';
-const configTabs = new Map<string, string>(), configDrafts = new Map<string, Record<string, unknown>>();
-const configSource = `const CONFIG_GENERAL = 'General';\n${fn('function shownConfigFields')}\n${fn('function configControlValue')}\n`;
-const render = new Function('esc', 'renderField', 'field', 'pluginConfigTabs', 'pluginConfigDrafts', `${configSource}${fn('function pluginSettingControl')}\n${fn('function pluginConfigForm')}\nreturn pluginConfigForm;`)(esc, renderField, field, configTabs, configDrafts) as (plugin: unknown, divided?: boolean) => string;
+const drafts = new Map<string, Record<string, unknown>>();
+const configSource = [fn('function shownConfigFields'), fn('function configGroupFields'), constant('configFormId'), constant('configDisabled'),
+  fn('function configControlValue'), fn('function pluginSettingControl'), fn('function configControl'), fn('function configBody'),
+  fn('function destinationRow'), fn('function generalConfigBlock'), fn('function configForms'), fn('function pluginSettingsForm')].join('\n');
+const ui = new Function('esc', 'renderField', 'field', 'pluginConfigDrafts', `${configSource}\nreturn { pluginSettingsForm, generalConfigBlock, configForms };`)(esc, renderField, field, drafts) as {
+  pluginSettingsForm(plugin: unknown, scope: string, fields: unknown[], values: Record<string, unknown>): string;
+  generalConfigBlock(plugin: unknown): string;
+  configForms(plugin: unknown): string;
+};
 
+const settings = [
+  { key: 'localhost', label: 'Localhost', type: 'boolean', default: true, hint: 'Test on this computer.' },
+  { key: 'production', label: 'Production', type: 'boolean', default: false, hint: 'Publish to your website.' },
+];
 const config = [
-  { key: 'productionConfigured', label: 'Production configured explicitly', type: 'boolean', default: false },
-  { key: 'productionOrigin', label: 'Production HTTPS origin', type: 'text', default: '' },
+  { key: 'localPort', label: 'Port', type: 'number', default: 8443, shownWhen: 'localhost' },
+  { key: 'productionOrigin', label: 'Origin', type: 'text', default: '', shownWhen: 'production' },
+  { key: 'productionBranch', label: 'Branch', type: 'text', default: '', shownWhen: 'production' },
+  { key: 'productionTimeoutMs', label: 'Timeout', type: 'number', default: 10, shownWhen: 'production', advanced: true },
 ];
+const plugin = (extra: Record<string, unknown> = {}) => ({ id: 'w', enabled: true, settings, config, values: { localhost: true, production: true }, configValues: {}, ...extra });
+const card = (p: any) => ui.pluginSettingsForm(p, 'settings', p.settings, p.values) + ui.generalConfigBlock(p) + ui.configForms(p);
 
-test('declared configuration renders as tabs with an explicit Save', () => {
-  const html = render({ id: 'bundled:publisher', enabled: true, config, configValues: { productionConfigured: true, productionOrigin: 'https://site.example' } }, true);
-  assert.match(html, /data-plugin-config="bundled:publisher"/);
-  assert.match(html, /<div class="xrb-tabs settings-config-tabs" role="tablist" aria-label="Configuration"><button type="button" class="xrb-tab" role="tab" data-config-tab="General" aria-selected="true" data-active>General<\/button><\/div>/);
-  assert.doesNotMatch(html, /xrb-section-divider/, 'no line between the checkboxes and the tabs');
-  assert.match(html, /name="productionConfigured" checked/);
-  assert.match(html, /value="https:\/\/site\.example"/);
-  assert.match(html, /<button type="submit"[^>]*>Save configuration<\/button>/);
-  assert.doesNotMatch(html, /disabled/);
+test('each destination is one row with its name, description, status and switch', () => {
+  const html = card(plugin({ destinationStatus: { localhost: { configured: true }, production: { configured: false, problem: 'Configure production in Settings' } } }));
+  assert.deepEqual([...html.matchAll(/data-destination="([^"]+)"/g)].map(m => m[1]), ['localhost', 'production']);
+  assert.match(html, /<h2 class="settings-section">Localhost<\/h2><span class="xrb-help">Test on this computer\.<\/span>/);
+  assert.match(html, /<span class="state ok">ready<\/span>/);
+  assert.match(html, /<span class="state busy" title="Configure production in Settings">not configured<\/span>/);
+  assert.match(html, /<label class="xrb-switch"><input type="checkbox" role="switch" name="production" aria-label="Production" checked/);
+  assert.match(html, /<p class="xrb-help settings-destination-problem">Configure production in Settings<\/p>/);
+  assert.doesNotMatch(html, /xrb-tabs|<label class="toggle"><input type="checkbox" name="production"/, 'no tabs and no duplicate checkbox');
+  assert.match(html, /<section class="settings-destination " data-destination="localhost">/, 'the first section has no divider');
+  assert.match(html, /<section class="settings-destination xrb-section-divider" data-destination="production">/, 'later sections use the shared divider, not a border');
 });
 
-const scoped = [
-  { key: 'localPort', label: 'Port', type: 'number', default: 8443, section: 'Localhost', shownWhen: 'localhost' },
-  { key: 'productionOrigin', label: 'Origin', type: 'text', default: '', section: 'Production', shownWhen: 'production' },
-  { key: 'productionBranch', label: 'Branch', type: 'text', default: '', section: 'Production', shownWhen: 'production' },
-];
-
-test('each enabled destination gets a tab; a turned-off destination is hidden entirely', () => {
-  const both = render({ id: 'w', enabled: true, config: scoped, values: { localhost: true, production: true }, configValues: { productionOrigin: 'https://site.example' } });
-  assert.deepEqual([...both.matchAll(/data-config-tab="([^"]+)"/g)].map(m => m[1]), ['Localhost', 'Production']);
-  assert.match(both, /data-config-panel="Localhost" >/, 'first tab open');
-  assert.match(both, /data-config-panel="Production" hidden>/);
-  assert.match(both, /name="productionOrigin" value="https:\/\/site\.example"/, 'hidden tabs keep their fields in the form');
-  const localOnly = render({ id: 'w', enabled: true, config: scoped, values: { localhost: true, production: false } });
-  assert.deepEqual([...localOnly.matchAll(/data-config-tab="([^"]+)"/g)].map(m => m[1]), ['Localhost']);
-  assert.doesNotMatch(localOnly, /productionOrigin/);
-  assert.equal(render({ id: 'w', enabled: true, config: scoped, values: { localhost: false, production: false } }), '', 'nothing to configure');
+test('a destination that is off shows only its row; its fields and form are not rendered', () => {
+  const html = card(plugin({ values: { localhost: true, production: false } }));
+  assert.match(html, /<section class="settings-destination xrb-section-divider" data-destination="production">/);
+  assert.doesNotMatch(html, /productionOrigin|plugin-config-w-production/);
+  assert.match(html, /id="plugin-config-w-localhost" data-plugin-config="w" data-config-group="localhost" hidden/);
 });
 
-test('the open tab and typed drafts survive a redraw', () => {
-  configTabs.set('d', 'Production'); configDrafts.set('d', { productionBranch: 'pages' });
-  const html = render({ id: 'd', enabled: true, config: scoped, values: { localhost: true, production: true }, configValues: { productionBranch: 'main' } });
-  assert.match(html, /data-config-tab="Production" aria-selected="true" data-active/);
-  assert.match(html, /data-config-panel="Localhost" hidden>/);
-  assert.match(html, /name="productionBranch" value="pages"/);
-  configTabs.clear(); configDrafts.clear();
+test('configuration fields belong to their destination form, with Advanced folded and a Save per row', () => {
+  const html = card(plugin({ configValues: { productionOrigin: 'https://site.example' } }));
+  assert.match(html, /form="plugin-config-w-production" name="productionOrigin" value="https:\/\/site\.example"/);
+  assert.match(html, /<details class="xrb-disclosure settings-config-advanced"><summary>Advanced<\/summary><div class="settings-card-fields">[^]*name="productionTimeoutMs"/);
+  assert.doesNotMatch(html.slice(0, html.indexOf('<details')), /name="productionTimeoutMs"/, 'advanced fields stay folded');
+  assert.equal([...html.matchAll(/<button type="submit" form="plugin-config-w-(localhost|production)" class="action-button" >Save<\/button>/g)].length, 2);
+  assert.match(html, /id="plugin-config-w-production-error" data-config-error/);
+});
+
+test('typed drafts survive a redraw', () => {
+  drafts.set('w', { productionBranch: 'pages' });
+  assert.match(card(plugin({ configValues: { productionBranch: 'main' } })), /name="productionBranch" value="pages"/);
+  drafts.clear();
+});
+
+test('configuration not tied to a setting renders as its own block', () => {
+  const p = plugin({ settings: [], values: {}, config: [{ key: 'region', label: 'Region', type: 'text', default: '' }] });
+  const html = card(p);
+  assert.match(html, /<div class="settings-config">[^]*form="plugin-config-w-general" name="region"/);
+  assert.match(html, /id="plugin-config-w-general" data-plugin-config="w" data-config-group=""/);
 });
 
 test('disabled plugins and unreadable files keep configuration read-only and say why', () => {
-  assert.equal(render({ id: 'p', enabled: true, config: [] }), '', 'no section without declared fields');
-  const disabled = render({ id: 'p', enabled: false, config, configValues: {} });
+  const disabled = card(plugin({ enabled: false }));
   assert.match(disabled, /name="productionOrigin" value=""\s+disabled/);
-  assert.match(disabled, /Save configuration/); assert.match(disabled, /<button type="submit" class="action-button" disabled>/);
-  const broken = render({ id: 'p', enabled: true, config, configProblem: 'Invalid JSON in plugin config: <file>' });
+  assert.match(disabled, /<button type="submit" form="plugin-config-w-production" class="action-button" disabled>Save<\/button>/);
+  const broken = card(plugin({ configProblem: 'Invalid JSON in plugin config: <file>' }));
   assert.match(broken, /<p class="errors" role="alert">Invalid JSON in plugin config: &lt;file&gt;<\/p>/);
-  assert.match(broken, /<button type="submit" class="action-button" disabled>/);
+  assert.match(broken, /class="action-button" disabled>Save/);
 });
 
 class ApiError extends Error {
@@ -70,57 +88,67 @@ class ApiError extends Error {
   constructor(status: number, data: any) { super(data?.error); this.status = status; this.data = data; }
 }
 
-function control(name: string, value: string | boolean) {
-  return typeof value === 'boolean' ? { name, checked: value, disabled: false } : { name, value, disabled: false };
+function form(values: Record<string, string | boolean>, group = 'production') {
+  const controls = Object.entries(values).map(([name, value]) => typeof value === 'boolean' ? { name, checked: value, disabled: false } : { name, value, disabled: false });
+  const named: any = (name: string) => controls.find(item => item.name === name);
+  const elements = Object.assign([...controls], { namedItem: named });
+  return { id: `plugin-config-p-${group}`, dataset: { pluginConfig: 'p', configGroup: group }, isConnected: true, controls, elements };
 }
-function form(values: Record<string, string | boolean>) {
-  const controls = Object.entries(values).map(([name, value]) => control(name, value));
-  const error = { textContent: '', hidden: true };
-  return {
-    dataset: { pluginConfig: 'p' }, isConnected: true, error, controls,
-    elements: { namedItem: (name: string) => controls.find(item => item.name === name) },
-    querySelector: (selector: string) => selector === '[data-config-error]' ? error : null,
-    querySelectorAll: () => controls,
-  };
-}
-function harness(api: (method: string, url: string, body?: any) => Promise<any>, rendered: ReturnType<typeof form>) {
-  const plugin: any = { id: 'p', enabled: true, config, configValues: {}, configRevision: 'absent' };
-  const state = { managedPlugins: [plugin] }, calls = { render: 0, projects: 0 };
-  const document = { getElementById: () => ({ hidden: true, className: '', textContent: '' }), querySelector: () => rendered };
-  const drafts = new Map<string, unknown>([['p', { productionOrigin: 'typed' }]]);
-  const save = new Function('state', 'api', 'ApiError', 'document', 'CSS', 'renderGlobalSettings', 'loadProjects', 'pluginConfigDrafts', `${configSource}${fn('async function savePluginConfig')}\nreturn savePluginConfig;`)(
-    state, api, ApiError, document, { escape: (value: string) => value }, () => { calls.render++; }, async () => { calls.projects++; }, drafts) as (form: unknown) => Promise<void>;
-  return { plugin, calls, save, drafts };
+function harness(api: (method: string, url: string, body?: any) => Promise<any>, extra: Record<string, unknown> = {}) {
+  const p: any = { id: 'p', enabled: true, config, values: { localhost: true, production: true }, configValues: {}, configRevision: 'absent', ...extra };
+  const calls = { render: 0, projects: 0, plugins: 0 }, errors = new Map<string, { textContent: string; hidden: boolean }>();
+  const document = { getElementById: (id: string) => { if (!errors.has(id)) errors.set(id, { textContent: '', hidden: true }); return errors.get(id); } };
+  const local = new Map<string, unknown>([['p', { productionOrigin: 'typed' }]]);
+  const save = new Function('state', 'api', 'ApiError', 'document', 'renderGlobalSettings', 'loadProjects', 'loadManagedPlugins', 'pluginConfigDrafts',
+    `${[fn('function shownConfigFields'), constant('configDisabled'), fn('function configControlValue'), fn('async function savePluginConfig')].join('\n')}\nreturn savePluginConfig;`)(
+    { managedPlugins: [p] }, api, ApiError, document, () => { calls.render++; }, async () => { calls.projects++; }, async () => { calls.plugins++; }, local) as (form: unknown) => Promise<void>;
+  return { plugin: p, calls, save, drafts: local, error: (id: string) => errors.get(`${id}-error`) };
 }
 
-test('Save sends trimmed values with the loaded revision and keeps the new revision', async () => {
-  const sent: any[] = [], f = form({ productionConfigured: true, productionOrigin: ' https://site.example ' });
-  const h = harness(async (method, url, body) => { sent.push({ method, url, body }); return { revision: 'b'.repeat(64), values: body.values }; }, f);
+test('Save sends only that destination\'s fields, trimmed, with the loaded revision', async () => {
+  const sent: any[] = [], f = form({ productionOrigin: ' https://site.example ', productionBranch: 'main', productionTimeoutMs: '20' });
+  const h = harness(async (method, url, body) => { sent.push({ method, url, body }); return { revision: 'b'.repeat(64), values: body.values }; });
   await h.save(f);
-  assert.deepEqual(sent, [{ method: 'PUT', url: '/api/plugins/manage/p/config', body: { values: { productionConfigured: true, productionOrigin: 'https://site.example' }, revision: 'absent' } }]);
+  assert.deepEqual(sent, [{ method: 'PUT', url: '/api/plugins/manage/p/config', body: { values: { productionOrigin: 'https://site.example', productionBranch: 'main', productionTimeoutMs: 20 }, revision: 'absent' } }]);
   assert.equal(h.plugin.configRevision, 'b'.repeat(64));
-  assert.equal(h.calls.projects, 1, 'publisher choices refresh');
+  assert.deepEqual(h.calls, { render: 1, projects: 1, plugins: 1 }, 'the ready/not configured chip and publisher choices refresh');
   assert.equal(h.drafts.has('p'), false, 'a saved draft is cleared');
   assert.ok(f.controls.every(item => !item.disabled));
 });
 
+test('the Localhost row saves only Localhost, so other destinations keep their stored values', async () => {
+  const sent: any[] = [];
+  const h = harness(async (_m, _u, body) => { sent.push(body); return { revision: 'r'.repeat(64), values: body.values }; });
+  await h.save(form({ localPort: '9443' }, 'localhost'));
+  assert.deepEqual(sent[0].values, { localPort: 9443 });
+});
+
 test('invalid values show inline and stale saves reload what is on disk', async () => {
-  const f = form({ productionConfigured: false, productionOrigin: 'x' });
-  const invalid = harness(async () => { throw new ApiError(400, { error: 'Invalid value for Production HTTPS origin', details: { fields: [{ field: 'productionOrigin' }] } }); }, f);
+  const f = form({ productionOrigin: 'x', productionBranch: '', productionTimeoutMs: '10' });
+  const invalid = harness(async () => { throw new ApiError(400, { error: 'Invalid value for Origin', details: { fields: [{ field: 'productionOrigin' }] } }); });
   await invalid.save(f);
-  assert.equal(f.error.hidden, false); assert.match(f.error.textContent, /Invalid value/);
+  assert.equal(invalid.error(f.id)!.hidden, false); assert.match(invalid.error(f.id)!.textContent, /Invalid value/);
   assert.equal(invalid.calls.render, 0, 'typed values are kept');
 
-  const fresh = form({});
   const stale = harness(async (method) => {
-    if (method === 'GET') return { revision: 'c'.repeat(64), values: { productionConfigured: false, productionOrigin: 'https://other.example' } };
+    if (method === 'GET') return { revision: 'c'.repeat(64), values: { productionOrigin: 'https://other.example' } };
     throw new ApiError(409, { error: 'The configuration changed on disk; reload it before saving', details: { stale: 'config' } });
-  }, fresh);
-  await stale.save(form({ productionConfigured: true, productionOrigin: 'https://mine.example' }));
+  });
+  const g = form({ productionOrigin: 'https://mine.example', productionBranch: '', productionTimeoutMs: '10' });
+  await stale.save(g);
   assert.equal(stale.plugin.configRevision, 'c'.repeat(64));
   assert.equal(stale.plugin.configValues.productionOrigin, 'https://other.example');
   assert.equal(stale.calls.render, 1);
-  assert.match(fresh.error.textContent, /changed on disk/);
+  assert.match(stale.error(g.id)!.textContent, /changed on disk/);
+});
+
+test('switches save instantly, configuration fields only remember drafts, and a destination switch redraws', () => {
+  const render = fn('function renderGlobalSettings');
+  assert.match(render, /if \(event\.target\.form !== form\) return; \/\/ a configuration field inside a destination row/);
+  assert.match(render, /addEventListener\('input', rememberConfigDraft\)/);
+  const save = fn('async function savePluginSettings');
+  assert.match(save, /if \(plugin\.config\?\.some\(\(setting\) => setting\.shownWhen\)\) \{\n\s+\/\/[^\n]*\n\s+await loadManagedPlugins\(\)\.catch\(\(\) => \{\}\);\n\s+renderGlobalSettings\(\);/);
+  assert.match(save, /if \(!control\.form \|\| control\.form === form\) control\.disabled = true/, 'configuration controls are left alone');
 });
 
 test('unconfigured publishers are named "(not configured)" instead of their placeholder host', () => {
@@ -138,21 +166,4 @@ test('the Publish card explains a missing configuration and links to that plugin
   assert.match(fields, /const result = configure \|\| failure;/);
   assert.match(fields, /const canPublish = !!selectedPublisher && info\.available/, 'the server marks an unconfigured selection unavailable, which disables Publish');
   assert.match(fn('function renderGlobalSettings'), /plugins\.find\(\(plugin\) => plugin\.key === requestedModule\)\?\.id/, 'Settings accepts the linked plugin key');
-});
-
-test('only shown fields are saved, so a hidden destination keeps its stored values', async () => {
-  const sent: any[] = [], f = form({ localPort: '9443' });
-  const plugin: any = { id: 'p', enabled: true, config: scoped, values: { localhost: true, production: false }, configValues: {}, configRevision: 'absent' };
-  const save = new Function('state', 'api', 'ApiError', 'document', 'CSS', 'renderGlobalSettings', 'loadProjects', 'pluginConfigDrafts', `${configSource}${fn('async function savePluginConfig')}\nreturn savePluginConfig;`)(
-    { managedPlugins: [plugin] }, async (_m: string, _u: string, body: any) => { sent.push(body); return { revision: 'r'.repeat(64), values: body.values }; }, ApiError,
-    { getElementById: () => null }, { escape: (v: string) => v }, () => {}, async () => {}, new Map()) as (form: unknown) => Promise<void>;
-  await save(f);
-  assert.deepEqual(sent[0].values, { localPort: 9443 });
-});
-
-test('turning a destination checkbox on or off redraws only the configuration form', () => {
-  assert.match(fn('async function savePluginSettings'), /if \(plugin\.config\?\.some\(\(setting\) => setting\.shownWhen\)\) refreshPluginConfig\(plugin\);/);
-  const refresh = fn('function refreshPluginConfig');
-  assert.match(refresh, /current\.outerHTML = html \|\| ''/);
-  assert.match(refresh, /bindPluginConfig\(form\)/);
 });
