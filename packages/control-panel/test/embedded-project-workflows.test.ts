@@ -70,7 +70,9 @@ test('embedded projects use durable normal settings and immutable builds without
   await fs.writeFile(file, JSON.stringify({ ...working.manifest, name: 'External edit' })); await fs.utimes(file, fixedTime, fixedTime);
   const external = (await f.request('GET', '/api/projects/bundled%3Asample')).json;
   assert.equal(external.manifestMtimeMs, previous.manifestMtimeMs);
-  assert.equal((await f.save(previous.manifest, previous.manifestMtimeMs, previous.manifestRevision)).status, 409, 'content revision rejects stale edits even with identical Windows timestamps');
+  const stale = await f.save(previous.manifest, previous.manifestMtimeMs, previous.manifestRevision);
+  assert.equal(stale.status, 409, 'content revision rejects stale edits even with identical Windows timestamps');
+  assert.equal(stale.json.details.stale, 'manifest', 'clients may rebase only explicitly classified revision conflicts');
   assert.equal((await f.save({ ...external.manifest, name: 'My sample' })).status, 200);
   const job = await f.request('POST', '/api/projects/bundled%3Asample/build-web');
   assert.equal(job.status, 202, job.text);

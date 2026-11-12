@@ -4,6 +4,7 @@ import { appLaunchUrl, createXrbApp, fitIcon, loadAppIcon, rendererOptions, upda
 import { Button, COLORS, Dialog, Label, material, roundedBox, roundedDisc } from '@xr-build/ui-kit';
 import { catalogBaseHref, excludeCurrentPublication, isLoopbackDevelopment, isPanelPreview, isPublishedHosting, loadRuntimeCatalog, workspaceCatalogBase } from './catalog.js';
 import createIcon from './icon.js';
+import { loadIconModel } from './icon-loader.js';
 import './style.css';
 
 const PANEL = { width: 0.597, height: 0.336 };
@@ -252,6 +253,7 @@ class AppCard extends THREE.Group {
     this.launching = false;
     this.launchStartedAt = 0;
     this.launchOrigin = new THREE.Vector3();
+    this.disposed = false;
     this.icon3d = null;
     this.iconReveal = 0;
     this.iconSeconds = 0;
@@ -271,17 +273,20 @@ class AppCard extends THREE.Group {
     fallback.position.set(0, 0.043, CARD_FACE_Z + 0.007);
     content.add(fallback);
     // The app's 3D icon (its build's icon.js) pops out of the well; without one, its PNG icon on a plane.
+    let image = null;
     const showPng = () => app.iconUrl && textureLoader.load(app.iconUrl, (texture) => {
-      if (!this.parent) { texture.dispose(); return; }
+      if (this.disposed || this.icon3d) { texture.dispose(); return; }
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.anisotropy = 4;
       const icon = new THREE.Mesh(new THREE.PlaneGeometry(0.052, 0.052), new THREE.MeshBasicMaterial({ map: texture, transparent: true }));
       icon.position.set(0, 0.043, CARD_FACE_Z + 0.0075);
       fallback.visible = false;
+      image = icon;
       content.add(icon);
     }, undefined, () => {});
     const show3d = (icon) => {
-      if (!this.parent) return;
+      if (this.disposed) { disposeObject(icon); return; }
+      if (image) { image.removeFromParent(); disposeObject(image); image = null; }
       if (app.defaultSphere) icon.traverse((object) => {
         const materials = Array.isArray(object.material) ? object.material : [object.material];
         for (const material of materials) material?.color?.set(DEFAULT_ICON_COLORS[app.iconColor] ?? DEFAULT_ICON_COLORS.blue);
@@ -297,7 +302,12 @@ class AppCard extends THREE.Group {
       new THREE.MeshStandardMaterial({ color: DEFAULT_ICON_COLORS[app.iconColor] ?? DEFAULT_ICON_COLORS.blue, metalness: 0.1, roughness: 0.35 }),
     ), ICON_DIAMETER));
     else if (app.placeholder || !app.route) showPng();
-    else void loadAppIcon(app.route, ICON_DIAMETER).then((icon) => icon ? show3d(icon) : showPng());
+    else {
+      showPng();  // A usable image stays visible while authored geometry loads.
+      const model = app.iconModelUrl ? loadIconModel(app.iconModelUrl, ICON_DIAMETER, fitIcon)
+        : app.projectId ? Promise.resolve(null) : loadAppIcon(app.route, ICON_DIAMETER);
+      void model.then((icon) => { if (icon) show3d(icon); });
+    }
 
     const title = new Label(wrapLines(app.title, 18), { size: 0.011, weight: 700 });
     title.position.set(0, 0.001, CARD_FACE_Z);
@@ -382,6 +392,7 @@ class AppCard extends THREE.Group {
   }
 
   destroy() {
+    this.disposed = true;
     this.launch?.detach();
     disposeObject(this);
     this.removeFromParent();
@@ -480,8 +491,8 @@ async function updateCatalog() {
     catalogError = null;
     catalogLoaded = true;
     if (development && !panelPreview && !workspaceBase) nextApps = nextApps.map(localizePublishedApp);
-    const signature = JSON.stringify(nextApps.map(({ id, title, description, route, launchUrl, iconUrl, iconColor, defaultSphere }) =>
-      [id, title, description, route, launchUrl, iconUrl, iconColor, defaultSphere]));
+    const signature = JSON.stringify(nextApps.map(({ id, title, description, route, launchUrl, iconUrl, iconColor, defaultSphere, defaultIcon3d, iconModelUrl, iconRevision }) =>
+      [id, title, description, route, launchUrl, iconUrl, iconColor, defaultSphere, defaultIcon3d, iconModelUrl, iconRevision]));
     if (signature !== catalogSignature) {
       apps = nextApps;
       catalogSignature = signature;

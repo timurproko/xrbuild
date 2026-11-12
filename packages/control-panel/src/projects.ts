@@ -16,6 +16,8 @@ export interface Manifest {
   /** Optional launcher card copy; empty omits the description. */
   description?: string;
   kind: ProjectKind;
+  /** Explicit run capability: prepare the local library's authored icons before opening this app. */
+  catalog?: boolean;
   /** folder served to the host, relative to the project: a build output or a static page folder */
   entry?: string;
   /** script names from the project's package.json */
@@ -102,6 +104,7 @@ export function validateManifest(m: unknown, projectDir: string): FieldError[] {
   if (!m || typeof m !== 'object' || Array.isArray(m)) return [{ field: '', message: 'manifest must be a JSON object' }];
   const o = m as Record<string, unknown>;
   if (typeof o.name !== 'string' || !o.name.trim()) err('name', 'name is required');
+  if (o.catalog !== undefined && typeof o.catalog !== 'boolean') err('catalog', 'catalog must be a boolean');
   if (o.description !== undefined && (typeof o.description !== 'string' || o.description.length > 160)) err('description', 'description must be text up to 160 characters');
   if (o.kind !== 'app' && o.kind !== 'test') err('kind', 'kind must be "app" or "test"');
   for (const field of ['entry', 'icon'] as const) {

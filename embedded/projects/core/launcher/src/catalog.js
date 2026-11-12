@@ -239,8 +239,10 @@ export async function loadWorkspaceCatalog({ fetchImpl = fetch, baseHref, signal
         launchUrl: launch.href,
         iconUrl: new URL(`/api/projects/${encodeURIComponent(project.id)}/icon`, base).href,
         // A generated default icon keeps the compact sphere in the app colour; authored icons keep their own size.
-        defaultSphere: card.icon.default,
-        defaultIcon3d: card.icon.default && !card.icon.model,
+        defaultSphere: card.icon.default && (!project.icon?.authored || project.icon?.generated === true),
+        defaultIcon3d: project.icon?.generated === true || card.icon.default && !card.icon.model && !project.icon?.authored,
+        iconModelUrl: project.icon?.model ? new URL(project.icon.model, base).href : null,
+        iconRevision: JSON.stringify([project.icon?.model, project.icon?.mtimeMs, project.icon?.generated]),
         iconColor: card.icon.color,
         publishedMs: 0,
       };

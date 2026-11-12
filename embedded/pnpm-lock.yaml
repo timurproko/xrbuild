@@ -70,16 +70,6 @@ importers:
         specifier: 6.4.3
         version: 6.4.3
 
-  projects/unsorted/test:
-    dependencies:
-      three:
-        specifier: 0.170.0
-        version: 0.170.0
-    devDependencies:
-      vite:
-        specifier: 6.4.3
-        version: 6.4.3
-
 packages:
 
   '@esbuild/aix-ppc64@0.25.12':

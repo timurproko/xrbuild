@@ -1,5 +1,6 @@
 // XR Build control panel UI: plain ES module, no build step. Talks to the panel server
 // (same origin) over JSON and a Server-Sent Events stream.
+import { SettingsWriter } from './settings-writer.js';
 import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
 import {requestedNavigation,menuKeyboard,renderNavigationMenu,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
@@ -64,6 +65,35 @@ class ApiError extends Error {
     super(data?.error ?? `HTTP ${status}`);
     this.status = status;
     this.data = data;
+  }
+}
+
+const settingsWriter = new SettingsWriter({
+  read: (id) => api('GET', projectUrl(id)),
+  write: (id, manifest, current) => api('PUT', `${projectUrl(id)}/manifest`, { manifest, mtimeMs: current.manifestMtimeMs, revision: current.manifestRevision }),
+  saved: (id, result) => {
+    for (const list of [state.projects, state.archived]) {
+      const index = list.findIndex((project) => project.id === id);
+      if (index >= 0) list[index] = { ...result, manifest: settingsWriter.overlay(id, result.manifest) };
+    }
+  },
+  changed: (id) => { if (selected()?.id === id) renderSettingsStatus(); },
+});
+
+function renderSettingsStatus() {
+  const p = selected(), form = $('#settings');
+  if (!p || !form) return;
+  let status = form.querySelector('[data-settings-status]');
+  if (!status) { status = document.createElement('div'); status.dataset.settingsStatus = ''; status.className = 'xrb-stack'; form.append(status); }
+  const entry = settingsWriter.entry(p.id);
+  if (entry?.error?.data?.fields) showFieldErrors(Object.fromEntries(entry.error.data.fields.map((field) => [field.field, field.message])));
+  status.replaceChildren();
+  if (!entry?.running && !entry?.error) return;
+  const text = document.createElement('span'); text.className = `xrb-help${entry.error ? ' field-error' : ''}`; text.setAttribute('role', 'status');
+  text.textContent = entry.error ? `Not saved. ${entry.error.message}` : 'Saving settings…'; status.append(text);
+  if (entry.error) for (const [label, run] of [['Retry', async () => { await settingsWriter.retry(p.id); await loadProjects(); }], ['Reload', async () => { settingsWriter.discard(p.id); state.dirty = false; await loadProjects(); renderDetail(true); }]]) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'small'; button.textContent = label;
+    button.addEventListener('click', action(run)); status.append(button);
   }
 }
 
@@ -322,6 +352,7 @@ async function loadProjects() {
   }
   const retainPublicationEdit = (project) => {
     const pending = state.savingPublication.get(project.id) ?? state.publicationJobViews.get(project.id);
+    if (project.manifest) project = { ...project, manifest: settingsWriter.overlay(project.id, project.manifest) };
     if (!pending || !project.manifest) return project;
     const publisher = pending.publication.publisher;
     const status = pending.status ?? project.publicationDestinations?.[publisher]?.status ?? project.publication?.status ?? null;
@@ -1982,6 +2013,7 @@ function renderDetail(force = false) {
   }));
   if (platformGroup) wirePlatformDrag(platformGroup);
   syncRunDock(p);
+  renderSettingsStatus();
   // The optional Publish form saves independently: Display/Input edits must not overwrite package or publication fields.
   // A title saves on Enter or blur, never while half typed.
   for (const form of [$('#settings'), $('#build-settings')].filter(Boolean)) {
@@ -2185,12 +2217,21 @@ async function saveSettings(p, form, changedName) {
   }
   for (const [k, v] of form.entries()) {
     const at = /^plugins\.([^.]+)\.(.+)$/.exec(k);
-    if (!at) continue;
+    if (!at || k !== changedName) continue;
     const value = k === 'plugins.desktop.monitor' ? Math.max(0, Number(v) || 0) : String(v).trim();
     m.plugins = { ...m.plugins, [at[1]]: { ...m.plugins?.[at[1]], [at[2]]: value } };
   }
-  syncPackageId(m, p.manifest, p.packaging);
+  if (changedName?.startsWith('publication.') || changedName === 'platform-choice') syncPackageId(m, p.manifest, p.packaging);
   for (const k of Object.keys(m)) if (m[k] === undefined) delete m[k];
+  if (!changedName?.startsWith('publication.') && changedName !== 'platform-choice') {
+    const saving = settingsWriter.enqueue(p.id, previousManifest, m);
+    p.manifest = settingsWriter.overlay(p.id, previousManifest);
+    state.dirty = false;
+    await saving;
+    await loadProjects();
+    renderSettingsStatus();
+    return;
+  }
   const editingPublication = changedName?.startsWith('publication.');
   const switchingPublisher = changedName === 'publication.publisher' && m.publication?.publisher !== previousManifest.publication?.publisher;
   const destination = switchingPublisher ? p.publicationDestinations?.[m.publication.publisher] : null;
@@ -2267,9 +2308,7 @@ async function saveSettings(p, form, changedName) {
         await loadProjects();
         return;
       }
-      await ask({ title: 'Settings changed on disk', message: error.message, ok: 'Reload', cancel: null });
-      state.dirty = false;
-      await loadProjects();
+      showFieldErrors({ '': `Not saved. ${error.message}` });
       return;
     }
     clearPublicationSave();

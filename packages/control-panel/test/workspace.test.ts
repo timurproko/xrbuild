@@ -5,6 +5,9 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { REPO } from '../src/env.ts';
 import { discoverProjects } from '../src/projects.ts';
+import { projectIconSource } from '../src/project-icons.ts';
+import { discoverProjectCatalog } from '../src/extension-catalog.ts';
+import { embeddedWorkspacePlan } from '../src/embedded-workspace.ts';
 import { createProject, createProjectWorkspace, createWorkspace, importPluginSample, isWorkspace, PLUGIN_PROJECTS_SECTION, ProjectRefused, STARTER_APP, writeEditorConfig } from '../src/workspace.ts';
 
 const tmp = () => fs.mkdtemp(path.join(os.tmpdir(), 'xrb-ws-'));
@@ -64,6 +67,30 @@ test('a new project takes its name, and an existing folder or a bad name is refu
   assert.match(await fs.readFile(path.join(ws, 'projects', 'unsorted', 'globe', 'index.html'), 'utf8'), /<title>Globe &lt;Demo&gt;<\/title>/);
   await assert.rejects(createProject(REPO, ws, 'globe'), ProjectRefused);
   await assert.rejects(createProject(REPO, ws, '../out'), ProjectRefused);
+});
+
+test('New project retains the canonical template after embedded starter retirement and never cleans personal state', async t => {
+  await fs.mkdir(path.join(REPO, '.artifacts'), { recursive: true });
+  const ws = await fs.mkdtemp(path.join(REPO, '.artifacts/new-template-'));
+  t.after(() => fs.rm(ws, { recursive: true, force: true }));
+  const preserved = path.join(ws, '.xrb/embedded-projects/retired/recording.txt');
+  await fs.mkdir(path.dirname(preserved), { recursive: true }); await fs.writeFile(preserved, 'preserve personal state');
+  await createProject(REPO, ws, 'test', 'Test', 'combined');
+  const [project] = await discoverProjects(ws);
+  assert.equal(project.id, 'test'); assert.equal(project.manifest!.name, 'Test');
+  for (const relative of ['src/main.js', 'src/icon.js', 'src/icon-theme.js', 'public/font-LICENSE.txt']) {
+    const expected = (await fs.readFile(path.join(REPO, 'templates/app', relative), 'utf8')).replaceAll('__NAME__', 'Test').replaceAll('\r\n', '\n');
+    const actual = (await fs.readFile(path.join(project.dir, relative), 'utf8')).replaceAll('\r\n', '\n');
+    assert.equal(actual, expected, relative);
+  }
+  assert.equal((await projectIconSource(REPO, project)).generated, true, '3D template icon is ready before an app build');
+  const catalog = await discoverProjectCatalog(REPO, ws);
+  assert.ok(catalog.projects.some(p => p.project.id === 'test'));
+  assert.ok(!catalog.projects.some(p => p.project.id === 'bundled:test'));
+  assert.equal(catalog.projects.filter(p => p.origin === 'bundled').length, 7);
+  assert.equal(await fs.readFile(preserved, 'utf8'), 'preserve personal state');
+  const plan = await embeddedWorkspacePlan(REPO);
+  assert.equal(plan.packages.length, 6); assert.ok(!plan.packages.some(p => p.relative === 'projects/unsorted/test'));
 });
 
 test('a plugin sample imports as an independent project in the plugins section', async t => {

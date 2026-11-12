@@ -38,6 +38,7 @@ import { effectiveProjectOutput, effectiveOutputRoot } from './embedded-project-
 import { discoverProjectCatalog } from './extension-catalog.ts';
 import { bundledBuildPlan, resolveProjectOutput, requireProjectOutput, projectPreviewRoute, projectBuildRoot } from './project-build.ts';
 import { copyBundledProject, projectFile, projectPath } from './embedded-projects.ts';
+import { projectIconSource } from './project-icons.ts';
 import { assertEditableProject, assertUserRoot, assertWritablePath } from './project-access.ts';
 import { projectRunSettingsFile, readProjectRunSettings, withRunSettings } from './project-run-settings.ts';
 import { publicationCard } from './publication.ts';
@@ -215,6 +216,7 @@ export async function describeProject(projects: string, p: Project, panel: Panel
   // The build's 3D icon (icon.js next to index.html), which a launcher imports from the preview route.
   const iconModelMs = entry ? output ? await mtime(path.join(entry, 'icon.js')) : await assetTime(`${relativeEntry}/icon.js`) : null;
   const iconMs = m?.icon ? await assetTime(m.icon) : null;
+  const iconSource = await projectIconSource(panel.repo, p);
   const packageId = m ? identityOf(m)?.id : undefined;
   const zipMs = typeof packageId === 'string' ? await mtime(path.join(panel.workspace, 'builds', `${packageId}.zip`)) : null;
   const publicationPromise = panel.publicationOf(m);
@@ -249,6 +251,8 @@ export async function describeProject(projects: string, p: Project, panel: Panel
     entryExists: webBuildMs !== null,
     webBuildMs,
     icon: {
+      generated: iconSource.generated,
+      authored: iconSource.authored,
       custom: iconMs !== null, mtimeMs: iconMs, changedSincePackage: iconMs !== null && zipMs !== null && iconMs > zipMs,
       model: iconModelMs !== null ? `${projectPreviewRoute(p, output ?? undefined)}icon.js` : null,
     },
@@ -555,7 +559,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       const checkWriteRevision = async () => {
         if (p.origin === 'bundled') assertEditableProject(core, projects, p);
         const current = p.origin === 'bundled' ? await readProject(p.dir, p.id, p.section) : null;
-        if (p.origin === 'bundled' && (!current || embeddedManifestRevision({ ...p, ...current }) !== writeManifestRevision)) throw new HttpError(409, 'Project settings changed; reload before saving');
+        if (p.origin === 'bundled' && (!current || embeddedManifestRevision({ ...p, ...current }) !== writeManifestRevision)) throw new HttpError(409, 'Project settings changed; reload before saving', { stale: 'manifest' });
         if ((await fs.stat(path.join(p.dir, MANIFEST))).mtimeMs !== writeRevision) throw new ManifestConflictError('Project settings changed; reload before saving');
       };
       if (method === 'GET' && rest.length === 0) return sendJson(res, 200, await describeProject(projects, p, panel));
@@ -568,7 +572,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
         if (p.origin === 'bundled') {
           const legacy = p.readOnly && p.manifest ? await readProjectRunSettings(core, workspace, p) : null;
           if (typeof body.revision !== 'string') throw new HttpError(400, 'The current project manifest revision is required');
-          if (body.revision !== embeddedManifestRevision(p, legacy?.revision)) throw new HttpError(409, 'Project settings changed; reload before saving');
+          if (body.revision !== embeddedManifestRevision(p, legacy?.revision)) throw new HttpError(409, 'Project settings changed; reload before saving', { stale: 'manifest' });
           const wasRaw = p.readOnly, previousManifest = p.manifest;
           panel.assertProjectIdle(p);
           p = await panel.prepareProject(p);
@@ -597,7 +601,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
           });
           if (r.errors.length) return sendJson(res, 400, { error: 'invalid settings', fields: r.errors });
         } catch (e) {
-          if (e instanceof ManifestConflictError) throw new HttpError(409, e.message);
+          if (e instanceof ManifestConflictError) throw new HttpError(409, e.message, { stale: 'manifest' });
           throw e;
         }
         log(`[projects] saved ${id}/${MANIFEST}`);

@@ -7,8 +7,8 @@ import {test} from 'node:test';
 const core=process.env.XRB_CORE;
 if(!core)throw Error('Public catalog checks require explicit XRB_CORE');
 const {validateManifest}=await import(pathToFileURL(path.join(core,'packages/control-panel/src/projects.ts')).href);
-const groups=['core/launcher','core/ui-kit','unsorted/test','archive/eyes-check','archive/hands-check','archive/hello-cube','archive/rig-check','archive/touch-check'];
-test('all eight product projects retain sections/archives and portable inactive defaults',async()=>{
+const groups=['core/launcher','core/ui-kit','archive/eyes-check','archive/hands-check','archive/hello-cube','archive/rig-check','archive/touch-check'];
+test('all seven product projects retain sections/archives and portable inactive defaults',async()=>{
  for(const group of groups){const m=JSON.parse(await fs.readFile(path.join(core,'embedded/projects',group,'xrb-project.json'),'utf8'));
   assert.equal(m.display,'desktop',group);assert.deepEqual(m.inputs,[],group);assert.deepEqual(validateManifest(m,path.join(core,'embedded/projects',group)),[],group);assert.equal(m.fullscreen,false,group);
   for(const key of ['publication','plugins','platform','platformSettings','monitor','hostArgs','input','uuid'])assert.equal(m[key],undefined,group+': '+key);
@@ -16,8 +16,9 @@ test('all eight product projects retain sections/archives and portable inactive 
  const root=path.join(core,'embedded/projects'),found=[];for(const section of await fs.readdir(root,{withFileTypes:true})){if(!section.isDirectory())continue;for(const folder of await fs.readdir(path.join(root,section.name),{withFileTypes:true})){if(!folder.isDirectory())continue;try{await fs.access(path.join(root,section.name,folder.name,'xrb-project.json'));found.push(section.name+'/'+folder.name);}catch{}}}
  assert.deepEqual(found.sort(),[...groups].sort());
 });
-test('starter source is generated from canonical template and retains the upstream font notice',async()=>{
- for(const relative of ['src/main.js','src/icon.js','src/icon-theme.js','public/font-LICENSE.txt']){const template=(await fs.readFile(path.join(core,'templates/app',relative),'utf8')).replaceAll('__NAME__','Test').replaceAll('\r\n','\n');const actual=(await fs.readFile(path.join(core,'embedded/projects/unsorted/test',relative),'utf8')).replaceAll('\r\n','\n');assert.equal(actual,template,relative);}
+test('the duplicate embedded starter is absent while canonical template icon and notices remain',async()=>{
+ await assert.rejects(fs.access(path.join(core,'embedded/projects/unsorted/test')));
+ for(const relative of ['src/main.js','src/icon.js','src/icon-theme.js','public/font-LICENSE.txt'])assert.ok((await fs.readFile(path.join(core,'templates/app',relative),'utf8')).length,relative);
 });
 test('archived diagnostics parse and render without a host, device, capture or inference',async()=>{
  for(const group of groups.filter(g=>g.startsWith('archive/')&&g!=='archive/hello-cube')){

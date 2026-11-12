@@ -38,6 +38,7 @@ import { archiveProject, readLayout, removeEmptyProjectSection, unarchiveProject
 import { discoverPublishers, normalizeReleaseCatalog, publicationUrl, publisherFor, releaseIdProblem, type PublicationCard, type PublicationIdentity, type Publisher, type PublisherDiscovery, type PublisherReleaseCatalog, type PublisherStatus } from './publishers.ts';
 import { compareVersions as compareReleaseVersions, highestVersion, publicationCard, publicationIdentity, receiptMatchesOutput, suggestedVersion, verifyBuildReceipt, versionProblem, writeBuildReceipt, type PublicationConfig } from './publication.ts';
 import { importPluginSample, ProjectRefused } from './workspace.ts';
+import { projectIconSource } from './project-icons.ts';
 
 /** Providers compiled into xrb-host: never shipped as plugin folders. */
 const BUILTIN_PROVIDERS = new Set(['desktop', 'none', 'mouse', 'keyboard', 'replay', 'simulated']);
@@ -1250,6 +1251,20 @@ export class Panel {
     return true;
   }
 
+  /** Only an explicit catalog launch may prepare other apps; catalog GETs stay read-only. */
+  async prepareCatalogIcons(p: Project): Promise<void> {
+    if (!p.manifest?.catalog) return;
+    const catalog = await discoverProjectCatalog(this.repo, this.workspace, this.projects);
+    for (const { project } of catalog.projects) {
+      if (project.id === p.id || isArchivedId(project.id) || project.manifest?.kind !== 'app' || !project.manifest.scripts?.build) continue;
+      const icon = await projectIconSource(this.repo, project);
+      if (!icon.authored || icon.generated) continue;
+      // Jobs expose cold preparation in Activity; the managed build lane deduplicates current output.
+      const done = await this.jobs.wait(this.webBuild(project));
+      if (done.state === 'failed') log(`[panel] Library icon unavailable for ${project.id}: ${done.error}`);
+    }
+  }
+
   /** Starts one panel-owned standalone WebXR browser preview and returns its app URL. */
   async preview(p: Project, mode: RunMode, flat: boolean | undefined, token: string, options: { fullscreen?: boolean; monitor?: number; clientPort: number }): Promise<string> {
     if (mode === 'dev' && !p.manifest?.scripts?.dev) throw new HttpError(409, `${p.id} has no dev script`);
@@ -1260,6 +1275,7 @@ export class Panel {
     try {
       return await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
         const effective = mode === 'dev' || p.workingRoot ? await this.prepareProject(p) : p;
+        await this.prepareCatalogIcons(effective);
         return this.preparePreview(effective, mode, flat ?? effective.runDefaults?.flat, token, options);
       }, release => this.holdProjectRun(release));
     }
@@ -1338,6 +1354,7 @@ export class Panel {
           const done = await this.jobs.wait(this.webBuild(p));
           if (done.state === 'failed') throw new HttpError(409, done.error ?? 'Project build failed');
         } else if (mode === 'dev' || p.workingRoot) p = await this.prepareProject(p);
+        await this.prepareCatalogIcons(p);
         const settings = p.readOnly ? await readProjectRunSettings(this.repo, this.workspace, p) : null;
         const screen = desktop || settings ? { fullscreen: desktop?.fullscreen ?? settings?.values.fullscreen ?? false, monitor: desktop?.monitor ?? settings?.values.monitor ?? 0 } : undefined;
         await this.runNative(settings ? withRunSettings(p, settings) : p, mode, flat ?? settings?.values.flat ?? p.runDefaults?.flat ?? false, cameraView ?? settings?.values.cameraView ?? p.runDefaults?.cameraView ?? false, screen);

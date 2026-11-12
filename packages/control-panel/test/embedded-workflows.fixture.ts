@@ -20,6 +20,10 @@ test('normal embedded workflow builds the real public launcher with frozen publi
   const p = (await discoverProjectCatalog(REPO, workspace, projects)).projects.find(p => p.key === 'bundled:launcher')!.project;
   assert.ok(p.manifest?.scripts?.build);
   const panel = new Panel(REPO, workspace, new EventHub(), projects);
+  await panel.prepareCatalogIcons(p);
+  const showcase = (await discoverProjectCatalog(REPO, workspace, projects)).projects.find(p => p.key === 'bundled:ui-kit')!.project;
+  const model = await effectiveProjectOutput(REPO, workspace, showcase);
+  await fs.access(path.join(model.entry, 'icon.js'));
   const job = panel.rebuildApp(p); await panel.jobs.wait(job);
   await fs.writeFile(path.join(REPO, '.artifacts/public-project-workflow.log'), job.lines.join('\n'));
   assert.equal(job.state, 'done', job.error ?? job.lines.slice(-20).join('\n'));
