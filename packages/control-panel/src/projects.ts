@@ -65,7 +65,8 @@ export interface Project {
   integrationWorkspace?: string;
   workingRoot?: string;
   stateProblem?: string;
-  sourceUpdate?: { revision: string; path: string };
+  /** Stable finalized-output namespace retained across working-source generations. */
+  workingOutputKey?: string;
   organizationRevision?: string;
   importedRunRevision?: string | null;
   runDefaults?: { flat: boolean; cameraView: boolean };

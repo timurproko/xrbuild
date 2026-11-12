@@ -11,7 +11,9 @@ import { projectStateKey } from './project-run-settings.ts';
 import { embeddedWorkspacePlan } from './embedded-workspace.ts';
 
 export function effectiveOutputRoot(core: string, workspace: string, p: Project) {
-  return path.join(workspace, 'build', 'projects', projectStateKey(core, p));
+  const key = p.workingOutputKey ?? projectStateKey(core, p);
+  if (!/^[a-f0-9]{24}$/.test(key)) throw new HttpError(409, 'Invalid effective output scope');
+  return path.join(workspace, 'build', 'projects', key);
 }
 export async function effectiveInputFingerprint(p: Project) {
   if (!p.workingRoot || !p.manifest) throw new HttpError(409, 'Effective embedded project is unavailable');
@@ -46,9 +48,9 @@ export async function effectiveProjectOutput(core: string, workspace: string, p:
   assertWritablePath(core, workspace, root);
   if (generation !== undefined && !/^r-[a-zA-Z0-9]{6}$/.test(generation)) throw new HttpError(409, 'Invalid output generation');
   const record = await buildJson(await containedPath(root, generation ? `${generation}/effective.json` : 'effective.json'));
-  if (record?.version !== 2 || !/^[a-f0-9]{64}$/.test(record.inputs) || !/^[a-f0-9]{64}$/.test(record.output) || record.key !== p.key || record.source !== p.dir || !/^r-[a-zA-Z0-9]{6}$/.test(record.generation) || generation && record.generation !== generation)
+  if (record?.version !== 2 || !/^[a-f0-9]{64}$/.test(record.inputs) || !/^[a-f0-9]{64}$/.test(record.output) || record.key !== p.key || typeof record.source !== 'string' || !/^r-[a-zA-Z0-9]{6}$/.test(record.generation) || generation && record.generation !== generation)
     throw new HttpError(409, 'Effective output belongs to another project or generation');
-  if (!generation && record.inputs !== await effectiveInputFingerprint(p)) throw new HttpError(409, 'Effective sources changed; rebuild the project');
+  if (!generation && (record.source !== p.dir || record.inputs !== await effectiveInputFingerprint(p))) throw new HttpError(409, 'Effective sources changed; rebuild the project');
   const entry = await containedPath(root, `${record.generation}/out`), tree = await buildInventory(entry);
   if (!tree.files.includes('index.html') || tree.fingerprint !== record.output) throw new HttpError(409, 'Effective build output is missing or changed');
   return { entry, origin: 'cache' as const, generation: record.generation as string, problem: null };

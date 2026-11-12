@@ -595,7 +595,7 @@ test('browser selects duplicate origins and copies a bundled project into editab
   await f.project(f.embedded, 'core', 'demo'); await f.project(f.projects, 'unsorted', 'demo');
   const before = await snapshot(f.core);
   await withBrowser(async ({ evaluate, navigate }) => {
-    await navigate(f.url, `!document.body.classList.contains('workspace-pending') && document.querySelectorAll('.proj').length === 2`);
+    await navigate(f.url, `!!document.body && !document.body.classList.contains('workspace-pending') && document.querySelectorAll('.proj').length === 2`);
     await evaluate(`document.querySelector('.proj[data-id="bundled:demo"]').click()`);
     assert.equal(await evaluate(`!!document.querySelector('#settings') && !document.querySelector('#bundled-copy')`), true);
     assert.equal(await evaluate(`document.querySelector('.proj[data-id="bundled:demo"]').draggable`), true);

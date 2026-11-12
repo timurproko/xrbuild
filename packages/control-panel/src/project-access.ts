@@ -43,7 +43,7 @@ export function assertEditableProject(core: string, projects: string, project: P
       if (lstatSync(path.join(root, 'state.json')).size > 65536) throw new Error('Oversized state');
       const record = JSON.parse(readFileSync(path.join(root, 'state.json'), 'utf8'));
       const relative = record.scope?.relative;
-      if (record.version !== 1 || record.scope?.core !== canonicalFuturePath(core) || record.scope?.projects !== canonicalFuturePath(projects)
+      if (![1, 2].includes(record.version) || record.scope?.core !== canonicalFuturePath(core) || record.scope?.projects !== canonicalFuturePath(projects)
         || record.scope?.workspace !== canonicalFuturePath(project.integrationWorkspace) || record.scope?.key !== liveId(project.key ?? project.id)
         || typeof relative !== 'string' || !/^projects\/[^/]+\/[^/]+$/.test(relative) || relative.split('/').some(segment => segment === '.' || segment === '..')
         || path.posix.basename(relative) !== path.basename(project.productDir) || typeof record.working !== 'string' || !/^w-[a-zA-Z0-9]{6}$/.test(record.working)) throw new Error('Invalid state');

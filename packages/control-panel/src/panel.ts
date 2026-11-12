@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { defaultIcon } from '../../app-icon/src/icon.ts';
 import { APP_FAVICON_FILE, finalizeBrowserBuild } from './browser-build.ts';
 import { projectFile } from './embedded-projects.ts';
+import { staticSourcesMatchBaseline, trackSourceFinalization } from './embedded-source-refresh.ts';
 import { prepareEmbeddedProject, prepareEmbeddedDependencies, projectWritableRoot, embeddedProjectEnvironment, withEmbeddedProjectLock, runEmbeddedProjectScript } from './embedded-project-state.ts';
 import { effectiveInputFingerprint, effectiveProjectOutput, publishEffectiveOutput, markEffectiveBuildFailed } from './embedded-project-output.ts';
 import { metadataText } from './embedded-inputs.ts';
@@ -393,7 +394,12 @@ export class Panel {
           const p = (await discoverProjectCatalog(this.repo, this.workspace, this.projects)).projects.find(record => record.project.id === projectId)?.project;
           if (!p) throw new HttpError(409, 'Project organization changed before the job started');
           return withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
-            await this.prepareProject(p);
+            // Web/icon jobs resolve their effective project inside the callback. Other
+            // jobs already captured validated settings: refuse if that snapshot moved.
+            if (!['web-build', 'icon-render'].includes(kind)) {
+              const effective = await this.prepareProject(p);
+              if (effective.workingRoot !== p.workingRoot) throw new HttpError(409, 'Project code updated before the job started; try the action again');
+            }
             return work(ctx);
           });
         };
@@ -415,6 +421,12 @@ export class Panel {
 
   async prepareProject(p: Project): Promise<Project> {
     return prepareEmbeddedProject(this.repo, this.workspace, this.projects, p);
+  }
+
+  private async reloadPreparedProject(p: Project): Promise<Project> {
+    const current = (await discoverProjectCatalog(this.repo, this.workspace, this.projects)).projects.find(record => record.project.id === p.id)?.project;
+    if (!current || current.key !== p.key) throw new HttpError(409, 'Project organization changed; try again');
+    return this.prepareProject(current);
   }
 
   private writableRoot(p: Project): string { return projectWritableRoot(this.projects, p); }
@@ -522,12 +534,12 @@ export class Panel {
   private async finalizeBrowserOutput(p: Project, m: Manifest): Promise<boolean> {
     this.editableManifest(p);
     for (const name of ['index.html', APP_FAVICON_FILE]) assertWritablePath(this.repo, this.writableRoot(p), path.join(this.entryOf(p, m), name));
-    return (await finalizeBrowserBuild(this.entryOf(p, m), {
+    return (await trackSourceFinalization(this.repo, this.projects, p, () => finalizeBrowserBuild(this.entryOf(p, m), {
       file: m.icon ? path.resolve(p.dir, m.icon) : undefined,
       color: m.iconColor,
       shape: m.iconShape,
       description: m.description,
-    })).changed;
+    }))).changed;
   }
 
   private async executeBrowserBuild(p: Project, m: Manifest, ctx: JobContext): Promise<void> {
@@ -551,6 +563,7 @@ export class Panel {
 
   private async checkEffectiveManifest(p: Project): Promise<void> {
     if (!p.workingRoot) return;
+    assertEditableProject(this.repo, this.projects, p);
     const current = await readProject(p.dir, p.id, p.section);
     if (!current || current.manifestMtimeMs !== p.manifestMtimeMs || JSON.stringify(current.manifest) !== JSON.stringify(p.manifest)) throw new HttpError(409, 'Project settings changed before Build');
   }
@@ -589,7 +602,7 @@ export class Panel {
       const exists = await fs.access(path.join(entry, 'index.html')).then(() => true, () => false);
       // A static app has nothing to rebuild: its recorded output is still current when only the manifest changed
       // (a publication draft, for example). Changed or unrecorded output is still refused for publication.
-      if (!exists || (requireScriptOnStale && !(await receiptMatchesOutput(this.workspace, p.id, entry)))) throw new Error(`A current build is required, but ${p.id} has no build script.`);
+      if (!exists || (requireScriptOnStale && !(await receiptMatchesOutput(this.workspace, p.id, entry)) && !(await staticSourcesMatchBaseline(p)))) throw new Error(`A current build is required, but ${p.id} has no build script.`);
       ctx.line('No build script is configured; using and recording the existing app output.');
       if (await this.finalizeBrowserOutput(p, m)) ctx.line('Applied the project icon as the browser favicon.');
       await this.recordBrowserBuild(p, entry);
@@ -1501,7 +1514,7 @@ export class Panel {
         if (runMode === 'built' && p.origin === 'bundled' && (!p.readOnly || !(await requireProjectOutput(this.repo, this.workspace, p).catch(() => null)))) {
           const done = await this.jobs.wait(this.webBuild(p));
           if (done.state === 'failed') throw new HttpError(409, done.error ?? 'Project build failed');
-          p = await this.prepareProject(p);
+          p = await this.reloadPreparedProject(p);
         }
         const previewToken = typeof token === 'string' && /^[a-zA-Z0-9-]{16,80}$/.test(token) ? token : randomUUID();
         const screen = Number.isInteger(monitor) && monitor! >= 0 && monitor! <= 255 ? monitor! : 0;
@@ -1520,7 +1533,7 @@ export class Panel {
           const build = this.webBuild(p);
           const done = await this.jobs.wait(build);
           if (done.state === 'failed') throw new HttpError(400, done.error ?? 'the app build failed');
-          if (p.origin === 'bundled') p = await this.prepareProject(p);
+          if (p.origin === 'bundled') p = await this.reloadPreparedProject(p);
         }
         const screen = Number.isInteger(monitor) && monitor! >= 0 && monitor! <= 255 ? monitor! : 0;
         await this.run(p, runMode, p.readOnly && flat === undefined ? undefined : flat === true, p.readOnly && cameraView === undefined ? undefined : cameraView === true,

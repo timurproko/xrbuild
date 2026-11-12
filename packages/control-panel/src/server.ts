@@ -32,7 +32,8 @@ import {
   readProject,
 } from './projects.ts';
 import { Panel } from './panel.ts';
-import { projectWritableRoot, withEmbeddedProjectLock, keepEmbeddedWorkingSources, embeddedProjectRoot, embeddedManifestRevision } from './embedded-project-state.ts';
+import { refreshManifest } from './embedded-source-refresh.ts';
+import { projectWritableRoot, withEmbeddedProjectLock, embeddedProjectRoot, embeddedManifestRevision } from './embedded-project-state.ts';
 import { effectiveProjectOutput, effectiveOutputRoot } from './embedded-project-output.ts';
 import { discoverProjectCatalog } from './extension-catalog.ts';
 import { bundledBuildPlan, resolveProjectOutput, requireProjectOutput, projectPreviewRoute, projectBuildRoot } from './project-build.ts';
@@ -234,7 +235,6 @@ export async function describeProject(projects: string, p: Project, panel: Panel
     canDelete: p.origin !== 'bundled',
     preferenceKey: p.origin === 'bundled' ? `bundled:${path.basename(embeddedProjectRoot(panel.repo, panel.workspace, projects, p))}` : p.id,
     stateProblem: p.stateProblem ?? null,
-    sourceUpdate: p.sourceUpdate ?? null,
     runDefaults: p.runDefaults ?? runSettings?.value?.values ?? null,
     build: output ? { path: path.relative(panel.workspace, projectBuildRoot(panel.repo, panel.workspace, p)).split(path.sep).join('/'), origin: output.origin, generation: output.generation, problem: output.problem, canRebuild: buildPlan?.available ?? false, reason: buildPlan?.reason ?? null } : null,
     runSettings: runSettings?.value ?? null,
@@ -530,16 +530,15 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
         }
       }
       if (method === 'POST' && rest.length === 1 && rest[0] === 'keep-working-sources') {
-        if (p.origin !== 'bundled' || !p.workingRoot) throw new HttpError(409, 'Only prepared embedded projects have working sources');
-        panel.assertProjectIdle(p);
-        const body = await readJson<{ revision?: unknown; confirm?: unknown }>(req);
-        await keepEmbeddedWorkingSources(core, workspace, projects, p, body.revision, body.confirm);
-        hub.send('projects-changed', {});
-        return sendJson(res, 200, await describeProject(projects, await findProject(id), panel));
+        throw new HttpError(410, 'Project sources now update automatically; reload the panel.');
       }
       if (method === 'POST' && rest.length === 1 && rest[0] === 'copy') {
         const body = await readJson<{ folder: string; name?: string }>(req);
-        const copied = await withEmbeddedProjectLock(core, projects, p, () => copyBundledProject(core, projects, p, body.folder, body.name));
+        panel.assertProjectIdle(p);
+        const copied = await withEmbeddedProjectLock(core, projects, p, async () => {
+          if (p.workingRoot) p = await panel.prepareProject(p);
+          return copyBundledProject(core, projects, p, body.folder, body.name);
+        });
         hub.send('projects-changed', {});
         return sendJson(res, 201, await describeProject(projects, await findProject(copied), panel));
       }
@@ -554,6 +553,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       if (p.origin !== 'bundled' && !['GET', 'HEAD', 'OPTIONS'].includes(method)) assertEditableProject(core, projects, p);
       let writable = projectWritableRoot(projects, p);
       const checkWriteRevision = async () => {
+        if (p.origin === 'bundled') assertEditableProject(core, projects, p);
         const current = p.origin === 'bundled' ? await readProject(p.dir, p.id, p.section) : null;
         if (p.origin === 'bundled' && (!current || embeddedManifestRevision({ ...p, ...current }) !== writeManifestRevision)) throw new HttpError(409, 'Project settings changed; reload before saving');
         if ((await fs.stat(path.join(p.dir, MANIFEST))).mtimeMs !== writeRevision) throw new ManifestConflictError('Project settings changed; reload before saving');
@@ -569,9 +569,11 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
           const legacy = p.readOnly && p.manifest ? await readProjectRunSettings(core, workspace, p) : null;
           if (typeof body.revision !== 'string') throw new HttpError(400, 'The current project manifest revision is required');
           if (body.revision !== embeddedManifestRevision(p, legacy?.revision)) throw new HttpError(409, 'Project settings changed; reload before saving');
-          const wasRaw = p.readOnly;
+          const wasRaw = p.readOnly, previousManifest = p.manifest;
           panel.assertProjectIdle(p);
           p = await panel.prepareProject(p);
+          // Apply this editor's changes to refreshed defaults, not its whole old manifest.
+          if (previousManifest && p.manifest) body.manifest = refreshManifest(previousManifest, body.manifest, p.manifest, p.dir)!;
           if (wasRaw && legacy && p.importedRunRevision !== legacy.revision) throw new HttpError(409, 'Personal settings changed during preparation; reload before saving');
           writeRevision = p.manifestMtimeMs;
           writeManifestRevision = embeddedManifestRevision(p);

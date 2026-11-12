@@ -180,31 +180,201 @@ test('only embedded deletion is refused and origin-qualified aliases cannot bypa
   await fs.access(f.source);
 });
 
-test('personal settings seed effective manifests once and source updates preserve edits with explicit reconciliation', async t => {
+test('source updates automatically adopt current bytes, preserve personal state and keep pinned output across section relocation', async t => {
   const f = await fixture(t), raw = await f.bundled(), settings = await readProjectRunSettings(f.core, f.workspace, raw);
-  await saveProjectRunSettings(f.core, f.workspace, raw, { display: 'desktop', inputs: ['keyboard'], flat: true }, settings.revision);
+  await saveProjectRunSettings(f.core, f.workspace, raw, { display: 'desktop', inputs: ['keyboard'], flat: true, monitor: 2, fullscreen: true }, settings.revision);
   const effective = await prepareEmbeddedProject(f.core, f.workspace, f.projects, raw);
   assert.deepEqual(effective.manifest!.inputs, ['keyboard']); assert.equal(effective.runDefaults!.flat, true);
-  await f.save({ ...effective.manifest!, name: 'Keep this edit', inputs: ['mouse'] });
+  const publication = { id: randomUUID(), enabled: true, publisher: 'fixture', slug: 'my-sample' };
+  // Saving publication needs a registered adapter, but refresh never calls it or invents new identity.
+  f.server.panel.publishers = { found: [{ dir: f.workspace, publisher: { name: 'fixture', origin: 'https://example.test', validate: () => [], status: async () => ({ state: 'unpublished', selectedUrl: '' }), publish: async () => ({ url: '' }), unpublish: async () => ({}) } }], problems: [] };
+  assert.equal((await f.save({ ...effective.manifest!, name: 'Keep this edit', inputs: ['mouse'], publication })).status, 200);
+  await f.write(path.join(effective.dir, 'recordings/session.jsonl'), 'user recording');
+  await f.write(path.join(effective.dir, '.env.local'), 'user secret');
+  const icon = defaultIcon(16, 'red'); assert.equal((await f.request('PUT', '/api/projects/bundled%3Asample/icon', icon)).status, 200);
+  const built = await f.request('POST', '/api/projects/bundled%3Asample/build-web');
+  assert.equal((await f.server.panel.jobs.wait(f.server.panel.jobs.get(built.json.id)!)).state, 'done');
+  const previous = await effectiveProjectOutput(f.core, f.workspace, await f.bundled());
   await f.write(path.join(f.source, 'new-file.js'), 'export const updated = true;');
-  const p = await f.bundled(); assert.ok(p.sourceUpdate);
-  await assert.rejects(prepareEmbeddedProject(f.core, f.workspace, f.projects, p), /preserved/);
-  const rejected = await f.request('POST', '/api/projects/bundled%3Asample/keep-working-sources', { revision: 'stale', confirm: true });
-  assert.equal(rejected.status, 409);
-  const kept = await f.request('POST', '/api/projects/bundled%3Asample/keep-working-sources', { revision: p.sourceUpdate!.revision, confirm: true });
-  assert.equal(kept.status, 200, kept.text); assert.equal(kept.json.sourceUpdate, null);
-  assert.equal(kept.json.manifest.name, 'Keep this edit'); assert.deepEqual(kept.json.manifest.inputs, ['mouse']);
+  await f.write(path.join(f.source, 'dist/index.html'), '<html><head></head><body>latest installed app</body></html>');
+  const stateRoot = embeddedProjectRoot(f.core, f.workspace, f.projects, effective), stateBefore = await fs.readFile(path.join(stateRoot, 'state.json'), 'utf8');
+  const visible = (await f.request('GET', '/api/projects/bundled%3Asample')).json;
+  assert.equal(visible.sourceUpdate, undefined);
+  assert.equal(await fs.readFile(path.join(stateRoot, 'state.json'), 'utf8'), stateBefore, 'browsing never refreshes');
+  const retired = await f.request('POST', '/api/projects/bundled%3Asample/keep-working-sources', { revision: 'old', confirm: true });
+  assert.equal(retired.status, 410); assert.equal(await fs.readFile(path.join(stateRoot, 'state.json'), 'utf8'), stateBefore);
+  const updated = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  assert.notEqual(updated.workingRoot, effective.workingRoot);
+  assert.match(await fs.readFile(path.join(updated.dir, 'dist/index.html'), 'utf8'), /latest installed app/);
+  assert.equal(await fs.readFile(path.join(updated.dir, 'new-file.js'), 'utf8'), 'export const updated = true;');
+  assert.equal(updated.manifest!.name, 'Keep this edit'); assert.deepEqual(updated.manifest!.inputs, ['mouse']);
+  assert.equal(updated.manifest!.publication!.id, publication.id); assert.equal(updated.runDefaults!.flat, true);
+  assert.equal(updated.manifest!.plugins!.desktop.monitor, 2); assert.equal(updated.manifest!.plugins!.desktop.fullscreen, true);
+  assert.equal(await fs.readFile(path.join(updated.dir, 'recordings/session.jsonl'), 'utf8'), 'user recording');
+  assert.equal(await fs.readFile(path.join(updated.dir, '.env.local'), 'utf8'), 'user secret');
+  assert.deepEqual(await fs.readFile(path.join(updated.dir, updated.manifest!.icon!)), icon);
+  await fs.access(effective.dir); // previous generation is preserved, not cleaned
+  await assert.rejects(effectiveProjectOutput(f.core, f.workspace, updated), /another project|sources changed/);
+  assert.match((await f.request('GET', `/preview/bundled%3Asample/@${previous.generation}/`)).text, /fixture/);
+  assert.equal((await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled())).dir, updated.dir, 'restarts do not refresh again');
   const other = path.join(f.root, 'other-projects'); await fs.mkdir(other);
-  const otherCatalog = await discoverProjectCatalog(f.core, f.workspace, other);
-  assert.equal(otherCatalog.projects.find(p => p.key === 'bundled:sample')!.project.manifest!.name, 'sample');
-  // An upstream default-section move must not manufacture a new user/deployment identity.
+  assert.equal((await discoverProjectCatalog(f.core, f.workspace, other)).projects.find(p => p.key === 'bundled:sample')!.project.manifest!.name, 'sample');
   assert.equal((await f.request('PUT', '/api/layout', { ...(await f.catalog()).layout, sections: [{ name: 'custom', items: ['bundled:sample', 'sample'] }] })).status, 200);
   await fs.rename(f.source, path.join(f.core, 'embedded/projects/archive/sample'));
-  const relocated = await f.bundled();
-  assert.equal(relocated.key, 'bundled:sample'); assert.equal(relocated.section, 'custom'); assert.equal(relocated.workingRoot, effective.workingRoot);
-  assert.equal(relocated.manifest!.name, 'Keep this edit'); assert.ok(relocated.sourceUpdate);
-  const accepted = await f.request('POST', '/api/projects/bundled%3Asample/keep-working-sources', { revision: relocated.sourceUpdate!.revision, confirm: true });
-  assert.equal(accepted.status, 200, accepted.text); assert.equal(accepted.json.manifest.name, 'Keep this edit');
+  const relocated = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  assert.equal(relocated.key, 'bundled:sample'); assert.equal(relocated.section, 'custom');
+  assert.ok(relocated.dir.endsWith(path.join('projects/archive/sample')));
+  assert.equal(relocated.manifest!.name, 'Keep this edit'); assert.equal(relocated.manifest!.publication!.id, publication.id);
+  assert.match((await f.request('GET', `/preview/bundled%3Asample/@${previous.generation}/`)).text, /fixture/);
+});
+
+test('known baselines update additions and deletions, retain compatible edits and refuse real conflicts without changing state', async t => {
+  const f = await fixture(t);
+  for (const [name, value] of Object.entries({ 'upstream.txt': 'old', 'local.txt': 'base', 'same.txt': 'base', 'removed.txt': 'remove' })) await f.write(path.join(f.source, name), value);
+  const p = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  await f.write(path.join(p.dir, 'local.txt'), 'my edit'); await f.write(path.join(p.dir, 'same.txt'), 'identical');
+  await f.write(path.join(f.source, 'upstream.txt'), 'new'); await f.write(path.join(f.source, 'same.txt'), 'identical');
+  await fs.unlink(path.join(f.source, 'removed.txt')); await f.write(path.join(f.source, 'added/nested.txt'), 'new file');
+  const updated = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  for (const [name, value] of Object.entries({ 'upstream.txt': 'new', 'local.txt': 'my edit', 'same.txt': 'identical', 'added/nested.txt': 'new file' })) assert.equal(await fs.readFile(path.join(updated.dir, name), 'utf8'), value);
+  await assert.rejects(fs.access(path.join(updated.dir, 'removed.txt')));
+  await f.write(path.join(f.source, 'local.txt'), 'conflicting upstream');
+  const record = path.join(embeddedProjectRoot(f.core, f.workspace, f.projects, updated), 'state.json'), before = await fs.readFile(record, 'utf8');
+  await assert.rejects(prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled()), /local.txt.*conflicting local changes/);
+  assert.equal(await fs.readFile(record, 'utf8'), before); assert.equal(await fs.readFile(path.join(updated.dir, 'local.txt'), 'utf8'), 'my edit');
+  // Resolve the genuine conflict to current installed content, then retry normally.
+  await f.write(path.join(updated.dir, 'local.txt'), 'conflicting upstream');
+  const resolved = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  assert.equal(await fs.readFile(path.join(resolved.dir, 'local.txt'), 'utf8'), 'conflicting upstream');
+});
+
+test('legacy snapshots adopt current code and retain their complete previous tree and personal choices', async t => {
+  const f = await fixture(t);
+  const p = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  assert.equal((await f.save({ ...p.manifest!, name: 'My legacy name', inputs: ['keyboard'], host: { recordHands: 'session.jsonl' } })).status, 200);
+  const record = path.join(embeddedProjectRoot(f.core, f.workspace, f.projects, p), 'state.json');
+  const saved = JSON.parse(await fs.readFile(record, 'utf8')); saved.version = 1; delete saved.baseline; delete saved.outputKey;
+  saved.inputs = '0'.repeat(64); // Old Keep sources could advance this without updating the generation marker.
+  await fs.writeFile(record, JSON.stringify(saved));
+  await f.write(path.join(p.dir, 'unknown-user-edit.txt'), 'must be retained');
+  await f.write(path.join(p.dir, 'recordings/legacy.jsonl'), 'recording');
+  await f.write(path.join(p.dir, 'session.jsonl'), 'named recording');
+  await f.write(path.join(f.source, 'dist/index.html'), '<html><head></head><body>latest legacy upgrade</body></html>');
+  const updated = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  assert.equal(updated.manifest!.name, 'My legacy name'); assert.deepEqual(updated.manifest!.inputs, ['keyboard']);
+  assert.match(await fs.readFile(path.join(updated.dir, 'dist/index.html'), 'utf8'), /latest legacy upgrade/);
+  assert.equal(await fs.readFile(path.join(p.dir, 'unknown-user-edit.txt'), 'utf8'), 'must be retained');
+  assert.equal(await fs.readFile(path.join(updated.dir, 'recordings/legacy.jsonl'), 'utf8'), 'recording');
+  assert.equal(await fs.readFile(path.join(updated.dir, 'session.jsonl'), 'utf8'), 'named recording');
+  const next = JSON.parse(await fs.readFile(record, 'utf8')); assert.equal(next.version, 2); assert.ok(next.previous.includes(saved.working));
+  assert.equal((await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled())).dir, updated.dir);
+  // Ambiguous legacy build/source declarations cannot be safely overwritten.
+  next.version = 1; delete next.baseline; delete next.outputKey; await fs.writeFile(record, JSON.stringify(next));
+  await f.write(path.join(updated.dir, 'xrb-project.json'), { ...updated.manifest, entry: 'custom-output' });
+  await assert.rejects(prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled()), /xrb-project.json:entry.*conflicting/);
+  assert.equal(JSON.parse(await fs.readFile(record, 'utf8')).working, next.working);
+});
+
+test('shared SDK changes refresh working generations and settings saves rebase onto new source declarations', async t => {
+  const f = await fixture(t), p = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  await f.write(path.join(f.core, 'packages/sdk/src/new.ts'), 'export const current = true;');
+  const updated = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  assert.notEqual(updated.dir, p.dir, 'shared inputs invalidate the installed-input baseline');
+  await f.write(path.join(f.source, 'xrb-project.json'), { ...updated.manifest, entry: 'site' });
+  await f.write(path.join(f.source, 'site/index.html'), '<html><head></head><body>new entry</body></html>');
+  const saved = await f.save({ ...updated.manifest!, name: 'Rename during update' });
+  assert.equal(saved.status, 200, saved.text); assert.equal(saved.json.manifest.entry, 'site');
+  assert.equal(saved.json.manifest.name, 'Rename during update');
+});
+
+test('source update revalidates concurrent input edits and rejects unsafe links without losing the previous generation', async t => {
+  const f = await fixture(t); await f.write(path.join(f.source, 'source.txt'), 'base');
+  const p = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  await f.write(path.join(f.source, 'source.txt'), 'latest');
+  const record = path.join(embeddedProjectRoot(f.core, f.workspace, f.projects, p), 'state.json'), before = await fs.readFile(record, 'utf8');
+  const copy = fs.copyFile; let injected = false;
+  fs.copyFile = async (from, to, ...rest) => {
+    await copy(from, to, ...rest);
+    if (!injected && String(from) === path.join(f.source, 'source.txt')) { injected = true; await f.write(path.join(p.dir, 'new-concurrent-edit.txt'), 'local edit'); }
+  };
+  try { await assert.rejects(prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled()), /changed during update/); }
+  finally { fs.copyFile = copy; }
+  assert.ok(injected); assert.equal(await fs.readFile(record, 'utf8'), before);
+  assert.equal(await fs.readFile(path.join(p.dir, 'new-concurrent-edit.txt'), 'utf8'), 'local edit');
+  await fs.link(path.join(p.dir, 'source.txt'), path.join(p.dir, 'linked.txt'));
+  await assert.rejects(prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled()), /link/);
+  assert.equal(await fs.readFile(record, 'utf8'), before);
+});
+
+test('directory replacements update safely and upstream directory deletion cannot discard a new local file', async t => {
+  const f = await fixture(t);
+  await f.write(path.join(f.source, 'switch'), 'old file'); await f.write(path.join(f.source, 'removed-dir/original.txt'), 'base');
+  const p = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  await fs.unlink(path.join(f.source, 'switch')); await f.write(path.join(f.source, 'switch/child.txt'), 'now a directory');
+  const updated = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  assert.equal(await fs.readFile(path.join(updated.dir, 'switch/child.txt'), 'utf8'), 'now a directory');
+  await f.write(path.join(updated.dir, 'removed-dir/local.txt'), 'local addition');
+  await fs.rm(path.join(f.source, 'removed-dir'), { recursive: true });
+  const state = path.join(embeddedProjectRoot(f.core, f.workspace, f.projects, p), 'state.json'), before = await fs.readFile(state, 'utf8');
+  await assert.rejects(prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled()), /removed-dir.*conflicting/);
+  assert.equal(await fs.readFile(state, 'utf8'), before); assert.equal(await fs.readFile(path.join(updated.dir, 'removed-dir/local.txt'), 'utf8'), 'local addition');
+});
+
+test('source updates detect new personal files appearing after preservation and corrupt source baselines', async t => {
+  const f = await fixture(t), p = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  await f.write(path.join(f.source, 'new.txt'), 'latest');
+  const state = path.join(embeddedProjectRoot(f.core, f.workspace, f.projects, p), 'state.json'), before = await fs.readFile(state, 'utf8');
+  const write = fs.writeFile; let injected = false;
+  fs.writeFile = async (file, ...args) => {
+    await write(file, ...args);
+    if (!injected && String(file).endsWith('source-baseline.json')) { injected = true; await f.write(path.join(p.dir, 'recordings/new.jsonl'), 'new recording'); }
+  };
+  try { await assert.rejects(prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled()), /Personal files changed/); }
+  finally { fs.writeFile = write; }
+  assert.ok(injected); assert.equal(await fs.readFile(state, 'utf8'), before);
+  assert.equal(await fs.readFile(path.join(p.dir, 'recordings/new.jsonl'), 'utf8'), 'new recording');
+  const baseline = path.join(path.dirname(p.workingRoot!), 'source-baseline.json');
+  await fs.writeFile(baseline, '{}');
+  assert.match((await f.bundled()).stateProblem!, /baseline/);
+  await assert.rejects(prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled()), /baseline/);
+  assert.equal(await fs.readFile(baseline, 'utf8'), '{}'); assert.equal(await fs.readFile(state, 'utf8'), before);
+});
+
+test('refresh refuses interrupted or foreign generation markers and changed isolated manager configuration', async t => {
+  const f = await fixture(t), p = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  const work = path.dirname(p.workingRoot!), marker = path.join(work, '.xrb-working.json');
+  const original = await fs.readFile(marker, 'utf8'), record = path.join(embeddedProjectRoot(f.core, f.workspace, f.projects, p), 'state.json'), before = await fs.readFile(record, 'utf8');
+  await f.write(path.join(f.source, 'new.txt'), 'latest');
+  for (const changed of [{ ...JSON.parse(original), status: 'working' }, { ...JSON.parse(original), workspace: f.workspace }]) {
+    await fs.writeFile(marker, JSON.stringify(changed));
+    await assert.rejects(prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled()), /incomplete|another project/);
+    assert.equal(await fs.readFile(record, 'utf8'), before);
+  }
+  await fs.writeFile(marker, original);
+  await fs.writeFile(path.join(work, 'user.npmrc'), 'unexpected configuration');
+  await assert.rejects(prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled()), /configuration changed/);
+  assert.equal(await fs.readFile(record, 'utf8'), before);
+  assert.equal(await fs.readFile(path.join(work, 'user.npmrc'), 'utf8'), 'unexpected configuration');
+});
+
+test('icon jobs and independent copies consume newly installed source rather than old working files', async t => {
+  const f = await fixture(t);
+  await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  await f.write(path.join(f.core, 'native/host/build/Release/xrb-host.exe'), 'synthetic host; rendering is intercepted');
+  await f.write(path.join(f.source, 'dist/index.html'), '<html><head></head><body>current icon input</body></html>');
+  let rendered = false;
+  const start = f.server.panel.jobs.start.bind(f.server.panel.jobs);
+  f.server.panel.jobs.start = (kind, id, title, body, ...rest) => start(kind, id, title, ctx => body({ ...ctx, async run(_command, args) {
+    const app = args[args.indexOf('--app') + 1], output = args[args.indexOf('--out') + 1];
+    assert.match(await fs.readFile(path.join(app, 'index.html'), 'utf8'), /current icon input/);
+    await fs.writeFile(output, defaultIcon(16, 'green')); rendered = true;
+  } }), ...rest);
+  const job = f.server.panel.renderIcon(await f.bundled()), done = await f.server.panel.jobs.wait(job);
+  assert.equal(done.state, 'done', done.error ?? ''); assert.ok(rendered);
+  await f.write(path.join(f.source, 'new-copy.txt'), 'current copy source');
+  const copy = await f.request('POST', '/api/projects/bundled%3Asample/copy', { folder: 'latest-copy' });
+  assert.equal(copy.status, 201, copy.text);
+  assert.equal(await fs.readFile(path.join(f.projects, 'projects/unsorted/latest-copy/new-copy.txt'), 'utf8'), 'current copy source');
 });
 
 test('working state and cooperating operation locks reject malformed, interrupted and linked state without replacement', async t => {
@@ -237,8 +407,8 @@ test('working state and cooperating operation locks reject malformed, interrupte
   assert.equal(await fs.readFile(path.join(preserved, 'state.json'), 'utf8'), '{bad');
 });
 
-test('embedded publication and web packaging use neutral adapters and finalized generation output', async t => {
-  const f = await fixture(t), before = (await buildInventory(f.core)).fingerprint;
+test('embedded publication and web packaging refresh installed sources and use neutral finalized inputs', async t => {
+  const f = await fixture(t);
   let published = '', packaged = '', setupCalls = 0;
   f.server.panel.publishers = { found: [{ dir: f.workspace, publisher: { name: 'fixture', origin: 'https://example.test', validate: () => [],
     status: async () => ({ state: 'unpublished', selectedUrl: '' }), publish: async input => { published = input.app; return { url: 'https://example.test/sample/' }; },
@@ -256,14 +426,17 @@ test('embedded publication and web packaging use neutral adapters and finalized 
   assert.equal(saved.status, 200, saved.text);
   let response = await f.request('POST', '/api/projects/bundled%3Asample/build-web');
   assert.equal((await f.server.panel.jobs.wait(f.server.panel.jobs.get(response.json.id)!)).state, 'done');
+  await f.write(path.join(f.source, 'dist/index.html'), '<html><head></head><body>current publication source</body></html>');
   response = await f.request('POST', '/api/projects/bundled%3Asample/publish', {});
   assert.equal(response.status, 202, response.text);
   let done = await f.server.panel.jobs.wait(f.server.panel.jobs.get(response.json.id)!); assert.equal(done.state, 'done', done.error ?? '');
-  assert.match(published, /r-[a-zA-Z0-9]{6}[\\/]out$/); assert.match(await fs.readFile(path.join(published, 'index.html'), 'utf8'), /xrb-app-icon/);
+  assert.match(published, /r-[a-zA-Z0-9]{6}[\\/]out$/); assert.match(await fs.readFile(path.join(published, 'index.html'), 'utf8'), /current publication source/);
+  await f.write(path.join(f.source, 'dist/index.html'), '<html><head></head><body>current package source</body></html>');
+  const before = (await buildInventory(f.core)).fingerprint;
   response = await f.request('POST', '/api/projects/bundled%3Asample/package', {});
   assert.equal(response.status, 202, response.text);
   done = await f.server.panel.jobs.wait(f.server.panel.jobs.get(response.json.id)!); assert.equal(done.state, 'done', done.error ?? '');
-  assert.match(packaged, /package-inputs/); assert.match(await fs.readFile(path.join(packaged, 'index.html'), 'utf8'), /xrb-app-icon/);
+  assert.match(packaged, /package-inputs/); assert.match(await fs.readFile(path.join(packaged, 'index.html'), 'utf8'), /current package source/);
   await f.request('POST', '/api/projects/bundled%3Asample/archive');
   p = (await f.catalog()).archived.find((p: any) => p.id === 'bundled:archive/sample');
   assert.equal(p.manifest.publication.id, saved.json.manifest.publication.id);
@@ -293,6 +466,10 @@ test('native runs use immutable effective output and retain their project operat
     for (let i = 0; i < 100 && await fs.lstat(lock).catch(() => null); i++) await sleep(10);
     assert.equal((await prepareEmbeddedProject(f.core, f.workspace, f.projects, p)).dir, p.dir);
     assert.equal((await buildInventory(f.core)).fingerprint, before);
+    await f.write(path.join(f.source, 'dist/index.html'), '<html><head></head><body>latest native source</body></html>');
+    const currentRun = await f.request('POST', '/api/projects/bundled%3Asample/run', { mode: 'built' });
+    assert.equal(currentRun.status, 200, currentRun.text);
+    assert.match(await fs.readFile(path.join(launched.entryDir, 'index.html'), 'utf8'), /latest native source/);
   } finally {
     Reflect.deleteProperty(runner, 'busy'); Reflect.deleteProperty(runner, 'projectId'); runner.emit('state', { phase: 'idle' });
   }
@@ -345,10 +522,24 @@ test('normal scripted builds keep editable inputs, frozen installation and pinne
     assert.equal(devProcessEnvironment({ XRB_CORE: f.core }).npm_config_userconfig, 'ambient-must-not-leak');
   } finally { if (previous === undefined) delete process.env.npm_config_userconfig; else process.env.npm_config_userconfig = previous; }
   assert.equal((await buildInventory(f.core)).fingerprint, before);
+  await f.write(path.join(f.source, 'new-after-pull.js'), 'export const newest = true;');
+  const refreshedPreview = await f.request('POST', '/api/projects/bundled%3Asample/preview', { mode: 'dev' });
+  assert.equal(refreshedPreview.status, 200, refreshedPreview.text);
+  assert.notEqual(dev.request.projectDir, p.dir);
+  assert.equal(await fs.readFile(path.join(dev.request.projectDir, 'new-after-pull.js'), 'utf8'), 'export const newest = true;');
+  assert.equal(await fs.readFile(path.join(dev.request.projectDir, 'src.txt'), 'utf8'), 'fail', 'compatible user source edits remain active');
 });
 
-test('real browser shows normal embedded workflows with cache review removed and Delete hidden', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
+test('Apps UI has no routine source-update explanation or acknowledgement control', async () => {
+  const app = await fs.readFile(new URL('../ui/app.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(app, /sourceUpdate|keep-working-sources|Keep my working sources|Installed sources changed/);
+  assert.match(app, /project-workflow-tabs/);
+});
+
+test('real browser shows normal embedded workflows after an installed update without source-review UI', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
   const f = await fixture(t);
+  await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  await f.write(path.join(f.source, 'new-after-pull.js'), 'new installed browser input');
   f.server.panel.publishers = { found: [{ dir: f.workspace, publisher: { name: 'fixture', origin: 'https://example.test', validate: () => [], status: async () => ({ state: 'unpublished', selectedUrl: '' }), publish: async () => ({ url: '' }), unpublish: async () => ({}) } }], problems: [] };
   await withBrowser(async ({ navigate, evaluate, send }) => {
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
@@ -356,18 +547,24 @@ test('real browser shows normal embedded workflows with cache review removed and
     const until = async (expression: string) => { for (let i = 0; i < 100; i++) { if (await evaluate(expression)) return; await sleep(50); } assert.fail(expression); };
     await evaluate(`document.querySelector('.proj[data-id="bundled:sample"]').click()`);
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.project-workflow-tabs [role="tab"]'),x=>x.textContent)`), ['Develop', 'Publish', 'Build']);
-    assert.equal(await evaluate(`!!document.querySelector('#bundled-run-settings, #bundled-copy, .bundled-sec')`), false);
+    assert.equal(await evaluate(`!!document.querySelector('#bundled-run-settings, #bundled-copy, .bundled-sec, #keep-working-sources')`), false);
+    assert.equal(await evaluate(`document.querySelector('.project-hero').textContent.includes('Installed sources changed')`), false);
     assert.equal(await evaluate(`document.querySelector('.proj[data-id="bundled:sample"]').draggable`), true);
     const geometry = await evaluate(`({height:document.querySelector('.project-hero').getBoundingClientRect().height,icon:document.querySelector('.project-hero .icon-btn').getBoundingClientRect().width})`);
     assert.equal(geometry.icon, 26); assert.ok(geometry.height < 500, JSON.stringify(geometry));
     await evaluate(`document.querySelector('#settings [data-choice="host:"]').click()`);
     for (let i = 0; i < 100 && (await f.request('GET', '/api/projects/bundled%3Asample')).json.manifest.target === 'webxr'; i++) await sleep(50);
     assert.notEqual((await f.request('GET', '/api/projects/bundled%3Asample')).json.manifest.target, 'webxr', 'normal platform controls persist effective settings');
+    // The API write can finish before the browser's platform-save continuation.
+    // Reload persisted settings before testing the separate publisher-selection action.
+    await navigate(f.server.url, `!!document.querySelector('.proj[data-id="bundled:sample"]')`);
+    await evaluate(`document.querySelector('.proj[data-id="bundled:sample"]').click()`);
     await evaluate(`document.querySelector('[data-surface="publish"]').click()`);
     await until(`!!document.querySelector('[name="publication.slug"]')`);
     for (let i = 0; i < 100 && !(await f.request('GET', '/api/projects/bundled%3Asample')).json.manifest.publication?.publisher; i++) await sleep(50);
     await sleep(350);
     const initialPublication = (await f.request('GET', '/api/projects/bundled%3Asample')).json.manifest.publication;
+    assert.ok(initialPublication, await evaluate(`document.body.innerText`));
     assert.equal(initialPublication.slug, 'sample', 'automatic publisher selection never persists the bundled namespace in the slug');
     assert.equal(await evaluate(`document.querySelector('[name="publication.slug"]').value`), 'sample');
     await evaluate(`const slug=document.querySelector('[name="publication.slug"]');slug.value='browser-sample';slug.dispatchEvent(new Event('change',{bubbles:true}))`);
