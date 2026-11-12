@@ -18,7 +18,7 @@ body.plugins-page .run-dock, body.plugins-page .stats-dock, body.settings-page .
 .settings-destination-title { display: grid; gap: 2px; flex: 1; min-width: 0; }
 .settings-destination-body, .settings-config { display: grid; gap: var(--xrb-space-stack); }
 .settings-destination-body > .errors, .settings-config > .errors, .settings-destination-problem { margin: 0; }
-.settings-config-actions { display: flex; justify-content: flex-end; }
+.settings-config-actions { display: flex; justify-content: flex-start; }
 .settings-card-disabled { opacity: .72; }
 @media (max-width: 700px) { .settings-card-fields { grid-template-columns: minmax(0, 1fr); } }
 
