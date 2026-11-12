@@ -58,6 +58,7 @@ let selected = query.get('state') === 'manual' ? 'libraries-ready' : query.get('
 if (query.get('view') === 'progress' && ['installing', 'failed', 'restart', 'complete'].includes(selected)) selected = `progress-${selected}`;
 function render() {
   const entry = cases[picker.value], nav = document.querySelector('#states'), frame = document.querySelector('#preview');
+  document.body.dataset.case = picker.value;
   const available = entry.groups.flatMap(([, states]) => states.map(([id]) => id));
   if (!available.includes(selected)) selected = entry.defaultState;
   nav.replaceChildren();

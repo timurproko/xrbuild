@@ -5,8 +5,8 @@
 
 ## 2. Align Apps and Design scrollbar behavior
 
-- [ ] 2.1 Remove unnecessary Design Main scroll-viewport framing and consume shared scrollbar geometry while retaining intentional component padding and isolated workflow bounds; verify matching viewport-edge/inset behavior on Apps and Design without copied scrollbar CSS or controllers.
-- [ ] 2.2 Add Main/case/nested/resize browser regressions; verify parity across wide/narrow and light/dark layouts, filtering and content-fit states, while Design workflow actions stay mocked and navigation origin metadata remains correct.
+- [x] 2.1 Remove unnecessary Design Main scroll-viewport framing and consume shared scrollbar geometry while retaining intentional component padding and isolated workflow bounds; verify matching viewport-edge/inset behavior on Apps and Design without copied scrollbar CSS or controllers.
+- [x] 2.2 Add Main/case/nested/resize browser regressions; verify parity across wide/narrow and light/dark layouts, filtering and content-fit states, while Design workflow actions stay mocked and navigation origin metadata remains correct.
 
 ## 3. Open Hands independently of optional capture services
 
