@@ -1,4 +1,3 @@
-import { createBridge } from './server.mjs';
 import {assertRuntimeSync} from './runtime.mjs';
 
 export const bootstrapPath='/__handtracking/bridge';
@@ -9,7 +8,7 @@ const loopback=new Set(['127.0.0.1','::ffff:127.0.0.1','::1']);
 export function prepareNative(context={}){assertRuntimeSync(context);}
 
 /** One viewer-owned, authenticated service. Pairing credentials live only in server/page memory. */
-export function managedBridge({context={},prepare=()=>prepareNative(context),bridgeFactory=createBridge,logger=console,route=bootstrapPath}={}){
+export function managedBridge({context={},prepare=()=>prepareNative(context),bridgeFactory=options=>import('./server.mjs').then(({createBridge})=>createBridge(options)),logger=console,route=bootstrapPath}={}){
   let prepared=false,preparationError='',service=null,pending=null,closed=false,closeWork=null;
   const prepareOnce=()=>{
     if(prepared)return;prepared=true;

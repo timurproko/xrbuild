@@ -4,7 +4,7 @@ Plugin-owned implementation/sample for generated hands, browser RGB observations
 
 ## Normal use
 
-Use the normal panel → **Hands**, route `/hand-tracking/`, after explicit bundled dependency setup. The default is a generated fixture. Opening/navigation never starts camera capture, inference, model downloads or native compilation. Capture and recording remain separate explicit actions. Imported samples are independent editable copies; do not modify the installed original.
+Use the normal panel → **Hands**, route `/hands/` (`/hand-tracking/` remains an alias), after explicit public dependency/build setup. The checked browser view opens independently of optional Node/native bridge startup; bridge dependencies are loaded only on authenticated explicit requests. If the browser build itself is unavailable, the normal shared shell shows inline explicit setup/recovery instead of a centered Retry wall. The default is a generated fixture. Opening/navigation never starts camera capture, inference, model downloads or native compilation. Capture and recording remain separate explicit actions. Imported samples are independent editable copies; do not modify the installed original.
 
 The view reuses the actual panel theme/navigation. Capture controls select runtime-reported cameras, exact supported profiles and modes. No device is silently substituted if the selected one is missing/busy. Stop/source switch/page disposal releases owned tracks/workers/processes; one authenticated tab owns each capture service. Tokens stay only in server/page memory, never URLs or preferences.
 

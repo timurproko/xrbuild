@@ -8,6 +8,7 @@ export async function revealWorkspace(signal?:AbortSignal):Promise<void>{
   if(boot.handTrackingBootFailure)removeEventListener('error',boot.handTrackingBootFailure);
   document.getElementById('boot-error')!.hidden=true;
   document.body.classList.remove('workspace-pending');
+  document.body.removeAttribute('data-xrb-scrollbar');
 }
 export function failWorkspace(error:unknown):void{
   const message=document.getElementById('boot-error');if(!message)return;

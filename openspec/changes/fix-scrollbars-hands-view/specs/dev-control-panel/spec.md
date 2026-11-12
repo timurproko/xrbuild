@@ -52,6 +52,11 @@ Apps and Design Main SHALL share scrollbar geometry, viewport-edge behavior and 
 
 A managed tool supporting independent viewer serving SHALL open its current checked browser view despite optional service startup failure. Such failures SHALL appear inline instead of replacing the viewer with a centered Retry wall. Missing browser output SHALL use the normal shared shell with honest inline explicit setup/recovery, not claim readiness. Runtime ownership, required restart and explicit installation safeguards SHALL remain enforced.
 
+#### Scenario: Declare independent viewer support
+
+- **WHEN** a managed tool declares the neutral boolean `independentView` capability
+- **THEN** missing current browser output uses the normal shared unavailable-view shell with inline explicit recovery, while unrelated tools keep their existing failure behavior
+
 #### Scenario: Optional service fails
 
 - **WHEN** a tool's current checked browser build is available but an optional service dependency is missing

@@ -12,7 +12,7 @@ const RESERVED_PATHS = ['/api/', '/plugins/', '/settings/', '/preview/', '/vendo
 
 interface ToolBase { id: string; label: string }
 export interface ExternalToolLink extends ToolBase { url: string; passPanelOrigin?: boolean }
-export interface ManagedToolLink extends ToolBase { route: string; module: string; endpoints: string[]; aliases?: string[]; owner?: { key: string; root: string; module: string } }
+export interface ManagedToolLink extends ToolBase { route: string; module: string; endpoints: string[]; aliases?: string[]; independentView?: boolean; owner?: { key: string; root: string; module: string } }
 export type ToolLink = ExternalToolLink | ManagedToolLink;
 export const isManagedTool = (tool: ToolLink): tool is ManagedToolLink => 'route' in tool;
 
@@ -33,7 +33,7 @@ function validateItems(tools: unknown[], source: string, modulePrefix = '', mana
       throw new Error(`${source}: tool IDs must be distinct lower-case names`);
     if (typeof tool.label !== 'string' || !tool.label.trim() || tool.label.length > 60 || /[\x00-\x1f\x7f]/.test(tool.label))
       throw new Error(`${source}: invalid tool label`);
-    const hasUrl = tool.url !== undefined, hasManaged = tool.route !== undefined || tool.module !== undefined || tool.endpoints !== undefined || tool.aliases !== undefined;
+    const hasUrl = tool.url !== undefined, hasManaged = tool.route !== undefined || tool.module !== undefined || tool.endpoints !== undefined || tool.aliases !== undefined || tool.independentView !== undefined;
     if (hasUrl === hasManaged || managedOnly && hasUrl) throw new Error(`${source}: each tool must define ${managedOnly ? 'a managed route/module' : 'either url or route/module'}`);
     ids.add(tool.id);
     const base = { id: tool.id, label: tool.label.trim() };
@@ -52,6 +52,7 @@ function validateItems(tools: unknown[], source: string, modulePrefix = '', mana
     if (tool.module.startsWith('#') && !managedOnly) throw new Error(`${source}: component aliases require a plugin owner`);
     const module = modulePrefix ? `${modulePrefix}/${tool.module}` : tool.module;
     if (module.length > 256 || !MODULE.test(module)) throw new Error(`${source}: managed tool module path is too long`);
+    if (tool.independentView !== undefined && typeof tool.independentView !== 'boolean') throw new Error(`${source}: independentView must be boolean`);
     const endpoints = tool.endpoints === undefined ? [] : tool.endpoints;
     if (!Array.isArray(endpoints) || endpoints.length > 8 || endpoints.some((entry) => typeof entry !== 'string' || !ENDPOINT.test(entry)))
       throw new Error(`${source}: managed tool endpoints must be bounded local path prefixes`);
@@ -61,7 +62,7 @@ function validateItems(tools: unknown[], source: string, modulePrefix = '', mana
     if (!Array.isArray(aliases) || aliases.length > 8 || aliases.some(entry => typeof entry !== 'string' || entry.length > 128 || !MANAGED_ROUTE.test(entry)))
       throw new Error(`${source}: managed tool aliases must be bounded local directory paths`);
     ownedPaths.push(tool.route, ...distinct, ...aliases);
-    return { ...base, route: tool.route, module, endpoints: distinct, ...(aliases.length ? {aliases: aliases as string[]} : {}) };
+    return { ...base, route: tool.route, module, endpoints: distinct, ...(tool.independentView === true ? {independentView: true} : {}), ...(aliases.length ? {aliases: aliases as string[]} : {}) };
   });
   validatePathOwnership(ownedPaths, source);
   return result;

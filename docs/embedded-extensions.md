@@ -184,6 +184,12 @@ project it copies current working sources through the same portable-field/identi
 fixtures cover normal tabs/actions, mixed sections/archive, persistent edits, frozen builds, publication/packaging adapters,
 legacy run-choice import, Copy and generation-pinned assets without native device execution.
 
+Managed tools may declare the neutral boolean `independentView` capability. Their missing-view state retains the shared header/navigation with inline
+explicit public setup/recovery; unrelated tools retain their existing failure behavior. The hand diagnostic's current checked viewer does not import
+optional bridge dependencies on navigation, and no page GET installs packages or starts capture. Actual executed service/runtime changes still require
+restart; stale, foreign or unsafe activated output never falls back to old/source output. Shared scrollbars suppress CSS-hidden/pending content and closed
+output, release retired-document capture targets, and use the same viewport-edge inset in Apps and Design Main without preview framing gutters.
+
 ### Embedded package setup, build and test
 
 The core-owned `embedded/` registers **six packages**: WebXR publisher under `plugins/publisher-webxr` (local/production destinations,

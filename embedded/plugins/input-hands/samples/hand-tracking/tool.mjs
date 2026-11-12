@@ -11,8 +11,10 @@ import {managedPanelDocument} from './panel-document.mjs';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon','.wasm':'application/wasm'};
 export async function createWorkspaceTool(context){
+  if(context.plugin?.origin==='bundled'&&!context.runtimeRoot)throw new Error('The current Hands browser view requires checked public output. Set up public services explicitly; installed source output is not a fallback.');
   statePaths(context);const dist=plainPath(path.join(root,'dist')),index=plainPath(path.join(dist,'index.html'));
-  if(!(await fs.stat(index)).isFile())throw new Error('Set up bundled services to build the hand diagnostic before opening it');
+  const ready=await fs.stat(index).catch(error=>{if(error.code==='ENOENT')return null;throw error;});
+  if(!ready?.isFile())throw new Error('The current Hands browser view is not built. Set up public services explicitly to prepare it; no camera or model is started.');
   const handlers=[],plugins=[managedBridgePlugin({context,httpServer:context.server}),panelStatusPlugin(context.panelOrigin),recordingStorePlugin(context),visionAssetsPlugin(context)];
   const server={httpServer:context.server,config:{server:{https:false}},middlewares:{use(prefix,handler){
     handlers.push(typeof prefix==='string'?(req,res,next)=>{const pathname=new URL(req.url||'/','http://127.0.0.1').pathname;return pathname===prefix||pathname.startsWith(prefix+'/')?handler(req,res,next):next();}:prefix);
