@@ -142,7 +142,14 @@ async function confirmable(path, body = {}) {
 function report(e) {
   console.error(e);
   const rawMessage = String(e?.message ?? e ?? 'Unknown error');
-  const rawDetails = e?.data?.details && !e.data.details.needsConfirm ? e.data.details : '';
+  const blocked = e?.data?.details && typeof e.data.details.reason === 'string' ? e.data.details : null;
+  if (blocked?.restart) {
+    // Waiting cannot clear this cause; offer the one action that does.
+    void ask({ title: 'Restart needed', message: rawMessage, ok: 'Restart', cancel: 'Close' })
+      .then((yes) => { if (yes) return restartPanel(); }).catch(report);
+    return;
+  }
+  const rawDetails = !blocked && e?.data?.details && !e.data.details.needsConfirm ? e.data.details : '';
   const data = typeof rawDetails === 'string' ? rawDetails : rawDetails ? JSON.stringify(rawDetails, null, 2) : '';
   const details = [rawMessage, data].filter((value, index, values) => value && values.indexOf(value) === index).join('\n\n');
   ask({ title: 'Something went wrong', message: 'XR Build could not complete this action. Review or copy the details below.', details, closeOnly: true });

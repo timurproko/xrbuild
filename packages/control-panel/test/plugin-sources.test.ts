@@ -64,8 +64,8 @@ test('source refresh reserves consumers, publishes services together and refuses
   const p = {} as any;
   await assert.rejects(f.panel.packageBuild(p, {}), /changing/);
   await assert.rejects(f.panel.publish(p), /changing/);
-  await assert.rejects(f.panel.run(p, 'built'), /preparation/);
-  await assert.rejects(f.panel.saveRunSettings(p, {}, 'revision'), /preparation/);
+  await assert.rejects(f.panel.run(p, 'built'), /Plugin services are being updated/);
+  await assert.rejects(f.panel.saveRunSettings(p, {}, 'revision'), /Plugin services are being updated/);
   await assert.rejects(f.panel.selectPluginSource('workspace:shared', 'workspace', revision), /Stop running/);
   release(); await selection; delete (globalThis as any).__sourceGate;
   assert.equal(f.panel.publishers.found[0].publisher.label, 'Bundled'); assert.equal(f.panel.packagers.found[0].packager.label, 'Bundled');

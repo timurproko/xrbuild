@@ -1,7 +1,7 @@
 ## 1. Specific launch refusal causes
 
-- [ ] 1.1 Replace the shared Run/Preview/rebuild 409 text with an ordered cause helper returning a reason code and message (including `servicesProblem`); verify panel tests cover each cause, order and the restart-required case.
-- [ ] 1.2 Offer Restart in the error dialog for restart-required refusals; verify a UI test shows the action only for that reason.
+- [x] 1.1 Replace the shared Run/Preview/rebuild 409 text with an ordered cause helper returning a reason code and message (including `servicesProblem`); verify panel tests cover each cause, order and the restart-required case.
+- [x] 1.2 Offer Restart in the error dialog for restart-required refusals; verify a UI test shows the action only for that reason.
 
 ## 2. Plugin configuration in Settings
 

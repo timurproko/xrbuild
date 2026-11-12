@@ -22,6 +22,7 @@ import { cleanWorkingCache, reviewWorkingCache } from './cache-maintenance.ts';
 import { requireProjectOutput, projectPreviewRoute } from './project-build.ts';
 import { assertEditableProject, assertUserRoot, assertWritablePath } from './project-access.ts';
 import { projectStateKey, readProjectRunSettings, saveProjectRunSettings, validateRunOverrides, withRunSettings } from './project-run-settings.ts';
+import { launchBlocker, type LaunchState } from './launch-blockers.ts';
 import { log } from './env.ts';
 import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHost, clearProviderCache } from './host-build.ts';
 import { DesktopSetup } from './desktop-setup.ts';
@@ -210,6 +211,8 @@ export class Panel {
   private servicesRevision: string | null = null;
   private servicesPending = false;
   private servicesProblem: string | null = null;
+  /** Set when executed plugin module code changed: only a panel restart clears servicesPending. */
+  private servicesNeedRestart = false;
   private servicesSync: Promise<void> | null = null;
   private servicesCheckedMs = 0;
   private readonly executedPluginCode = new Map<string, string>();
@@ -346,6 +349,7 @@ export class Panel {
         const restartRequired = this.codeChanged(snapshot);
         await this.onPluginSourcesChanged(restartRequired);
         if (snapshot.problem || restartRequired) {
+          this.servicesNeedRestart = !snapshot.problem && restartRequired;
           this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel before using plugins';
           this.packagers = { found: [], problems: [this.servicesProblem] }; this.publishers = { found: [], problems: [this.servicesProblem] };
           this.publicationStatuses.clear(); clearProviderCache(); return;
@@ -371,7 +375,7 @@ export class Panel {
     if (expected && before !== expected) throw new HttpError(409, 'Plugin declarations changed; reload and select the source again');
     const snapshot = await pluginDiscoverySnapshot(this.repo, this.workspace);
     if (snapshot.problem || this.codeChanged(snapshot)) {
-      this.servicesPending = true; this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel before using plugins';
+      this.servicesPending = true; this.servicesNeedRestart = !snapshot.problem; this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel before using plugins';
       throw new HttpError(409, this.servicesProblem);
     }
     this.rememberPluginCode(snapshot);
@@ -380,7 +384,7 @@ export class Panel {
     const after = await pluginDiscoverySnapshot(this.repo, this.workspace);
     if (after.revision !== snapshot.revision) { this.servicesPending = true; this.servicesProblem = 'Plugin sources changed during refresh; restart or set up services again'; throw new HttpError(409, this.servicesProblem); }
     this.packagers = packagers; this.publishers = publishers;
-    this.servicesRevision = after.revision; this.servicesPending = false; this.servicesProblem = null; this.servicesCheckedMs = Date.now();
+    this.servicesRevision = after.revision; this.servicesPending = false; this.servicesNeedRestart = false; this.servicesProblem = null; this.servicesCheckedMs = Date.now();
     await this.onPluginSourcesChanged();
   }
 
@@ -625,7 +629,7 @@ export class Panel {
     if (p.origin === 'bundled') {
       const m = this.manifestOf(p);
       if (!m.scripts?.build) throw new HttpError(409, `${p.id} has no build script`);
-      if (this.preparingNativeRun || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
+      this.refuseIfLaunchBlocked(p, { preparingNativeRun: this.preparingNativeRun, preparingPreview: this.preparingPreview });
       this.refuseIfBusy(p.id);
       return this.startJob('web-build', p.id, `rebuild: ${m.name}`, async ctx => {
         const effective = await this.prepareProject(p);
@@ -803,9 +807,9 @@ export class Panel {
   private async acceptExplicitServiceLoad(): Promise<void> {
     const snapshot = await pluginDiscoverySnapshot(this.repo, this.workspace);
     if (snapshot.problem || this.codeChanged(snapshot)) {
-      this.servicesPending = true; this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel'; return;
+      this.servicesPending = true; this.servicesNeedRestart = !snapshot.problem; this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel'; return;
     }
-    this.servicesRevision = snapshot.revision; this.servicesPending = false; this.servicesProblem = null;
+    this.servicesRevision = snapshot.revision; this.servicesPending = false; this.servicesNeedRestart = false; this.servicesProblem = null;
     this.rememberPluginCode(snapshot); this.servicesCheckedMs = Date.now();
   }
 
@@ -1230,7 +1234,7 @@ export class Panel {
   }
 
   async saveRunSettings(p: Project, overrides: unknown, revision: unknown) {
-    if (this.changingPlugins || this.maintainingCache || this.preparingNativeRun || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
+    this.refuseIfLaunchBlocked(p, { changingPlugins: this.changingPlugins, maintainingCache: this.maintainingCache, preparingNativeRun: this.preparingNativeRun, preparingPreview: this.preparingPreview });
     this.refuseIfBusy(p.id);
     this.settingsWrites.add(p.id);
     try {
@@ -1269,7 +1273,7 @@ export class Panel {
   async preview(p: Project, mode: RunMode, flat: boolean | undefined, token: string, options: { fullscreen?: boolean; monitor?: number; clientPort: number }): Promise<string> {
     if (mode === 'dev' && !p.manifest?.scripts?.dev) throw new HttpError(409, `${p.id} has no dev script`);
     await this.synchronizePluginServices(true);
-    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending || this.preparingPreview || this.preparingNativeRun || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
+    this.refuseIfLaunchBlocked(p, this.launchState(p));
     if (p.readOnly) this.refuseIfBusy(p.id);
     this.preparingPreview = true;
     try {
@@ -1341,8 +1345,7 @@ export class Panel {
     if (mode === 'dev' && !p.manifest?.scripts?.dev) throw new HttpError(409, `${p.id} has no dev script`);
     await this.synchronizePluginServices(true);
     const desktopSetupBusy = await this.desktopSetup.isBusy();
-    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for launch preparation or settings saving to finish');
-    if (this.preparingNativeRun) throw new HttpError(409, 'another native launch is being prepared');
+    this.refuseIfLaunchBlocked(p, this.launchState(p));
     if (this.jobs.active().some(job => job.kind === 'host-rebuild')) throw new HttpError(409, 'wait for the native rebuild to finish before running');
     if (this.jobs.active().some(job => job.kind === 'desktop-setup') || desktopSetupBusy) throw new HttpError(409, 'wait for desktop setup to finish before running');
     if (p.readOnly) this.refuseIfBusy(p.id);
@@ -1395,6 +1398,20 @@ export class Panel {
       const output = last?.projectId === p.id && last.endedMs >= attemptedAt ? last.lines : null;
       throw new HttpError(400, (e as Error).message, output?.length ? output.join('\n') : undefined);
     }
+  }
+
+  private launchState(p: Project): LaunchState {
+    return {
+      restartPending: this.restartPending, changingPlugins: this.changingPlugins, maintainingCache: this.maintainingCache,
+      servicesPending: this.servicesPending, servicesProblem: this.servicesProblem, servicesNeedRestart: this.servicesNeedRestart,
+      preparingNativeRun: this.preparingNativeRun, preparingPreview: this.preparingPreview, settingsSaving: this.settingsWrites.has(p.id),
+    };
+  }
+
+  /** Refuses with the first specific cause; `details.reason` lets the UI offer Restart when only a restart helps. */
+  private refuseIfLaunchBlocked(p: Project, state: LaunchState): void {
+    const blocked = launchBlocker({ ...state, settingsSaving: this.settingsWrites.has(p.id) });
+    if (blocked) throw new HttpError(409, blocked.message, { reason: blocked.reason, restart: blocked.restart });
   }
 
   /** Settings and organization cannot overlap launch preparation or that project's active work. */
