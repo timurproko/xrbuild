@@ -125,6 +125,11 @@ export function emojiFavicon(emoji,filter=''){const style=filter?` style="filter
 export function setPageIdentity(product,emoji,filter=''){document.title=`XR Build · ${product}`;let link=document.querySelector('link[rel="icon"]');if(!link){link=document.createElement('link');link.rel='icon';document.head.append(link);}link.href=emojiFavicon(emoji,filter);}
 export function updateRebuildChip(chip,status,readyLabel=''){const active=!status.exists||status.outdated;chip.className=`chip ${active?'rebuild':'good'}`;chip.textContent=!status.exists?'rebuild required':status.outdated?'rebuild available':readyLabel;chip.hidden=!active;return active;}
 export function updateRestartChip(chip,outdated){const active=!!outdated;chip.className='chip warn';chip.textContent='restart available';chip.hidden=!active;return active;}
+/** Shared field wrapper: callers supply trusted label/control HTML; user hint/error copy is escaped here. */
+export function renderField(labelHtml,controlHtml,{hint='',error=''}={}) {
+  const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return `<label class="xrb-field-label">${labelHtml}${controlHtml}${hint?`<span class="xrb-help">${escape(hint)}</span>`:''}${error?`<span class="xrb-help field-error">${escape(error)}</span>`:''}</label>`;
+}
 export function sentenceText(value){let text=String(value??'').trim();if(!text)return'';text=text.replace(/\p{L}/u,letter=>letter.toLocaleUpperCase());text=text.replace(/[.!?…,;:]*$/u,'')+'.';return text;}
 function normalizeHelp(element){const next=sentenceText(element.textContent);if(element.textContent!==next)element.textContent=next;}
 export function enhanceHelpText(root=document){const apply=node=>{if(node instanceof Element&&node.matches('.xrb-help'))normalizeHelp(node);node.querySelectorAll?.('.xrb-help').forEach(normalizeHelp);};apply(root);const observer=new MutationObserver(records=>{for(const record of records){if(record.type==='characterData')apply(record.target.parentElement);else for(const node of record.addedNodes)if(node instanceof Element)apply(node);}});observer.observe(root===document?document.documentElement:root,{childList:true,subtree:true,characterData:true});return()=>observer.disconnect();}

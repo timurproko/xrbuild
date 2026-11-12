@@ -5,7 +5,7 @@ import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './p
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
 import {requestedNavigation,menuKeyboard,renderNavigationMenu,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
 import {rebuildHostInPlace} from './rebuild-dialog.js';
-import {enhanceHelpText,iconSvg,installDropdowns,installIcons,installNumberSteppers,installTabs,installTooltips,openFloating,resumeAnimations,setFieldError,setPageIdentity,setRevealed,stabilizePanelHeight,transitionPanelHeight,updateRebuildChip,updateRestartChip} from './design-system.js';
+import {enhanceHelpText,iconSvg,installDropdowns,installIcons,installNumberSteppers,installTabs,installTooltips,openFloating,renderField,resumeAnimations,setFieldError,setPageIdentity,setRevealed,stabilizePanelHeight,transitionPanelHeight,updateRebuildChip,updateRestartChip} from './design-system.js';
 import {exposedProviderInputs,runtimeProviderInputs} from './provider-choice.js';
 import {bumpPackageVersion, nextPublicationVersion} from './package-version.js';
 const $ = (sel) => document.querySelector(sel);
@@ -1062,7 +1062,7 @@ function field(label, name, value, opts = {}) {
         <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" ${err ? 'aria-invalid="true"' : ''} ${opts.disabled ? 'disabled' : ''}>${!opts.multiple && opts.marks?.[value] ? `<span class="xrb-status-dot ${esc(opts.marks[value])}" aria-hidden="true"></span>` : ''}<span class="xrb-option-label">${esc(opts.multiple ? value.filter((v) => opts.options.includes(v)).map((v) => optionLabel(v, owner)).join(', ') || 'None' : optionLabel(value ?? '', owner))}</span>${!opts.multiple && opts.optionDetails?.[value] ? `<span class="xrb-option-detail">${esc(opts.optionDetails[value])}</span>` : ''}</button>
       </div>`
     : `<input name="${name}" value="${esc(value ?? '')}" ${err ? 'aria-invalid="true"' : ''} ${opts.disabled ? 'disabled' : ''} ${opts.readonly ? 'readonly aria-disabled="true"' : ''} ${opts.autocomplete ? `autocomplete="${esc(opts.autocomplete)}"` : ''} title="${esc(opts.title ?? '')}" placeholder="${esc(opts.placeholder ?? '')}">`;
-  return `<label>${label}${input}${err ? `<span class="xrb-help field-error">${esc(err)}</span>` : ''}</label>`;
+  return renderField(label, input, { hint: opts.hint, error: err });
 }
 
 // Shared design-system dropdown behavior is state-model agnostic; this panel only supplies values.
@@ -3177,10 +3177,10 @@ function pluginSettingControl(setting, value, disabled) {
   if (setting.type === 'boolean') return `<div class="xrb-stack settings-boolean-field"><label class="toggle"><input type="checkbox" name="${esc(setting.key)}" ${value ? 'checked' : ''} ${disabled ? 'disabled' : ''}> ${esc(setting.label)}</label>${hint}</div>`;
   if (setting.type === 'select') {
     const options = setting.options.map((option) => option.value), labels = Object.fromEntries(setting.options.map((option) => [option.value, option.label]));
-    const control = field(esc(setting.label), setting.key, value, { options, labels, disabled });
-    return hint ? control.replace('</label>', `${hint}</label>`) : control;
+    return field(esc(setting.label), setting.key, value, { options, labels, disabled, hint: setting.hint });
   }
-  return `<label><span>${esc(setting.label)}</span><input type="${setting.type === 'number' ? 'number' : 'text'}" name="${esc(setting.key)}" value="${esc(value ?? '')}" ${setting.min !== undefined ? `min="${esc(setting.min)}"` : ''} ${setting.max !== undefined ? `max="${esc(setting.max)}"` : ''} ${setting.step !== undefined ? `step="${esc(setting.step)}"` : ''} ${disabled ? 'disabled' : ''}>${hint}</label>`;
+  const control = `<input type="${setting.type === 'number' ? 'number' : 'text'}" name="${esc(setting.key)}" value="${esc(value ?? '')}" ${setting.min !== undefined ? `min="${esc(setting.min)}"` : ''} ${setting.max !== undefined ? `max="${esc(setting.max)}"` : ''} ${setting.step !== undefined ? `step="${esc(setting.step)}"` : ''} ${disabled ? 'disabled' : ''}>`;
+  return renderField(esc(setting.label), control, { hint: setting.hint });
 }
 
 function pluginSettingsForm(plugin, scope, fields, values, divided = false) {
@@ -3249,7 +3249,8 @@ function renderGlobalSettings() {
     })}</form><form id="app-preferences"><div class="settings-card-fields">${field('Cursor', 'cursor', state.appSettings.cursor, {
       options: ['system', 'ring', 'ring-dot'], raw: true,
       optionLabels: { system: 'System', ring: 'Ring', 'ring-dot': 'Ring with hover dot' },
-    })}</div><p class="xrb-help">Applies on the next run. Mouse must be selected in the app’s Input options.</p></form></div>`) : '';
+      hint: 'Applies on the next run. Mouse must be selected in the app’s Input options.',
+    })}</div></form></div>`) : '';
   $('#settings-content').innerHTML = apps + shownPlugins.map(pluginSettingsSection).join('');
   $('#panel-appearance')?.addEventListener('change', event => window.xrbTheme.set(event.currentTarget.elements.namedItem('theme').value));
   $('#app-preferences')?.addEventListener('change', action(async (event) => {
