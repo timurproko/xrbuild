@@ -1,5 +1,6 @@
 export type XrbIconName='folder'|'open'|'rewind'|'play'|'pause'|'stop'|'search'|'close'|'code'|'copy'|'trash'|'camera'|'reset'|'fullscreen'|'exit-fullscreen'|'check-circle'|'error-circle';
 export function iconSvg(name:XrbIconName):string;
+export function installWorkspaceLayout(document?:Document):()=>void;
 export function installOverlayScrollbars(root?:Document):()=>void;
 export function positionFloating<T extends HTMLElement>(element:T,options?:{x?:number;y?:number;anchor?:HTMLElement|null;gap?:number}):T;
 export function openFloating<T extends HTMLElement>(element:T,options?:{x?:number;y?:number;anchor?:HTMLElement|null;gap?:number;focus?:boolean}):T;

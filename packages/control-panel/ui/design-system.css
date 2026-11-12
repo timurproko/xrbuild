@@ -10,7 +10,8 @@
   --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
   --top-h: 56px; --action-button-w: 96px; --card-head-h: 28px; --card-inline: 18px; --sidebar-w: 290px; --sidebar-compact-w: 270px;
   --xrb-workspace-inline: 24px; --xrb-workspace-block-start: 20px; --xrb-workspace-block-end: 40px; --xrb-workspace-gap: 20px;
-  --xrb-workspace-sticky-top: calc(var(--top-h) + var(--xrb-workspace-block-start));
+  --xrb-workspace-max: 1760px; --xrb-workspace-detail-min: 440px; --xrb-workspace-aside: 430px; --xrb-card-gap: 16px; --xrb-sidebar-head-h: 36px; --xrb-sidebar-head-gap: 12px;
+  --xrb-workspace-sticky-top: calc(var(--xrb-app-bar-height, var(--top-h)) + var(--xrb-workspace-block-start));
   --xrb-sticky-mask-gap: 10px;
   --xrb-space-field: 4px; --xrb-space-stack: 12px; --xrb-space-section: 24px;
   --xrb-scrollbar-size: 10px; --xrb-scrollbar-inset: 2px; --xrb-scrollbar-thumb: 4px; --xrb-scrollbar-min: 24px;
@@ -79,9 +80,29 @@ small { font-weight: normal; }
 
 /* Application chrome */
 .xrb-workspace-layout { padding: var(--xrb-workspace-block-start) var(--xrb-workspace-inline) var(--xrb-workspace-block-end); gap: var(--xrb-workspace-gap); }
+.xrb-workspace-grid { display: grid; align-items: start; max-width: var(--xrb-workspace-max); margin: 0 auto; }
+.xrb-workspace-grid > *, .xrb-workspace-flow > * { min-width: 0; }
+.xrb-workspace-flow { display: contents; }
+.xrb-workspace-grid--sidebar { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); }
+.xrb-workspace-grid--activity { grid-template-columns: var(--sidebar-w) minmax(var(--xrb-workspace-detail-min), 1fr) var(--xrb-workspace-aside); }
+.xrb-workspace-sidebar { position: sticky; top: var(--xrb-workspace-sticky-top); height: calc(100dvh - var(--xrb-workspace-sticky-top) - var(--xrb-workspace-block-end)); display: flex; flex-direction: column; overflow: hidden; transform: translateZ(0); backface-visibility: hidden; }
+.xrb-workspace-sidebar-heading, .xrb-workspace-sidebar > .nav-tabs { flex: none; height: var(--xrb-sidebar-head-h); margin: 0 0 var(--xrb-sidebar-head-gap); padding-bottom: 10px; border-bottom: 1px solid var(--line); display: flex; align-items: flex-end; }
+.xrb-workspace-sidebar-content { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
+.xrb-card-stack { display: flex; flex-direction: column; min-width: 0; gap: var(--xrb-card-gap); }
+.xrb-card-stack > .xrb-card, .xrb-card-stack > .card { margin-bottom: 0; }
+@media (max-width: 1320px) {
+  .xrb-workspace-grid--sidebar, .xrb-workspace-grid--activity { grid-template-columns: var(--sidebar-compact-w) minmax(0, 1fr); }
+  .xrb-workspace-grid--activity > .xrb-workspace-flow { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: var(--xrb-card-gap); }
+}
+@media (max-width: 700px) {
+  .xrb-workspace-grid--sidebar, .xrb-workspace-grid--activity { grid-template-columns: minmax(0, 1fr); }
+  .xrb-workspace-grid > .xrb-workspace-sidebar { position: static; height: auto; max-height: 40dvh; }
+  .xrb-workspace-grid--activity > .xrb-workspace-flow { grid-column: 1; grid-row: 2; }
+}
 .xrb-app-bar, .top { display: flex; align-items: center; gap: 14px; height: var(--top-h); padding: 0 var(--xrb-workspace-inline); border-bottom: 1px solid var(--line); background: var(--surface); position: sticky; top: 0; z-index: 4; }
 .xrb-app-bar::after, .top::after { content: ""; position: absolute; left: 0; right: 0; bottom: -2px; height: 2px; background: var(--bg); pointer-events: none; }
 .xrb-app-bar h1, .top h1 { flex: none; }
+.xrb-app-bar--wrap { height: auto; min-height: var(--top-h); flex-wrap: wrap; padding-block: 8px; }
 .xrb-product-menu, .panel-menu-button { display: inline-flex; align-items: center; gap: 5px; margin: 0; padding: 2px 3px; border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 500; }
 .xrb-product-menu::after, .panel-menu-button::after { content: ""; width: 5px; height: 5px; border: solid currentColor; border-width: 0 1px 1px 0; transform: rotate(45deg); }
 .xrb-product-menu:hover:not(:disabled), .xrb-product-menu[aria-expanded="true"], .panel-menu-button:hover:not(:disabled), .panel-menu-button[aria-expanded="true"] { background: var(--surface-2); border-color: transparent; color: var(--fg); }
@@ -110,6 +131,7 @@ button.danger, button.danger-solid { --fill: var(--err); --edge: var(--err); }
 button.ghost { --fill: transparent; }
 button.small, :is(.xrb-controls-small, .xrb-controls-compact) button:not(.dropdown-btn) { min-height: 30px; padding: 4px 10px; font-size: .8rem; }
 button.xrb-icon-button, a.xrb-icon-button { align-self: center; flex: none; margin-left: auto; width: 28px; height: 28px; min-width: 28px; padding: 0; display: grid; place-items: center; box-sizing: border-box; border: 0; border-radius: 6px; background: transparent; color: color-mix(in srgb, var(--muted) 78%, transparent); text-decoration: none; }
+.xrb-inline-icons > .xrb-icon-button { margin-left: 0; }
 button.xrb-icon-button:hover:not(:disabled), a.xrb-icon-button:hover { background: var(--surface-2); border-color: transparent; color: var(--fg); }
 .xrb-icon-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .xrb-icon-button svg { display: block; }
@@ -300,7 +322,8 @@ a.xrb-path:hover, a.xrb-path:focus-visible { color: var(--accent); text-decorati
 .xrb-glyph-detail { --xrb-glyph-filter: var(--xrb-glyph-detail-filter); }
 
 /* Surfaces and navigation tabs */
-.xrb-card, .card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px var(--card-inline); margin-bottom: 16px; display: flex; flex-direction: column; gap: var(--xrb-space-stack); min-width: 0; }
+.xrb-card, .card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px var(--card-inline); margin-bottom: var(--xrb-card-gap); display: flex; flex-direction: column; gap: var(--xrb-space-stack); min-width: 0; }
+.xrb-card > p, .card > p { margin: 0; }
 .xrb-card > .row:first-child, .card > .row:first-child { min-height: var(--card-head-h); }
 /* A non-tab card heading shares the tab row's top rhythm without implying navigation. */
 .xrb-card-heading { height: 43px; min-height: 43px !important; margin: -16px calc(-1 * var(--card-inline)) 0; padding: 0 var(--card-inline); }
@@ -314,7 +337,7 @@ a.xrb-path:hover, a.xrb-path:focus-visible { color: var(--accent); text-decorati
 .xrb-tab-toolbar-end { justify-self: end; margin-inline-end: -8px; }
 .xrb-tabs, .activity-tabs { position: relative; display: flex; gap: 20px; align-items: stretch; height: 43px; margin: -16px calc(-1 * var(--card-inline)) 0; padding: 0 var(--card-inline); border-bottom: 1px solid var(--line); }
 .xrb-tab, .activity-tab { padding: 0 2px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font-size: .74rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
-.xrb-tabs.xrb-tabs-compact { align-items: flex-end; gap: 18px; flex: none; box-sizing: border-box; height: 36px; margin: 0 0 12px; padding: 0; }
+.xrb-tabs.xrb-tabs-compact { align-items: flex-end; gap: 18px; flex: none; box-sizing: border-box; height: var(--xrb-sidebar-head-h); margin: 0 0 var(--xrb-sidebar-head-gap); padding: 0; }
 .xrb-tabs-compact .xrb-tab { display: inline-flex; align-items: center; gap: 6px; padding: 0 2px 8px; }
 .xrb-tabs-compact .xrb-tab.xrb-drop-target { border-radius: 6px 6px 0 0; background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
 .xrb-tabs.xrb-tabs-compact.xrb-search-bar { align-items: center; gap: 10px; color: var(--muted); }
@@ -359,6 +382,7 @@ button.xrb-search-close { margin-left: auto; }
 .xrb-sidebar-content > .xrb-sidebar-section:first-child { margin-top: 0 !important; padding-top: 0 !important; border-top: 0 !important; }
 .xrb-sidebar-content > .xrb-sidebar-section:first-child > :first-child { margin-top: 0 !important; }
 .xrb-sidebar-content > .xrb-sidebar-section:not([hidden]) ~ .xrb-sidebar-section:not([hidden]) { margin-top: var(--xrb-space-section); padding-top: 0; border-top: 0; }
+.xrb-workspace-sidebar-content > .xrb-sidebar-section:not([hidden]) ~ .xrb-sidebar-section:not([hidden]) { margin-top: var(--xrb-space-section); }
 
 /* Reusable content primitives */
 .xrb-section-label { box-sizing: border-box; display: flex; align-items: flex-end; padding: 0 2px 9px; border-bottom: 1px solid var(--line); background: var(--bg); }

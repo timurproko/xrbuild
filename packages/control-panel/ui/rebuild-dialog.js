@@ -39,9 +39,10 @@ export function rebuildPresentation(job, error = '') {
   };
 }
 
-export function rebuildProgressDialog({document: documentRef = globalThis.document, storage = globalThis.localStorage, onViewJob} = {}) {
-  if (!documentRef) throw new Error('A document is required for rebuild progress');
-  const existing = controllers.get(documentRef);
+export function rebuildProgressDialog({document: documentRef = globalThis.document, storage = globalThis.localStorage, onViewJob, container = documentRef?.body, idPrefix = 'xrb'} = {}) {
+  if (!documentRef || !container) throw new Error('A document and container are required for rebuild progress');
+  if (!/^[a-z][a-z0-9-]*$/.test(idPrefix)) throw new Error('A valid dialog ID prefix is required');
+  const existing = controllers.get(container);
   if (existing) {
     existing.setViewJob(onViewJob);
     return existing;
@@ -50,14 +51,14 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
   const dialog = documentRef.createElement('dialog');
   dialog.className = 'xrb-dialog xrb-progress-dialog xrb-rebuild-dialog';
   dialog.dataset.xrbRebuildDialog = '';
-  dialog.setAttribute('aria-labelledby', 'xrb-rebuilding-title');
-  dialog.setAttribute('aria-describedby', 'xrb-rebuilding-message');
+  dialog.setAttribute('aria-labelledby', `${idPrefix}-rebuilding-title`);
+  dialog.setAttribute('aria-describedby', `${idPrefix}-rebuilding-message`);
   dialog.innerHTML = `<div class="xrb-progress-status"><span class="xrb-progress-status-icon" data-xrb-rebuild-status data-state="running" aria-hidden="true">
     <span class="xrb-spinner xrb-spinner-accent xrb-progress-running"></span>
     <span class="xrb-progress-check">${iconSvg('check-circle')}</span>
     <span class="xrb-progress-error">${iconSvg('error-circle')}</span>
-  </span><div><h3 id="xrb-rebuilding-title" data-xrb-rebuild-title>Rebuilding</h3>
-    <p id="xrb-rebuilding-message" class="muted" data-xrb-rebuild-message role="status">Starting update…</p></div></div>
+  </span><div><h3 id="${idPrefix}-rebuilding-title" data-xrb-rebuild-title>Rebuilding</h3>
+    <p id="${idPrefix}-rebuilding-message" class="muted" data-xrb-rebuild-message role="status">Starting update…</p></div></div>
   <pre class="log" data-xrb-rebuild-output aria-label="Build output">Waiting for build output…</pre>
   <div class="row ask-buttons is-building" data-xrb-rebuild-actions><label class="toggle"><input type="checkbox" data-xrb-rebuild-autoclose> Autoclose on finish</label><span class="spacer"></span>
     <button type="button" class="action-button" data-xrb-rebuild-view>View job</button>
@@ -82,7 +83,7 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
     viewJob?.(currentJob);
   });
   dialog.addEventListener('cancel', (event) => { if (actions.classList.contains('is-building')) event.preventDefault(); });
-  documentRef.body.append(dialog);
+  container.append(dialog);
 
   const controller = {
     element: dialog,
@@ -105,8 +106,9 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
       if (!dialog.open) dialog.showModal();
     },
     close() { if (dialog.open) dialog.close(); },
+    dispose() { dialog.remove();controllers.delete(container); },
   };
-  controllers.set(documentRef, controller);
+  controllers.set(container, controller);
   return controller;
 }
 

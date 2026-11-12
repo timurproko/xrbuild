@@ -25,17 +25,17 @@
     <div id="run-dock" class="run-dock" hidden><div class="run-project"><img alt=""><span class="name"></span><button type="button" class="action-button"></button></div></div>
   </header>
 
-  <main id="dashboard" class="xrb-workspace-layout">
-    <nav id="projects" aria-label="Projects"></nav>
+  <main id="dashboard" class="xrb-workspace-layout xrb-workspace-grid xrb-workspace-grid--activity">
+    <nav id="projects" class="xrb-workspace-sidebar" aria-label="Projects"></nav>
 
-    <div id="workspace-content">
+    <div id="workspace-content" class="xrb-workspace-flow">
     <section id="project-content">
-      <div id="detail" aria-live="polite">
+      <div id="detail" class="xrb-card-stack" aria-live="polite">
         <p class="empty">Select a project.</p>
       </div>
     </section>
 
-    <aside id="side">
+    <aside id="side" class="xrb-card-stack">
       <section class="card" id="run-card">
         <div class="row xrb-card-heading"><h2>Analytics</h2><span class="spacer"></span><label class="toggle xrb-toggle-pill xrb-toggle-pill-compact" id="camera-toggle" data-tooltip="Show input camera images, such as hand-tracking views, here." hidden><input type="checkbox" id="act-cams"> Cameras</label></div>
         <div id="run-warning" class="warning" hidden></div>
@@ -80,13 +80,13 @@
     </div>
   </main>
 
-  <main id="plugins-manager" class="plugins-manager xrb-workspace-layout" hidden>
-    <nav id="plugin-nav" aria-label="Installed plugins"></nav>
+  <main id="plugins-manager" class="plugins-manager xrb-workspace-layout xrb-workspace-grid xrb-workspace-grid--sidebar" hidden>
+    <nav id="plugin-nav" class="xrb-workspace-sidebar" aria-label="Installed plugins"></nav>
     <section id="plugin-details"><h2 class="col-label xrb-section-label">Details</h2><div id="plugin-detail"></div></section>
   </main>
 
-  <main id="global-settings" class="global-settings xrb-workspace-layout" hidden>
-    <nav id="settings-nav" aria-label="Settings filters"></nav>
+  <main id="global-settings" class="global-settings xrb-workspace-layout xrb-workspace-grid xrb-workspace-grid--sidebar" hidden>
+    <nav id="settings-nav" class="xrb-workspace-sidebar" aria-label="Settings filters"></nav>
     <section id="settings-details"><div id="settings-content"></div></section>
   </main>
 

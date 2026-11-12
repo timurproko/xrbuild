@@ -1,16 +1,11 @@
 /* Catalog layout only: production primitives supply typography, controls and surfaces. */
-.component-catalog { max-width: 1000px; margin: auto; padding: 20px; gap: var(--xrb-space-section); }
-.component-catalog > .xrb-card { margin-bottom: 0; scroll-margin-top: 20px; }
-.component-catalog p { margin: 0; }
-.component-catalog .xrb-icon-button { margin-left: 0; }
-.component-catalog .xrb-tab-toolbar-end .xrb-icon-button { margin-left: auto; }
+.component-catalog { min-width: 0; }
+.component-catalog > .xrb-card { scroll-margin-top: var(--xrb-workspace-sticky-top); }
 .component-catalog .xrb-media-stage { max-width: 400px; }
 .component-checker { height: 72px; }
-.component-catalog [data-component-glyph] { filter: var(--xrb-glyph-detail-filter); }
 .component-catalog .xrb-swatch-group { --c-blue: var(--accent); --c-green: var(--ok); --c-amber: var(--warn); --c-red: var(--err); --c-purple: var(--rebuild); --c-teal: var(--test); --c-grey: var(--muted); }
 #example-dialog { width: min(460px, calc(100vw - 32px)); }
 @media (max-width: 600px) {
-  .component-catalog { padding: 12px; }
   .component-catalog .xrb-field-grid, .component-catalog .xrb-toggle-grid { grid-template-columns: minmax(0, 1fr); }
   .component-catalog .xrb-tab-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
   .component-catalog .xrb-tab-toolbar-center { display: none; }

@@ -7,19 +7,22 @@
   <title>XR Build · Design</title>
   <script src="/theme.js"></script>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/design-system.css">
+  <link rel="stylesheet" href="/design-system/components.css">
   <link rel="stylesheet" href="/design-system/gallery.css">
   <script type="module" src="/design-system/gallery.js"></script>
 </head>
 <body class="design-gallery">
-  <header class="xrb-app-bar design-toolbar">
+  <header class="xrb-app-bar xrb-app-bar--wrap design-toolbar">
     <h1 class="xrb-brand">XR Build <button id="panel-menu-button" class="xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Design</button></h1>
     <div class="design-case-picker"><select id="case" aria-label="Design case"><option value="main">Main</option></select></div>
   </header>
   <div id="panel-menu" class="menu panel-menu" role="menu" hidden></div>
-  <div class="design-layout">
-    <nav id="states" aria-label="Case scenarios"></nav>
-    <main class="design-stage"><iframe id="preview" title="Install dependencies preview" sandbox="allow-scripts allow-same-origin"></iframe></main>
+  <div class="design-layout xrb-workspace-layout xrb-workspace-grid xrb-workspace-grid--sidebar">
+    <nav id="states" class="xrb-workspace-sidebar" aria-label="Case scenarios"></nav>
+    <section id="design-main" hidden></section>
+    <main class="design-stage" hidden><iframe id="preview" title="Install dependencies preview" sandbox="allow-scripts allow-same-origin"></iframe></main>
   </div>
 </body>
 </html>

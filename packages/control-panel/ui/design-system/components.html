@@ -9,8 +9,8 @@
   <link rel="stylesheet" href="/design-system.css"><link rel="stylesheet" href="/design-system/components.css">
   <script type="module" src="/design-system/components.js"></script>
 </head>
-<body>
-<main class="component-catalog xrb-stack">
+<body class="xrb-workspace-layout">
+<main class="component-catalog xrb-card-stack">
   <section id="typography" class="xrb-card" data-component-section>
     <h2 class="xrb-card-heading row">Typography</h2>
     <h3>Dialog heading</h3><h1>Page heading</h1><h2>Section label</h2>
@@ -22,9 +22,9 @@
   <section id="actions" class="xrb-card" data-component-section>
     <h2 class="xrb-card-heading row">Buttons and actions</h2>
     <div class="xrb-button-row"><button type="button" class="primary">Primary</button><button type="button">Secondary</button><button type="button" class="danger">Danger</button><button type="button" class="ghost">Ghost</button><button type="button" disabled>Disabled</button></div>
-    <div class="row"><button type="button" class="action-button">Action</button><button type="button" class="small">Small</button><button type="button" class="small" disabled>Small disabled</button><button type="button" class="action-button launching">Preparing…</button><button type="button" class="xrb-icon-button" aria-label="Open folder" data-xrb-icon="folder"></button></div>
+    <div class="row xrb-inline-icons"><button type="button" class="action-button">Action</button><button type="button" class="small">Small</button><button type="button" class="small" disabled>Small disabled</button><button type="button" class="action-button launching">Preparing…</button><button type="button" class="xrb-icon-button" aria-label="Open folder" data-xrb-icon="folder"></button></div>
     <button type="button" class="xrb-tool-button"><span data-xrb-icon="play"></span><span>Tool action</span></button>
-    <div id="icon-samples" class="row" aria-label="Shared icons"></div>
+    <div id="icon-samples" class="row xrb-inline-icons" aria-label="Shared icons"></div>
   </section>
   <section id="fields" class="xrb-card" data-component-section>
     <h2 class="xrb-card-heading row">Fields and controls</h2>

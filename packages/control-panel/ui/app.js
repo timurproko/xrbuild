@@ -555,7 +555,7 @@ function renderProjects() {
   const caret = focused ? [focused.selectionStart, focused.selectionEnd] : null;
   const scroll = nav.querySelector('.nav-list')?.scrollTop ?? 0;
   const warnings = state.projectProblems.map(problem => `<p class="empty-note errors" role="alert">${esc(problem)}</p>`).join('');
-  nav.innerHTML = `${head}<div class="nav-list">${warnings}${body}</div>`;
+  nav.innerHTML = `${head}<div class="nav-list xrb-workspace-sidebar-content">${warnings}${body}</div>`;
   nav.querySelector('.nav-list').scrollTop = scroll;
   nav.querySelectorAll('.nav-tabs .xrb-tab[data-view]').forEach((t) => t.addEventListener('click', () => { if (t.dataset.view !== state.view) setView(t.dataset.view); }));
   nav.querySelector('#search-open')?.addEventListener('click', openSearch);
@@ -3097,7 +3097,7 @@ function renderManagedPlugins() {
   const empty = !state.managedPlugins.length;
   $('#plugin-details').hidden = empty;
   nav.innerHTML = `<div class="nav-tabs xrb-section-label"><span>Plugins</span></div>
-    <div class="nav-list">${empty ? '<div class="empty-note">No plugins installed yet.</div>' : state.managedPlugins.map((p) =>
+    <div class="nav-list xrb-workspace-sidebar-content">${empty ? '<div class="empty-note">No plugins installed yet.</div>' : state.managedPlugins.map((p) =>
       `<button type="button" class="proj xrb-focus-inset ${p.id === state.managedId ? 'selected' : ''} ${p.enabled ? '' : 'plugin-disabled'}" data-plugin="${esc(p.id)}" aria-current="${p.id === state.managedId}" ${p.enabled ? '' : `aria-label="${esc(`${managerName(p)}, disabled`)}"`}>
         <span class="stripe"></span>${managerIcon(p)}<span class="text"><span class="name">${esc(managerName(p))}</span><span class="meta">${esc(managerType(p))}</span></span></button>`).join('')}</div>`;
   nav.querySelector('.nav-list').scrollTop = scroll;
@@ -3232,7 +3232,7 @@ function renderGlobalSettings() {
     { id: 'control-panel', name: 'Apps', meta: 'core', icon: settingsGlyph(APPS_GLYPH, true) },
     ...plugins.map((plugin) => ({ id: plugin.id, name: managerName(plugin), meta: managerType(plugin), icon: managerIcon(plugin), enabled: plugin.enabled })),
   ];
-  nav.innerHTML = `<div class="nav-tabs xrb-section-label settings-module-heading"><span>Module</span></div><div class="nav-list">${rows.map((row) => `<button type="button" class="proj xrb-focus-inset ${row.id === state.settingsFilter ? 'selected' : ''} ${row.enabled === false ? 'plugin-disabled' : ''}" data-settings-filter="${esc(row.id)}" aria-current="${row.id === state.settingsFilter}"><span class="stripe"></span>${row.icon}<span class="text"><span class="name">${esc(row.name)}</span><span class="meta">${esc(row.meta)}</span></span></button>`).join('')}</div>`;
+  nav.innerHTML = `<div class="nav-tabs xrb-section-label settings-module-heading"><span>Module</span></div><div class="nav-list xrb-workspace-sidebar-content">${rows.map((row) => `<button type="button" class="proj xrb-focus-inset ${row.id === state.settingsFilter ? 'selected' : ''} ${row.enabled === false ? 'plugin-disabled' : ''}" data-settings-filter="${esc(row.id)}" aria-current="${row.id === state.settingsFilter}"><span class="stripe"></span>${row.icon}<span class="text"><span class="name">${esc(row.name)}</span><span class="meta">${esc(row.meta)}</span></span></button>`).join('')}</div>`;
   nav.querySelectorAll('[data-settings-filter]').forEach((button) => button.addEventListener('click', () => {
     state.settingsFilter = button.dataset.settingsFilter;
     const url = new URL(location.href);

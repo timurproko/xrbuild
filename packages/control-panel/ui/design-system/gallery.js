@@ -1,4 +1,5 @@
-import {enhanceSelects, installDropdowns, setPageIdentity} from '/design-system.js';
+import {setPageIdentity} from '/design-system.js';
+import {initializeComponentDocument, mountComponentCatalog} from './components.js';
 import {mountToolNavigation, panelOrigin} from '/navigation.js';
 const cases = {
   main: {
@@ -56,28 +57,51 @@ picker.replaceChildren(...Object.entries(cases).map(([id, entry]) => {
 picker.value = Object.hasOwn(cases, query.get('case')) ? query.get('case') : query.has('state') ? 'install-dependencies' : 'main';
 let selected = query.get('state') === 'manual' ? 'libraries-ready' : query.get('state') ?? cases[picker.value].defaultState;
 if (query.get('view') === 'progress' && ['installing', 'failed', 'restart', 'complete'].includes(selected)) selected = `progress-${selected}`;
-function render() {
+let catalog, catalogWork, renderSequence = 0;
+async function mainCatalog() {
+  if (catalog) return catalog;
+  return catalogWork ??= (async () => {
+    const response = await fetch(cases.main.preview);
+    if (!response.ok) throw new Error('The component catalog is unavailable.');
+    const parsed = new DOMParser().parseFromString(await response.text(), 'text/html');
+    const root = document.querySelector('#design-main');
+    root.replaceChildren(...[...parsed.body.children].map(element => document.importNode(element, true)));
+    catalog = mountComponentCatalog(root);root.dataset.fixtureReady = 'true';return catalog;
+  })();
+}
+async function render() {
+  const sequence = ++renderSequence;
   const entry = cases[picker.value], nav = document.querySelector('#states'), frame = document.querySelector('#preview');
   document.body.dataset.case = picker.value;
   const available = entry.groups.flatMap(([, states]) => states.map(([id]) => id));
   if (!available.includes(selected)) selected = entry.defaultState;
-  nav.replaceChildren();
+  const heading = document.createElement('h2');heading.className = 'xrb-workspace-sidebar-heading xrb-section-label';heading.textContent = picker.value === 'main' ? 'Components' : 'Scenarios';
+  const content = document.createElement('div');content.className = 'xrb-workspace-sidebar-content';nav.replaceChildren(heading, content);
   for (const [title, states] of entry.groups) {
-    const section = document.createElement('section');section.className = 'design-scenarios';
-    const heading = document.createElement('h2');heading.textContent = title;section.append(heading);
+    const section = document.createElement('section');section.className = 'design-scenarios xrb-sidebar-section';
+    if (entry.groups.length > 1) {const heading = document.createElement('h2');heading.textContent = title;section.append(heading);}
     const list = document.createElement('div');list.className = 'xrb-choice-list';section.append(list);
     for (const [id, label] of states) {
       const button = document.createElement('button');button.type = 'button';button.textContent = label;button.dataset.state = id;
       button.setAttribute('aria-pressed', String(id === selected));
       button.addEventListener('click', () => {selected = id;render();});list.append(button);
     }
-    nav.append(section);
+    content.append(section);
   }
   const values = new URLSearchParams({case: picker.value, state: selected});
   if (origin !== location.origin) values.set('xrbuildPanel', origin);
   history.replaceState(null, '', `${location.pathname}?${values}`);
-  frame.title = `${entry.title} preview`;
-  frame.src = `${entry.preview}?${values}`;
+  const main = picker.value === 'main';
+  document.querySelector('#design-main').hidden = !main;
+  frame.parentElement.hidden = main;
+  if (main) {
+    frame.removeAttribute('src');
+    try {const view = await mainCatalog();if (sequence === renderSequence) view.select(selected);}
+    catch (error) {document.querySelector('#design-main').textContent = error.message;catalogWork = null;}
+  } else {
+    catalog?.hide();
+    frame.title = `${entry.title} preview`;frame.src = `${entry.preview}?${values}`;
+  }
 }
 picker.addEventListener('change', () => {selected = cases[picker.value].defaultState;render();});
-enhanceSelects(document);installDropdowns(document);render();
+initializeComponentDocument(document);render();
