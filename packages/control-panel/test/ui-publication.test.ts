@@ -50,7 +50,7 @@ test('Publish and Build separate publication from package actions without a stan
   assert.match(app, /activePublicationJobs[\s\S]*state\.publicationJobViews\.set\(project\.id/, 'reloading restores queued publication identity from the jobs API');
   assert.match(app, /async function rebasePublicationSettings[\s\S]*api\('GET', projectUrl\(p\.id\)\)[\s\S]*\.\.\.latest\.manifest[\s\S]*publication: \{ \.\.\.desired[\s\S]*mtimeMs: latest\.manifestMtimeMs/, 'a stale publication edit rebases only publication data onto current settings');
   assert.match(app, /editingPublication && error instanceof ApiError && error\.status === 409[\s\S]*await rebasePublicationSettings\(p, m\.publication\)/, 'Publisher and Slug conflicts retry automatically');
-  assert.match(app, /if \(editingPublication\) \{[\s\S]*await loadProjects\(\);[\s\S]*return;[\s\S]*Settings changed on disk/, 'publication editing never opens the generic conflict dialog');
+  assert.doesNotMatch(app, /Settings changed on disk/, 'publication and ordinary settings never open the generic conflict dialog');
   assert.match(app, /if \(editingPublication\) await rebasePublicationSettings\(p, m\.publication, \['publication-route'\]\)/, 'confirmed route moves also use the latest manifest');
   assert.match(app, /input\.disabled \|\| input\.readOnly/, 'locked publication fields do not show stale validation errors');
   assert.match(app, /function publicationHeroLink[\s\S]*class="publication-hero-link"[\s\S]*href="\$\{esc\(url\)\}"/, 'the published route is one compact hero link');

@@ -559,7 +559,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       const checkWriteRevision = async () => {
         if (p.origin === 'bundled') assertEditableProject(core, projects, p);
         const current = p.origin === 'bundled' ? await readProject(p.dir, p.id, p.section) : null;
-        if (p.origin === 'bundled' && (!current || embeddedManifestRevision({ ...p, ...current }) !== writeManifestRevision)) throw new HttpError(409, 'Project settings changed; reload before saving');
+        if (p.origin === 'bundled' && (!current || embeddedManifestRevision({ ...p, ...current }) !== writeManifestRevision)) throw new HttpError(409, 'Project settings changed; reload before saving', { stale: 'manifest' });
         if ((await fs.stat(path.join(p.dir, MANIFEST))).mtimeMs !== writeRevision) throw new ManifestConflictError('Project settings changed; reload before saving');
       };
       if (method === 'GET' && rest.length === 0) return sendJson(res, 200, await describeProject(projects, p, panel));
@@ -572,7 +572,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
         if (p.origin === 'bundled') {
           const legacy = p.readOnly && p.manifest ? await readProjectRunSettings(core, workspace, p) : null;
           if (typeof body.revision !== 'string') throw new HttpError(400, 'The current project manifest revision is required');
-          if (body.revision !== embeddedManifestRevision(p, legacy?.revision)) throw new HttpError(409, 'Project settings changed; reload before saving');
+          if (body.revision !== embeddedManifestRevision(p, legacy?.revision)) throw new HttpError(409, 'Project settings changed; reload before saving', { stale: 'manifest' });
           const wasRaw = p.readOnly, previousManifest = p.manifest;
           panel.assertProjectIdle(p);
           p = await panel.prepareProject(p);
@@ -601,7 +601,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
           });
           if (r.errors.length) return sendJson(res, 400, { error: 'invalid settings', fields: r.errors });
         } catch (e) {
-          if (e instanceof ManifestConflictError) throw new HttpError(409, e.message);
+          if (e instanceof ManifestConflictError) throw new HttpError(409, e.message, { stale: 'manifest' });
           throw e;
         }
         log(`[projects] saved ${id}/${MANIFEST}`);

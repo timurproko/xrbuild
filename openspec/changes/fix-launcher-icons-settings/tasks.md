@@ -6,9 +6,9 @@
 
 ## 2. Non-blocking ordinary settings persistence
 
-- [ ] 2.1 Capture field-specific intent and serialize/coalesce ordinary project setting saves while advancing authoritative revisions; verify first embedded materialization, repeated edits, rapid input toggles, monitor/provider changes and SSE/project-switch interleavings preserve the latest intended values.
-- [ ] 2.2 Rebase classified compatible stale saves with bounded retries and shared inline failure/conflict feedback instead of the routine reload modal; verify unrelated external edits survive, same-field conflicts remain non-destructive, and busy/unsafe/validation/publication-consent failures retain their safeguards.
-- [ ] 2.3 Add focused UI/browser and server regressions; verify ordinary settings edits show no Settings changed on disk modal and persist through reload while equal-timestamp stale revisions and operation locks are still rejected server-side.
+- [x] 2.1 Capture field-specific intent and serialize/coalesce ordinary project setting saves while advancing authoritative revisions; verify first embedded materialization, repeated edits, rapid input toggles, monitor/provider changes and SSE/project-switch interleavings preserve the latest intended values.
+- [x] 2.2 Rebase classified compatible stale saves with bounded retries and shared inline failure/conflict feedback instead of the routine reload modal; verify unrelated external edits survive, same-field conflicts remain non-destructive, and busy/unsafe/validation/publication-consent failures retain their safeguards.
+- [x] 2.3 Add focused UI/browser and server regressions; verify ordinary settings edits show no Settings changed on disk modal and persist through reload while equal-timestamp stale revisions and operation locks are still rejected server-side.
 
 ## 3. Remove embedded Test while keeping template creation
 
