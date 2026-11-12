@@ -56,7 +56,7 @@ export async function buildInventory(root: string, filtered = false, excluded: s
   const exclusions = typeof excluded === 'string' ? [excluded] : excluded;
   const rootStat = await fs.lstat(root);
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new Error('Build tree root must be a plain directory');
-  const files: string[] = [], directories: string[] = [], digest = createHash('sha256');
+  const files: string[] = [], directories: string[] = [], hashes: Record<string, string> = Object.create(null), digest = createHash('sha256');
   const visit = async (relative = '') => {
     const dir = await containedPath(root, relative || '.');
     for (const name of (await fs.readdir(dir)).sort()) {
@@ -66,21 +66,22 @@ export async function buildInventory(root: string, filtered = false, excluded: s
       const file = await containedPath(root, next), stat = await fs.lstat(file);
       if (stat.isSymbolicLink() || stat.isFile() && stat.nlink !== 1 || !stat.isFile() && !stat.isDirectory()) throw new Error('Build tree contains a link or unsupported entry');
       digest.update(`${next}\0${stat.isDirectory() ? 'd' : 'f'}\0${stat.isFile() ? stat.size : 0}\0`);
-      if (stat.isDirectory()) { directories.push(next); await visit(next); }
+      if (stat.isDirectory()) { hashes[next] = 'directory'; directories.push(next); await visit(next); }
       else {
         files.push(next);
         const handle = await fs.open(file, 'r');
         try {
           const opened = await handle.stat();
           if (!opened.isFile() || opened.ino !== stat.ino || opened.dev !== stat.dev || opened.nlink !== 1 || opened.size !== stat.size) throw new Error('Build input changed while opening');
-          let size = 0;
-          for await (const bytes of handle.createReadStream({ autoClose: false })) { digest.update(bytes); size += bytes.length; }
+          let size = 0; const content = createHash('sha256');
+          for await (const bytes of handle.createReadStream({ autoClose: false })) { digest.update(bytes); content.update(bytes); size += bytes.length; }
           if (size !== stat.size) throw new Error('Build input changed while reading');
+          hashes[next] = content.digest('hex');
         } finally { await handle.close(); }
       }
     }
   };
-  await visit(); return { files, directories, fingerprint: digest.digest('hex') };
+  await visit(); return { files, directories, hashes, fingerprint: digest.digest('hex') };
 }
 export async function embeddedInputs(core: string, excluded: string | string[] = []) {
   const root = await containedPath(canonicalFuturePath(core), 'embedded');
@@ -89,7 +90,7 @@ export async function embeddedInputs(core: string, excluded: string | string[] =
     const source = await containedPath(canonicalFuturePath(core), relative).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
     sdk.push(source ? (await buildInventory(source)).fingerprint : 'missing');
   }
-  for (const relative of ['package.json', 'pnpm-lock.yaml', 'tools/fetch-deps/deps.lock.json', 'packages/sdk/package.json', 'packages/ui-kit/package.json', 'packages/control-panel/package.json', 'packages/control-panel/src/browser-build.ts', 'packages/control-panel/src/project-build.ts', 'packages/control-panel/src/embedded-inputs.ts', 'packages/control-panel/src/embedded-workspace.ts', 'packages/control-panel/src/embedded-project-state.ts', 'packages/control-panel/src/embedded-project-output.ts', 'packages/control-panel/src/service-artifacts.ts', 'packages/control-panel/src/component-resolver.ts', 'packages/control-panel/src/plugin-manager.ts']) {
+  for (const relative of ['package.json', 'pnpm-lock.yaml', 'tools/fetch-deps/deps.lock.json', 'packages/sdk/package.json', 'packages/ui-kit/package.json', 'packages/control-panel/package.json', 'packages/control-panel/src/browser-build.ts', 'packages/control-panel/src/project-build.ts', 'packages/control-panel/src/embedded-inputs.ts', 'packages/control-panel/src/embedded-workspace.ts', 'packages/control-panel/src/embedded-project-state.ts', 'packages/control-panel/src/embedded-source-refresh.ts', 'packages/control-panel/src/embedded-project-output.ts', 'packages/control-panel/src/service-artifacts.ts', 'packages/control-panel/src/component-resolver.ts', 'packages/control-panel/src/plugin-manager.ts']) {
     const file = await containedPath(canonicalFuturePath(core), relative).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
     if (file && (await fs.lstat(file)).nlink !== 1) throw new Error('Core build input uses a hard link');
     sdk.push(file ? inputHash(await fs.readFile(file, 'utf8')) : 'missing');

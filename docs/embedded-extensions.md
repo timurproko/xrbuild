@@ -292,10 +292,29 @@ the lease until idle. Legacy disposable snapshot builders retain their separate 
 verifying their writer stopped before manual recovery; they are never removed automatically. Durable working trees,
 retained runtime generations and failed state are not automatically deleted.
 
-Installed input changes report a reconciliation warning while preserving all working edits. After reviewing them, **Keep
-my working sources** explicitly accepts the current installed baseline without replacing the editable tree and invalidates
-current built output for rebuilding. The API is `POST /api/projects/<id>/keep-working-sources` with the displayed
-`{ "revision": "<sourceUpdate.revision>", "confirm": true }`. Invalid state is diagnosed, never silently reset.
+After a pull or installation update, the next explicit project action automatically prepares current installed public
+inputs in a new working generation. Browsing is read-only and shows no routine source-review banner or button. The
+normal Run/preview/build/package/publication paths use refreshed sources and require current output; static apps are
+finalized without inventing a compilation step. Shared SDK/build-input changes and static entry-file changes also trigger
+refresh. The old `keep-working-sources` mutation returns 410: accepting a fingerprint alone cannot authorize stale code.
+
+Version-two working state records a content/membership source baseline, separate from personal manifest overrides.
+Upstream additions/changes/deletions are adopted, compatible actual local source edits survive, and name/icon/provider
+choices, publication/deployment/signing identity, run defaults and recordings remain user-owned. Panel-generated static
+favicon/card stamping is tracked by exact before/after hashes so it is not mistaken for a user edit. The logical project,
+user section/archive placement and finalized-output namespace survive source-generation or installed-section changes.
+Already pinned immutable output URLs remain readable; they are never selected as fallback for a new action.
+
+Older state cannot prove which source files were edited. Its complete previous generation is retained and listed in
+`state.json`'s `previous` recovery list; current installed sources and validated personal choices become the new working
+generation. Unknown old source edits remain recoverable there, rather than being deleted or guessed to be installed
+defaults. Nothing in source refresh authorizes cleanup of these generations.
+
+A genuine conflicting source edit, ambiguous legacy source/build declaration, invalid manifest or unsafe/interrupted
+state stops the attempted action with a specific recovery error. Correct conflicting working files to the intended
+content (or carry your edit manually onto current installed code), then retry. The error identifies the preserved working
+location when needed. Linked/hard-linked/foreign state is refused rather than reset; active project leases prevent refresh
+until the consumer stops. Updates revalidate installed/working/personal inputs before atomic state replacement.
 
 ### Personal run settings
 

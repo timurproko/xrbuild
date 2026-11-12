@@ -90,8 +90,11 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   project repository's `.xrb/embedded-projects/<scope>/w-<id>/workspace/`; no separate Copy step or catalog duplicate.
   Working sources/settings/deployment identity survive rebuild/restart and stay outside disposable caches. Logical
   embedded placement in `xrb-panel.json` never moves product folders. Operation locks in `.xrb/embedded-locks/`
-  protect builds/settings/organization and remain leased for active runs. Installed input changes require explicit
-  non-destructive reconciliation; Keep my working sources preserves edits and invalidates current output for rebuild.
+  protect builds/settings/organization and remain leased for active runs. Explicit source-consuming actions automatically
+  refresh changed installed inputs through baseline-aware atomic working generations, retaining compatible source edits,
+  personal settings/identity/icons/recordings and all previous generations. Legacy state upgrades keep its complete old
+  tree recoverable. Genuine conflicts/unsafe state block the action without stale-source fallback; normal Apps cards have
+  no routine source-review banner/button. Generation-pinned output survives refresh, while new consumers require current output.
   Valid unmaterialized packaged preview/run stays read-only. Optional independent copies reset deployment/device identity.
   Launch config/default icons use integration-workspace `build/project-state/`; effective recordings use writable sources.
   Legacy personal `config/projects/<key>/run.json` choices remain scoped/revision-checked and import once into effective
