@@ -231,3 +231,30 @@ test('real plugin-source form resolves conflict and switches services without re
     assert.equal(f.panel.instanceId, instance);
   });
 });
+
+test('Settings configuration API saves declared fields, refreshes services and refuses stale, invalid and busy saves', async t => {
+  const f = await fixture(t), revision = (await f.plugins())[0].sourceRevision;
+  assert.equal((await f.request('PUT', 'api/plugins/manage/bundled%3Ashared/origin', { origin: 'bundled', revision })).status, 200);
+  const listed = (await f.plugins()).find((p: any) => p.selected);
+  assert.deepEqual(listed.config.map((field: any) => field.key), ['active']);
+  assert.deepEqual(listed.configValues, { active: false }); assert.equal(listed.configRevision, 'absent');
+  const url = 'api/plugins/manage/bundled%3Ashared/config', file = path.join(f.workspace, 'config/plugins/shared/config.json');
+  assert.deepEqual((await f.request('GET', url)).data, { revision: 'absent', values: { active: false } });
+
+  const invalid = await f.request('PUT', url, { values: { active: 'yes' }, revision: 'absent' });
+  assert.equal(invalid.status, 400); assert.equal(invalid.data.details.fields[0].field, 'active');
+  await assert.rejects(fs.access(file));
+
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  const job = f.panel.jobs.start('web-build', 'fixture', 'fixture work', () => gate);
+  assert.equal((await f.request('PUT', url, { values: { active: true }, revision: 'absent' })).status, 409, 'services stay unchanged while work runs');
+  release(); await f.panel.jobs.wait(job);
+  await assert.rejects(fs.access(file));
+
+  const saved = await f.request('PUT', url, { values: { active: true }, revision: 'absent' });
+  assert.equal(saved.status, 200); assert.deepEqual(saved.data.values, { active: true });
+  assert.equal(f.panel.publishers.found[0].plugin!.key, 'bundled:shared', 'services refreshed after the save');
+  assert.equal((await f.request('PUT', url, { values: { active: false }, revision: 'absent' })).data.details.stale, 'config');
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { active: true });
+  assert.equal((await f.request('PUT', url, { values: { active: false }, revision: saved.data.revision, extra: 1 })).status, 400);
+});

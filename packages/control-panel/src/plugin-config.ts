@@ -1,4 +1,5 @@
-// Safe first-run defaults. Existing configuration bytes (including unknown fields) are never rewritten.
+// Safe first-run defaults never replace existing bytes; only an explicit revision-checked Settings save rewrites the file.
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { effectiveSettings, validateSettings, type PluginSetting, type SettingValue } from './plugin-manager.ts';
@@ -80,4 +81,58 @@ export async function readUserPluginConfig(workspace: string, id: string, fields
   try { validateSettings(fields, known); }
   catch { throw new Error(`Plugin config values do not match their schema: ${file}`); }
   return { file, created, values: effectiveSettings(fields, known as Record<string, SettingValue>) };
+}
+
+/** Revision of the user's config file content; `absent` before the first explicit save. */
+async function configRevision(file: string): Promise<{ revision: string; saved: Record<string, unknown> }> {
+  const present = await fs.lstat(file).then(() => true, (error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return false; throw error; });
+  if (!present) return { revision: 'absent', saved: {} };
+  const saved = await readConfig(file);
+  return { revision: createHash('sha256').update(await fs.readFile(file)).digest('hex'), saved };
+}
+
+export interface UserPluginConfigState { values: Record<string, SettingValue>; revision: string }
+/** Effective values plus the revision an explicit Settings save must present. Never creates anything. */
+export async function readUserPluginConfigState(workspace: string, id: string, fields: PluginSetting[]): Promise<UserPluginConfigState> {
+  const dir = await configDirectory(workspace, id, false, true), file = path.join(dir, 'config.json');
+  const { revision, saved } = await configRevision(file);
+  const known = Object.fromEntries(Object.entries(saved).filter(([key]) => fields.some(field => field.key === key)));
+  return { revision, values: effectiveSettings(fields, known as Record<string, SettingValue>) };
+}
+
+export class PluginConfigConflict extends Error {}
+export class PluginConfigInvalid extends Error {
+  readonly field: string;
+  constructor(field: string, message: string) { super(message); this.field = field; }
+}
+
+/**
+ * An explicit user save. Requires the revision the editor loaded, validates only declared fields, keeps unknown
+ * fields and replaces the user's own file atomically. Configuration never holds credentials.
+ */
+export async function writeUserPluginConfig(workspace: string, id: string, fields: PluginSetting[], changes: unknown, expectedRevision: unknown): Promise<UserPluginConfigState> {
+  if (typeof expectedRevision !== 'string' || !/^(absent|[a-f0-9]{64})$/.test(expectedRevision)) throw new PluginConfigConflict('The current configuration revision is required');
+  if (!changes || typeof changes !== 'object' || Array.isArray(changes)) throw new PluginConfigInvalid('', 'configuration must be an object');
+  for (const [key, value] of Object.entries(changes)) {
+    try { validateSettings(fields, { [key]: value }); }
+    catch { throw new PluginConfigInvalid(key, fields.some(field => field.key === key) ? `Invalid value for ${fields.find(field => field.key === key)!.label}` : `Unknown configuration field ${key}`); }
+  }
+  const dir = await configDirectory(workspace, id, true), file = path.join(dir, 'config.json');
+  const current = await configRevision(file);
+  if (current.revision !== expectedRevision) throw new PluginConfigConflict('The configuration changed on disk; reload it before saving');
+  const defaults = Object.fromEntries(fields.filter(field => field.default !== undefined).map(field => [field.key, field.default!]));
+  const next = { ...defaults, ...current.saved, ...(changes as Record<string, SettingValue>) };
+  const staging = await fs.mkdtemp(path.join(dir, '.save-')), temporary = path.join(staging, 'config.json');
+  try {
+    const handle = await fs.open(temporary, 'wx', 0o600);
+    try { await handle.writeFile(`${JSON.stringify(next, null, 2)}\n`); await handle.sync(); }
+    finally { await handle.close(); }
+    await configDirectory(workspace, id, false);
+    if ((await configRevision(file)).revision !== expectedRevision) throw new PluginConfigConflict('The configuration changed on disk; reload it before saving');
+    await fs.rename(temporary, file);
+  } finally {
+    await fs.unlink(temporary).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+    await fs.rmdir(staging);
+  }
+  return readUserPluginConfigState(workspace, id, fields);
 }

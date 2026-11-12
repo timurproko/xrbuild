@@ -28,7 +28,8 @@ import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHos
 import { DesktopSetup } from './desktop-setup.ts';
 import { panelFreshness, panelSourceRoots, type PanelFreshness } from './panel-freshness.ts';
 import { HostRunner, type RunMode } from './host-runner.ts';
-import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings } from './plugin-manager.ts';
+import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings, type PluginSetting, type SettingValue } from './plugin-manager.ts';
+import { PluginConfigConflict, PluginConfigInvalid, readUserPluginConfigState, writeUserPluginConfig, type UserPluginConfigState } from './plugin-config.ts';
 import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, discoverProjectCatalog, containedPath, type PluginCatalog } from './extension-catalog.ts';
 import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
 import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
@@ -731,6 +732,7 @@ export class Panel {
         problem, providers: presentedProviders,
         packager: isPackager, built: !native.length || native.every((p) => p.built && !p.outdated),
         settings: meta.settings, values: effectiveSettings(meta.settings ?? [], pluginPreferenceValues(plugin, prefs)),
+        ...await this.pluginConfigView(plugin),
         panelSettings: meta.panelSettings, panelValues: effectiveSettings(meta.panelSettings ?? [], pluginPreferenceValues(plugin, prefs, 'panelSettings')),
         samples: (meta.panelSamples ?? []).map(({ id: sampleId, name: sampleName, kind, description }) => ({ id: sampleId, name: sampleName, kind, description })),
         dir: `${plugin.origin === 'bundled' ? 'embedded/' : ''}plugins/${plugin.id}`,
@@ -1414,6 +1416,16 @@ export class Panel {
     if (blocked) throw new HttpError(409, blocked.message, { reason: blocked.reason, restart: blocked.restart });
   }
 
+  /** Declared user configuration for Settings; a malformed file is reported, never replaced. */
+  private async pluginConfigView(plugin: { id: string; meta: { config?: PluginSetting[] } }): Promise<{ config?: PluginSetting[]; configValues?: Record<string, SettingValue>; configRevision?: string; configProblem?: string }> {
+    const fields = plugin.meta.config;
+    if (!fields?.length) return {};
+    try {
+      const state = await readUserPluginConfigState(this.workspace, plugin.id, fields);
+      return { config: fields, configValues: state.values, configRevision: state.revision };
+    } catch (error) { return { config: fields, configProblem: (error as Error).message }; }
+  }
+
   /** Settings and organization cannot overlap launch preparation or that project's active work. */
   assertProjectIdle(p: Project): void {
     if (this.preparingNativeRun || this.preparingPreview || this.settingsWrites.has(p.id)) throw new HttpError(409, 'Wait for project launch/settings preparation');
@@ -1603,6 +1615,28 @@ export class Panel {
           panel: effectiveSettings(meta.panelSettings ?? [], pluginPreferenceValues(plugin, prefs, 'panelSettings')),
         });
         return true;
+      }
+      if (api.length === 4 && api[3] === 'config' && (method === 'GET' || method === 'PUT')) {
+        const fields = plugin.meta.config;
+        if (!fields?.length) throw new HttpError(404, `plugin ${id} declares no configuration`);
+        if (method === 'GET') { sendJson(res, 200, await readUserPluginConfigState(this.workspace, plugin.id, fields)); return true; }
+        const body = await readJson<{ values?: unknown; revision?: unknown }>(req);
+        if (Object.keys(body).some(key => !['values', 'revision'].includes(key))) throw new HttpError(400, 'Only values and revision are accepted');
+        let saved: UserPluginConfigState | undefined;
+        try {
+          // Publishers and packagers read this file when services load: change it only while they are idle.
+          await this.withPluginMutation(async () => {
+            saved = await writeUserPluginConfig(this.workspace, plugin.id, fields, body.values, body.revision);
+            await this.refreshPluginServices();
+          });
+        } catch (error) {
+          if (error instanceof PluginConfigInvalid) throw new HttpError(400, error.message, { fields: [{ field: error.field, message: error.message }] });
+          if (error instanceof PluginConfigConflict) throw new HttpError(409, error.message, { stale: 'config' });
+          if (saved && error instanceof HttpError) throw new HttpError(409, `Configuration saved, but plugin services could not refresh: ${error.message}`, { saved: true });
+          throw error;
+        }
+        this.hub.send('plugins-changed', { id }); this.hub.send('projects-changed', {});
+        sendJson(res, 200, saved); return true;
       }
       if (method === 'POST' && api.length === 4 && api[3] === 'open-folder') {
         const dir = plugin.sourceRoot;

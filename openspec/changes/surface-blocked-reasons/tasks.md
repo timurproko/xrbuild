@@ -5,8 +5,8 @@
 
 ## 2. Plugin configuration in Settings
 
-- [ ] 2.1 Add a revision-checked, schema-validated, unknown-field-preserving atomic write for user plugin config and its route, guarded like plugin mutations and followed by an idle service refresh; verify tests for success, stale revision, invalid value, busy refusal and unknown-field preservation.
-- [ ] 2.2 Render declared config fields as a Configuration section in the plugin's Settings card with shared controls and inline errors; verify UI tests for rendering, save, stale and invalid feedback.
+- [x] 2.1 Add a revision-checked, schema-validated, unknown-field-preserving atomic write for user plugin config and its route, guarded like plugin mutations and followed by an idle service refresh; verify tests for success, stale revision, invalid value, busy refusal and unknown-field preservation.
+- [x] 2.2 Render declared config fields as a Configuration section in the plugin's Settings card with shared controls and inline errors; verify UI tests for rendering, save, stale and invalid feedback.
 
 ## 3. Unconfigured publisher presentation
 

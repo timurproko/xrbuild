@@ -3121,7 +3121,7 @@ function renderManagedPlugins() {
   const servicesProblem = state.pluginServices?.problem;
   const description = p.description || (p.packager ? `Builds packages for ${managerName(p)} apps.` : 'No description provided.');
   const version = p.version || p.providers.find((v) => v.version)?.version;
-  const hasSettings = (p.settings?.length ?? 0) > 0 || (p.panelSettings?.length ?? 0) > 0;
+  const hasSettings = (p.settings?.length ?? 0) > 0 || (p.panelSettings?.length ?? 0) > 0 || (p.config?.length ?? 0) > 0;
   el.innerHTML = `${servicesProblem ? `<p class="errors" role="alert">${esc(servicesProblem)}</p>` : ''}<div class="card hero plugin-hero-card">
     <div class="hero-top plugin-hero-top"><div class="plugin-hero-icon">${managerIcon(p)}</div>
       <div class="plugin-identity"><h3>${esc(managerName(p))}</h3></div>
@@ -3209,7 +3209,56 @@ function pluginSettingsCard(plugin) {
     ${plugin.settingsDescription ? `<p class="xrb-supporting-text">${esc(plugin.settingsDescription)}</p>` : ''}
     ${pluginSettingsForm(plugin, 'settings', runtime, plugin.values ?? {})}
     ${pluginSettingsForm(plugin, 'panelSettings', panel, plugin.panelValues ?? {}, runtime.length > 0)}
+    ${pluginConfigForm(plugin, runtime.length + panel.length > 0)}
   </div>`;
+}
+
+/** Declared user configuration (for example a publication destination): saved explicitly, never on each keystroke. */
+function pluginConfigForm(plugin, divided = false) {
+  const fields = plugin.config ?? [];
+  if (!fields.length) return '';
+  const disabled = !plugin.enabled || !!plugin.configProblem;
+  const controls = fields.map((setting) => pluginSettingControl(setting, plugin.configValues?.[setting.key] ?? setting.default, disabled)).join('');
+  return `<form class="settings-card-fields ${divided ? 'xrb-section-divider' : ''}" data-plugin-config="${esc(plugin.id)}">
+    <h2 class="settings-section">Configuration</h2>
+    ${plugin.configProblem ? `<p class="errors" role="alert">${esc(plugin.configProblem)}</p>` : ''}
+    ${controls}
+    <p class="errors" data-config-error role="alert" hidden></p>
+    <div><button type="submit" class="action-button" ${disabled ? 'disabled' : ''}>Save configuration</button></div>
+  </form>`;
+}
+
+async function savePluginConfig(form) {
+  const plugin = state.managedPlugins.find((candidate) => candidate.id === form.dataset.pluginConfig);
+  if (!plugin?.config?.length) return;
+  const values = Object.fromEntries(plugin.config.map((setting) => {
+    const input = form.elements.namedItem(setting.key);
+    return [setting.key, setting.type === 'boolean' ? input.checked : setting.type === 'number' ? (input.value.trim() === '' ? input.value : Number(input.value)) : input.value.trim()];
+  }));
+  const status = document.getElementById(`plugin-settings-status-${plugin.id}`);
+  const showError = (target, message) => { const box = target.querySelector('[data-config-error]'); if (box) { box.textContent = message; box.hidden = !message; } };
+  showError(form, '');
+  form.querySelectorAll('input,button,select').forEach((control) => { control.disabled = true; });
+  try {
+    const saved = await api('PUT', `/api/plugins/manage/${encodeURIComponent(plugin.id)}/config`, { values, revision: plugin.configRevision });
+    plugin.configValues = saved.values; plugin.configRevision = saved.revision;
+    if (status) { status.hidden = false; status.className = 'state ok'; status.textContent = 'saved'; }
+    await loadProjects().catch(() => {});
+  } catch (error) {
+    if (!(error instanceof ApiError) || ![400, 409].includes(error.status)) throw error;
+    if (error.status === 409 && (error.data?.details?.stale === 'config' || error.data?.details?.saved)) {
+      // Show what is on disk now; never overwrite another editor's change.
+      const current = await api('GET', `/api/plugins/manage/${encodeURIComponent(plugin.id)}/config`);
+      plugin.configValues = current.values; plugin.configRevision = current.revision;
+      renderGlobalSettings();
+      const fresh = document.querySelector(`[data-plugin-config="${CSS.escape(plugin.id)}"]`);
+      if (fresh) showError(fresh, error.message);
+      return;
+    }
+    showError(form, error.message);
+  } finally {
+    if (form.isConnected) form.querySelectorAll('input,button,select').forEach((control) => { control.disabled = !plugin.enabled; });
+  }
 }
 
 function settingsOwnerSection(id, title, card, status = '') {
@@ -3222,7 +3271,7 @@ function pluginSettingsSection(plugin) {
 }
 
 function renderGlobalSettings() {
-  const plugins = state.managedPlugins.filter((plugin) => !plugin.problem && ((plugin.settings?.length ?? 0) || (plugin.panelSettings?.length ?? 0)));
+  const plugins = state.managedPlugins.filter((plugin) => !plugin.problem && ((plugin.settings?.length ?? 0) || (plugin.panelSettings?.length ?? 0) || (plugin.config?.length ?? 0)));
   const defaultFilter = plugins.length ? 'all' : 'control-panel';
   const filters = new Set([...(plugins.length ? ['all'] : []), 'control-panel', ...plugins.map((plugin) => plugin.id)]);
   const requestedFilter = new URLSearchParams(location.search).get('module');
@@ -3267,6 +3316,7 @@ function renderGlobalSettings() {
     finally { renderGlobalSettings(); }
   }));
   $('#settings-content').querySelectorAll('[data-plugin-settings]').forEach((form) => form.addEventListener('change', action(() => savePluginSettings(form))));
+  $('#settings-content').querySelectorAll('[data-plugin-config]').forEach((form) => form.addEventListener('submit', action((event) => { event.preventDefault(); return savePluginConfig(form); })));
 }
 
 async function savePluginSettings(form) {
