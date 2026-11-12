@@ -1,7 +1,7 @@
 ## 1. Guarded ready-PR refresh
 
-- [ ] 1.1 Implement bounded same-repository ready-PR listing, fresh identity/head/main comparisons and expected-head update-branch decisions; verify focused Node fixtures cover drafts, forks, closed/wrong-base PRs, malformed data, pagination limits, current branches and stale candidates.
-- [ ] 1.2 Add the App-only trusted API entrypoint and disposition reporting; verify fixtures cover accepted updates, head races, already-current responses, conflicts, independent candidate failures, credential aborts, bounded requests and no forbidden writes or workflow-token fallback.
+- [x] 1.1 Implement bounded same-repository ready-PR listing, fresh identity/head/main comparisons and expected-head update-branch decisions; verify focused Node fixtures cover drafts, forks, closed/wrong-base PRs, malformed data, pagination limits, current branches and stale candidates.
+- [x] 1.2 Add the App-only trusted API entrypoint and disposition reporting; verify fixtures cover accepted updates, head races, already-current responses, conflicts, independent candidate failures, credential aborts, bounded requests and no forbidden writes or workflow-token fallback.
 
 ## 2. Trusted post-merge workflow
 
