@@ -10,6 +10,9 @@ body.plugins-page .run-dock, body.plugins-page .stats-dock, body.settings-page .
 .settings-card-fields > label { min-width: 0; }
 .settings-card-fields > .settings-boolean-field { grid-column: 1 / -1; }
 .settings-section { margin: 4px 0 0; }
+/* Declared plugin configuration: section subheads, the inline error and the explicit Save span the card. */
+.settings-card-fields > .settings-subsection, .settings-card-fields > .errors, .settings-card-fields > .settings-config-actions { grid-column: 1 / -1; }
+.settings-subsection { margin: 4px 0 0; font-size: .82rem; font-weight: 600; color: var(--muted); }
 .settings-card-disabled { opacity: .72; }
 @media (max-width: 700px) { .settings-card-fields { grid-template-columns: minmax(0, 1fr); } }
 

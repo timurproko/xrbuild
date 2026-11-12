@@ -1286,6 +1286,8 @@ function identityFields(p, titleOnly = false) {
  * platform, or a standalone app) the package action is omitted.
  */
 function publisherDisplayName(item) {
+  // An unconfigured destination has only a placeholder origin: name it and say what is missing instead.
+  if (item.configured === false) return `${item.label ?? item.name} (not configured)`;
   try { return new URL(item.origin).hostname || item.label || item.name; }
   catch { return item.label ?? item.name; }
 }
@@ -1553,7 +1555,9 @@ function publicationFields(p) {
   // A status problem is not a failed action: the publisher says why the app is not live, or cannot be asked.
   const failureTitle = status?.state === 'unavailable' ? 'Publisher unavailable' : 'Publication failed';
   const failure = status?.error && status.state !== 'failed' ? `<div class="publication-result error"><div class="publication-result-head"><span>${failureTitle}</span></div><span class="field-error">${esc(status.error)}</span></div>` : '';
-  const result = failure;
+  const selectedItem = info.publishers.find((item) => item.name === selectedPublisher);
+  const configure = selectedItem?.configured === false ? `<div class="publication-result error"><div class="publication-result-head"><span>Publisher not configured</span></div><span class="field-error">${esc(selectedItem.configurationProblem ?? info.reason ?? 'This publisher is not configured')}</span>${selectedItem.settingsModule ? `<a class="publication-configure" href="/settings/?module=${encodeURIComponent(selectedItem.settingsModule)}">Configure…</a>` : ''}</div>` : '';
+  const result = configure || failure;
   const selectedSlug = published && typeof status?.deployedSlug === 'string'
     ? status.deployedSlug
     : typeof pub.slug === 'string' ? pub.slug : defaultProjectSlug(p.id);
@@ -3218,13 +3222,18 @@ function pluginConfigForm(plugin, divided = false) {
   const fields = plugin.config ?? [];
   if (!fields.length) return '';
   const disabled = !plugin.enabled || !!plugin.configProblem;
-  const controls = fields.map((setting) => pluginSettingControl(setting, plugin.configValues?.[setting.key] ?? setting.default, disabled)).join('');
+  let section = null;
+  const controls = fields.map((setting) => {
+    const heading = setting.section && setting.section !== section ? `<h3 class="settings-subsection">${esc(setting.section)}</h3>` : '';
+    if (setting.section) section = setting.section;
+    return `${heading}${pluginSettingControl(setting, plugin.configValues?.[setting.key] ?? setting.default, disabled)}`;
+  }).join('');
   return `<form class="settings-card-fields ${divided ? 'xrb-section-divider' : ''}" data-plugin-config="${esc(plugin.id)}">
     <h2 class="settings-section">Configuration</h2>
     ${plugin.configProblem ? `<p class="errors" role="alert">${esc(plugin.configProblem)}</p>` : ''}
     ${controls}
     <p class="errors" data-config-error role="alert" hidden></p>
-    <div><button type="submit" class="action-button" ${disabled ? 'disabled' : ''}>Save configuration</button></div>
+    <div class="settings-config-actions"><button type="submit" class="action-button" ${disabled ? 'disabled' : ''}>Save configuration</button></div>
   </form>`;
 }
 
@@ -3274,7 +3283,9 @@ function renderGlobalSettings() {
   const plugins = state.managedPlugins.filter((plugin) => !plugin.problem && ((plugin.settings?.length ?? 0) || (plugin.panelSettings?.length ?? 0) || (plugin.config?.length ?? 0)));
   const defaultFilter = plugins.length ? 'all' : 'control-panel';
   const filters = new Set([...(plugins.length ? ['all'] : []), 'control-panel', ...plugins.map((plugin) => plugin.id)]);
-  const requestedFilter = new URLSearchParams(location.search).get('module');
+  const requestedModule = new URLSearchParams(location.search).get('module');
+  // Links from other pages may name a plugin by its origin-qualified key; select that plugin's own entry.
+  const requestedFilter = requestedModule && !filters.has(requestedModule) ? plugins.find((plugin) => plugin.key === requestedModule)?.id ?? requestedModule : requestedModule;
   // Route intent wins: the plain menu destination always opens All, not the last sidebar module.
   state.settingsFilter = requestedFilter && filters.has(requestedFilter) ? requestedFilter : defaultFilter;
   if (requestedFilter && !filters.has(requestedFilter)) {

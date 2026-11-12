@@ -10,5 +10,5 @@
 
 ## 3. Unconfigured publisher presentation
 
-- [ ] 3.1 Add optional `configured`/`configurationProblem` to the publisher contract and project status, and have the WebXR publisher report its unconfigured production destination with clear Settings description and field labels; verify publisher and panel tests.
-- [ ] 3.2 Show "<label> (not configured)" in the Publish dropdown, disable Publish and link to the plugin's Settings section; verify UI tests and that configured publishers are unchanged.
+- [x] 3.1 Add optional `configured`/`configurationProblem` to the publisher contract and project status, and have the WebXR publisher report its unconfigured production destination with clear Settings description and field labels; verify publisher and panel tests.
+- [x] 3.2 Show "<label> (not configured)" in the Publish dropdown, disable Publish and link to the plugin's Settings section; verify UI tests and that configured publishers are unchanged.

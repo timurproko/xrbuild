@@ -91,6 +91,10 @@ export interface Publisher {
   label?: string;
   origin: string;
   routePrefix?: string;
+  /** False while a destination still needs explicit user configuration; its origin is then not a real destination. */
+  configured?: boolean;
+  /** Bounded user-facing reason shown while `configured` is false. */
+  configurationProblem?: string;
   validate(publication: PublicationIdentity): PublisherError[];
   status(publication: PublicationIdentity): Promise<PublisherStatus>;
   publish(o: { app: string; publication: PublicationIdentity; card?: PublicationCard; log(message: string): void }): Promise<PublisherResult>;
@@ -137,6 +141,8 @@ function isPublisherDeclaration(value: unknown): value is { module: string; sett
 function isPublisher(value: unknown): value is Publisher {
   const p = value as Partial<Publisher> | null;
   if (!p || typeof p.name !== 'string' || !/^[a-z0-9-]+$/.test(p.name) || (p.label !== undefined && (typeof p.label !== 'string' || !p.label.trim())) || typeof p.origin !== 'string') return false;
+  if (p.configured !== undefined && typeof p.configured !== 'boolean') return false;
+  if (p.configurationProblem !== undefined && (typeof p.configurationProblem !== 'string' || !p.configurationProblem.trim() || p.configurationProblem.length > 300 || /[\x00-\x1f\x7f]/.test(p.configurationProblem))) return false;
   try {
     const origin = new URL(p.origin);
     if (origin.protocol !== 'https:' || origin.username || origin.password || (p.routePrefix !== undefined && !/^[a-z0-9-]+$/.test(p.routePrefix))) return false;
@@ -185,6 +191,9 @@ export async function discoverPublishers(workspace: string, core?: string): Prom
   }
   return { found: found.filter(item => !conflicts.has(item.publisher.name)), problems };
 }
+/** A publisher that reports it still needs configuration; publishers omitting the field are configured. */
+export const publisherUnconfigured = (publisher: Pick<Publisher, 'configured' | 'configurationProblem'>): string | null =>
+  publisher.configured === false ? publisher.configurationProblem ?? 'This publisher is not configured' : null;
 export const publisherFor = (discovery: PublisherDiscovery, name: string) => discovery.found.find((item) => item.publisher.name === name) ?? null;
 export function publicationUrl(publisher: Pick<Publisher, 'origin' | 'routePrefix'>, slug: string): string {
   const prefix = `/${(publisher.routePrefix ?? 'apps').replace(/^\/+|\/+$/g, '')}/`;

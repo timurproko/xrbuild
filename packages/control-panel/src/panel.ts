@@ -37,7 +37,7 @@ import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatu
 import { PackageList } from './packages.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
 import { archiveProject, readLayout, removeEmptyProjectSection, unarchiveProject } from './layout.ts';
-import { discoverPublishers, normalizeReleaseCatalog, publicationUrl, publisherFor, releaseIdProblem, type PublicationCard, type PublicationIdentity, type Publisher, type PublisherDiscovery, type PublisherReleaseCatalog, type PublisherStatus } from './publishers.ts';
+import { discoverPublishers, normalizeReleaseCatalog, publicationUrl, publisherFor, publisherUnconfigured, releaseIdProblem, type PublicationCard, type PublicationIdentity, type Publisher, type PublisherDiscovery, type PublisherReleaseCatalog, type PublisherStatus } from './publishers.ts';
 import { compareVersions as compareReleaseVersions, highestVersion, publicationCard, publicationIdentity, receiptMatchesOutput, suggestedVersion, verifyBuildReceipt, versionProblem, writeBuildReceipt, type PublicationConfig } from './publication.ts';
 import { importPluginSample, ProjectRefused } from './workspace.ts';
 import { projectIconSource } from './project-icons.ts';
@@ -847,12 +847,19 @@ export class Panel {
     return found.publisher.validate(publicationIdentity(publication)).map((error) => ({ field: `publication.${error.field}`, message: error.message }));
   }
 
-  async publicationOf(m: Manifest | null): Promise<{ available: boolean; publishers: Array<{ name: string; label?: string; origin: string; routePrefix?: string; releases: boolean }>; status: PublisherStatus | null; releases: PublicationReleases | null; reason: string | null }> {
-    const list = this.publishers.found.map(({ publisher }) => ({ name: publisher.name, label: publisher.label, origin: publisher.origin, routePrefix: publisher.routePrefix, releases: !!publisher.releases }));
+  async publicationOf(m: Manifest | null): Promise<{ available: boolean; publishers: Array<{ name: string; label?: string; origin: string; routePrefix?: string; releases: boolean; configured: boolean; configurationProblem?: string; settingsModule?: string }>; status: PublisherStatus | null; releases: PublicationReleases | null; reason: string | null }> {
+    const list = this.publishers.found.map(({ publisher, plugin }) => {
+      const unconfigured = publisherUnconfigured(publisher);
+      // An unconfigured destination's origin is a placeholder: never present it as a destination.
+      return { name: publisher.name, label: publisher.label, origin: unconfigured ? '' : publisher.origin, routePrefix: publisher.routePrefix, releases: !!publisher.releases && !unconfigured,
+        configured: !unconfigured, ...(unconfigured ? { configurationProblem: unconfigured } : {}), ...(plugin ? { settingsModule: plugin.key } : {}) };
+    });
     if (m && !publicationTargetOf(m)) return { available: false, publishers: list, status: null, releases: null, reason: 'publication is available only for app projects' };
     if (!m?.publication) return { available: false, publishers: list, status: null, releases: null, reason: 'publication is not configured' };
     const found = publisherFor(this.publishers, m.publication.publisher);
     if (!found) return { available: false, publishers: list, status: null, releases: null, reason: `publisher "${m.publication.publisher}" is unavailable` };
+    const unconfigured = publisherUnconfigured(found.publisher);
+    if (unconfigured) return { available: false, publishers: list, status: null, releases: null, reason: unconfigured };
     const identity = publicationIdentity(m.publication);
     const status = await this.cachedStatus(found.publisher, identity);
     return { available: true, publishers: list, status, releases: this.releasesOf(found.publisher, identity, m.publication), reason: null };
@@ -874,7 +881,8 @@ export class Panel {
   async publicationDestinationsOf(m: Manifest | null): Promise<Record<string, { slug: string; status: PublisherStatus }>> {
     if (!m?.publication || !publicationTargetOf(m)) return {};
     const publication = m.publication;
-    return Object.fromEntries(await Promise.all(this.publishers.found.map(async ({ publisher }) => {
+    // An unconfigured destination has no real route to check or show.
+    return Object.fromEntries(await Promise.all(this.publishers.found.filter(({ publisher }) => !publisherUnconfigured(publisher)).map(async ({ publisher }) => {
       const slug = publication.routes?.[publisher.name] ?? publication.slug;
       return [publisher.name, { slug, status: await this.cachedStatus(publisher, { id: publication.id, slug }) }];
     })));
@@ -953,6 +961,8 @@ export class Panel {
   }
   private async preparePublish(p: Project, body: { version?: unknown; expectedRevision?: unknown }): Promise<Job> {
     const { m, publisher, identity, snapshot } = this.publicationTarget(p);
+    const unconfigured = publisherUnconfigured(publisher);
+    if (unconfigured) throw new HttpError(409, unconfigured, { configuration: true });
     const errors = publisher.validate(identity);
     if (errors.length) throw new HttpError(400, errors.map((e) => e.message).join('; '), { errors });
     const entry = this.entryOf(p, m);

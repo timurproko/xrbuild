@@ -5,14 +5,15 @@ import {contextPaths,plain} from './ownership.mjs';
 const instances=new Map();
 function unavailable(message){
   const reject=async()=>{throw Error(message);};
-  return{name:'production-web',label:'Production',origin:'https://unconfigured.invalid',routePrefix:'apps',validate:()=>[{field:'publisher',message}],status:async()=>({state:'unavailable',selectedUrl:'https://unconfigured.invalid/apps/',error:message}),publish:reject,unpublish:reject,releases:{catalog:reject,publish:reject,activate:reject,delete:reject}};
+  // The reserved origin only satisfies the contract shape; configured:false keeps it from being shown as a destination.
+  return{name:'production-web',label:'Production',origin:'https://unconfigured.invalid',routePrefix:'apps',configured:false,configurationProblem:message,validate:()=>[{field:'publisher',message}],status:async()=>({state:'unavailable',selectedUrl:'https://unconfigured.invalid/apps/',error:message}),publish:reject,unpublish:reject,releases:{catalog:reject,publish:reject,activate:reject,delete:reject}};
 }
 export async function createPublisher(context,dependencies={}){
   const paths=await contextPaths(context),v=paths.values;
-  if(v.productionConfigured!==true)return unavailable('Configure the production destination explicitly before use');
+  if(v.productionConfigured!==true)return unavailable('Configure production in Settings: fill in the HTTPS origin, output repository and branches, turn on "Production configured explicitly" and save.');
   const config={origin:v.productionOrigin,repository:v.productionRepository,branch:v.productionBranch,seedBranch:v.productionSeedBranch,routePrefix:v.productionRoutePrefix,sitePath:v.productionSitePath,verifyTimeoutMs:v.productionTimeoutMs};
-  let origin;try{origin=new URL(config.origin);}catch{return unavailable('Production configuration is incomplete or invalid');}
-  if(origin.pathname!=='/'||origin.search||origin.hash)return unavailable('Production configuration requires a plain HTTPS origin');
+  let origin;try{origin=new URL(config.origin);}catch{return unavailable('Configure production in Settings: the HTTPS origin is missing or invalid.');}
+  if(origin.pathname!=='/'||origin.search||origin.hash)return unavailable('Configure production in Settings: the HTTPS origin must be a plain origin such as https://apps.example.');
   const storageRoot=path.join(paths.workRoot,'production'),associationsFile=path.join(paths.configRoot,'associations.json');
   const key=createHash('sha256').update(JSON.stringify([paths.workspace,paths.source,context.plugin.key,config])).digest('hex');
   if(!Object.keys(dependencies).length&&instances.has(key))return instances.get(key);

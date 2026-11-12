@@ -13,6 +13,8 @@ and unknown fields. If absent, discovery uses validated defaults in memory witho
 explicit configuration initialization can create missing defaults without replacement. Product defaults contain no production site, repository, deployment identity or key.
 `localhost` defaults enabled; `production` defaults disabled. Enabling a destination setting is not sufficient to
 configure production: `productionConfigured` and complete validated destination fields are required explicitly.
+Fill them in under Settings > WebXR > Configuration. Until then the production service reports `configured: false`
+with what is missing, so the panel lists it as "Production (not configured)" instead of a placeholder origin.
 
 Local HTTPS uses `localhost-cert.pem` and `localhost-key.pem` in that user config directory. They must already exist;
 discovery/status never generate keys or start a listener. An explicit Publish/Activate starts serving. Status after a

@@ -91,3 +91,20 @@ test('invalid values show inline and stale saves reload what is on disk', async 
   assert.equal(stale.calls.render, 1);
   assert.match(fresh.error.textContent, /changed on disk/);
 });
+
+test('unconfigured publishers are named "(not configured)" instead of their placeholder host', () => {
+  const name = new Function(`${fn('function publisherDisplayName')}\nreturn publisherDisplayName;`)() as (item: unknown) => string;
+  assert.equal(name({ name: 'production-web', label: 'Production', origin: '', configured: false }), 'Production (not configured)');
+  assert.equal(name({ name: 'production-web', origin: '', configured: false }), 'production-web (not configured)');
+  assert.equal(name({ name: 'local-test', label: 'Localhost', origin: 'https://127.0.0.1:8443', configured: true }), '127.0.0.1');
+});
+
+test('the Publish card explains a missing configuration and links to that plugin in Settings', () => {
+  const fields = fn('function publicationFields');
+  assert.match(fields, /selectedItem\?\.configured === false/);
+  assert.match(fields, /Publisher not configured/);
+  assert.match(fields, /href="\/settings\/\?module=\$\{encodeURIComponent\(selectedItem\.settingsModule\)\}">Configure…<\/a>/);
+  assert.match(fields, /const result = configure \|\| failure;/);
+  assert.match(fields, /const canPublish = !!selectedPublisher && info\.available/, 'the server marks an unconfigured selection unavailable, which disables Publish');
+  assert.match(fn('function renderGlobalSettings'), /plugins\.find\(\(plugin\) => plugin\.key === requestedModule\)\?\.id/, 'Settings accepts the linked plugin key');
+});
