@@ -285,9 +285,16 @@ export class Panel {
 
   private async withPluginServices<T>(work: () => Promise<T>): Promise<T> {
     await this.synchronizePluginServices(true);
-    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending) throw new HttpError(409, this.servicesProblem ?? 'Plugin services are changing; retry after the update');
+    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending) throw this.servicesRefusal('Plugin services are changing; retry after the update');
     this.pluginConsumers++;
     try { return await work(); } finally { this.pluginConsumers--; }
+  }
+
+  /** A plugin-services refusal; when only a restart helps it carries the same reason the UI turns into a Restart action. */
+  private servicesRefusal(fallback = 'Plugin services are unavailable'): HttpError {
+    return this.servicesPending && this.servicesNeedRestart
+      ? new HttpError(409, launchBlocker({ servicesPending: true, servicesNeedRestart: true })!.message, { reason: 'restart-required', restart: true })
+      : new HttpError(409, this.servicesProblem ?? fallback);
   }
 
   private async withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
@@ -377,7 +384,7 @@ export class Panel {
     const snapshot = await pluginDiscoverySnapshot(this.repo, this.workspace);
     if (snapshot.problem || this.codeChanged(snapshot)) {
       this.servicesPending = true; this.servicesNeedRestart = !snapshot.problem; this.servicesProblem = snapshot.problem ?? 'Plugin module code or dependencies changed; restart the panel before using plugins';
-      throw new HttpError(409, this.servicesProblem);
+      throw this.servicesRefusal();
     }
     this.rememberPluginCode(snapshot);
     const [packagers, publishers] = await Promise.all([discoverPackagers(this.repo, this.workspace), discoverPublishers(this.workspace, this.repo)]);
@@ -391,7 +398,7 @@ export class Panel {
 
   private startJob(...args: Parameters<JobRunner['start']>): Job {
     if (this.restartPending) throw new HttpError(409, 'The panel is restarting');
-    if (this.servicesPending) throw new HttpError(409, this.servicesProblem ?? 'Plugin discovery is awaiting refresh');
+    if (this.servicesPending) throw this.servicesRefusal('Plugin discovery is awaiting refresh');
     if (this.changingPlugins) throw new HttpError(409, 'Plugin services are changing; retry after the update');
     try {
       const [kind, projectId, , work] = args;

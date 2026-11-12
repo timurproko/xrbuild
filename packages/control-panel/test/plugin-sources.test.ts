@@ -136,7 +136,7 @@ test('automatic discovery refreshes idle preference changes, defers busy work an
   await fs.writeFile(module, (await fs.readFile(module, 'utf8')).replaceAll("label:'Workspace'", "label:'Updated after restart'"));
   await f.plugins();
   assert.equal(f.panel.publishers.found.length, 0); assert.match(f.panel.pluginServiceStatus().problem!, /restart/);
-  await assert.rejects(f.panel.publish({} as any), /restart/);
+  await assert.rejects(f.panel.publish({} as any), /restart/i);
   const script = `import {discoverPublishers} from ${JSON.stringify(import.meta.resolve('../src/publishers.ts'))}; const result=await discoverPublishers(process.argv[1],process.argv[2]); console.log(result.found[0]?.publisher.label);`;
   const child = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script, f.workspace, f.core]);
   assert.equal(child.stdout.trim(), 'Updated after restart');
@@ -257,4 +257,15 @@ test('Settings configuration API saves declared fields, refreshes services and r
   assert.equal((await f.request('PUT', url, { values: { active: false }, revision: 'absent' })).data.details.stale, 'config');
   assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { active: true });
   assert.equal((await f.request('PUT', url, { values: { active: false }, revision: saved.data.revision, extra: 1 })).status, 400);
+});
+
+test('a plugin change that needs a restart refuses settings saves with the Restart reason', async t => {
+  const f = await fixture(t), revision = (await f.plugins())[0].sourceRevision;
+  assert.equal((await f.request('PUT', 'api/plugins/manage/workspace%3Ashared/origin', { origin: 'workspace', revision })).status, 200);
+  const services = path.join(f.workspace, 'plugins/shared/services.mjs');
+  await fs.writeFile(services, `${await fs.readFile(services, 'utf8')}\n// edited while the panel runs\n`);
+  const refused = await f.request('PUT', 'api/plugins/manage/workspace%3Ashared', { settings: {} });
+  assert.equal(refused.status, 409);
+  assert.deepEqual(refused.data.details, { reason: 'restart-required', restart: true });
+  assert.match(refused.data.error, /Restart the panel/);
 });
