@@ -3213,7 +3213,7 @@ function pluginSettingsCard(plugin) {
     ${plugin.settingsDescription ? `<p class="xrb-supporting-text">${esc(plugin.settingsDescription)}</p>` : ''}
     ${pluginSettingsForm(plugin, 'settings', runtime, plugin.values ?? {})}
     ${pluginSettingsForm(plugin, 'panelSettings', panel, plugin.panelValues ?? {}, runtime.length > 0)}
-    ${pluginConfigForm(plugin, runtime.length + panel.length > 0)}
+    ${pluginConfigForm(plugin)}
   </div>`;
 }
 
@@ -3228,7 +3228,8 @@ function shownConfigFields(plugin) {
 }
 
 /** Declared user configuration (for example a publication destination): one tab per section, saved explicitly. */
-function pluginConfigForm(plugin, divided = false) {
+// The tabs already separate configuration from the checkboxes above: no divider line.
+function pluginConfigForm(plugin) {
   const fields = shownConfigFields(plugin);
   if (!fields.length) return '';
   const disabled = !plugin.enabled || !!plugin.configProblem;
@@ -3241,7 +3242,7 @@ function pluginConfigForm(plugin, divided = false) {
   const panels = sections.map((section) => `<div class="settings-card-fields" role="tabpanel" data-config-panel="${esc(section)}" ${section === active ? '' : 'hidden'}>${
     fields.filter((setting) => sectionOf(setting) === section).map((setting) =>
       pluginSettingControl(setting, Object.hasOwn(draft, setting.key) ? draft[setting.key] : plugin.configValues?.[setting.key] ?? setting.default, disabled)).join('')}</div>`).join('');
-  return `<form class="settings-config ${divided ? 'xrb-section-divider' : ''}" data-plugin-config="${esc(plugin.id)}">
+  return `<form class="settings-config" data-plugin-config="${esc(plugin.id)}">
     ${tabs}
     ${plugin.configProblem ? `<p class="errors" role="alert">${esc(plugin.configProblem)}</p>` : ''}
     ${panels}
@@ -3279,8 +3280,7 @@ function bindPluginConfig(form) {
 function refreshPluginConfig(plugin) {
   const card = document.querySelector(`[data-settings-owner="${CSS.escape(plugin.id)}"]`);
   if (!card) return;
-  const runtime = plugin.settings ?? [], panel = plugin.panelSettings ?? [];
-  const html = pluginConfigForm(plugin, runtime.length + panel.length > 0);
+  const html = pluginConfigForm(plugin);
   const current = card.querySelector('[data-plugin-config]');
   if (current) current.outerHTML = html || '';
   else if (html) card.insertAdjacentHTML('beforeend', html);

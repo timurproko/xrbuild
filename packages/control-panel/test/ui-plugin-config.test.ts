@@ -21,7 +21,7 @@ test('declared configuration renders as tabs with an explicit Save', () => {
   const html = render({ id: 'bundled:publisher', enabled: true, config, configValues: { productionConfigured: true, productionOrigin: 'https://site.example' } }, true);
   assert.match(html, /data-plugin-config="bundled:publisher"/);
   assert.match(html, /<div class="xrb-tabs settings-config-tabs" role="tablist" aria-label="Configuration"><button type="button" class="xrb-tab" role="tab" data-config-tab="General" aria-selected="true" data-active>General<\/button><\/div>/);
-  assert.match(html, /xrb-section-divider/);
+  assert.doesNotMatch(html, /xrb-section-divider/, 'no line between the checkboxes and the tabs');
   assert.match(html, /name="productionConfigured" checked/);
   assert.match(html, /value="https:\/\/site\.example"/);
   assert.match(html, /<button type="submit"[^>]*>Save configuration<\/button>/);
