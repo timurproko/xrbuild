@@ -5,5 +5,5 @@
 
 ## 2. State and refresh safeguards
 
-- [ ] 2.1 Preserve badge state/text/colour/visibility and menu-dot/action behavior across asynchronous status updates and navigation; verify browser fixtures cover both-visible, restart-only, rebuild-only and no-visible states without action invocation, empty slots or reversed labels.
-- [ ] 2.2 Add focused cross-view/header regression coverage and perform changed-code checks; verify applicable panel/hand fixtures, strict public TypeScript, name guard and strict OpenSpec change validation pass without native/device setup or private workspace changes.
+- [x] 2.1 Preserve badge state/text/colour/visibility and menu-dot/action behavior across asynchronous status updates and navigation; verify browser fixtures cover both-visible, restart-only, rebuild-only and no-visible states without action invocation, empty slots or reversed labels.
+- [x] 2.2 Add focused cross-view/header regression coverage and perform changed-code checks; verify applicable panel/hand fixtures, strict public TypeScript, name guard and strict OpenSpec change validation pass without native/device setup or private workspace changes.

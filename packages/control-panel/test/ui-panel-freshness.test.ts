@@ -9,7 +9,7 @@ test('panel freshness shows the restart chip and the Restart dot only while outd
   const app = await fs.readFile(path.join(ui, 'app.js'), 'utf8');
   const index = await fs.readFile(path.join(ui, 'index.html'), 'utf8');
   const navigation = await fs.readFile(path.join(ui, 'navigation.js'), 'utf8');
-  assert.match(index, /<span id="panel-chip" class="chip warn" hidden>restart available<\/span>/);
+  assert.match(index, /<span id="panel-chip" class="chip warn" data-maintenance="restart" hidden>restart available<\/span>/);
   assert.match(navigation, /\{id:'restart',label:'Restart'/);
   assert.match(navigation, /\{id:'rebuild',label:'Rebuild'/);
   assert.match(navigation, /dot\.id=item\.id==='rebuild'\?'host-rebuild-dot':'panel-restart-dot'/, 'both menu items share one dot style');
