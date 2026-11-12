@@ -57,6 +57,8 @@ ledger with the observed baseline. Approval grants no private export, hosting mu
 - A change that needs a plan (new behaviour, a spec change, anything beyond a small fix) starts as an OpenSpec change
   in `openspec/changes/<change-id>/`: proposal, design, spec deltas, tasks (each ending in a verify clause). A fix that
   changes no spec sets `skip_specs: true` in its `.openspec.yaml`.
+- Write `tasks.md` as one task group per PR Implementation outcome, in the same order. No task is about ticking PR
+  outcomes or handing off.
 - Commit `docs(openspec): propose <change-id>`, push, and open a **draft** PR to `main`: title `type(scope): subject`,
   body from `.github/pull_request_template.md` written to `.artifacts/pr-body.md` and passed with `--body-file`:
   - `## Proposal`: one or two sentences.
@@ -71,14 +73,14 @@ ledger with the observed baseline. Approval grants no private export, hosting mu
 
 - Update proposal, design, deltas and tasks before the code they cover when the plan shifts.
 - Commits: `type(scope): subject`, concise; no AI attribution lines anywhere.
-- Tick each task in `tasks.md` only when its verify clause holds. A task that can only be verified after merge belongs
-  in a follow-up change, not ticked here. Manual device-only acceptance may be reported as a gap, but never
-  pretend an unverified task is done. Tick a PR Implementation outcome as soon as its code, tests and related
-  detailed tasks are done; CI status and manual acceptance do not count as checkbox progress.
+- Tick tasks and PR outcomes as the `Implementation progress` paragraph of `AGENTS.md` says: one outcome at a time,
+  pushed and ticked before the next one starts. A task's verify clause holds once that outcome's code and tests are
+  written and its focused checks pass. What only CI, a device or the maintainer can observe is reported as a gap and
+  holds no tick; a task that can only be verified after merge belongs in a follow-up change. Never pretend an
+  unverified task is done.
 - Run quick targeted checks for changed code and its written tests, plus `pnpm check:names` and strict change validation;
   use the type check when the repository provides it. Do not turn broad local suites into a repeated pre-push loop.
-  Written code/tests and truthful pre-ready bookkeeping determine Implementation progress; exact-final-head CI is the
-  later integration gate, not a future result to mark already passed.
+  Exact-final-head CI is the later integration gate, not a future result to mark already passed.
 - Add `## Acceptance` before `## Automation`: one to ten plain bullets saying what now holds, specific to this change.
 
 ## 4. Ready and finalization
