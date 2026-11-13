@@ -4,6 +4,7 @@ Task identity is tied to a single local worktree even for remote planning, while
 
 ## What Changes
 
+- Install the exact shared `portable-delivery-v1` rulebook, explicit repository adapters and 50 fixed verification cases; copy approved guidance instead of independently interpreting workflow policy.
 - Permit planning-only draft publication and GitHub administration from any directory/machine without worktree setup, dependency installation or sweep.
 - Preserve repository/branch/history/change/PR identity when adopting an existing proposal on another machine; keep implementation isolated and owned.
 - Make explicit exact-checkout local removal publication- and preservation-based, independent of merge/CI/acceptance, without deleting remote work or silently sweeping unrelated worktrees.
@@ -14,6 +15,10 @@ Task identity is tied to a single local worktree even for remote planning, while
 ## Scope boundary
 
 OpenSpec skills and the OpenSpec framework are out of scope. Do not modify, regenerate, replace, or override `openspec-*` skills, generated OpenSpec/`opsx` commands, framework implementation, schemas, templates, or lifecycle semantics. Simplify only repository-owned delivery tooling and guidance around the unchanged framework. Project-specific proposal, design, tasks and specification deltas remain editable; that does not authorize framework changes. If an outcome requires changing OpenSpec, report the blocker and move that work to a separate explicitly approved scope instead of bundling it here.
+
+## Exact implementation inputs
+
+[Shared rules](delivery-rules.md), [repository adapters](delivery-adapters.json), [verification cases](delivery-cases.json) and [digest manifest](delivery-contract.json) are identical in both planning PRs. R17 specifies exact copy destinations and the root routing paragraph. R20 requires reconciliation of already-started work before further affected implementation. Conflicts require clarification, not agent-authored policy exceptions.
 
 ## Capabilities
 

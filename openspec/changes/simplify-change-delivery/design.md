@@ -12,6 +12,16 @@ Non-goals: changes to or overrides of OpenSpec skills, generated commands or fra
 
 ## Decisions
 
+### Exact shared contract and implementation gate
+
+The normative rules are [delivery-rules.md](delivery-rules.md), contract `portable-delivery-v1`. Both repositories receive identical rulebook, [adapter table](delivery-adapters.json), [50 verification cases](delivery-cases.json) and [SHA-256 manifest](delivery-contract.json). These are fixed implementation inputs, not prompts to paraphrase. Only the named adapter values may differ; code structure and local test bindings may differ without changing observable policy. No live companion-repository dependency is introduced.
+
+Before further affected implementation, follow R20: fetch this revision, preserve existing work and record a head-bound rule/case reconciliation in `contract-reconciliation.md`. Do not reset or discard another agent's work. The new installation/reconciliation task remains unchecked until actually completed; prior unrelated completed tasks remain truthful. This planning update does not grant new implementation, merge, cleanup, hosting or export authority.
+
+For implementation, copy all four contract files unchanged to the exact `docs/` destinations in R17, install its exact routing paragraph once in `AGENTS.md`, and replace duplicated repository-owned workflow/progress rules with links. Preserve unrelated product/private/security instructions and every OpenSpec skill/generated command. Keep only compatible command syntax and operational detail in local runbooks. Add byte/hash checks against these approved snapshots and bind every shared case to observed implementation effects; do not change expected values to make tests pass. A mismatch, unspecified authority or conflicting requirement blocks the affected action for clarification, not a local exception. Updating a digest alone is not approval.
+
+Future contract refinements require an explicit maintainer decision and matching planning updates in both PRs before affected implementation. The companion PR and deployed guidance must use the same contract version and hashes; legacy runtime/metadata compatibility and existing protected integration remain mandatory.
+
 ### OpenSpec remains unchanged
 
 OpenSpec skills and the OpenSpec framework are out of scope. Do not modify, regenerate, replace, or override `openspec-*` skills, generated OpenSpec/`opsx` commands, framework implementation, schemas, templates, or lifecycle semantics. Simplify only repository-owned delivery tooling and guidance around the unchanged framework. Project-specific proposal, design, tasks and specification deltas remain editable; that does not authorize framework changes. If an outcome requires changing OpenSpec, report the blocker and move that work to a separate explicitly approved scope instead of bundling it here.
@@ -69,6 +79,8 @@ Keep current no-bypass protection, CI required, squash/linear policy and deploym
 - Dormant workflow promises -> readback/report activation separately; do not claim integration exercised merely because source/tests exist.
 
 ## Migration Plan
+
+Before step 1, complete the R20 existing-work reconciliation and install the exact R17 contract under task 1.1/1.4. Preserve work already published; do not restart the branch or infer new implementation authority.
 
 1. Land coherent guidance and compatible tooling together through current trusted delivery policy; leave existing PRs/branches/history untouched.
 2. Add portable planning/entry and safe standalone removal, preserving public/private boundaries and legacy metadata.

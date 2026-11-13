@@ -210,7 +210,7 @@ Before implementation edits, agents SHALL create or resume an owned isolated che
 
 ### Requirement: Implementation progress while implementing
 
-AGENTS.md SHALL own shared progress guidance; other instructions SHALL link rather than duplicate it. Tasks SHALL map meaningfully to outcomes without mandatory one-to-one groups or per-outcome pushes. Agents SHALL record local progress promptly, publish coherent checkpoints and synchronize PR completion only to published work, including before handoff. A PR-delivery request includes scoped commits/pushes; edit-only remains local. Required implementation, observed tests/CI and optional device acceptance remain separate.
+AGENTS.md SHALL contain the exact R17 routing paragraph to the shared `docs/delivery-rules.md` contract; other repository-owned instructions SHALL link rather than duplicate its R05 progress policy. Tasks SHALL map meaningfully to outcomes without mandatory one-to-one groups or per-outcome pushes. Agents SHALL record local progress promptly, publish coherent checkpoints and synchronize PR completion only to published work, including before handoff. A PR-delivery request includes scoped commits/pushes; edit-only remains local. Required implementation, observed tests/CI and optional device acceptance remain separate.
 
 #### Scenario: Several outcomes
 - **WHEN** a plan contains several outcomes
@@ -227,7 +227,7 @@ AGENTS.md SHALL own shared progress guidance; other instructions SHALL link rath
 
 #### Scenario: Any agent runtime
 - **WHEN** an agent loads the repository's instructions through `AGENTS.md` or `.claude/CLAUDE.md`
-- **THEN** it receives the same single progress paragraph
+- **THEN** it receives the same exact shared contract through the R17 routing paragraph
 
 #### Scenario: Plan tasks
 - **WHEN** an agent writes a linked change's `tasks.md`
@@ -238,6 +238,30 @@ AGENTS.md SHALL own shared progress guidance; other instructions SHALL link rath
 - **THEN** they refer to the `AGENTS.md` paragraph and do not restate it
 
 ## ADDED Requirements
+
+### Requirement: Both repositories implement one exact delivery contract
+
+Delivery simplification SHALL use the byte-identical `portable-delivery-v1` rulebook, adapter table, verification cases and digest manifest supplied by this change. Implementers SHALL copy them unchanged to the R17 destinations and use only the listed repository-specific bindings. They SHALL NOT paraphrase shared policy, change expected cases, invent exceptions or override OpenSpec.
+
+#### Scenario: Agent installs repository guidance
+- **WHEN** the approved delivery implementation installs guidance
+- **THEN** the four contract files SHALL match the approved planning bytes and SHA-256 digests
+- **AND** `AGENTS.md` SHALL contain the exact R17 routing paragraph once while other repository-owned entries link rather than restate policy
+
+#### Scenario: Existing implementation predates the contract
+- **WHEN** work has already started under an earlier plan
+- **THEN** the agent SHALL preserve it and record the inspected head, rule/case reconciliation, corrections and blockers before further affected implementation
+- **AND** unrelated completed tasks SHALL remain truthful without automatically discarding work
+
+#### Scenario: Shared verification is executed
+- **WHEN** either repository verifies implementation conformance
+- **THEN** its test bindings SHALL consume every identical case and assert actual behavior against the unchanged expected results
+- **AND** dropped cases, changed contract bytes, adapter drift or framework overrides SHALL fail verification rather than be silently accepted
+
+#### Scenario: Implementer encounters ambiguity
+- **WHEN** a requirement conflicts with the exact contract or a policy decision is unspecified
+- **THEN** the affected action SHALL stop for explicit clarification without inventing an exception
+- **AND** a contract refinement SHALL require matching approved updates in both repositories before affected implementation
 
 ### Requirement: Workflow simplification preserves the OpenSpec framework
 
