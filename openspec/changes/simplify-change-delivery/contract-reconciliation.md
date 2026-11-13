@@ -27,9 +27,11 @@ Installed all four approved snapshots at their exact `docs/` destinations, with 
 
 Observed checks: 18 focused guidance/publisher tests pass (including negative byte/adapter drift, rehash, missing-case-file, encoding and protected-asset fixtures); `pnpm check:names`, `pnpm check:types`, strict OpenSpec change validation and `git diff --check` pass. Public dependencies were installed explicitly in this checkout with the frozen lockfile and scripts disabled. These focused installation tests do not claim complete behavioral conformance for all 50 shared cases.
 
+Follow-up owner-link regression checks exposed stale assertions looking for duplicated routing/checkpoint text in the skill. The assertions now inspect the canonical root/shared policy and checkpoint runbook while retaining private isolation, approval, historical preservation and bot-delivery checks. After repair, all 15 repository-routing/PR-body tests pass. No runtime/branch-resume implementation is included in this first checkpoint.
+
 ## Remaining blockers and evidence boundaries
 
-- Task 3.3 depends on a compatible released A1 exact-operation interface. Its availability has not been established; keep that outcome incomplete until verified. Standalone repository operations remain separately implementable. Do not substitute complete/discard/sweep.
+- Task 3.3 depends on a compatible released A1 exact-operation interface. Read-only inspection found companion PR #923 still open/draft at `b2e47d1cba0129b2cb6ae5b832d8cd96f060994d`; compatible released interface availability has not been established. Keep that outcome incomplete until verified. Standalone repository operations remain separately implementable. Do not substitute complete/discard/sweep.
 - Current deployed safeguards remain authoritative until this PR is integrated (R09/R18). Installing planned guidance does not authorize using proposed merge/removal permissions in this session.
 - No conflict requiring a shared-contract refinement was found in this checkpoint. New ambiguity must stop its affected action under R18/C50 rather than changing hashes, expectations or adapter values.
 - Only the ten publisher tests were observed at this checkpoint. All 50 unchanged shared cases must eventually bind actual effects under 5.5; runtime compatibility, exact-head CI, live activation and optional device/human observations are separate, unclaimed evidence.

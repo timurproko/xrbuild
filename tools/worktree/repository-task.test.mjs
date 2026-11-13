@@ -143,11 +143,17 @@ test('CLI writes ignored create-only records, redacts private config, and binds 
 });
 
 test('instruction matrix and prerequisite order are explicit without overwriting predecessor changes', async () => {
-  const instructions = await fs.readFile(path.join(REPO, '.claude/CLAUDE.md'), 'utf8'), delivery = await fs.readFile(path.join(REPO, '.claude/skills/change-delivery/SKILL.md'), 'utf8');
+  const read = file => fs.readFile(path.join(REPO, file), 'utf8');
+  const [instructions, delivery, agents, rules] = await Promise.all([
+    '.claude/CLAUDE.md', '.claude/skills/change-delivery/SKILL.md', 'AGENTS.md', 'docs/delivery-rules.md',
+  ].map(read));
   assert.match(instructions, /audited source snapshot/); assert.match(instructions, /never enroll private packages/i);
-  assert.match(delivery, /Route engine and approved `embedded\/` changes to the core PR/);
-  assert.match(delivery, /private-only work.*independent private PR/i);
-  assert.match(delivery, /Paired tasks use separate PRs/i); assert.match(delivery, /Never merge, arm auto-merge or push to `main`/);
+  assert.match(agents, /Generic engine code and approved public modules under `embedded\/` belong to the core PR/);
+  assert.match(agents, /Private-only work belongs to a private PR/);
+  assert.match(agents, /Paired work needs separate PRs/);
+  assert.match(delivery, /Shared delivery rules.*delivery-rules\.md/);
+  assert.match(rules, /Implementation approval, green CI and an earlier or standing preference MUST NOT authorize merge/);
+  assert.match(rules, /Agents and repository controllers MUST NOT arm implementation auto-merge/);
   const prerequisites = await fs.readFile(path.join(REPO, 'openspec/changes/bundled-extensions/prerequisites.md'), 'utf8');
   assert.match(prerequisites, /user-workspace-public-core.*split-private-workspace.*bundled-extensions/s);
   assert.match(prerequisites, /bot.*finalization/i); assert.match(prerequisites, /never.*overwrite.*predecessor/i);
@@ -159,13 +165,14 @@ test('accepted contract checkpoints require approval, historical preservation an
     '.claude/CLAUDE.md', '.claude/skills/change-delivery/SKILL.md', 'openspec/config.yaml',
     'docs/pr-delivery-governance.md', 'docs/spec-baseline-reconciliation.md',
   ].map(read));
-  for (const entry of [instructions, delivery, context, governance]) {
+  for (const entry of [instructions, context, governance]) {
     assert.match(entry, /spec-baseline-reconciliation\.md/);
     assert.match(entry, /explicitly.*approved/i);
     assert.match(entry, /bot-finalized and maintainer-merged/);
   }
-  assert.match(delivery, /leave historical plans and task completion unchanged/);
-  assert.match(delivery, /not an open-task bypass/);
+  assert.match(delivery, /baseline reconciliation.*spec-baseline-reconciliation\.md/);
+  assert.match(delivery, /selected change's prerequisite ledger/);
+  assert.match(checkpoint, /unverified requirement blocks the checkpoint; a successful syntax check alone is not contract acceptance/);
   assert.match(checkpoint, /user-workspace-public-core[\s\S]*split-private-workspace[\s\S]*bundled-extensions[\s\S]*restore-embedded-project-workflows/);
   assert.match(checkpoint, /Do not edit or archive historical plans, change their task completion/);
   assert.match(checkpoint, /Only the normal trusted repository bot synchronizes and archives/);
