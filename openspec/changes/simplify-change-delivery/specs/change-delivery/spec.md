@@ -2,7 +2,7 @@
 
 ### Requirement: Delivery skill
 
-The repository SHALL own delivery in .claude/skills/change-delivery/SKILL.md with root/context/generic skills routing to it. Guidance SHALL distinguish planning, implementation, publication, acceptance, integration and removal authority without duplicate rituals. A PR-delivery request SHALL include scoped commits/pushes; edit-only and planning-only SHALL not imply broader operations. Generic sync/archive skills SHALL not bypass trusted delivered-change finalization. Private export, remote deletion and hosting mutation retain explicit permission.
+The repository SHALL own delivery in `.claude/skills/change-delivery/SKILL.md`, with repository-owned root instructions and project context routing to it. Guidance SHALL distinguish planning, implementation, publication, acceptance, integration and removal authority without duplicating repository procedures or modifying or overriding OpenSpec skills, generated commands or framework semantics. A PR-delivery request SHALL include scoped commits/pushes; edit-only and planning-only SHALL not imply broader operations. Repository guidance SHALL describe trusted delivered-change finalization through supported integration points while leaving generic OpenSpec sync/archive skills unchanged; conflicts requiring framework changes SHALL be reported as separately scoped blockers. Private export, remote deletion and hosting mutation retain explicit permission.
 
 #### Scenario: Agent starts a task
 - **WHEN** an agent is asked to deliver a change in the core
@@ -238,6 +238,25 @@ AGENTS.md SHALL own shared progress guidance; other instructions SHALL link rath
 - **THEN** they refer to the `AGENTS.md` paragraph and do not restate it
 
 ## ADDED Requirements
+
+### Requirement: Workflow simplification preserves the OpenSpec framework
+
+Workflow simplification SHALL be limited to repository-owned delivery tooling and guidance around the unchanged OpenSpec framework. It SHALL NOT modify, regenerate, replace, or override OpenSpec skills (including `openspec-*`), generated OpenSpec/`opsx` commands, framework implementation, schemas, templates, or lifecycle semantics. Project-specific proposals, designs, tasks and specification deltas MAY be edited without granting framework-change authority. Repository guidance SHALL NOT shadow or override OpenSpec instructions. Any outcome requiring a framework change SHALL be reported as blocked and moved to a separate explicitly approved scope.
+
+#### Scenario: Repository delivery guidance is simplified
+- **WHEN** this change simplifies root instructions, the repository-owned delivery skill, runbooks or project context
+- **THEN** the changes SHALL use supported integration points without changing or overriding OpenSpec skills or framework behavior
+- **AND** project-specific planning artifacts SHALL remain distinct from protected framework assets
+
+#### Scenario: Implementation diff is reviewed
+- **WHEN** the implementation candidate is reviewed
+- **THEN** the complete diff, including additions, deletions and rename sources/destinations, SHALL leave protected OpenSpec skills, commands and framework assets unchanged
+- **AND** repository guidance SHALL be inspected for indirect overrides, not only changes to protected paths
+
+#### Scenario: Simplification would require a framework change
+- **WHEN** a proposed outcome cannot be delivered without changing or overriding OpenSpec
+- **THEN** the agent SHALL report that outcome as blocked and seek a separate explicitly approved scope
+- **AND** it SHALL NOT bundle the framework change into this delivery
 
 ### Requirement: Explicit published local removal preserves remote work
 

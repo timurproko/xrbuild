@@ -2,15 +2,21 @@
 
 Audit baseline: main at 7d0ea7ebb785c4cbfdc5671250daaae0f3e2d851. Read-only live inspection confirmed squash/linear integration, non-strict CI required and no bypass actors. Docs auto-merge, Nightly triage and OpenSpec reconcile are disabled_manually under the reviewed activation profile. Repository auto-merge being allowed is not evidence these controllers run.
 
-Entry currently creates from origin/main and installs by default; owned dirty resume is rejected. The open-PR remove path retains the local branch but lacks remote containment proof and follows force-removal with recursive deletion. Its private workspace/KEEP checks must be strengthened, not removed. The runtime completion declaration invokes sweep --apply rather than one exact checkout. AGENTS progress mandates commit/push per outcome while .claude instructions say commit only when asked. Generic propose/sync/archive skills can impose extra approval turns or compete with trusted finalization. The canonical governance spec still describes an admin bypass absent from current declared/live settings.
+Entry currently creates from origin/main and installs by default; owned dirty resume is rejected. The open-PR remove path retains the local branch but lacks remote containment proof and follows force-removal with recursive deletion. Its private workspace/KEEP checks must be strengthened, not removed. The runtime completion declaration invokes sweep --apply rather than one exact checkout. AGENTS progress mandates commit/push per outcome while .claude instructions say commit only when asked. Repository delivery guidance must distinguish its responsibilities from unchanged OpenSpec propose/sync/archive skills; framework requirements are not simplification targets. The canonical governance spec still describes an admin bypass absent from current declared/live settings.
 
 ## Goals / Non-Goals
 
 Goals: shared observable behavior with the companion proposal; portable task identity; operation-scoped authority; protected private/unpublished data; clear readiness and activation; fewer repeated rules.
 
-Non-goals: a new mandatory framework, equal package managers/branch names/metadata, distributed edit locks, activating dormant workflows, strictness changes, weaker checks, bot implementation merge, private exports, device-validation changes, historical task rewriting or testing destructive operations on actual user worktrees.
+Non-goals: changes to or overrides of OpenSpec skills, generated commands or framework behavior; a new mandatory framework, equal package managers/branch names/metadata, distributed edit locks, activating dormant workflows, strictness changes, weaker checks, bot implementation merge, private exports, device-validation changes, historical task rewriting or testing destructive operations on actual user worktrees.
 
 ## Decisions
+
+### OpenSpec remains unchanged
+
+OpenSpec skills and the OpenSpec framework are out of scope. Do not modify, regenerate, replace, or override `openspec-*` skills, generated OpenSpec/`opsx` commands, framework implementation, schemas, templates, or lifecycle semantics. Simplify only repository-owned delivery tooling and guidance around the unchanged framework. Project-specific proposal, design, tasks and specification deltas remain editable; that does not authorize framework changes. If an outcome requires changing OpenSpec, report the blocker and move that work to a separate explicitly approved scope instead of bundling it here.
+
+Repository-owned `change-delivery` guidance, root instructions, runbooks and project context may describe repository responsibilities and supported integration points, but must not shadow or override OpenSpec instructions. Existing framework requirements are not redundant repository rituals to remove. Review the complete implementation diff, including additions, deletions and rename sources/destinations, to verify protected OpenSpec assets remain unchanged; also inspect repository guidance for indirect overrides. Do not run skill regeneration as part of this change.
 
 ### Planning versus implementation
 
@@ -18,13 +24,13 @@ Analysis, remote administration and real planning-only publication need explicit
 
 Only implementation needs an owned isolated checkout, with primary unchanged. Keep repository/branch/history/change/PR across machines; adopt a verified remote proposal or unoccupied local branch without resets. Preserve dirty owned resumes; report divergence, existing ownership, path collisions and unavailable dependencies separately. Dependency installation is explicit/need-based. Existing CLI aliases remain compatible. A1 enter/attach success is authoritative without a second inventory ritual; external agents use ordinary Git without A1 installation.
 
-### Authority, progress and generic skills
+### Authority, progress and repository-owned guidance
 
 A request to deliver through a PR includes scoped commits/pushes and metadata; edit-only does not imply publication and planning-only does not imply implementation. A clear request may approve scope and request implementation without another ritual turn. Renew approval for material scope/behavior changes, not wording clarifications. Merge, private export, remote abandonment and hosting mutation remain separately scoped.
 
 Tasks map to outcomes without mandatory one-to-one groups/network barriers. Track local completion promptly; publish and synchronize truthful PR progress at coherent checkpoints and before handoff. One outcome is valid, including small/test-only fixes; no artificial second outcome or spec change is required when behavior contracts are unaffected. Keep code/test completion, focused observed results, required final-head CI and optional device observation distinct. Broader local checks are proportionate options, not mandatory repeated loops or prohibited diagnostics.
 
-Generic propose/apply/sync/archive skills route to repository delivery ownership. They must not require redundant approval turns, edit canonical specs or archive an active delivered change instead of the trusted finalizer. Keep accepted historical contract-checkpoint and version-1/in-progress compatibility; do not manufacture historical completion.
+Repository-owned `.claude/skills/change-delivery/SKILL.md`, root guidance and project context describe the repository delivery route and trusted finalizer responsibilities through supported OpenSpec integration points. Remove only duplicate repository instructions, never OpenSpec-required steps. Leave generic OpenSpec propose/apply/sync/archive skills and generated commands unchanged; if repository expectations conflict with them, report a separately scoped blocker rather than edit or override the framework. Keep accepted historical contract-checkpoint and version-1/in-progress compatibility; do not manufacture historical completion.
 
 ### Handoff and safe local-only removal
 
@@ -50,7 +56,7 @@ Agents do not arm linked-implementation auto-merge. A personally armed route, if
 
 ### Activation and private boundaries
 
-Correct docs skill promises to match live activation. This change never activates Docs auto-merge, Nightly triage or OpenSpec reconcile. Conditional contracts describe their behavior only when separately reviewed and enabled. Docs eligibility excludes AGENTS, agent skills, governance/cleanup/privileged authority even under Markdown/docs paths; include full rename sources/destinations and preserve opt-out. Hold and no-auto-merge are blockers. Routine docs remain eligible only if the controller is enabled.
+Correct repository-owned delivery-skill and runbook promises to match live activation without editing OpenSpec skills. This change never activates Docs auto-merge, Nightly triage or OpenSpec reconcile. Conditional contracts describe their behavior only when separately reviewed and enabled. Docs eligibility excludes AGENTS, agent skills, governance/cleanup/privileged authority even under Markdown/docs paths; include full rename sources/destinations and preserve opt-out. Hold and no-auto-merge are blockers. Routine docs remain eligible only if the controller is enabled.
 
 Keep current no-bypass protection, CI required, squash/linear policy and deployment trust. Declare any new label through reviewed governance; actual hosting apply remains separately confirmed. Public changes use neutral names and public evidence only. Private task-local clones stay independent; no shared private dependencies/output, automatic export or false device-validation claims.
 
