@@ -98,7 +98,7 @@ test('frozen inputs reject missing cases, changed planning bytes, CRLF, BOM and 
 
 test('entry points link shared policy without old progress, prose-count or authorization overrides', () => {
   const entries = ['AGENTS.md', '.claude/CLAUDE.md', '.claude/skills/change-delivery/SKILL.md',
-    '.github/pull_request_template.md', 'docs/portable-planning.md', 'docs/portable-worktrees.md', 'docs/pr-delivery-governance.md', 'README.md', 'openspec/config.yaml'];
+    '.github/pull_request_template.md', 'docs/portable-planning.md', 'docs/portable-worktrees.md', 'docs/published-local-removal.md', 'docs/pr-delivery-governance.md', 'README.md', 'openspec/config.yaml'];
   for (const file of entries) {
     const content = text(file);
     assert.match(content, /delivery-rules\.md/, `${file} must link the shared contract`);

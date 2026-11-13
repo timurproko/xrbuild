@@ -24,10 +24,11 @@ Contract binding: R04, R12; consume the matching IDs in `delivery-cases.json` wi
 
 Contract binding: R12-R16; consume the matching IDs in `delivery-cases.json` without rewriting expectations.
 
-- [ ] 3.1 Harden local-only removal with fresh remote containment, read-only remote access and retained local refs; verify open/draft PRs, pending CI and safe remote descendants.
-- [ ] 3.2 Replace force/recursive fallback with bounded content inspection, locking and non-force removal; verify dirty/unknown-ignored/private/nested/KEEP/link/ownership/unpublished/offline blockers retain all data.
+- [x] 3.1 Harden local-only removal with fresh remote containment, read-only remote access and retained local refs; verify open/draft PRs, pending CI and safe remote descendants.
+- [x] 3.2 Replace force/recursive fallback with bounded content inspection, locking and non-force removal; verify dirty/unknown-ignored/private/nested/KEEP/link/ownership/unpublished/offline blockers retain all data.
 - [ ] 3.3 Add exact merged-completion and local-removal adapters after compatible runtime release; verify preflight/detach/shell-exit/rechecks and no unrelated sweep.
-- [ ] 3.4 Cover partial recovery, retries and recreated identities; verify standalone paths remain supported and legacy discard cannot silently broaden remote authority.
+  - Blocked: installed runtime is `0.2.7-dev.1292` (#919), release is `0.2.6`, and companion PR #923 is still open/draft. A compatible released exact-operation/claim interface has not been verified. Default CLI ownership remains unavailable; no runtime wiring or sweep substitute is adopted.
+- [x] 3.4 Cover partial recovery, retries and recreated identities; verify standalone paths remain supported and legacy discard cannot silently broaden remote authority.
 
 ## 4. Progress and readiness
 

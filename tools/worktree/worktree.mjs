@@ -6,9 +6,8 @@
 //   pnpm worktree add <type/short-desc>        adopt an unoccupied local/remote task branch, or create from origin/main
 //   pnpm worktree enter <type/short-desc>      prepare/resume the selected task; --a1 uses successful runtime attachment
 //                                              --install explicitly links public dependencies and installs them
-//   pnpm worktree remove <name> [--discard]    unlink core dependencies, remove the worktree (refuses dirty/protected trees);
-//                                              deletes the local branch when its PR is merged. A worktree whose PR
-//                                              closed unmerged is removed only with --discard (branch deleted too)
+//   pnpm worktree remove <name>               exact published-local removal, retaining refs; trusted ownership required
+//                                              --discard is a separate unsupported route, never a force fallback
 //   pnpm worktree sweep [--apply]              every task worktree as dirty / active / merged / closed / unknown;
 //                                              --apply removes the merged, clean ones and nothing else
 //   pnpm worktree handoff <name> [--change <id>] [--pr <n>]
@@ -23,6 +22,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attachA1, contextEnvironment, describeHandoff, prepareContext, registeredContexts, writeHandoffRecord } from './portable-context.mjs';
+import { inspectRemovalTarget, preservationReason, removePublishedCheckout, runtimeCleanupUnavailable } from './published-removal.mjs';
+export { preservationReason } from './published-removal.mjs';
 
 const TYPES = ['feat', 'fix', 'refactor', 'docs', 'test', 'chore', 'ci', 'perf'];
 
@@ -153,52 +154,34 @@ export function add(branch, options = {}) { return context(branch, options, fals
 /** Existing context resumes only after verified ownership; dirty task edits are never reset. */
 export function enter(branch, options = {}) { return context(branch, options, true); }
 
-/** Ignored private data is not disposable just because outer Git status is clean. Fail closed on filesystem errors. */
-export function preservationReason(dir) {
-  for (const relative of ['.xrbuild', path.join('.artifacts', 'KEEP')]) {
-    try {
-      fs.lstatSync(path.join(dir, relative)); // Detect dangling links too; never follow them for cleanup.
-      return `${relative} must be preserved separately before worktree cleanup`;
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-    }
-  }
-  return null;
-}
-
-export function remove(name, { root = primaryRoot(), discard = false, prState = ghPrState, log = console.log } = {}) {
+export function remove(name, { root = primaryRoot(), discard = false, expectedHead, log = console.log, ...options } = {}) {
+  if (discard) throw new Error('Confirmed unmerged discard requires a separate supported adapter; no refs or remote work deleted');
   const w = findWorktree(root, name);
-  const protectedData = preservationReason(w.dir);
-  if (protectedData) throw new Error(`${w.dir}: ${protectedData}`);
-  const dirty = git(w.dir, ['status', '--porcelain']);
-  if (dirty) throw new Error(`${w.dir} has uncommitted changes:\n${dirty}`);
-  const pr = w.branch ? prState(w.branch, root) : null;
-  if (discard && pr !== 'CLOSED') throw new Error(`--discard is for a worktree whose PR closed unmerged; ${w.branch}'s PR is ${pr ?? 'missing'}`);
-  if (!discard && pr === 'CLOSED') throw new Error(`${w.branch}'s PR closed unmerged: remove it with --discard if its work is not needed`);
-  unlinkWorktreeDependencies(w.dir);
-  // Ignored files (node_modules, builds) go with it; the clean-tree check above guards the rest.
-  git(root, ['worktree', 'remove', '--force', w.dir], { stdio: ['ignore', 'pipe', 'inherit'] });
-  // git leaves ignored folders it could not empty (pnpm's node_modules); the links in them are removed as links.
-  fs.rmSync(w.dir, { recursive: true, force: true });
-  log(`removed ${w.dir}`);
-  if (w.branch && (pr === 'MERGED' || discard)) {
-    git(root, ['branch', '-D', w.branch]);
-    log(`deleted branch ${w.branch} (${discard ? 'discarded' : 'its PR is merged'})`);
-  } else if (w.branch) {
-    log(`kept branch ${w.branch} (no merged PR for it)`);
-  }
+  const result = removePublishedCheckout({ ...options, root, target: w.dir, expectedHead });
+  log(`removed ${w.dir} locally; ${result.branchPreserved ? 'local branch retained' : 'local ref state requires review'}; no remote writes`);
+  return result;
 }
 
-/** Lists task worktrees with their state; with `apply`, removes the merged clean ones. Returns [{ name, branch, state }]. */
-export function sweep({ root = primaryRoot(), apply = false, prState = ghPrState, log = console.log } = {}) {
+/** Explicit bulk operation only; rechecks merged eligibility and reports preserved/blocked resources. */
+export function sweep({ root = primaryRoot(), apply = false, prState = ghPrState, log = console.log, ...options } = {}) {
   const rows = taskWorktrees(root).filter((w) => fs.existsSync(w.dir)).map((w) => {
-    const dirty = Boolean(preservationReason(w.dir)) || Boolean(git(w.dir, ['status', '--porcelain']));
+    let dirty = Boolean(preservationReason(w.dir));
+    if (!dirty) {
+      try { inspectRemovalTarget({ ...options, root, target: w.dir }); }
+      catch { dirty = true; }
+    }
     const pr = w.branch ? prState(w.branch, root) : null;
-    return { name: w.name, branch: w.branch, state: classify({ dirty, pr }) };
+    return { name: w.name, branch: w.branch, head: git(w.dir, ['rev-parse', 'HEAD']), state: classify({ dirty, pr }) };
   });
   for (const r of rows) log(`${r.state.padEnd(8)} ${r.name} (${r.branch ?? 'detached'})`);
   if (!rows.length) log('no task worktrees');
-  if (apply) for (const r of rows.filter((x) => x.state === 'merged')) remove(r.name, { root, prState, log });
+  if (apply) for (const r of rows.filter(x => x.state === 'merged')) {
+    try {
+      if (prState(r.branch, root) !== 'MERGED') throw new Error('Merged eligibility changed; worktree preserved');
+      remove(r.name, { ...options, root, expectedHead: r.head, log });
+      r.cleanup = 'removed';
+    } catch (error) { r.cleanup = 'blocked'; r.reason = error.message; log(`preserved ${r.name}: ${r.reason}`); }
+  }
   return rows;
 }
 
@@ -229,8 +212,16 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       if (unknown.length || o._.length !== 1) throw new Error('Unknown context option');
       console.log((cmd === 'add' ? add : enter)(o._[0], { a1: Boolean(o.a1), install: Boolean(o.install), expectedHead: o['expected-head'] }));
     }
-    else if (cmd === 'remove' && o._[0]) remove(o._[0], { discard: Boolean(o.discard) });
-    else if (cmd === 'sweep') sweep({ apply: Boolean(o.apply) });
+    else if (cmd === 'remove' && o._[0]) {
+      if (o._.length !== 1 || Object.keys(o).some(key => !['_', 'discard', 'expected-head'].includes(key))) throw new Error('Unknown removal option; no force/ownership assertion supported');
+      remove(o._[0], { discard: Boolean(o.discard), expectedHead: o['expected-head'] });
+    }
+    else if (cmd === 'sweep') {
+      if (o._.length || Object.keys(o).some(key => !['_', 'apply'].includes(key))) throw new Error('Unknown sweep scope/option');
+      const rows = sweep({ apply: Boolean(o.apply) });
+      if (o.apply && rows.some(row => row.cleanup === 'blocked')) process.exitCode = 1;
+    }
+    else if (['runtime-remove', 'complete'].includes(cmd)) runtimeCleanupUnavailable();
     else if (cmd === 'handoff' && o._[0]) console.log(handoff(o._[0], { change: o.change ?? null, pr: o.pr ?? null }));
     else throw new Error('usage: worktree add|enter <type/short-desc> [--a1] [--install] [--expected-head <sha>] | remove <name> [--discard] | sweep [--apply] | handoff <name> [--change <id>] [--pr <n>]');
   } catch (e) {

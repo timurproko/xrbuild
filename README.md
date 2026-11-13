@@ -318,13 +318,15 @@ Delivery policy: [Shared delivery rules](docs/delivery-rules.md), using only the
 The worktree helper's explicit `--install` setup shares only untracked core `third_party/` entries. For private integration work, provision an
 independent `.xrbuild/` clone in that task worktree; never junction the primary workspace into it. Private source,
 plugin builds, app output and packages stay task-local. Cleanup refuses any `.xrbuild/` or `.artifacts/KEEP` marker;
-preserve those files separately before cleanup (sweep reports protected worktrees as dirty):
+preserve those files separately before cleanup (sweep reports protected worktrees as dirty). The
+[published-local removal engine](docs/published-local-removal.md) retains all refs and currently requires a trusted
+ownership adapter; the default CLI preserves checkouts while that prerequisite is unavailable:
 
 ```text
 pnpm worktree add fix/hand-jitter      # adopt an existing task branch, else create from origin/main; no implicit install
 pnpm worktree sweep                    # every task worktree: dirty / active / merged / closed / unknown
-pnpm worktree sweep --apply            # remove the merged, clean ones
-pnpm worktree remove hand-jitter       # remove one after its merge (--discard if its PR was closed unmerged)
+pnpm worktree sweep --apply            # merged candidates only; trusted ownership/publication/preservation checks required
+pnpm worktree remove hand-jitter       # one published local checkout, refs retained; ownership adapter required
 ```
 
 Planning, progress and finalization: [R03-R08](docs/delivery-rules.md#r03---portable-planning). Documentation

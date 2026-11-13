@@ -11,10 +11,10 @@ const fail = message => { throw new Error(message); };
 export const contextEnvironment = () => Object.fromEntries(Object.entries(process.env).filter(([key]) =>
   !/^GIT_(?:DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|NAMESPACE|CONFIG_PARAMETERS|CONFIG_COUNT|CONFIG_KEY_\d+|CONFIG_VALUE_\d+)$/i.test(key)
   && !/^(?:GH_REPO|GH_HOST)$/.test(key)));
-export function executeGit(cwd, args) {
+export function executeGit(cwd, args, { input } = {}) {
   try {
     return execFileSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], {
-      cwd, env: contextEnvironment(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000, maxBuffer: 8 * 1024 * 1024,
+      cwd, env: contextEnvironment(), input, encoding: 'utf8', stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'], timeout: 30_000, maxBuffer: 8 * 1024 * 1024,
     }).trimEnd();
   } catch {
     throw Object.assign(new Error('Git context operation failed; inspect repository/ref access without discarding work'), { code: 'XRB_GIT_UNAVAILABLE' });

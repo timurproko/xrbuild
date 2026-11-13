@@ -66,9 +66,11 @@ operations: [protected PR delivery](../../../docs/pr-delivery-governance.md). Pl
   ignored/private content is not certified by Git HEAD containment. Remote-only planning reports the publisher's
   observed result without local registration. Portable handoff policy: [R12](../../../docs/delivery-rules.md#r12---portable-handoff).
 - Published local removal, preservation and runtime boundaries: [R13-R15](../../../docs/delivery-rules.md#r13---explicit-published-local-removal).
-  PR #19's exact-target cleanup adapters remain unfinished. The existing `.a1/worktree.json` is a legacy bulk-sweep
-  declaration, not a compatible exact-completion interface. Compatible released runtime support is not yet verified;
-  report this blocker for exact runtime removal rather than treating legacy `complete`, `discard` or `sweep` as a substitute.
+  The standalone engine's command/API inventory is in [published local removal](../../../docs/published-local-removal.md).
+  It retains refs and admits no ignored/cache payloads; without a trusted claimant adapter the CLI blocks disposal.
+  PR #19's runtime wiring remains unfinished. The existing `.a1/worktree.json` is a legacy bulk-sweep declaration,
+  not a compatible exact-completion interface. Compatible released runtime support is not yet verified; report this
+  blocker rather than treating legacy `complete`, `discard` or `sweep` as a substitute.
 - Existing command inventories are in `tools/worktree/worktree.mjs`; their presence is not contract conformance
   or deletion authority. Scratch/private boundaries: [R16](../../../docs/delivery-rules.md#r16---scratch-and-private-boundaries).
 

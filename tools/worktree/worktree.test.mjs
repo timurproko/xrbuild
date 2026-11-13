@@ -54,8 +54,8 @@ test('a materialized workspace dependency is kept instead of being replaced by a
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test('removing a worktree folder that still holds a junction removes the link, not its target', () => {
-  // remove() deletes what git leaves behind with fs.rmSync; a junction left in it must not take the target along.
+test('isolated fixture teardown unlinks a junction without deleting its target', () => {
+  // Production removal now refuses unknown links; recursive teardown here is only test-owned storage.
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-'));
   const target = path.join(tmp, 'primary', 'cef');
   fs.mkdirSync(target, { recursive: true });
@@ -171,7 +171,7 @@ test('failed install leaves a registered checkout that enter can repair; unregis
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('sweep lists every task worktree; --apply removes only the merged clean one and its branch', () => {
+test('sweep lists every state but missing trusted ownership prevents removal even for merged clean work', () => {
   const { root, g } = repoWith(['feat/merged', 'feat/dirty', 'feat/open', 'feat/closed', 'feat/unknown', 'feat/dirty-merged']);
   fs.writeFileSync(path.join(root, '.worktrees', 'dirty', 'wip.txt'), 'x');
   fs.writeFileSync(path.join(root, '.worktrees', 'dirty-merged', 'wip.txt'), 'x');
@@ -182,10 +182,12 @@ test('sweep lists every task worktree; --apply removes only the merged clean one
   assert.deepEqual(Object.fromEntries(rows.map((r) => [r.name, r.state])), { merged: 'merged', dirty: 'dirty', open: 'active', closed: 'closed', unknown: 'unknown', 'dirty-merged': 'dirty' });
   assert.equal(taskWorktrees(root).length, 6, 'without --apply nothing is removed');
 
-  sweep({ root, prState, apply: true, log: quiet });
-  assert.deepEqual(taskWorktrees(root).map((w) => w.name).sort(), ['closed', 'dirty', 'dirty-merged', 'open', 'unknown']);
-  assert.ok(!fs.existsSync(path.join(root, '.worktrees', 'merged')));
-  assert.equal(g('branch', '--list', 'feat/merged'), '', 'the merged branch is deleted');
+  const applied = sweep({ root, prState, apply: true, log: quiet });
+  assert.equal(applied.find(row => row.name === 'merged').cleanup, 'blocked');
+  assert.match(applied.find(row => row.name === 'merged').reason, /ownership adapter unavailable/);
+  assert.equal(taskWorktrees(root).length, 6);
+  assert.ok(fs.existsSync(path.join(root, '.worktrees', 'merged')));
+  assert.notEqual(g('branch', '--list', 'feat/merged'), '', 'local refs remain intact without verified disposal');
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -219,18 +221,18 @@ test('cleanup preserves private clones, unversioned workspaces, links and marked
   }
 });
 
-test('a closed PR\'s worktree is removed only with --discard, and --discard refuses an open or merged PR', () => {
+test('legacy discard and PR state cannot substitute for verified local-only cleanup authority', t => {
   const { root, g } = repoWith(['feat/closed', 'feat/open', 'feat/merged']);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const states = { 'feat/closed': 'CLOSED', 'feat/open': 'OPEN', 'feat/merged': 'MERGED' };
   const opts = { root, prState: (b) => states[b], log: () => {} };
-  assert.throws(() => remove('closed', opts), /closed unmerged: remove it with --discard/);
-  assert.throws(() => remove('open', { ...opts, discard: true }), /PR is OPEN/);
-  assert.throws(() => remove('merged', { ...opts, discard: true }), /PR is MERGED/);
-  remove('closed', { ...opts, discard: true });
-  assert.ok(!fs.existsSync(path.join(root, '.worktrees', 'closed')));
-  assert.equal(g('branch', '--list', 'feat/closed'), '');
+  assert.throws(() => remove('closed', opts), /ownership adapter unavailable/);
+  for (const name of ['open', 'merged', 'closed']) {
+    assert.throws(() => remove(name, { ...opts, discard: true }), /separate supported adapter/);
+    assert.ok(fs.existsSync(path.join(root, '.worktrees', name)));
+    assert.notEqual(g('branch', '--list', `feat/${name}`), '', 'no ref deletion is inferred from discard or PR state');
+  }
   assert.throws(() => remove('nope', opts), /no worktree/);
-  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test('handoff records the worktree in .artifacts/handoff.json and returns the report skeleton', () => {
