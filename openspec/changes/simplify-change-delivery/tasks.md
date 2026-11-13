@@ -2,9 +2,9 @@
 
 ## 1. Planning and authorization
 
-- [ ] 1.1 Reconcile repository-owned delivery-skill/root guidance, scoped commit permission and material-approval rules without modifying or overriding OpenSpec skills or framework behavior; verify planning-only, edit-only, deliver-through-PR and clear combined requests.
-- [ ] 1.2 Support explicit-repository/base/head planning publication without worktree/runtime/install/sweep; verify allowlisted real artifacts, unchecked drafts, expected-head retries and partial-publication recovery.
-- [ ] 1.3 Permit safe remote-operation payload handling while retaining implementation artifacts and public-name safeguards; verify no private input, credential or cross-checkout scratch leaks.
+- [x] 1.1 Reconcile repository-owned delivery-skill/root guidance, scoped commit permission and material-approval rules without modifying or overriding OpenSpec skills or framework behavior; verify planning-only, edit-only, deliver-through-PR and clear combined requests.
+- [x] 1.2 Support explicit-repository/base/head planning publication without worktree/runtime/install/sweep; verify allowlisted real artifacts, unchecked drafts, expected-head retries and partial-publication recovery.
+- [x] 1.3 Permit safe remote-operation payload handling while retaining implementation artifacts and public-name safeguards; verify no private input, credential or cross-checkout scratch leaks.
 
 ## 2. Portable implementation context
 

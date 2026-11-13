@@ -23,6 +23,10 @@ context: |
   contracts in their recorded order, bind them to accepted public implementation evidence, and leave historical
   plans/tasks unchanged. Its own complete tasks and normal bot finalization remain required; successors stay
   blocked until the checkpoint is bot-finalized and maintainer-merged. No private export or hosting authority follows.
-  A change ships in the PR that implements it, as the change-delivery skill describes
-  (`.claude/skills/change-delivery/SKILL.md`): plan first as a draft PR linked to the change, implementation after
-  approval, then the repo bot archives the change in that PR so main gets the code and the synced specs together.
+  Repository-owned delivery authorization and supported integration points are described in
+  .claude/skills/change-delivery/SKILL.md. Planning-only publication and remote administration need explicit
+  repository/base/head identity but no checkout, setup or sweep. Implementation requires approved scope and an
+  owned isolated checkout; PR delivery includes scoped publication, while edit-only and planning-only do not grant
+  broader authority. A change ships with its implementation through trusted finalization in the PR. OpenSpec skills,
+  generated commands, schemas, templates and framework lifecycle remain unchanged; project-specific artifacts and
+  this repository context do not authorize overrides. Report framework-dependent conflicts for separate approval.

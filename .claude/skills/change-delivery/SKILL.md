@@ -5,8 +5,12 @@ description: Deliver a change to the XR Build core through its PR flow - own wor
 
 # Change delivery
 
-The process for every change to the core. Rules it relies on: `.claude/CLAUDE.md` (names, Git, layout) and
-`openspec/config.yaml` (planning). Never merge, arm auto-merge or push to `main`; the maintainer merges.
+The repository-owned delivery route for core changes. Rules it relies on: `.claude/CLAUDE.md` (names, Git,
+layout), `AGENTS.md` (shared progress and worktree context), and `openspec/config.yaml` (project planning context).
+OpenSpec skills, generated commands and framework lifecycle remain unchanged: use their supported integration
+points, never edit, regenerate or indirectly override them to simplify repository procedures. Report a framework
+conflict as a blocker requiring separate approval. Project-specific change artifacts are not framework assets.
+Never merge, arm auto-merge or push to `main`; the maintainer merges.
 Workspace-only changes belong to the independent private clone at ignored `.xrbuild/`, not this core PR.
 The maintainer uses ordinary Git there; agents never push `main` in either repository.
 
@@ -32,12 +36,28 @@ The checkpoint needs its own complete verified tasks and normal bot finalization
 A successor stays blocked until that checkpoint is bot-finalized and maintainer-merged, then updates only its own
 ledger with the observed baseline. Approval grants no private export, hosting mutation, cleanup or merge authority.
 
-## 1. Preflight
+## Authorization and operation scope
 
-- From the primary checkout (it stays on `main`): `pnpm worktree sweep` and relay its lines. `--apply` only removes
-  merged, clean worktrees; never remove a `dirty`, `active`, `closed` or `unknown` one by hand. A task containing
-  `.xrbuild/` or `.artifacts/KEEP` is preserved as dirty even when outer Git is clean. Preserve private repositories
-  and marked backups separately before cleanup; never remove the protection just to make sweep pass.
+- **Planning-only:** inspect public evidence and publish the requested real planning draft; do not implement it.
+- **Edit-only:** make the requested local edits and checks in an isolated implementation checkout; do not commit,
+  push or publish PR metadata without permission.
+- **Deliver through a PR / work on an existing implementation PR:** includes scoped commits, pushes and truthful
+  metadata updates for that task, not a push to `main`. A clear request can approve the presented scope and ask
+  for implementation together; no ritual second turn is required when scope and intent are unambiguous.
+- **Material changes:** seek renewed approval before code when behavior, ownership, safety or scope changes;
+  wording-only clarification needs no renewed approval. Unresolved scope is a blocker, not self-approval.
+- **Separate authority:** implementation never grants private export, remote abandonment/deletion, hosting apply,
+  workflow activation, merge, auto-merge or local-data deletion. Attachment and clean status grant none of these.
+
+## 1. Context and preflight
+
+- Planning and remote administration need explicit repository/base/head identity, not a checkout, attachment,
+  dependency installation or sweep. See `docs/portable-planning.md` for CLI/API/stdin publication and recovery.
+- Implementation needs an owned isolated checkout; primary stays on `main`. Use the existing task identity.
+  Sweeps are explicitly requested bulk operations, not session/planning prerequisites. Never remove a `dirty`,
+  `active`, `closed` or `unknown` worktree by hand. A task containing `.xrbuild/` or `.artifacts/KEEP` is preserved
+  even when outer Git is clean. Preserve private repositories and marked backups separately before cleanup;
+  never remove protection just to make sweep pass.
 - Follow the shared Worktrees guidance in `AGENTS.md`. Continue the same task's branch, change and PR.
   A1 owns attachment verification, coordination and recovery; do not add an inventory approval gate or a manual
   linkage retry procedure. External agents use ordinary Git worktrees from `origin/main`; the existing repository
@@ -49,25 +69,33 @@ ledger with the observed baseline. Approval grants no private export, hosting mu
 - Attachment does not authorize cleanup or merge. Built-in tools follow the attached root; custom extensions and
   independent terminals may retain their own cwd, so use the returned explicit root for those integrations.
   Never edit the primary checkout or another task's worktree.
-- Scratch (PR bodies, logs, patches, captured output) goes in the worktree's `.artifacts/` (git-ignored), never the
-  system temp folder, the home folder or another checkout.
+- Implementation scratch (PR bodies, logs, patches, captured output) goes in the owning worktree's ignored
+  `.artifacts/`, never the system temp folder, home folder or another checkout. No-checkout planning/administration
+  may use stdin, memory or isolated secret-free session scratch. Durable evidence must not exist only in scratch;
+  neither route publishes credentials, private inventories or unapproved private content.
 
 ## 2. Plan (draft PR)
 
 - A change that needs a plan (new behaviour, a spec change, anything beyond a small fix) starts as an OpenSpec change
   in `openspec/changes/<change-id>/`: proposal, design, spec deltas, tasks (each ending in a verify clause). A fix that
   changes no spec sets `skip_specs: true` in its `.openspec.yaml`.
-- Write `tasks.md` as one task group per PR Implementation outcome, in the same order. No task is about ticking PR
+- For progress, follow the `Implementation progress` paragraph of `AGENTS.md`. No task is about ticking PR
   outcomes or handing off.
-- Commit `docs(openspec): propose <change-id>`, push, and open a **draft** PR to `main`: title `type(scope): subject`,
-  body from `.github/pull_request_template.md` written to `.artifacts/pr-body.md` and passed with `--body-file`:
+- Publish real selected planning artifacts on the task branch with commit `docs(openspec): propose <change-id>`
+  and a **draft** PR to the explicit base (normally `main`), title `type(scope): subject`. Use the body layout in
+  `.github/pull_request_template.md`. In a checkout use `.artifacts/pr-body.md` with `--body-file`; without one,
+  stdin/API memory payloads are supported. No dummy diff, setup-only checkout or separate planning merge is needed.
+  The optional `tools/worktree/publish-plan.mjs` publishes only the selected project's allowlisted change artifacts,
+  with create-only refs, expected-head/non-force updates and recoverable partial publication. Ordinary CLI/API
+  remains supported without this helper. Preserve existing branches/PRs and report races instead of replacing them:
   - `## Proposal`: one or two sentences.
   - `## Implementation`: at least two unchecked, implementation-specific outcome checkboxes; two to five is recommended for readability, not enforced as a maximum.
   - `## Automation`: the collapsed block with `{"version":1,"change":"<change-id>"}` in the `openspec-implementation` fence.
   - No `## Acceptance` yet, no list of commands or generic test/CI/merge checkboxes.
-- Hand off (section 6) and **stop**. No implementation until the maintainer approves the plan and asks for the
-  implementation in words. A request that asks for a plan and its implementation together is approval only when it
-  says the plan needs no review.
+- For a planning-only request, report repository, branch, change/PR, observed remote head and remaining work,
+  then **stop**; no local handoff registration is needed. Implementation requires approved scope and a clear
+  implementation request as defined in Authorization above. Continue the same task, never infer implementation
+  approval from publication or a lightweight draft CI pass.
 
 ## 3. Implement (same worktree, branch and PR)
 

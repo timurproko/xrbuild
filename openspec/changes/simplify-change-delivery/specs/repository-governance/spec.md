@@ -20,7 +20,7 @@ Reviewed config/github-repository-governance.json SHALL declare merge settings, 
 
 ### Requirement: Source behavior does not imply workflow activation
 
-Delivery guidance SHALL distinguish reviewed source, declared activation and observed live operation. Docs auto-merge, Nightly triage and OpenSpec reconcile SHALL remain disabled under the current reviewed profile; this simplification SHALL not enable them or apply repository settings. A future activation requires separately reviewed policy, explicit existing apply authorization and readback. New coordination labels SHALL be declared through governance without an implicit apply. Remote planning and routine local operations SHALL not require repository administration.
+Delivery guidance SHALL distinguish source, declared activation and observed operation. Docs auto-merge, Nightly triage and OpenSpec reconcile SHALL remain disabled. Future activation SHALL require separate review, explicit apply authorization and readback; new labels SHALL be declared without implicit apply. Planning/local operations SHALL require no repository administration.
 
 #### Scenario: Dormant workflow exists in source
 - **WHEN** documentation describes its supported behavior
@@ -28,4 +28,4 @@ Delivery guidance SHALL distinguish reviewed source, declared activation and obs
 
 #### Scenario: Delivery policy changes
 - **WHEN** this change implements portable delivery or hold support
-- **THEN** current live workflow states and protection SHALL not be mutated implicitly
+- **THEN** current live workflow states, repository settings and protection SHALL not be mutated implicitly

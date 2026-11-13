@@ -43,9 +43,32 @@ test('the delivery skill and PR template follow the shared progress rule without
   const read = file => fs.readFile(path.join(root, file), 'utf8');
   const [delivery, template] = await Promise.all(['.claude/skills/change-delivery/SKILL.md', '.github/pull_request_template.md'].map(read));
   assert.match(delivery, /`Implementation progress` paragraph of `AGENTS[.]md`/);
-  assert.match(delivery, /one task group per PR Implementation outcome, in the same order/);
+  assert.doesNotMatch(delivery, /one task group per PR Implementation outcome/);
   assert.match(delivery, /No task is about ticking PR\s+outcomes or handing off/);
   assert.ok(!delivery.includes('Never save ticks for handoff'));
   assert.doesNotMatch(delivery, /only when its verify clause holds/);
   assert.match(template, /`Implementation progress` in AGENTS[.]md/);
+});
+
+test('repository-owned request guidance has one authorization owner and preserves the OpenSpec boundary', async () => {
+  const read = file => fs.readFile(path.join(root, file), 'utf8');
+  const [delivery, instructions, context, runbook] = await Promise.all([
+    '.claude/skills/change-delivery/SKILL.md', '.claude/CLAUDE.md', 'openspec/config.yaml', 'docs/portable-planning.md',
+  ].map(read));
+  assert.match(delivery, /^## Authorization and operation scope$/m);
+  assert.match(instructions, /Authorization and operation scope/);
+  assert.match(runbook, /change-delivery.*#authorization-and-operation-scope/);
+  for (const text of [delivery, instructions, context, runbook]) {
+    assert.match(text, /OpenSpec/);
+    assert.match(text, /unchanged/);
+    assert.doesNotMatch(text, /Commit only when asked|says the plan needs no review/);
+  }
+  assert.match(delivery, /Material changes/);
+  assert.match(delivery, /wording-only clarification/);
+  assert.match(delivery, /No-checkout planning\/administration/);
+  assert.match(delivery, /Planning and remote administration need explicit repository\/base\/head/);
+  for (const request of ['Planning-only', 'Edit-only', 'Deliver through a PR', 'Separate authority']) {
+    assert.ok(delivery.includes(`**${request}`), `missing authorization case: ${request}`);
+  }
+  assert.doesNotMatch(delivery, /From the primary checkout.*sweep/);
 });

@@ -241,12 +241,12 @@ AGENTS.md SHALL own shared progress guidance; other instructions SHALL link rath
 
 ### Requirement: Workflow simplification preserves the OpenSpec framework
 
-Workflow simplification SHALL be limited to repository-owned delivery tooling and guidance around the unchanged OpenSpec framework. It SHALL NOT modify, regenerate, replace, or override OpenSpec skills (including `openspec-*`), generated OpenSpec/`opsx` commands, framework implementation, schemas, templates, or lifecycle semantics. Project-specific proposals, designs, tasks and specification deltas MAY be edited without granting framework-change authority. Repository guidance SHALL NOT shadow or override OpenSpec instructions. Any outcome requiring a framework change SHALL be reported as blocked and moved to a separate explicitly approved scope.
+Workflow simplification SHALL change only repository-owned delivery tooling, guidance and project-specific change artifacts. OpenSpec skills, commands and framework assets/semantics SHALL remain unchanged, without regeneration or indirect overrides. Framework-dependent outcomes SHALL be blocked pending separate explicit approval.
 
 #### Scenario: Repository delivery guidance is simplified
 - **WHEN** this change simplifies root instructions, the repository-owned delivery skill, runbooks or project context
 - **THEN** the changes SHALL use supported integration points without changing or overriding OpenSpec skills or framework behavior
-- **AND** project-specific planning artifacts SHALL remain distinct from protected framework assets
+- **AND** project-specific proposals, designs, tasks and specification deltas SHALL remain distinct from protected OpenSpec skills (including `openspec-*`), generated OpenSpec/`opsx` commands, framework implementation, schemas, templates and lifecycle semantics
 
 #### Scenario: Implementation diff is reviewed
 - **WHEN** the implementation candidate is reviewed
@@ -260,12 +260,13 @@ Workflow simplification SHALL be limited to repository-owned delivery tooling an
 
 ### Requirement: Explicit published local removal preserves remote work
 
-An explicit request SHALL authorize only one named owned non-primary checkout. Its HEAD SHALL be freshly verified equal to or ancestral to the intended live remote branch. Open/draft PR, pending CI, unfinished implementation and missing acceptance/archive SHALL not block this route. Preserve remote branch/PR and local branch refs by default. Dirty/untracked/unknown-ignored/private/nested/submodule/KEEP data, unsafe links, live/unverifiable claims and unpublished/divergent commits SHALL block removal. Reuse bounded content inspection, scoped locks, exact identity rechecks and non-force deletion; no recursive force fallback is permitted. Disposable caches SHALL be explicitly bounded rather than inferred from ignore rules. Unavailable evidence SHALL preserve resources. Deletion of refs/private data requires separate explicit scope and SHALL not be inferred from local disposal.
+Explicit local removal SHALL target one named owned non-primary checkout with fresh remote containment proof, bounded preservation checks and non-force deletion. Remote work and local refs SHALL remain by default. Unavailable evidence or unsafe/unpublished content SHALL block deletion; local disposal SHALL grant no remote or private-data deletion authority.
 
 #### Scenario: Published open PR
 - **WHEN** the requested checkout is safely published and preservation checks pass
 - **THEN** local-only removal SHALL proceed without waiting for merge/CI
 - **AND** remote work and local topic ref SHALL remain
+- **AND** open/draft PRs, pending CI, unfinished scope and missing acceptance/archive SHALL not block this route
 
 #### Scenario: Remote advanced on another machine
 - **WHEN** the remote tip contains local HEAD
@@ -274,6 +275,9 @@ An explicit request SHALL authorize only one named owned non-primary checkout. I
 #### Scenario: Clean outer Git hides valuable data
 - **WHEN** ignored/private/nested/KEEP content exists
 - **THEN** removal SHALL retain it despite clean status
+- **AND** dirty/untracked/unknown-ignored/private/nested/submodule/KEEP data, unsafe links and live/unverifiable claims SHALL block removal
+- **AND** scoped locks and exact identity rechecks SHALL protect bounded content inspection and non-force deletion without recursive force fallback
+- **AND** disposable caches SHALL be explicitly bounded, not inferred from ignore rules; deleting refs/private data requires separate explicit scope
 
 #### Scenario: Publication cannot be proved
 - **WHEN** local commits are unpushed/divergent or remote evidence is unavailable
@@ -281,11 +285,12 @@ An explicit request SHALL authorize only one named owned non-primary checkout. I
 
 ### Requirement: Runtime cleanup targets only the attached task
 
-Runtime completion/local-removal declarations SHALL call exact-target repository operations, not sweep --apply. A compatible released A1 interface SHALL preflight ownership/content before detaching and settle outside the checkout before trusted repository deletion. The repository operation SHALL recheck identity/publication/claims and preserve resources on races or blockers. Missing support SHALL be explicit, never a force or sweep fallback. Standalone operations SHALL remain available. Retries SHALL not delete recreated identities, retained branches or unrelated checkouts.
+Runtime completion/local-removal SHALL use exact-target operations, never sweep or force fallbacks. A compatible released A1 interface SHALL preflight before detach and settle outside the checkout before deletion. Repository operations SHALL recheck identity/publication/claims, preserve blocked resources and retain standalone support.
 
 #### Scenario: Another merged checkout exists
 - **WHEN** one attached task is completed or explicitly removed locally
 - **THEN** unrelated worktrees SHALL remain untouched
+- **AND** retries SHALL not delete recreated identities or retained branches
 
 #### Scenario: Post-detach race
 - **WHEN** ownership or content changes before deletion
