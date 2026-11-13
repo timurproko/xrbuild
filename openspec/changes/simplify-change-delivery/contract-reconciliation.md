@@ -51,6 +51,10 @@ The programmatic oracle in tests reads a synthetic fixture registry. It is not a
 
 Observed checks: all 42 isolated cleanup tests and 32 worktree/guidance/planning tests pass, with no skipped tests. Type checking, name guard, strict OpenSpec change validation and diff whitespace checks pass. The tests consume C34-C38, C40 and C41 component inputs and check repository-side ownership/content races; C39's actual runtime sequencing and the full 50-case binding remain incomplete. Fixture staging/line-ending assumptions, Git linked-config compatibility and precise Windows identity issues found during validation were repaired and rerun without weakening preservation assertions. No actual user checkout or private workspace was removed, and no live runtime cleanup or device acceptance is claimed.
 
+## Cleanup-fixture isolation repair
+
+After the cleanup checkpoint, hardened the disposable Git fixture helpers against ambient `GIT_DIR`, working-tree and index selectors, and disabled caller hooks/signing for fixture setup. A new regression deliberately points those selectors at another disposable caller fixture and verifies its refs, index and working source remain unchanged. This is a test-isolation repair, not runtime ownership wiring or a real-user repository probe. Observed follow-up: the new isolation regression plus C34/C38/C41 checks (4 tests), selected context/attachment checks (4 tests), and all 14 worktree-helper checks pass; types, names, strict validation and diff whitespace checks also pass. Production cleanup behavior is unchanged; task 3.3 remains blocked.
+
 ## Remaining blockers and evidence boundaries
 
 - Task 3.3 depends on a compatible released A1 exact-operation interface. Latest read-only inspection is recorded above; compatible released interface availability and trusted ownership wiring have not been established. Keep that task and the PR's third outcome incomplete until verified. Standalone repository operations remain separately implementable. Do not substitute complete/discard/sweep.

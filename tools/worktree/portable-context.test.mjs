@@ -5,9 +5,11 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import { enter, handoff } from './worktree.mjs';
-import { attachA1, executeGit, publicationEvidence, refreshSelectedRefs, registeredContexts } from './portable-context.mjs';
+import { attachA1, contextEnvironment, executeGit, publicationEvidence, refreshSelectedRefs, registeredContexts } from './portable-context.mjs';
 
-const git = (root, ...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: 'pipe' }).trim();
+const git = (root, ...args) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-C', root, ...args], {
+  env: contextEnvironment(), encoding: 'utf8', stdio: 'pipe',
+}).trim();
 const quiet = () => {};
 const cases = JSON.parse(fs.readFileSync(new URL('../../docs/delivery-cases.json', import.meta.url), 'utf8')).cases;
 const shared = id => { const value = cases.find(item => item.id === id); assert.ok(value, id); return value; };

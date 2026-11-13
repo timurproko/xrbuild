@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { classify, enter, handoff, linkThirdParty, linkWorktreeDependencies, remove, sweep, taskWorktrees, unlinkThirdParty, unlinkWorktreeDependencies, worktreeName } from './worktree.mjs';
 import { taskBranch } from './claude-create.mjs';
+import { contextEnvironment } from './portable-context.mjs';
 
 test('a branch is <type>/<short-desc>; the worktree is named after the description', () => {
   assert.equal(worktreeName('fix/hand-jitter'), 'hand-jitter');
@@ -103,7 +104,7 @@ test('states: dirty wins, then the PR decides; no PR is active work', () => {
 /** A primary checkout with one task worktree per given branch under .worktrees/. */
 function repoWith(branches) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-repo-'));
-  const g = (...a) => execFileSync('git', ['-C', root, ...a], { stdio: 'pipe' }).toString().trim();
+  const g = (...a) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-C', root, ...a], { env: contextEnvironment(), stdio: 'pipe' }).toString().trim();
   g('init', '--quiet', '-b', 'main');
   fs.writeFileSync(path.join(root, '.gitignore'), '.worktrees/\n.artifacts/\nthird_party/*\n.xrbuild/\n');
   g('add', '-A');
@@ -207,9 +208,9 @@ test('cleanup preserves private clones, unversioned workspaces, links and marked
       } else {
         fs.mkdirSync(workspace);
         fs.writeFileSync(path.join(workspace, 'uncommitted.txt'), 'private');
-        if (kind === 'clone') execFileSync('git', ['init', '--quiet', workspace]);
+        if (kind === 'clone') execFileSync('git', ['-c', 'core.hooksPath=/dev/null', 'init', '--quiet', workspace], { env: contextEnvironment() });
       }
-      assert.equal(execFileSync('git', ['-C', dir, 'status', '--porcelain']).toString(), '');
+      assert.equal(execFileSync('git', ['-C', dir, 'status', '--porcelain'], { env: contextEnvironment() }).toString(), '');
       const opts = { root, prState: () => 'MERGED', log: () => {} };
       assert.throws(() => remove('protected', opts), /preserved separately/);
       assert.equal(sweep({ ...opts, apply: true })[0].state, 'dirty');
@@ -251,6 +252,6 @@ test('handoff records the worktree in .artifacts/handoff.json and returns the re
   assert.match(report, /Branch and PR: feat\/thing, #12 \(change add-thing\)/);
   assert.match(report, /Publication: unverified/);
   assert.match(report, /Unfinished work and gaps:/);
-  assert.equal(execFileSync('git', ['-C', dir, 'status', '--porcelain']).toString(), '', '.artifacts/ is ignored');
+  assert.equal(execFileSync('git', ['-C', dir, 'status', '--porcelain'], { env: contextEnvironment() }).toString(), '', '.artifacts/ is ignored');
   fs.rmSync(root, { recursive: true, force: true });
 });

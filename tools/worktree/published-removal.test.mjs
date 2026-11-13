@@ -4,11 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
-import { executeGit } from './portable-context.mjs';
+import { contextEnvironment, executeGit } from './portable-context.mjs';
 import { inspectRemovalTarget, removePublishedCheckout, runtimeCleanupUnavailable } from './published-removal.mjs';
 import { remove, sweep } from './worktree.mjs';
 
-const git = (root, ...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: 'pipe' }).trim();
+const git = (root, ...args) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-C', root, ...args], {
+  env: contextEnvironment(), encoding: 'utf8', stdio: 'pipe',
+}).trim();
 const cases = JSON.parse(fs.readFileSync(new URL('../../docs/delivery-cases.json', import.meta.url), 'utf8')).cases;
 const shared = id => { const value = cases.find(item => item.id === id); assert.ok(value, id); return value; };
 const quiet = () => {};
@@ -47,6 +49,20 @@ function fixture(t) {
   return { root, target, remote, branch, head, calls, options, writeClaims, registry,
     publish() { git(target, 'add', '.'); git(target, 'commit', '--quiet', '-m', 'fixture update'); git(target, 'push', '--quiet', 'origin', branch); return git(target, 'rev-parse', 'HEAD'); } };
 }
+
+test('fixture setup cannot be redirected into a caller repository by ambient Git selectors', t => {
+  const caller = fixture(t), beforeRefs = git(caller.root, 'show-ref'), beforeIndex = fs.readFileSync(path.join(caller.root, '.git', 'index'));
+  const poisoned = { GIT_DIR: path.join(caller.root, '.git'), GIT_WORK_TREE: caller.target, GIT_INDEX_FILE: path.join(caller.root, '.git', 'index') };
+  const previous = Object.fromEntries(Object.keys(poisoned).map(key => [key, process.env[key]]));
+  t.after(() => { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  Object.assign(process.env, poisoned);
+  const isolated = fixture(t);
+  assert.notEqual(isolated.root, caller.root);
+  assert.ok(fs.statSync(path.join(isolated.root, '.git')).isDirectory());
+  assert.equal(git(caller.root, 'show-ref'), beforeRefs);
+  assert.ok(fs.readFileSync(path.join(caller.root, '.git', 'index')).equals(beforeIndex));
+  assert.equal(fs.readFileSync(path.join(caller.target, 'source.txt'), 'utf8').replaceAll('\r\n', '\n'), 'published source\n');
+});
 
 // The oracle above is an isolated registry reader, not an assertion that an unreleased runtime adapter exists.
 test('C34: published unfinished draft removes exactly one checkout, retaining local/remote refs without PR gates', t => {
@@ -174,7 +190,7 @@ test('checked text normalization permits ordinary CRLF while binary line-ending 
     const f = fixture(t);
     fs.writeFileSync(path.join(f.target, '.gitattributes'), 'source.txt -text\n');
     fs.writeFileSync(path.join(f.target, 'source.txt'), 'published source\n'); f.publish();
-    assert.equal(execFileSync('git', ['-C', f.target, 'show', 'HEAD:source.txt'], { encoding: 'utf8', stdio: 'pipe' }), 'published source\n');
+    assert.equal(execFileSync('git', ['-C', f.target, 'show', 'HEAD:source.txt'], { env: contextEnvironment(), encoding: 'utf8', stdio: 'pipe' }), 'published source\n');
     git(f.target, 'config', 'core.autocrlf', 'true');
     fs.writeFileSync(path.join(f.target, 'source.txt'), 'published source\r\n');
     assert.throws(() => removePublishedCheckout(f.options), /Unpublished source bytes/);
