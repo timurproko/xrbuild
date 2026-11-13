@@ -60,6 +60,10 @@ Content inspection is bounded, link/hardlink-aware and hashes actual regular sou
 
 Merged completion and explicit local removal use exact-target entrypoints; sweeps stay explicit separate bulk operations. Replace .a1/worktree.json broad completion with an exact operation after the compatible A1 API is released. Preflight before detach; trusted repository deletion only after shell exit and fresh rechecks. No runtime deletion fallback. Existing ordinary Git/standalone cleanup remains available; missing runtime support is a clear blocker, not permission to sweep. Repeated operations preserve recreated identities and unrelated worktrees.
 
+### Independent continuation after the runtime prerequisite
+
+The maintainer explicitly requested groups 4 and 5 to proceed independently while task 3.3 and its PR outcome remain unchecked. Do not wire an unreleased runtime or enable removal to unblock them. Shared-case reporting must distinguish actual unsupported runtime sequencing from completed independent behavioral bindings; incomplete runtime coverage cannot be converted into a skipped passing case. Frozen inputs and the OpenSpec boundary remain unchanged.
+
 ### Readiness, hold and finalized drafts
 
 Keep unambiguous Proposal/Implementation/Acceptance/Automation linkage and required completion. Accept one-or-more meaningful outcomes and flexible natural language; remove arbitrary count/style/lexical gates while retaining malformed-metadata and substantive validation failures. Local inspection and trusted promotion share one validator. Planning validation never means implementation readiness.

@@ -55,6 +55,14 @@ Observed checks: all 42 isolated cleanup tests and 32 worktree/guidance/planning
 
 After the cleanup checkpoint, hardened the disposable Git fixture helpers against ambient `GIT_DIR`, working-tree and index selectors, and disabled caller hooks/signing for fixture setup. A new regression deliberately points those selectors at another disposable caller fixture and verifies its refs, index and working source remain unchanged. This is a test-isolation repair, not runtime ownership wiring or a real-user repository probe. Observed follow-up: the new isolation regression plus C34/C38/C41 checks (4 tests), selected context/attachment checks (4 tests), and all 14 worktree-helper checks pass; types, names, strict validation and diff whitespace checks also pass. Production cleanup behavior is unchanged; task 3.3 remains blocked.
 
+## Independent group 4 completion
+
+The maintainer explicitly authorized independent groups 4 and 5 while retaining the task 3.3 dependency and unchecked cleanup outcome. Group 4 now uses one structural body validator for local inspection, trusted promotion and modern ready-PR validation. It accepts one-or-more outcomes, arbitrary meaningful prose/counts and ordinary testing/coverage/link vocabulary; duplicate/unterminated machine blocks, missing completion and incorrect archive/head associations remain blockers. Legacy version-1/in-progress readers remain supported; no-spec metadata or OpenSpec framework assets were changed.
+
+Promotion can resume a finalized draft only from verified current archive/tasks/history, without recreating active artifacts. All controller mutations freshly check hold and candidate identity; finalization checks before local archive, push and body writes. Hold release triggers bounded fresh promotion/finalization/refresh/docs evaluation. The hold label is declared only in reviewed configuration; no label/settings/workflow activation was applied live. CI exposes held delivery without inferring human-arm ownership or acceptance.
+
+Observed group-4 checks: 72 automation tests and 23 governance tests pass; types, names and strict change validation pass. Tests include archive-resume and hold races at archive/push/body/branch-update boundaries. These are source/fixture results, not live activation or runtime cleanup acceptance. Task 3.3 and the cleanup PR outcome remain unchecked.
+
 ## Remaining blockers and evidence boundaries
 
 - Task 3.3 depends on a compatible released A1 exact-operation interface. Latest read-only inspection is recorded above; compatible released interface availability and trusted ownership wiring have not been established. Keep that task and the PR's third outcome incomplete until verified. Standalone repository operations remain separately implementable. Do not substitute complete/discard/sweep.

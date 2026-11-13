@@ -7,8 +7,17 @@ Source policy is not live hosting configuration. `config/github-repository-gover
 Delivery policy: [Shared delivery rules](delivery-rules.md), using only the `xrbuild` entry in
 [Delivery adapters](delivery-adapters.json). Progress/readiness: R05-R08; integration/activation: R09-R11;
 local operations: R12-R16. This runbook documents repository architecture and command syntax, not alternative policy.
-The contract-reconciliation record in PR #19 lists unfinished controller/runtime migration work; installing guidance
-alone does not demonstrate contract-conformant automation.
+The contract-reconciliation record in PR #19 distinguishes completed source checks from unfinished runtime and live
+activation evidence. `pr-body.mjs` owns structural completion validation for trusted promotion and local stdin inspection
+(`inspect-body.mjs` accepts `{body,tasks}`). It accepts meaningful one-or-more outcomes and plain acceptance without
+count/style/vocabulary heuristics; malformed or incomplete linkage/work still blocks. Finalized drafts use their exact
+version-1 archive/history rather than recreating an active folder. Historical/in-progress readers remain supported.
+
+`delivery-hold` is declared in reviewed repository configuration; this PR does not apply labels/settings live.
+Promotion, finalization, ready-branch refresh and documentation integration re-read it before mutations. Removing it
+triggers fresh evaluation through the existing bounded controllers. Delivery checks also expose held state. A native
+human auto-merge arm is not proof of candidate acceptance or a promise of pause; unresolved ownership/binding must
+be reported rather than blindly cancelling a person's arm.
 
 Trusted main policy inspects the exact PR head as data with read-only credentials first. Unchecked implementation stays draft with a stable incomplete result. A fully checked body with unfinished detailed tasks or malformed acceptance/association reports an error explaining the blocker. Only an eligible snapshot requests a bot token, then rechecks PR identity, repository, base, head and body before promotion. No agent ready mutation, candidate dependency install or candidate script execution occurs with privileged credentials.
 

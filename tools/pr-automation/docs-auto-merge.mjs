@@ -12,6 +12,7 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseLink } from './pr-body.mjs';
+import { held, samePullSnapshot, HOLD_LABEL } from './snapshot.mjs';
 
 export const OPT_OUT_LABEL = 'no-auto-merge';
 /** Who may have armed auto-merge on this tool's behalf: the App (BOT_LOGIN) and, before it, the workflow token. */
@@ -29,7 +30,7 @@ export function isDocsPath(file) {
  * to link) an OpenSpec change, `touchesChange` when the PR adds or edits a file in an active change folder.
  */
 export function planAutoMerge({ files, draft, labels, sameRepo, baseRef, autoMergeBy, linksChange = false, touchesChange = false }) {
-  const eligible = sameRepo && baseRef === 'main' && !draft && !labels.includes(OPT_OUT_LABEL)
+  const eligible = sameRepo && baseRef === 'main' && !draft && !labels.includes(OPT_OUT_LABEL) && !labels.includes(HOLD_LABEL)
     && !linksChange && !touchesChange && files.length > 0 && files.every(isDocsPath);
   if (eligible) return autoMergeBy ? 'none' : 'arm';
   return autoMergeBy && botLogins().has(autoMergeBy) ? 'disarm' : 'none';
@@ -45,42 +46,44 @@ function gh(args) {
   return execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
-function main(prNumber) {
+export async function reconcileDocumentation({ number, repository, get, readFiles, mutate }) {
+  const before = await get(number);
+  if (before?.number !== number) return { status: 'blocked', reason: 'documentation PR number mismatch' };
+  if (before.state !== 'open') return { status: 'skipped' };
+  const entries = await readFiles(number);
+  const files = entries.flatMap(file => file.previous_filename ? [file.filename, file.previous_filename] : [file.filename]);
+  const plan = pull => {
+    const link = parseLink(pull.body);
+    return planAutoMerge({ files, draft: pull.draft, labels: (pull.labels ?? []).map(label => typeof label === 'string' ? label : label.name),
+      sameRepo: pull.head?.repo?.full_name === repository && pull.base?.repo?.full_name === repository,
+      baseRef: pull.base?.ref, autoMergeBy: pull.auto_merge?.enabled_by?.login ?? null,
+      linksChange: link.linked || Boolean(link.error), touchesChange: files.some(touchesChangeFolder) });
+  };
+  const action = plan(before);
+  if (action === 'none') return { status: 'none' };
+  const current = await get(number);
+  const snapshot = action === 'disarm'
+    ? samePullSnapshot({ ...before, labels: [] }, { ...current, labels: [] }, { draft: current.draft })
+    : samePullSnapshot(before, current, { draft: false });
+  if (!snapshot || plan(current) !== action || current.auto_merge?.enabled_by?.login !== before.auto_merge?.enabled_by?.login
+    || JSON.stringify(await readFiles(number)) !== JSON.stringify(entries) || action === 'arm' && held(current)) return { status: 'deferred', reason: 'documentation candidate changed or held' };
+  await mutate(action, current);
+  return { status: action };
+}
+
+async function main(prNumber) {
   const repo = process.env.GITHUB_REPOSITORY;
   if (!repo || !/^\d+$/.test(prNumber ?? '')) throw new Error('usage: docs-auto-merge.mjs <pr-number> (GITHUB_REPOSITORY set)');
-  const pr = JSON.parse(gh(['api', `repos/${repo}/pulls/${prNumber}`]));
-  if (pr.state !== 'open') return console.log(`#${prNumber} is ${pr.state}: nothing to do`);
-  const pages = JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${prNumber}/files`]));
-  const entries = pages.flat();
-  const files = entries.flatMap((f) => (f.previous_filename ? [f.filename, f.previous_filename] : [f.filename]));
-  const link = parseLink(pr.body);
-  const plan = planAutoMerge({
-    files,
-    draft: pr.draft,
-    labels: pr.labels.map((l) => l.name),
-    sameRepo: pr.head.repo?.full_name === repo,
-    baseRef: pr.base.ref,
-    autoMergeBy: pr.auto_merge?.enabled_by?.login ?? null,
-    linksChange: link.linked || Boolean(link.error),
-    touchesChange: entries.some((f) => f.status !== 'removed' && touchesChangeFolder(f.filename)),
+  const result = await reconcileDocumentation({ number: Number(prNumber), repository: repo,
+    get: n => JSON.parse(gh(['api', `repos/${repo}/pulls/${n}`])),
+    readFiles: n => JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${repo}/pulls/${n}/files`])).flat(),
+    mutate: (action, pr) => action === 'disarm'
+      ? gh(['pr', 'merge', prNumber, '--repo', repo, '--disable-auto'])
+      : gh(['pr', 'merge', prNumber, '--repo', repo, '--auto', '--squash', '--match-head-commit', pr.head.sha]),
   });
-  console.log(`#${prNumber}: ${files.length} file(s), plan: ${plan}`);
-  if (plan === 'disarm') gh(['pr', 'merge', prNumber, '--repo', repo, '--disable-auto']);
-  if (plan !== 'arm') return;
-  try {
-    gh(['pr', 'merge', prNumber, '--repo', repo, '--auto', '--squash', '--match-head-commit', pr.head.sha]);
-  } catch (e) {
-    // Checks already passed ("clean status"): GitHub will not arm auto-merge, so merge now.
-    if (!/clean status/i.test(String(e.stderr))) throw e;
-    gh(['pr', 'merge', prNumber, '--repo', repo, '--squash', '--match-head-commit', pr.head.sha]);
-  }
+  console.log(`#${prNumber}: ${result.status}`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  try {
-    main(process.argv[2]);
-  } catch (e) {
-    console.error(String(e.stderr || e.message || e));
-    process.exit(1);
-  }
+  main(process.argv[2]).catch(e => { console.error(String(e.stderr || e.message || e)); process.exitCode = 1; });
 }

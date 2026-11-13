@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { changesInTree } from './delivery.mjs';
 import { parseLink, writeLink } from './pr-body.mjs';
+import { held, samePullSnapshot } from './snapshot.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 /** The pinned OpenSpec CLI (this package's devDependency), run with the current Node. */
@@ -43,7 +44,10 @@ export function finalizeChange({ repo, change, author, openspec = OPENSPEC_BIN }
     throw new Error(`change "${change}" is neither active nor archived in the PR`);
   }
   const tasksFile = path.join(repo, 'openspec', 'changes', change, 'tasks.md');
-  const open = fs.existsSync(tasksFile) ? openTasks(fs.readFileSync(tasksFile, 'utf8')) : [];
+  if (!fs.existsSync(tasksFile)) throw new Error('Required tasks.md is missing');
+  const tasksText = fs.readFileSync(tasksFile, 'utf8');
+  if (!/^\s*[-*]\s+\[[ xX]\]\s+\S/m.test(tasksText)) throw new Error('Required implementation tasks are missing');
+  const open = openTasks(tasksText);
   if (open.length) return { status: 'open-tasks', tasks: open };
 
   const cli = (args) => execFileSync(process.execPath, [openspec, ...args], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, CI: '1', NO_COLOR: '1' } });
@@ -65,58 +69,56 @@ function summary(text) {
 }
 
 export function sameFinalizationSnapshot(before, after, expectedHead = before?.head?.sha) {
-  return before?.node_id === after?.node_id && before?.number === after?.number && after?.state === 'open' && after?.draft === false
-    && before?.body === after?.body && before?.base?.sha === after?.base?.sha && before?.base?.ref === after?.base?.ref
-    && before?.base?.repo?.full_name === after?.base?.repo?.full_name && before?.head?.ref === after?.head?.ref
-    && before?.head?.repo?.full_name === after?.head?.repo?.full_name && after?.head?.sha === expectedHead;
+  return samePullSnapshot(before, after, { draft: false, head: expectedHead });
 }
 
-function main(a) {
-  const repoName = process.env.GITHUB_REPOSITORY;
-  for (const k of ['repo', 'pr', 'author']) if (!a[k]) throw new Error(`missing --${k}`);
-  const gh = (args, input) => execFileSync('gh', args, { encoding: 'utf8', input, stdio: [input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
-  const pr = JSON.parse(gh(['api', `repos/${repoName}/pulls/${a.pr}`]));
-  if (pr.base?.repo?.full_name !== repoName || pr.head?.repo?.full_name !== repoName || pr.base?.ref !== 'main'
+export async function reconcileFinalization({ repository, number, get, head, finalize, push, update }) {
+  const pr = await get(number);
+  if (pr?.number !== number) throw new Error('Finalization PR number mismatch');
+  if (held(pr)) return { status: 'held', reason: 'delivery-hold pauses finalization' };
+  if (pr.base?.repo?.full_name !== repository || pr.head?.repo?.full_name !== repository || pr.base?.ref !== 'main'
     || !/^[a-f0-9]{40}$/.test(pr.head?.sha ?? '') || !/^[a-f0-9]{40}$/.test(pr.base?.sha ?? '') || !pr.node_id) throw new Error('Finalization repository or PR identity mismatch');
   const parsed = parseLink(pr.body);
   if (parsed.error) throw new Error(parsed.error);
-  if (!parsed.linked) return summary(`#${a.pr} links no OpenSpec change: nothing to finalize`);
-  if (pr.state !== 'open' || pr.draft) return summary(`#${a.pr} is ${pr.draft ? 'a draft' : pr.state}: not finalized`);
-  const head = git(a.repo, ['rev-parse', 'HEAD']);
-  if (head !== pr.head.sha) return summary(`#${a.pr} moved on (${pr.head.sha.slice(0, 7)}); the run for the new head finalizes it`);
-
-  const { change } = parsed.link;
-  const result = finalizeChange({ repo: a.repo, change, author: a.author });
-  if (result.status === 'open-tasks') {
-    summary(`### ${change}: not finalized, ${result.tasks.length} open task(s) in tasks.md\n\n${result.tasks.map((t) => `- ${t}`).join('\n')}`);
-    process.exitCode = 1;
-    return;
-  }
-  const refreshed = JSON.parse(gh(['api', `repos/${repoName}/pulls/${a.pr}`]));
-  if (!sameFinalizationSnapshot(pr, refreshed)) return summary(`#${a.pr} changed during finalization; bounded retry required, nothing pushed`);
-  let link = { ...parsed.link, archive: result.archive, finalizedHead: result.commit ?? head };
+  if (!parsed.linked || pr.state !== 'open' || pr.draft || head() !== pr.head.sha) return { status: 'skipped', reason: 'not a current ready linked candidate' };
+  // Re-read hold and identity before even local archive/spec writes, not just before publication.
+  if (!sameFinalizationSnapshot(pr, await get(number)) || head() !== pr.head.sha) return { status: 'skipped', reason: 'candidate changed or held before archive' };
+  const result = await finalize(parsed.link.change);
+  if (result.status === 'open-tasks') return result;
+  if (!result.archive) throw new Error('Finalizer did not provide an archive association');
+  const finalizedHead = result.commit ?? parsed.link.finalizedHead ?? pr.head.sha;
+  const link = { ...parsed.link, archive: result.archive, finalizedHead };
   if (result.status === 'finalized') {
-    git(a.repo, ['push', '--quiet', 'origin', `HEAD:refs/heads/${pr.head.ref}`]);
-    link = { ...link, finalizedHead: result.commit };
-    summary(`### ${change}: finalized\n\nArchived to \`${result.archive}\` in ${result.commit.slice(0, 7)}; CI runs on the new head.`);
-  } else {
-    summary(`### ${change}: already finalized (\`${result.archive}\`)`);
+    if (!sameFinalizationSnapshot(pr, await get(number)) || head() !== result.commit) return { status: 'skipped', reason: 'candidate changed or held before push' };
+    await push(pr.head.ref, result.commit);
   }
   if (JSON.stringify(link) !== JSON.stringify(parsed.link)) {
-    const current = JSON.parse(gh(['api', `repos/${repoName}/pulls/${a.pr}`]));
-    if (!sameFinalizationSnapshot(pr, current, link.finalizedHead)) return summary(`#${a.pr} changed before its final-head body update; preserve human text and retry`);
-    gh(['api', '-X', 'PATCH', `repos/${repoName}/pulls/${a.pr}`, '--input', '-'], JSON.stringify({ body: writeLink(pr.body, link) }));
+    if (!sameFinalizationSnapshot(pr, await get(number), result.commit ?? pr.head.sha)) return { status: 'skipped', reason: 'candidate changed or held before body update' };
+    await update(writeLink(pr.body, link));
   }
+  return { ...result, finalizedHead };
+}
+
+async function main(a) {
+  const repository = process.env.GITHUB_REPOSITORY;
+  for (const k of ['repo', 'pr', 'author']) if (!a[k]) throw new Error(`missing --${k}`);
+  const gh = (args, input) => execFileSync('gh', args, { encoding: 'utf8', input, stdio: [input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
+  const result = await reconcileFinalization({ repository, number: Number(a.pr),
+    get: n => JSON.parse(gh(['api', `repos/${repository}/pulls/${n}`])), head: () => git(a.repo, ['rev-parse', 'HEAD']),
+    finalize: change => finalizeChange({ repo: a.repo, change, author: a.author }),
+    push: ref => git(a.repo, ['push', '--quiet', 'origin', `HEAD:refs/heads/${ref}`]),
+    update: body => gh(['api', '-X', 'PATCH', `repos/${repository}/pulls/${a.pr}`, '--input', '-'], JSON.stringify({ body })),
+  });
+  summary(JSON.stringify(result));
+  if (result.status === 'open-tasks') process.exitCode = 1;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const argv = process.argv.slice(2);
   const a = {};
   for (let i = 0; i < argv.length; i += 2) a[argv[i].replace(/^--/, '')] = argv[i + 1];
-  try {
-    main(a);
-  } catch (e) {
+  main(a).catch(e => {
     console.error(`::error title=Finalization::${String(e.stderr || e.message || e).trim()}`);
-    process.exit(1);
-  }
+    process.exitCode = 1;
+  });
 }

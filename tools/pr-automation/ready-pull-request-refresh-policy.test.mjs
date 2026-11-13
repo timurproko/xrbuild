@@ -8,15 +8,15 @@ const docs = read('../../.github/workflows/docs-auto-merge.yml');
 const cli = read('./refresh-ready-pull-requests.mjs');
 
 // Keep security-sensitive wiring explicit: a workflow_run event must never select candidate scripts/artifacts.
-test('refresh listens only to main PR closures and the existing docs completion bridge', () => {
+test('refresh listens only to main closures, explicit hold release and the existing docs completion bridge', () => {
   const triggers = workflow.split(/^on:\r?\n/m)[1].split(/^permissions:/m)[0];
-  assert.match(triggers, /pull_request_target:\s+branches: \[main\]\s+types: \[closed\]/);
+  assert.match(triggers, /pull_request_target:\s+branches: \[main\]\s+types: \[closed, unlabeled\]/);
   const docsName = docs.match(/^name: (.+)$/m)[1];
   assert.ok(triggers.includes(`workflows: [${docsName}]`));
   assert.match(triggers, /types: \[completed\]/);
   assert.deepEqual([...triggers.matchAll(/^  ([\w_]+):/gm)].map(match => match[1]), ['pull_request_target', 'workflow_run']);
   const gate = workflow.match(/    if: >-\r?\n([\s\S]*?)    runs-on:/)[1].trim().replace(/\s+/g, ' ');
-  assert.equal(gate, "github.event.repository.default_branch == 'main' && (github.event_name == 'workflow_run' || github.event.pull_request.merged == true)");
+  assert.equal(gate, "github.event.repository.default_branch == 'main' && (github.event_name == 'workflow_run' || github.event.pull_request.merged == true || (github.event.action == 'unlabeled' && github.event.label.name == 'delivery-hold'))");
 });
 
 test('only trusted default-branch files execute with a read-only workflow token and no installs', () => {
