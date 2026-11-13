@@ -4,7 +4,11 @@ Source policy is not live hosting configuration. `config/github-repository-gover
 
 ## Agent completion and bot readiness
 
-Keep the approved PR Implementation outcomes truthful. Check an outcome when its code/tests and detailed bookkeeping are written; add plain Acceptance before the final item. Run focused checks for changed code, not repeated broad local validation loops. Do not check future post-finalization CI, manual acceptance or merge as completed implementation.
+Delivery policy: [Shared delivery rules](delivery-rules.md), using only the `xrbuild` entry in
+[Delivery adapters](delivery-adapters.json). Progress/readiness: R05-R08; integration/activation: R09-R11;
+local operations: R12-R16. This runbook documents repository architecture and command syntax, not alternative policy.
+The contract-reconciliation record in PR #19 lists unfinished controller/runtime migration work; installing guidance
+alone does not demonstrate contract-conformant automation.
 
 Trusted main policy inspects the exact PR head as data with read-only credentials first. Unchecked implementation stays draft with a stable incomplete result. A fully checked body with unfinished detailed tasks or malformed acceptance/association reports an error explaining the blocker. Only an eligible snapshot requests a bot token, then rechecks PR identity, repository, base, head and body before promotion. No agent ready mutation, candidate dependency install or candidate script execution occurs with privileged credentials.
 

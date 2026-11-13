@@ -14,22 +14,15 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
 
 - Never add a `Co-Authored-By: Claude` (or any Claude/Anthropic) trailer to commit messages,
   and no "Generated with Claude Code" lines in commits or PR descriptions.
-- Commit/publication permission follows `Authorization and operation scope` in the repository-owned delivery skill;
-  edit-only stays local, while a PR-delivery request includes scoped commits and pushes.
+- Delivery authority: [Shared delivery rules](../docs/delivery-rules.md#r02---authority).
 - Keep commit messages concise: a short subject line, then a few bullets only if needed.
-- Tick tasks and PR outcomes as the `Implementation progress` paragraph of `AGENTS.md` (imported above) says.
-  Add plain Acceptance before the final item and leave post-ready CI/integration pending until observed.
-  Only trusted automation promotes completed exact snapshots; do not invoke ready or mark unfinished tasks done.
-  Run focused changed-code checks rather than broad repeated validation loops before pushing.
+- Progress, validation and readiness: [Shared delivery rules](../docs/delivery-rules.md#r05---progress-and-publication).
 
 ## Changes and pull requests
 
-- Every change follows the repository-owned `change-delivery` skill (`.claude/skills/change-delivery/SKILL.md`):
-  explicit task identity, planning draft, approved implementation in an isolated checkout, and trusted finalization
-  through supported OpenSpec integration points. Planning/remote administration needs no checkout or setup;
-  implementation does. See the skill's `Authorization and operation scope` for request permissions. OpenSpec skills,
-  generated commands and framework lifecycle remain unchanged; report conflicts instead of overriding them.
-  Agents never merge, arm auto-merge or push to `main`; the maintainer merges.
+- Delivery policy: [Shared delivery rules](../docs/delivery-rules.md), using the `xrbuild` entry in
+  [Delivery adapters](../docs/delivery-adapters.json). Repository command details:
+  `.claude/skills/change-delivery/SKILL.md`.
 - Missing canonical contracts after an accepted public bootstrap may use an explicitly approved contract-only
   checkpoint under `docs/spec-baseline-reconciliation.md`. Preserve historical plans/tasks and recorded contract
   order; only the normal bot synchronizes/archives the completed checkpoint. A successor stays blocked until

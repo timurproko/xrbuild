@@ -2,7 +2,7 @@
 
 ### Requirement: Delivery skill
 
-The repository SHALL own delivery in `.claude/skills/change-delivery/SKILL.md`, with repository-owned root instructions and project context routing to it. Guidance SHALL distinguish planning, implementation, publication, acceptance, integration and removal authority without duplicating repository procedures or modifying or overriding OpenSpec skills, generated commands or framework semantics. A PR-delivery request SHALL include scoped commits/pushes; edit-only and planning-only SHALL not imply broader operations. Repository guidance SHALL describe trusted delivered-change finalization through supported integration points while leaving generic OpenSpec sync/archive skills unchanged; conflicts requiring framework changes SHALL be reported as separately scoped blockers. Private export, remote deletion and hosting mutation retain explicit permission.
+The repository SHALL route delivery through the exact shared contract in `docs/delivery-rules.md`, with `.claude/skills/change-delivery/SKILL.md` supplying compatible repository command details and repository-owned root instructions and project context linking to that contract. Guidance SHALL distinguish planning, implementation, publication, acceptance, integration and removal authority without duplicating repository procedures or modifying or overriding OpenSpec skills, generated commands or framework semantics. A PR-delivery request SHALL include scoped commits/pushes; edit-only and planning-only SHALL not imply broader operations. Repository guidance SHALL describe trusted delivered-change finalization through supported integration points while leaving generic OpenSpec sync/archive skills unchanged; conflicts requiring framework changes SHALL be reported as separately scoped blockers. Private export, remote deletion and hosting mutation retain explicit permission.
 
 #### Scenario: Agent starts a task
 - **WHEN** an agent is asked to deliver a change in the core
@@ -235,7 +235,7 @@ AGENTS.md SHALL contain the exact R17 routing paragraph to the shared `docs/deli
 
 #### Scenario: Single owner
 - **WHEN** `.claude/CLAUDE.md`, the delivery skill or the PR template mention implementation progress
-- **THEN** they refer to the `AGENTS.md` paragraph and do not restate it
+- **THEN** they link to the shared contract routed by `AGENTS.md` and do not restate its progress policy
 
 ## ADDED Requirements
 

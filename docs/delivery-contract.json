@@ -1,0 +1,18 @@
+{
+  "contract": "portable-delivery-v1",
+  "encoding": "UTF-8 without BOM; LF; one final newline",
+  "files": {
+    "delivery-rules.md": {
+      "sha256": "2e3caedb76ba2da7d1172c2dde0faed9d333a7d6bfa79634734df17ecd3b4d59",
+      "installTo": "docs/delivery-rules.md"
+    },
+    "delivery-adapters.json": {
+      "sha256": "8a8b0c4e395003457ce0f2f7d0eae78a9cde227d4db6f4fc550f764e609fd741",
+      "installTo": "docs/delivery-adapters.json"
+    },
+    "delivery-cases.json": {
+      "sha256": "e35a6024a97fe355f7eb9d6efbc8502fd67f2191949b08f6338f07d283d61f4c",
+      "installTo": "docs/delivery-cases.json"
+    }
+  }
+}

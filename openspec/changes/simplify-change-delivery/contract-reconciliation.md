@@ -1,0 +1,35 @@
+# Existing-work reconciliation
+
+## Checkpoint and authority
+
+Inspected local and fetched remote head: `8b3b5f98b21ce7c1672dbf7c9a6c82d68b91ccdf` on `chore/simplify-change-delivery`, PR #19 in `timurproko/xrbuild`, base `main` at `7d0ea7ebb785c4cbfdc5671250daaae0f3e2d851`. The maintainer's current request to work on PR #19 continues the presented implementation scope. No merge, deletion, hosting activation or private export is requested.
+
+This record precedes further affected implementation (R20 / C48). The existing history, publisher, tests and unrelated completed tasks 1.2/1.3 are preserved. No reset or discard was used. A pre-existing non-worktree path was retained; implementation is in a separately attached owned checkout of the same branch/PR. Attachment succeeded after checkout creation; failed entry/attachment attempts were not treated as success (R04 / C09-C13).
+
+## Observations and corrections
+
+| Rules / cases | Inspected behavior | Disposition |
+| --- | --- | --- |
+| R01 / C01-C02 | Complete branch diff leaves `.claude/skills/openspec-*` and `.claude/commands/opsx/` unchanged. `openspec/config.yaml` edits are repository context, not schema/framework modifications. No generation was run. | Preserve protected assets; replace duplicated repository context with a shared-contract link, not framework overrides. |
+| R02-R03 / C03-C08 | `publish-plan.mjs` uses explicit repository/base/head, public reviewed text artifacts, create-only/non-force refs, pre-write ref rechecks and identical-PR retry discovery. Planning creates unchecked drafts and does not invoke setup/runtime/sweep. | Preserve completed 1.2. Its ten mocked tests passed at the checkpoint. Shared behavioral-case bindings remain open under 5.5; this is not a claim that all shared cases pass. |
+| R16 / C42-C43 | Publisher receives stdin/memory payloads, rejects caller file paths and obvious credential/name violations, and does not persist credentials. Implementation scratch remains checkout-local. | Preserve completed 1.3 and its tests. Filtering is not export approval. |
+| R05, R06, R17 / C14-C16, C49 | Root/skill/template still duplicate per-outcome network barriers, minimum-two outcomes and prose counts. The portable-planning runbook restates authority. Deployed contract files are absent. | Task 1.1 remains reopened. Install exact files and routing; replace duplicated repository guidance with links. Keep tooling changes in their later outcomes. |
+| R17-R19 / C44-C47, C49 | Checkout uses `core.autocrlf=true`; frozen Git blobs are LF, while unchecked working copies acquire CRLF. No installed-byte verifier or shared-case behavioral bindings exist yet. | Pin LF attributes for the eight contract paths (including archived snapshots), install canonical approved bytes, and add independent digest/byte/adapter/boundary verification. Full 50-case implementation coverage remains task 5.5, not a passing stub. |
+| R04, R12 / C09-C13, C32-C33 | Repository `enter` still requires a clean matching checkout and installs on entry; `add` starts from main rather than adopting a proposal. Handoff records only local identity/head. | Tasks 2.1-2.3 remain open; no claim of portable adoption/publication proof. |
+| R13-R15 / C34-C41 | Existing removal uses `git worktree remove --force` and recursive fallback without remote containment or comprehensive ignored-content/ownership checks. Runtime declaration invokes bulk sweep. | Tasks 3.1-3.4 remain open. Do not run removal or completion through this legacy route as an exact-target substitute. |
+| R06-R08 / C15-C22 | Promotion still requires at least two outcomes and 1-10 acceptance bullets; controllers lack the complete shared hold/resume contract. | Tasks 4.1-4.4 remain open; installing guidance is not implementation of these behaviors. |
+| R09-R11 / C23-C31 | Exact-candidate one-shot integration and personal-arm binding are not implemented. Docs classification is too broad and inspects destination filenames only. | Tasks 5.1-5.4 remain open. No live integration, workflow activation or human-arm cancellation is authorized here. |
+| R18 / C50 | Older project prose still describes the delivery skill as policy owner and the single-owner scenario refers to the old progress paragraph. R17 names the shared contract as policy owner. | Align project-specific prose/scenario with its existing exact-contract requirement before implementation; do not edit frozen inputs or invent an exception. |
+
+## First-outcome implementation evidence
+
+Installed all four approved snapshots at their exact `docs/` destinations, with independent pinned digests in `tools/worktree/delivery-contract.mjs`. LF attributes cover active/archived snapshots and deployed files. `AGENTS.md` has the exact routing paragraph once. Product instructions, the repository delivery skill, planning/governance runbooks, PR template, README and repository OpenSpec context link to the shared policy instead of the old authorization/progress rules. Private preservation and unrelated product/security instructions remain intact. Protected OpenSpec assets remain unchanged; verification covers modifications, deletion/rename sources and unapproved additions without requiring Git history or network access.
+
+Observed checks: 18 focused guidance/publisher tests pass (including negative byte/adapter drift, rehash, missing-case-file, encoding and protected-asset fixtures); `pnpm check:names`, `pnpm check:types`, strict OpenSpec change validation and `git diff --check` pass. Public dependencies were installed explicitly in this checkout with the frozen lockfile and scripts disabled. These focused installation tests do not claim complete behavioral conformance for all 50 shared cases.
+
+## Remaining blockers and evidence boundaries
+
+- Task 3.3 depends on a compatible released A1 exact-operation interface. Its availability has not been established; keep that outcome incomplete until verified. Standalone repository operations remain separately implementable. Do not substitute complete/discard/sweep.
+- Current deployed safeguards remain authoritative until this PR is integrated (R09/R18). Installing planned guidance does not authorize using proposed merge/removal permissions in this session.
+- No conflict requiring a shared-contract refinement was found in this checkpoint. New ambiguity must stop its affected action under R18/C50 rather than changing hashes, expectations or adapter values.
+- Only the ten publisher tests were observed at this checkpoint. All 50 unchanged shared cases must eventually bind actual effects under 5.5; runtime compatibility, exact-head CI, live activation and optional device/human observations are separate, unclaimed evidence.
