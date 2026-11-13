@@ -98,7 +98,7 @@ test('frozen inputs reject missing cases, changed planning bytes, CRLF, BOM and 
 
 test('entry points link shared policy without old progress, prose-count or authorization overrides', () => {
   const entries = ['AGENTS.md', '.claude/CLAUDE.md', '.claude/skills/change-delivery/SKILL.md',
-    '.github/pull_request_template.md', 'docs/portable-planning.md', 'docs/pr-delivery-governance.md', 'README.md', 'openspec/config.yaml'];
+    '.github/pull_request_template.md', 'docs/portable-planning.md', 'docs/portable-worktrees.md', 'docs/pr-delivery-governance.md', 'README.md', 'openspec/config.yaml'];
   for (const file of entries) {
     const content = text(file);
     assert.match(content, /delivery-rules\.md/, `${file} must link the shared contract`);
@@ -112,7 +112,8 @@ test('entry points link shared policy without old progress, prose-count or autho
   assert.match(skill, /Private|private/);
   assert.match(skill, /legacy bulk-sweep/);
   assert.match(skill, /not a compatible exact-completion interface/);
-  assert.match(skill, /currently records local state only/);
+  assert.match(skill, /fresh remote HEAD\/containment evidence/);
+  assert.match(skill, /not automatic cleanup enrollment or acceptance/);
 });
 
 test('contract and approved planning snapshots use LF even with Windows autocrlf', () => {

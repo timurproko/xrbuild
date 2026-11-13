@@ -314,13 +314,14 @@ pnpm preview:readme
 
 Delivery policy: [Shared delivery rules](docs/delivery-rules.md), using only the `xrbuild` entry in
 [Delivery adapters](docs/delivery-adapters.json). Repository command details:
-[change-delivery](.claude/skills/change-delivery/SKILL.md). The worktree helper shares only untracked core `third_party/` entries. For private integration work, provision an
+[change-delivery](.claude/skills/change-delivery/SKILL.md) and [portable worktrees](docs/portable-worktrees.md).
+The worktree helper's explicit `--install` setup shares only untracked core `third_party/` entries. For private integration work, provision an
 independent `.xrbuild/` clone in that task worktree; never junction the primary workspace into it. Private source,
 plugin builds, app output and packages stay task-local. Cleanup refuses any `.xrbuild/` or `.artifacts/KEEP` marker;
 preserve those files separately before cleanup (sweep reports protected worktrees as dirty):
 
 ```text
-pnpm worktree add fix/hand-jitter      # .worktrees/hand-jitter on a new branch from origin/main
+pnpm worktree add fix/hand-jitter      # adopt an existing task branch, else create from origin/main; no implicit install
 pnpm worktree sweep                    # every task worktree: dirty / active / merged / closed / unknown
 pnpm worktree sweep --apply            # remove the merged, clean ones
 pnpm worktree remove hand-jitter       # remove one after its merge (--discard if its PR was closed unmerged)

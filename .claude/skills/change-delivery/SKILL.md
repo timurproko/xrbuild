@@ -20,11 +20,15 @@ operations: [protected PR delivery](../../../docs/pr-delivery-governance.md). Pl
   and the selected change's `prerequisites.md` for public/private boundaries and ordered dependencies.
 - Read the independently provisioned private clone's `CLAUDE.md` and affected plugin instructions for private work.
   Core/embedded-only work has no private-clone dependency. The private clone is not a submodule or junction.
-- Repository helper syntax: `pnpm worktree add|enter <type/short-desc>`. Current legacy helpers install public
-  dependencies and restrict re-entry; portable adoption and dirty-resume changes are still implementation work in
-  PR #19. For task-local dependency setup, the package-manager command is `pnpm install --frozen-lockfile`.
-- A1 entry/attachment syntax is in [Delivery adapters](../../../docs/delivery-adapters.json). External-agent
-  operations use ordinary Git. Resume/context policy: [R04](../../../docs/delivery-rules.md#r04---isolated-implementation-and-resume).
+- Repository helper syntax: `pnpm worktree add|enter <type/short-desc> [--a1] [--install] [--expected-head <sha>]`.
+  `add` prepares an unoccupied local/remote branch or creates from the selected base; `enter` also supports owned
+  existing contexts. `--install` explicitly links/installs public dependencies. No dependencies are installed by default.
+  For standalone task-local setup, the package-manager command is `pnpm install --frozen-lockfile`.
+- A1 entry/attachment syntax is in [Delivery adapters](../../../docs/delivery-adapters.json). Optional `--a1` invokes
+  that supported attachment adapter. Without a verifiable ownership adapter, the helper refuses existing-checkout
+  adoption; external agents can use ordinary Git in their own checkout without installing or impersonating A1.
+  Command details: [portable worktrees](../../../docs/portable-worktrees.md).
+  Resume/context policy: [R04](../../../docs/delivery-rules.md#r04---isolated-implementation-and-resume).
 
 ## Planning payloads and PR metadata
 
@@ -56,9 +60,11 @@ operations: [protected PR delivery](../../../docs/pr-delivery-governance.md). Pl
 
 ## Handoff and local-operation compatibility
 
-- Legacy local registration: `pnpm worktree handoff <short-desc> --change <change-id> --pr <n>`. It writes
-  `.artifacts/handoff.json` and prints a report skeleton. It currently records local state only, not remote
-  publication proof or automatic cleanup enrollment. Portable handoff policy: [R12](../../../docs/delivery-rules.md#r12---portable-handoff).
+- Local registration: `pnpm worktree handoff <short-desc> --change <change-id> --pr <n>`. It writes
+  `.artifacts/handoff.json` and prints a report skeleton with fresh remote HEAD/containment evidence, local Git
+  changes and unavailable-proof blockers. This is local registration, not automatic cleanup enrollment or acceptance;
+  ignored/private content is not certified by Git HEAD containment. Remote-only planning reports the publisher's
+  observed result without local registration. Portable handoff policy: [R12](../../../docs/delivery-rules.md#r12---portable-handoff).
 - Published local removal, preservation and runtime boundaries: [R13-R15](../../../docs/delivery-rules.md#r13---explicit-published-local-removal).
   PR #19's exact-target cleanup adapters remain unfinished. The existing `.a1/worktree.json` is a legacy bulk-sweep
   declaration, not a compatible exact-completion interface. Compatible released runtime support is not yet verified;

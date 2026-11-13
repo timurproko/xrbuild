@@ -6,7 +6,7 @@ Inspected local and fetched remote head: `8b3b5f98b21ce7c1672dbf7c9a6c82d68b91cc
 
 This record precedes further affected implementation (R20 / C48). The existing history, publisher, tests and unrelated completed tasks 1.2/1.3 are preserved. No reset or discard was used. A pre-existing non-worktree path was retained; implementation is in a separately attached owned checkout of the same branch/PR. Attachment succeeded after checkout creation; failed entry/attachment attempts were not treated as success (R04 / C09-C13).
 
-## Observations and corrections
+## Checkpoint observations and corrections
 
 | Rules / cases | Inspected behavior | Disposition |
 | --- | --- | --- |
@@ -28,6 +28,16 @@ Installed all four approved snapshots at their exact `docs/` destinations, with 
 Observed checks: 18 focused guidance/publisher tests pass (including negative byte/adapter drift, rehash, missing-case-file, encoding and protected-asset fixtures); `pnpm check:names`, `pnpm check:types`, strict OpenSpec change validation and `git diff --check` pass. Public dependencies were installed explicitly in this checkout with the frozen lockfile and scripts disabled. These focused installation tests do not claim complete behavioral conformance for all 50 shared cases.
 
 Follow-up owner-link regression checks exposed stale assertions looking for duplicated routing/checkpoint text in the skill. The assertions now inspect the canonical root/shared policy and checkpoint runbook while retaining private isolation, approval, historical preservation and bot-delivery checks. After repair, all 15 repository-routing/PR-body tests pass. No runtime/branch-resume implementation is included in this first checkpoint.
+
+## Second-outcome implementation evidence
+
+Continued the same branch from local/fetched head `e45c7a6d14e3f6fb40de7572ce8d118bbf5ca612`. `portable-context.mjs` now provides repository/head-verified adoption of fresh remote proposals and unoccupied local continuations, with no implicit installation, primary branch mutation, reset, remote write or private provisioning. Local descendants retain their commits; divergence/local-behind state, cached-but-vanished proposals, foreign repositories, unsafe paths, Git locks and ownership ambiguity block without replacement. Scoped acquisition tokens and fresh repository/context rechecks retain recreated locks or changed resources rather than clearing them.
+
+A1's supported attach command is the concrete optional ownership adapter; successful exit is the sole runtime confirmation, without inventory gates. Existing owned staged/unstaged/untracked edits and private task data survive resume. Missing or failed attachment blocks helper setup and leaves partial/new checkouts recoverable. Ordinary external Git worktree use remains available without A1 or an invented runtime identity. Public setup is explicit through `--install`; the create hook fails closed on unverifiable existing ownership.
+
+Handoff retains the legacy local record fields and adds repository identity, local/remote heads, fresh ancestry evidence and local Git dirty state. It distinguishes contained HEADs (including safe remote descendants) from dirty/local-only/unverifiable work. Remote-only publisher output supports handoff without local registration. Git environment overrides are isolated; linked/hardlinked artifacts are refused. No cleanup or acceptance enrollment is added.
+
+Observed checks: all 13 isolated portable-context tests and 32 worktree/guidance/planning tests pass; type checking, name guard, strict OpenSpec change validation and diff whitespace checks pass. These include component bindings for C09-C13 and C32-C33; complete normalized assertions for all 50 shared cases remain task 5.5, not a claimed passing suite. Early fixture failures (Windows short-path identity and a missing fetched fixture object) were repaired and rerun without relaxing safety assertions. A1 calls are mocked in these fixtures; no live cross-session takeover or cleanup is exercised.
 
 ## Remaining blockers and evidence boundaries
 

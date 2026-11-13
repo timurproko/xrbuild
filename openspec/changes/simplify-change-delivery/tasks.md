@@ -16,9 +16,9 @@ Contract binding: R01-R03, R16-R20; consume the matching IDs in `delivery-cases.
 
 Contract binding: R04, R12; consume the matching IDs in `delivery-cases.json` without rewriting expectations.
 
-- [ ] 2.1 Adopt selected existing remote/local task branches without replacing history; verify fresh-machine continuation, local-only commits, divergence and path conflicts.
-- [ ] 2.2 Preserve dirty owned resumes and separate dependency setup; verify live-owner refusal, primary isolation, external-agent support and private clone independence.
-- [ ] 2.3 Add publication-aware portable handoff; verify detached/clean-but-unpushed work is not advertised as remotely available.
+- [x] 2.1 Adopt selected existing remote/local task branches without replacing history; verify fresh-machine continuation, local-only commits, divergence and path conflicts.
+- [x] 2.2 Preserve dirty owned resumes and separate dependency setup; verify live-owner refusal, primary isolation, external-agent support and private clone independence.
+- [x] 2.3 Add publication-aware portable handoff; verify detached/clean-but-unpushed work is not advertised as remotely available.
 
 ## 3. Safe exact local removal
 

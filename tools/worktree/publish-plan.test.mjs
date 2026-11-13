@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import fs from 'node:fs';
 import { hashOf } from '../name-guard/name-guard.mjs';
 import { planPath, publishPlan, validatePlan } from './publish-plan.mjs';
 
@@ -66,6 +67,12 @@ test('planning publication needs no cwd, worktree, dependencies or runtime and c
   assert.deepEqual(refWrites(api).map(call => call.body), [{ ref: 'refs/heads/docs/public-plan', sha: C }]);
   assert.equal(api.calls.find(call => call.endpoint.endsWith('/pulls') && call.method === 'POST').body.draft, true);
   assert.equal(api.calls.some(call => call.method === 'DELETE'), false);
+  const portable = JSON.parse(fs.readFileSync(new URL('../../docs/delivery-cases.json', import.meta.url), 'utf8'))
+    .cases.find(item => item.id === 'C33');
+  assert.ok(portable);
+  assert.deepEqual({ localRegistrationRequired: api.calls.some(call => /handoff|worktree/.test(call.endpoint)),
+    inventedLocalPath: ['worktree', 'path', 'cwd'].some(key => Object.hasOwn(result, key)),
+    branchAndPrReported: result.branch === plan.head && Number.isSafeInteger(result.pr) }, portable.expect);
 });
 
 test('allowlist excludes private inputs, framework, generated skills, traversal and unrelated changes before remote access', async () => {

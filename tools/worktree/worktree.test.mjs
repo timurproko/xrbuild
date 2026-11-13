@@ -112,52 +112,62 @@ function repoWith(branches) {
   return { root, g };
 }
 
-test('enter creates a branch from origin/main and reuses only that clean registered checkout', () => {
+test('explicit setup links only public dependencies; verified dirty resume never resets or installs implicitly', () => {
   const { root, g } = repoWith([]);
   g('update-ref', 'refs/remotes/origin/main', g('rev-parse', 'HEAD'));
   fs.mkdirSync(path.join(root, 'third_party', 'browser'), { recursive: true });
   fs.mkdirSync(path.join(root, '.xrbuild', 'third_party', 'runtime'), { recursive: true });
   let installs = 0;
-  const options = { root, fetch: false, installFn: (dir) => { installs++; fs.mkdirSync(path.join(dir, 'node_modules')); }, log: () => {} };
-  const dir = enter('ci/task-setup', options);
-  assert.equal(dir, path.join(root, '.worktrees', 'task-setup'));
+  const options = { root, identify: () => 'timurproko/xrbuild',
+    refresh: () => ({ base: g('rev-parse', 'HEAD'), remote: null }), acquireOwnership: () => true,
+    installFn: dir => { installs++; fs.mkdirSync(path.join(dir, 'node_modules'), { recursive: true }); }, log: () => {} };
+  const dir = enter('ci/task-setup', { ...options, install: true });
+  assert.equal(fs.realpathSync.native(dir), fs.realpathSync.native(path.join(root, '.worktrees', 'task-setup')));
   assert.equal(g('branch', '--show-current'), 'main', 'primary remains on main');
   assert.equal(taskWorktrees(root).find((w) => w.name === 'task-setup').branch, 'ci/task-setup');
   assert.ok(fs.lstatSync(path.join(dir, 'third_party', 'browser')).isSymbolicLink());
   assert.ok(!fs.existsSync(path.join(dir, '.xrbuild')));
   fs.mkdirSync(path.join(root, 'third_party', 'added'));
   assert.equal(enter('ci/task-setup', options), dir);
-  assert.ok(fs.lstatSync(path.join(dir, 'third_party', 'added')).isSymbolicLink(), 're-entry links newly fetched core dependencies');
+  assert.ok(!fs.existsSync(path.join(dir, 'third_party', 'added')), 're-entry does not implicitly set up dependencies');
+  enter('ci/task-setup', { ...options, install: true });
+  assert.ok(fs.lstatSync(path.join(dir, 'third_party', 'added')).isSymbolicLink(), 'explicit setup links newly fetched public dependencies');
   assert.ok(!fs.existsSync(path.join(dir, '.xrbuild')), 're-entry does not provision private data');
-  assert.equal(installs, 1, 'no second install on reuse');
+  assert.equal(installs, 2, 'only the two explicit setup requests installed');
   assert.equal(taskBranch('ci--task-setup'), 'ci/task-setup');
   assert.throws(() => taskBranch('ci--../nope'), /worktree name/);
-  assert.throws(() => enter('fix/task-setup', options), /belongs to ci\/task-setup/);
+  assert.throws(() => enter('fix/task-setup', options), /not the selected registered task checkout/);
   fs.writeFileSync(path.join(dir, 'new-file'), 'uncommitted');
-  assert.throws(() => enter('ci/task-setup', options), /dirty/);
+  assert.equal(enter('ci/task-setup', options), dir);
+  assert.equal(fs.readFileSync(path.join(dir, 'new-file'), 'utf8'), 'uncommitted');
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('Claude Code hook re-enters a registered task and prints its path last', () => {
+test('Claude Code hook preserves a registered checkout when repository ownership is unverifiable', () => {
   const { root } = repoWith(['ci/hook-check']);
   const dir = path.join(root, '.worktrees', 'hook-check');
   fs.mkdirSync(path.join(dir, 'node_modules'));
   const hook = new URL('./claude-create.mjs', import.meta.url);
   const result = spawnSync(process.execPath, [fileURLToPath(hook)], { input: JSON.stringify({ name: 'ci--hook-check', cwd: root }), encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(fs.realpathSync.native(result.stdout.trim()).toLowerCase(), fs.realpathSync.native(dir).toLowerCase());
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  assert.ok(fs.existsSync(path.join(dir, 'node_modules')));
+  assert.ok(fs.existsSync(path.join(dir, '.git')));
   fs.rmSync(root, { recursive: true, force: true });
 });
 
 test('failed install leaves a registered checkout that enter can repair; unregistered collision is refused', () => {
   const { root, g } = repoWith([]);
   g('update-ref', 'refs/remotes/origin/main', g('rev-parse', 'HEAD'));
-  assert.throws(() => enter('ci/needs-deps', { root, fetch: false, log: () => {}, installFn: () => { throw new Error('offline'); } }), /retry with worktree enter/);
+  const options = { root, log: () => {}, identify: () => 'timurproko/xrbuild',
+    refresh: () => ({ base: g('rev-parse', 'HEAD'), remote: null }), acquireOwnership: () => true };
+  assert.throws(() => enter('ci/needs-deps', { ...options, install: true, installFn: () => { throw new Error('offline'); } }), /checkout\/history preserved/);
   assert.equal(taskWorktrees(root).find((w) => w.name === 'needs-deps').branch, 'ci/needs-deps');
-  const dir = enter('ci/needs-deps', { root, log: () => {}, installFn: (cwd) => fs.mkdirSync(path.join(cwd, 'node_modules')) });
+  const dir = enter('ci/needs-deps', { ...options, install: true, installFn: cwd => fs.mkdirSync(path.join(cwd, 'node_modules')) });
   assert.ok(fs.existsSync(path.join(dir, 'node_modules')));
   fs.mkdirSync(path.join(root, '.worktrees', 'collision'));
-  assert.throws(() => enter('ci/collision', { root, fetch: false }), /not a registered task worktree/);
+  assert.throws(() => enter('ci/collision', options), /not the selected registered task checkout/);
+  assert.throws(() => enter('ci/new-task', { ...options, fetch: false }), /Fetch cannot be disabled/);
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -225,11 +235,20 @@ test('a closed PR\'s worktree is removed only with --discard, and --discard refu
 
 test('handoff records the worktree in .artifacts/handoff.json and returns the report skeleton', () => {
   const { root, g } = repoWith(['feat/thing']);
-  const report = handoff('thing', { root, change: 'add-thing', pr: '12', now: new Date('2026-10-11T08:00:00Z') });
+  const report = handoff('thing', { root, change: 'add-thing', pr: '12', now: new Date('2026-10-11T08:00:00Z'), identify: () => 'timurproko/xrbuild' });
   const dir = path.join(root, '.worktrees', 'thing');
   const record = JSON.parse(fs.readFileSync(path.join(dir, '.artifacts', 'handoff.json'), 'utf8'));
-  assert.deepEqual({ ...record, worktree: undefined }, { worktree: undefined, branch: 'feat/thing', change: 'add-thing', pr: 12, head: g('rev-parse', 'HEAD'), time: '2026-10-11T08:00:00.000Z' });
-  assert.match(report, /^Worktree: .*thing\nBranch and PR: feat\/thing, #12 \(change add-thing\)\nCommit: [0-9a-f]{7}\nCommands run: \nBehaviour: \nGaps: \nManual test: $/);
+  assert.equal(record.branch, 'feat/thing');
+  assert.equal(record.change, 'add-thing');
+  assert.equal(record.pr, 12);
+  assert.equal(record.head, g('rev-parse', 'HEAD'));
+  assert.equal(record.time, '2026-10-11T08:00:00.000Z');
+  assert.equal(record.publicationVerified, false, 'missing remote proof is reported, not inferred');
+  assert.equal(record.unpublishedWork, true);
+  assert.match(report, /Repository: timurproko\/xrbuild/);
+  assert.match(report, /Branch and PR: feat\/thing, #12 \(change add-thing\)/);
+  assert.match(report, /Publication: unverified/);
+  assert.match(report, /Unfinished work and gaps:/);
   assert.equal(execFileSync('git', ['-C', dir, 'status', '--porcelain']).toString(), '', '.artifacts/ is ignored');
   fs.rmSync(root, { recursive: true, force: true });
 });
