@@ -82,7 +82,7 @@ test('C21: hold pauses all four controllers, and a hold introduced immediately b
 test('finalizer rechecks hold before archive, push and final-head body mutation', async () => {
   for (const at of [2, 3, 4]) {
     let reads = 0, localHead = head; const writes = [];
-    const result = await reconcileFinalization({ repository, number: 1, head: () => localHead,
+    const result = await reconcileFinalization({ repository, number: 1, head: () => localHead, readTasks: () => tasks,
       get: () => pull({ draft: false, head: { ...pull().head, sha: reads >= 3 ? finalized : head }, labels: ++reads === at ? [{ name: 'delivery-hold' }] : [] }),
       finalize: () => { writes.push('archive'); localHead = finalized; return { status: 'finalized', commit: finalized, archive: 'openspec/changes/archive/2026-11-13-fixture' }; },
       push: () => writes.push('push'), update: () => writes.push('body') });

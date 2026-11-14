@@ -13,7 +13,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { changesInTree } from './delivery.mjs';
-import { parseLink, writeLink } from './pr-body.mjs';
+import { inspectBodyProgress, parseLink, writeLink } from './pr-body.mjs';
+import { taskReference } from './promote.mjs';
 import { held, samePullSnapshot } from './snapshot.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -63,6 +64,25 @@ export function finalizeChange({ repo, change, author, openspec = OPENSPEC_BIN }
   return { status: 'finalized', archive, commit: git(repo, ['rev-parse', 'HEAD']) };
 }
 
+/** Read only tracked candidate tasks, including lost-body-update repair without recreating active files. */
+export function readFinalizationTasks(repo, link) {
+  const paths = git(repo, ['ls-tree', '-r', '--name-only', 'HEAD', '--', 'openspec/changes']).split('\n');
+  const active = `openspec/changes/${link.change}/`, activePresent = paths.some(file => file.startsWith(active));
+  const archives = [...new Set(paths.filter(file => new RegExp(`^openspec/changes/archive/\\d{4}-\\d{2}-\\d{2}-${link.change}/`).test(file))
+    .map(file => file.split('/').slice(0, 4).join('/')))];
+  let reference = `${active}tasks.md`;
+  if (link.archive || link.finalizedHead) {
+    reference = taskReference(link);
+    if (activePresent || archives.length !== 1 || reference !== `${archives[0]}/tasks.md`) throw new Error('Finalization archive association is missing or ambiguous');
+    try { git(repo, ['merge-base', '--is-ancestor', link.finalizedHead, 'HEAD']); }
+    catch { throw new Error('Finalized head is not verified in candidate history'); }
+  } else if (!activePresent) {
+    if (archives.length !== 1) throw new Error('Finalization archive/tasks evidence is missing or ambiguous');
+    reference = `${archives[0]}/tasks.md`;
+  } else if (archives.length) throw new Error('Active and archived change evidence is ambiguous');
+  try { return git(repo, ['show', `HEAD:${reference}`]); } catch { return null; }
+}
+
 function summary(text) {
   console.log(text);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`);
@@ -72,7 +92,7 @@ export function sameFinalizationSnapshot(before, after, expectedHead = before?.h
   return samePullSnapshot(before, after, { draft: false, head: expectedHead });
 }
 
-export async function reconcileFinalization({ repository, number, get, head, finalize, push, update }) {
+export async function reconcileFinalization({ repository, number, get, head, readTasks, finalize, push, update }) {
   const pr = await get(number);
   if (pr?.number !== number) throw new Error('Finalization PR number mismatch');
   if (held(pr)) return { status: 'held', reason: 'delivery-hold pauses finalization' };
@@ -81,19 +101,27 @@ export async function reconcileFinalization({ repository, number, get, head, fin
   const parsed = parseLink(pr.body);
   if (parsed.error) throw new Error(parsed.error);
   if (!parsed.linked || pr.state !== 'open' || pr.draft || head() !== pr.head.sha) return { status: 'skipped', reason: 'not a current ready linked candidate' };
-  // Re-read hold and identity before even local archive/spec writes, not just before publication.
-  if (!sameFinalizationSnapshot(pr, await get(number)) || head() !== pr.head.sha) return { status: 'skipped', reason: 'candidate changed or held before archive' };
+  // Ready state is not proof of completion: humans can ready invalid drafts or edit ready PRs back to incomplete.
+  let tasks;
+  try {
+    if (typeof readTasks !== 'function') throw new Error('Current finalization tasks reader is required');
+    tasks = await readTasks(parsed.link);
+  } catch (error) { return { status: 'blocked', reason: error.message }; }
+  const progress = inspectBodyProgress(pr.body, tasks);
+  if (progress.status !== 'complete') return { status: 'blocked', reason: progress.reason };
+  // Re-read tasks, hold and identity before even local archive/spec writes, not just before publication.
+  if (await readTasks(parsed.link) !== tasks || !sameFinalizationSnapshot(pr, await get(number)) || head() !== pr.head.sha) return { status: 'skipped', reason: 'candidate/tasks changed or held before archive' };
   const result = await finalize(parsed.link.change);
   if (result.status === 'open-tasks') return result;
   if (!result.archive) throw new Error('Finalizer did not provide an archive association');
   const finalizedHead = result.commit ?? parsed.link.finalizedHead ?? pr.head.sha;
   const link = { ...parsed.link, archive: result.archive, finalizedHead };
   if (result.status === 'finalized') {
-    if (!sameFinalizationSnapshot(pr, await get(number)) || head() !== result.commit) return { status: 'skipped', reason: 'candidate changed or held before push' };
+    if (await readTasks(link) !== tasks || !sameFinalizationSnapshot(pr, await get(number)) || head() !== result.commit) return { status: 'skipped', reason: 'candidate/tasks changed or held before push' };
     await push(pr.head.ref, result.commit);
   }
   if (JSON.stringify(link) !== JSON.stringify(parsed.link)) {
-    if (!sameFinalizationSnapshot(pr, await get(number), result.commit ?? pr.head.sha)) return { status: 'skipped', reason: 'candidate changed or held before body update' };
+    if (await readTasks(link) !== tasks || !sameFinalizationSnapshot(pr, await get(number), result.commit ?? pr.head.sha) || head() !== (result.commit ?? pr.head.sha)) return { status: 'skipped', reason: 'candidate/tasks changed or held before body update' };
     await update(writeLink(pr.body, link));
   }
   return { ...result, finalizedHead };
@@ -105,12 +133,13 @@ async function main(a) {
   const gh = (args, input) => execFileSync('gh', args, { encoding: 'utf8', input, stdio: [input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
   const result = await reconcileFinalization({ repository, number: Number(a.pr),
     get: n => JSON.parse(gh(['api', `repos/${repository}/pulls/${n}`])), head: () => git(a.repo, ['rev-parse', 'HEAD']),
+    readTasks: link => readFinalizationTasks(a.repo, link),
     finalize: change => finalizeChange({ repo: a.repo, change, author: a.author }),
     push: ref => git(a.repo, ['push', '--quiet', 'origin', `HEAD:refs/heads/${ref}`]),
     update: body => gh(['api', '-X', 'PATCH', `repos/${repository}/pulls/${a.pr}`, '--input', '-'], JSON.stringify({ body })),
   });
   summary(JSON.stringify(result));
-  if (result.status === 'open-tasks') process.exitCode = 1;
+  if (['open-tasks', 'blocked'].includes(result.status)) process.exitCode = 1;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

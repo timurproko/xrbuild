@@ -38,6 +38,7 @@ Contract binding: R05-R08; consume the matching IDs in `delivery-cases.json` wit
 
 - [x] 4.1 Use truthful coherent checkpoints and meaningful one-or-more outcomes; verify small/test-only changes and local-versus-published progress without per-outcome network barriers.
 - [x] 4.2 Share structural readiness validation without arbitrary prose/count gates; verify malformed metadata, missing required work and acceptance binding still block.
+  - Independent-review correction: finalization now applies the common body/tasks validator before archive/spec writes and metadata repair, including manually readied or edited-back ready candidates. Tracked active/archive/history evidence and fresh task/snapshot checks gate publication; invalid candidates cause no archive/push/body mutation.
 - [x] 4.3 Add delivery-hold across promotion/finalization/refresh/docs integration; verify paused snapshots, release, stale races and finalized-draft repair without active-folder restoration.
 - [x] 4.4 Preserve version-1/in-progress/historical checkpoint compatibility and distinct device/CI evidence; verify no historical or unobserved acceptance is manufactured.
 
