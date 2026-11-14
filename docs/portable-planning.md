@@ -10,7 +10,8 @@ Use an explicit repository for every operation: GitHub CLI supports `--repo owne
 `--body-file -` for a body on stdin, and `gh api repos/owner/repository/... --input -` for JSON on stdin.
 Do not rely on ambient cwd, `GH_REPO` or another task's scratch. Resolve the selected base and head, inspect existing
 refs and PRs (including closed PRs), and publish real change artifacts through normal GitHub commit/tree APIs.
-Create refs without replacement; existing work needs an observed expected head and non-force history preservation.
+Create refs without replacement; existing work needs server-enforced expected-head concurrency protection and
+history preservation. A GET followed by a non-force REST ref PATCH is not atomic expected-head protection.
 
 Body layout: [PR template](../.github/pull_request_template.md). Planning, handoff and payload policy:
 [R03](delivery-rules.md#r03---portable-planning), [R12](delivery-rules.md#r12---portable-handoff) and
@@ -57,13 +58,18 @@ secret scanner or export audit. Authentication remains with GitHub CLI; do not p
 
 1. New branches use create-only refs. Existing branches require an exact expected head and a plan-only diff,
    including rename sources. Divergent/behind branches or implementation changes are not rewritten by this helper.
-2. Before a ref write, base/head are read again. Commits have exactly the observed parent; non-force updates
-   reject concurrent divergent descendants. An API race fails, rather than force-replacing work.
+2. Before a ref write, base/head are read again. Existing branches use GitHub's `createCommitOnBranch` mutation
+   with `expectedHeadOid` and explicit repository/branch identity; selected text additions are base64-encoded.
+   The server atomically checks the expected head and creates its descendant commit. A rewind or ancestor
+   recreation between the last observation and mutation therefore fails too; there is no REST PATCH fallback.
+   New branches still use a detached commit and create-only ref POST. Base rechecks remain observational.
 3. PR discovery includes closed drafts and retains the same task. An identical draft is reused; mismatched,
    duplicate or closed PRs require explicit reconciliation. Concurrent metadata is never overwritten.
-4. If ref publication succeeds but PR publication fails, the error names the retained head. Inspect remote state,
-   then retry with that `expectedHead` and the same payload. An unchanged tree creates no new commit. If a PR
-   already exists but differs, inspect it and resolve the intended metadata explicitly; do not create another task.
+4. Lost ref/commit responses and later PR failures report unverified publication with the freshly observed tip
+   when available, not a stale candidate asserted as the current branch. Inspect that state/history/PR before
+   retrying with its observed `expectedHead` and the same payload; missing/unverifiable refs are not recreated
+   automatically. An unchanged tree creates no new commit. A differing existing PR requires explicit metadata
+   reconciliation, not a replacement task. GraphQL errors or missing commit identity never trigger a PATCH retry.
 5. Report failed/partial publication honestly. Do not delete refs/PRs to make retries pass. No local clean/detached
    status proves publication. Output records only observed public identity/head and PR, not machine-local paths.
 

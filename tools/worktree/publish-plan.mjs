@@ -87,6 +87,13 @@ export async function publishPlan(input, { request = ghRequest, banned } = {}) {
   const api = `repos/${plan.repository}`;
   const branchRef = branch => `${api}/git/ref/heads/${encodeURIComponent(branch)}`;
   const optional = async endpoint => { try { return await request(endpoint); } catch (error) { if (error.status === 404) return null; throw error; } };
+  const uncertainPublication = async candidate => {
+    let observed;
+    try { observed = (await optional(branchRef(plan.head)))?.object?.sha; } catch { /* No response is not proof of failure. */ }
+    const state = SHA.test(observed ?? '') ? `branch observed at ${observed}; inspect the existing PR and branch history, then retry with expectedHead=${observed}`
+      : 'branch missing or unverifiable; inspect remote state before any retry, do not automatically recreate it';
+    fail(`Planning publication result unverified; ${state}.${candidate ? ` Candidate commit ${candidate}.` : ''} No remote ref or PR was deleted`);
+  };
   const repository = await request(api);
   if (repository.full_name !== plan.repository || repository.private !== false) fail('The explicitly selected public repository could not be verified');
   const base = await request(branchRef(plan.base));
@@ -110,18 +117,33 @@ export async function publishPlan(input, { request = ghRequest, banned } = {}) {
   if (!SHA.test(tree.sha ?? '')) fail('Invalid planning tree');
   let head = parent;
   if (!existing || tree.sha !== commit.tree.sha) {
-    const created = await request(`${api}/git/commits`, { method: 'POST', body: {
+    // Only new refs need a detached commit object. Existing refs are committed atomically on the server.
+    const created = existing ? null : await request(`${api}/git/commits`, { method: 'POST', body: {
       message: `docs(openspec): propose ${plan.change}`, tree: tree.sha, parents: [parent],
     } });
-    if (!SHA.test(created.sha ?? '')) fail('Invalid planning commit');
-    // Recheck both selected refs immediately before publication. GitHub's non-force update also
-    // rejects a concurrent divergent descendant: every new commit has exactly the expected parent.
+    if (created && !SHA.test(created.sha ?? '')) fail('Invalid planning commit');
+    // Observational base/head rechecks are still useful, but cannot provide atomic head protection.
     const freshBase = await request(branchRef(plan.base));
     const freshHead = await optional(branchRef(plan.head));
     if (freshBase.object?.sha !== base.object.sha || freshHead?.object?.sha !== existing?.object?.sha) fail('Refs changed before publication; no branch update attempted');
-    if (existing) await request(`${api}/git/refs/heads/${encodeURIComponent(plan.head)}`, { method: 'PATCH', body: { sha: created.sha, force: false } });
-    else await request(`${api}/git/refs`, { method: 'POST', body: { ref: `refs/heads/${plan.head}`, sha: created.sha } });
-    head = created.sha;
+    try {
+      if (existing) {
+        const result = await request('graphql', { method: 'POST', body: {
+          query: 'mutation($input:CreateCommitOnBranchInput!){createCommitOnBranch(input:$input){commit{oid}}}',
+          variables: { input: {
+            branch: { repositoryNameWithOwner: plan.repository, branchName: plan.head }, expectedHeadOid: parent,
+            message: { headline: `docs(openspec): propose ${plan.change}` },
+            fileChanges: { additions: plan.files.map(file => ({ path: file.path, contents: Buffer.from(file.content, 'utf8').toString('base64') })) },
+          } },
+        } });
+        const oid = result?.data?.createCommitOnBranch?.commit?.oid;
+        if ((result?.errors !== undefined && (!Array.isArray(result.errors) || result.errors.length)) || !SHA.test(oid ?? '')) fail('Atomic planning commit rejected or unverified');
+        head = oid;
+      } else {
+        await request(`${api}/git/refs`, { method: 'POST', body: { ref: `refs/heads/${plan.head}`, sha: created.sha } });
+        head = created.sha;
+      }
+    } catch { await uncertainPublication(created?.sha); }
   }
   // Ref publication is durable. Any later failure is recoverable by selecting this exact head;
   // do not undo it, replace a concurrent PR body, or silently abandon a remote task.
@@ -145,7 +167,9 @@ export async function publishPlan(input, { request = ghRequest, banned } = {}) {
         || observed.body !== plan.body || observed.title !== plan.title) fail('Created candidate changed before readback');
     return { repository: plan.repository, branch: plan.head, change: plan.change, head, pr: pr.number, publication: 'verified', reused: false };
   } catch {
-    fail(`Plan branch retained at ${head}; inspect the existing PR and retry with expectedHead=${head}. No remote ref or PR was deleted`);
+    // A concurrent actor may have moved/deleted the ref even after our successful response.
+    // Report current evidence, not a stale candidate as though it were still the branch tip.
+    await uncertainPublication(head);
   }
 }
 

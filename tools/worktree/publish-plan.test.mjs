@@ -16,9 +16,12 @@ function payload() {
   };
 }
 
-function service({ existing = null, pulls = [], comparison, sameTree = false, beforeRef, failPull = false, raceUpdate = false } = {}) {
-  let head = existing, createdPr;
-  const calls = [];
+function service({ existing = null, pulls = [], comparison, sameTree = false, beforeRef, beforeWrite,
+  failPull = false, lostWriteResponse = false, mutationErrors = false, invalidMutation = false } = {}) {
+  let head = existing, createdPr, parentTree = T;
+  const calls = [], commits = new Map([[A, []], [B, [A]], ['f'.repeat(40), [B]]]);
+  const ancestor = (parent, tip) => parent === tip || (commits.get(tip) ?? []).some(value => ancestor(parent, value));
+  const atWrite = () => { if (beforeWrite) head = beforeWrite(head, value => { head = value; }); };
   const request = async (endpoint, options = {}) => {
     const { method = 'GET', body } = options;
     calls.push({ endpoint, method, body });
@@ -31,14 +34,27 @@ function service({ existing = null, pulls = [], comparison, sameTree = false, be
       return { object: { sha: head } };
     }
     if (route.startsWith('/compare/')) return comparison ?? { status: 'ahead', files: [{ filename: prefix + 'proposal.md' }] };
-    if (route === `/git/commits/${A}` || route === `/git/commits/${B}`) return { tree: { sha: T } };
-    if (route === '/git/trees' && method === 'POST') return { sha: sameTree ? T : U };
-    if (route === '/git/commits' && method === 'POST') return { sha: C };
-    if (route === '/git/refs' && method === 'POST') { assert.equal(head, null); head = body.sha; return {}; }
+    if ([A, B, C].some(sha => route === `/git/commits/${sha}`)) { parentTree = route.endsWith(C) ? U : T; return { tree: { sha: parentTree } }; }
+    if (route === '/git/trees' && method === 'POST') return { sha: sameTree ? parentTree : U };
+    if (route === '/git/commits' && method === 'POST') { commits.set(C, body.parents); return { sha: C }; }
+    if (route === '/git/refs' && method === 'POST') {
+      atWrite(); if (head !== null) throw new Error('ref already exists');
+      head = body.sha; if (lostWriteResponse) throw new Error('response lost'); return {};
+    }
     if (route === '/git/refs/heads/docs%2Fpublic-plan' && method === 'PATCH') {
-      assert.equal(body.force, false);
-      if (raceUpdate) throw new Error('non-fast-forward');
+      // Deliberately model real non-force REST semantics, not an invented expected-head check.
+      // Reverting the implementation to PATCH must reproduce the ancestor-rewind overwrite.
+      atWrite(); if (!head || body.force || !ancestor(head, body.sha)) throw new Error('non-fast-forward');
       head = body.sha; return {};
+    }
+    if (route === 'graphql' && method === 'POST') {
+      atWrite(); const input = body.variables.input;
+      if (head !== input.expectedHeadOid) return { errors: [{ message: 'expectedHeadOid mismatch' }] };
+      if (mutationErrors) return { errors: [{ message: 'rejected' }] };
+      if (invalidMutation) return { data: { createCommitOnBranch: { commit: null } } };
+      commits.set(C, [head]); head = C;
+      if (lostWriteResponse) throw new Error('response lost after commit');
+      return { data: { createCommitOnBranch: { commit: { oid: C } } } };
     }
     if (route.startsWith('/pulls?')) return pulls;
     if (route === '/pulls' && method === 'POST') {
@@ -53,7 +69,7 @@ function service({ existing = null, pulls = [], comparison, sameTree = false, be
   return { request, calls, head: () => head };
 }
 const publish = (plan, api) => publishPlan(plan, { request: api.request, banned });
-const refWrites = api => api.calls.filter(call => call.method !== 'GET' && /\/git\/refs(?:\/|$)/.test(call.endpoint));
+const refWrites = api => api.calls.filter(call => call.method !== 'GET' && (call.endpoint === 'graphql' || /\/git\/refs(?:\/|$)/.test(call.endpoint)));
 
 test('planning publication needs no cwd, worktree, dependencies or runtime and creates only a real draft', async () => {
   const plan = payload(), api = service();
@@ -139,12 +155,17 @@ test('existing branch requires explicit expected head; stale base/head never ove
   await assert.rejects(publish({ ...payload(), expectedHead: B }, service()), /missing/);
 });
 
-test('expected-head updates preserve history and only non-force publish a planning descendant', async () => {
+test('existing planning branches use server-side expectedHeadOid commit publication, never a REST ref PATCH', async () => {
   const plan = { ...payload(), expectedHead: B }, api = service({ existing: B });
-  await publish(plan, api);
-  const commit = api.calls.find(call => call.endpoint.endsWith('/git/commits') && call.method === 'POST');
-  assert.deepEqual(commit.body.parents, [B]);
-  assert.deepEqual(refWrites(api).map(call => call.body), [{ sha: C, force: false }]);
+  assert.equal((await publish(plan, api)).head, C);
+  const writes = refWrites(api); assert.equal(writes.length, 1); assert.equal(writes[0].endpoint, 'graphql');
+  assert.match(writes[0].body.query, /createCommitOnBranch/);
+  assert.deepEqual(writes[0].body.variables.input, {
+    branch: { repositoryNameWithOwner: plan.repository, branchName: plan.head }, expectedHeadOid: B,
+    message: { headline: 'docs(openspec): propose public-plan' },
+    fileChanges: { additions: plan.files.map(file => ({ path: file.path, contents: Buffer.from(file.content).toString('base64') })) },
+  });
+  assert.equal(api.calls.some(call => call.method === 'PATCH' || call.endpoint.endsWith('/git/commits') && call.method === 'POST'), false);
 });
 
 test('implementation, rename escapes, truncated evidence and divergence refuse planning-only updates', async () => {
@@ -161,19 +182,69 @@ test('implementation, rename escapes, truncated evidence and divergence refuse p
   }
 });
 
-test('pre-publication head race makes no ref write; API fast-forward guard handles later races', async () => {
+test('pre-publication head race makes no ref write', async () => {
   const plan = { ...payload(), expectedHead: B };
   const api = service({ existing: B, beforeRef: (calls, head) => calls.filter(call => call.endpoint.endsWith('ref/heads/docs%2Fpublic-plan')).length > 1 ? A : head });
   await assert.rejects(publish(plan, api), /Refs changed/);
   assert.equal(refWrites(api).length, 0);
-  const late = service({ existing: B, raceUpdate: true });
-  await assert.rejects(publish(plan, late), /non-fast-forward/);
-  assert.equal(late.head(), B);
+});
+
+test('atomic expected head rejects write-boundary rewinds, deletion/recreation and forward movement after the final observation', async () => {
+  for (const race of ['rewind', 'recreate-at-ancestor', 'advance', 'delete']) {
+    const actorHead = race === 'advance' ? 'f'.repeat(40) : race === 'delete' ? null : A;
+    const events = []; let api;
+    api = service({ existing: B, beforeWrite: (current, select) => {
+      assert.equal(current, B);
+      assert.equal(api.calls.filter(call => call.endpoint.endsWith('/git/ref/heads/docs%2Fpublic-plan')).length, 2,
+        'The competing actor acts after both observations, not at an initial stale read');
+      if (race === 'recreate-at-ancestor') { select(null); events.push('deleted'); select(A); events.push('recreated'); }
+      return actorHead;
+    } });
+    await assert.rejects(publish({ ...payload(), expectedHead: B }, api), /unverified/);
+    assert.equal(api.head(), actorHead, 'The atomic server rejects stale input without replacing the actor-selected state');
+    assert.equal(refWrites(api).length, 1); assert.equal(refWrites(api)[0].endpoint, 'graphql');
+    assert.equal(api.calls.some(call => call.method === 'PATCH' || call.method === 'DELETE' || call.endpoint.endsWith('/pulls') && call.method === 'POST'), false);
+    if (race === 'recreate-at-ancestor') assert.deepEqual(events, ['deleted', 'recreated']);
+  }
+});
+
+test('new refs remain create-only when another actor creates the name at the write boundary', async () => {
+  const api = service({ beforeWrite: () => A });
+  await assert.rejects(publish(payload(), api), /unverified/); assert.equal(api.head(), A);
+  assert.deepEqual(refWrites(api).map(call => call.method), ['POST']);
+  assert.equal(api.calls.some(call => call.endpoint === 'graphql' || call.method === 'PATCH' || call.method === 'DELETE'), false);
+});
+
+test('lost ref/atomic-commit responses report uncertain publication and resume the same head without duplicate commits', async () => {
+  for (const existing of [null, B]) {
+    const plan = payload(), failed = service({ existing, lostWriteResponse: true });
+    await assert.rejects(publish({ ...plan, ...(existing ? { expectedHead: existing } : {}) }, failed), new RegExp(`unverified.*observed at ${C}.*expectedHead=${C}`));
+    assert.equal(failed.head(), C); assert.equal(failed.calls.some(call => call.endpoint.endsWith('/pulls') && call.method === 'POST'), false);
+    assert.equal(failed.calls.some(call => call.method === 'DELETE'), false);
+    const resumed = service({ existing: C, sameTree: true });
+    assert.equal((await publish({ ...plan, expectedHead: C }, resumed)).head, C);
+    assert.equal(refWrites(resumed).length, 0);
+    assert.equal(resumed.calls.some(call => call.endpoint.endsWith('/git/commits') && call.method === 'POST'), false);
+  }
+});
+
+test('post-publication ref movement reports the observed tip, not the stale candidate as the retained branch', async () => {
+  const api = service({ existing: B, beforeRef: (calls, head) => calls.filter(call => call.endpoint.endsWith('/git/ref/heads/docs%2Fpublic-plan')).length >= 3 ? A : head });
+  await assert.rejects(publish({ ...payload(), expectedHead: B }, api), new RegExp(`unverified.*observed at ${A}.*expectedHead=${A}.*Candidate commit ${C}`));
+  assert.equal(api.head(), A); assert.equal(refWrites(api).length, 1);
+});
+
+test('GraphQL errors and missing commit identity never claim verified publication or fall back to PATCH', async () => {
+  for (const flags of [{ mutationErrors: true }, { invalidMutation: true }]) {
+    const api = service({ existing: B, ...flags });
+    await assert.rejects(publish({ ...payload(), expectedHead: B }, api), /unverified/); assert.equal(api.head(), B);
+    assert.equal(api.calls.some(call => call.method === 'PATCH' || call.method === 'DELETE' || call.endpoint.endsWith('/pulls') && call.method === 'POST'), false);
+  }
 });
 
 test('partial PR publication preserves ref and retry discovers the same draft without another commit', async () => {
   const plan = payload(), failed = service({ failPull: true });
-  await assert.rejects(publish(plan, failed), new RegExp(`retained at ${C}.*expectedHead=${C}`));
+  await assert.rejects(publish(plan, failed), new RegExp(`observed at ${C}.*expectedHead=${C}`));
   assert.equal(failed.head(), C);
   const pr = { number: 19, state: 'open', draft: true, title: plan.title, body: plan.body,
     head: { repo: { full_name: plan.repository }, ref: plan.head, sha: B }, base: { ref: plan.base } };
