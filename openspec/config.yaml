@@ -23,6 +23,6 @@ context: |
   contracts in their recorded order, bind them to accepted public implementation evidence, and leave historical
   plans/tasks unchanged. Its own complete tasks and normal bot finalization remain required; successors stay
   blocked until the checkpoint is bot-finalized and maintainer-merged. No private export or hosting authority follows.
-  A change ships in the PR that implements it, as the change-delivery skill describes
-  (`.claude/skills/change-delivery/SKILL.md`): plan first as a draft PR linked to the change, implementation after
-  approval, then the repo bot archives the change in that PR so main gets the code and the synced specs together.
+  Repository delivery policy: docs/delivery-rules.md using only the xrbuild entry in docs/delivery-adapters.json.
+  Repository command details: .claude/skills/change-delivery/SKILL.md. OpenSpec remains unchanged; its skills,
+  generated commands, schemas, templates and lifecycle are not overridden by this repository context.

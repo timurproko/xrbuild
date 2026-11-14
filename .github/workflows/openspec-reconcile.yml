@@ -1,5 +1,7 @@
 name: OpenSpec reconcile
 
+# Dormant in the reviewed activation profile; no activation is applied by this change.
+# Conditional legacy behavior, requiring separate review before enabling:
 # Nightly: lists OpenSpec changes still active on main that a merged PR delivered, in one issue labelled
 # `openspec-reconcile` (updated in place, closed when clean); see tools/pr-automation/reconcile.mjs.
 on:

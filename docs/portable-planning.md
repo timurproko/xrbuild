@@ -1,0 +1,77 @@
+# Portable planning and scoped authorization
+
+Policy: [Shared delivery rules](delivery-rules.md), especially R01-R03, R12 and R16, using only the `xrbuild`
+entry in [Delivery adapters](delivery-adapters.json). This runbook supplies CLI/API and publisher command details;
+OpenSpec skills and lifecycle remain unchanged.
+
+## Ordinary remote operations
+
+Use an explicit repository for every operation: GitHub CLI supports `--repo owner/repository` for PR operations,
+`--body-file -` for a body on stdin, and `gh api repos/owner/repository/... --input -` for JSON on stdin.
+Do not rely on ambient cwd, `GH_REPO` or another task's scratch. Resolve the selected base and head, inspect existing
+refs and PRs (including closed PRs), and publish real change artifacts through normal GitHub commit/tree APIs.
+Create refs without replacement; existing work needs server-enforced expected-head concurrency protection and
+history preservation. A GET followed by a non-force REST ref PATCH is not atomic expected-head protection.
+
+Body layout: [PR template](../.github/pull_request_template.md). Planning, handoff and payload policy:
+[R03](delivery-rules.md#r03---portable-planning), [R12](delivery-rules.md#r12---portable-handoff) and
+[R16](delivery-rules.md#r16---scratch-and-private-boundaries). Neither filename filtering nor the name guard proves
+export approval or confidentiality: review the entire payload before transmitting it.
+
+## Optional bounded publisher
+
+`tools/worktree/publish-plan.mjs` is an optional dependency-free Node entrypoint; use its absolute path from any
+directory and send one JSON object on stdin. It invokes authenticated `gh api` against explicit github.com API
+paths, not caller files. It never invokes Git, A1, dependency setup, cleanup, readiness or merge. Ordinary CLI/API
+operations remain available without this helper or a locally installed repository runtime.
+
+Payload fields:
+
+- `repository`, `base`, `head`, `change`: explicit public target identity, with distinct base/head.
+- `title`, `body`: real planning-draft metadata; body links only this active change.
+- `files`: objects with exactly `path` and text `content`. Only this change's `proposal.md`, `design.md`, `tasks.md`,
+  `.openspec.yaml` and `specs/<capability>/spec.md` are accepted. Proposal/design/tasks are required. This is a
+  publication allowlist, not an alternative OpenSpec schema or a reason to change generated assets.
+- `publicReviewed: true`: explicit caller attestation of confidentiality/export review for the whole payload.
+- `expectedHead`: required observed commit SHA when continuing an existing remote branch; never a force flag.
+- `expectedBase`: optional observed base SHA to bind publication to an earlier reviewed base candidate.
+
+For example, the identity portion of a payload is:
+
+```json
+{
+  "repository": "example/public-core",
+  "base": "main",
+  "head": "docs/public-plan",
+  "change": "public-plan",
+  "publicReviewed": true
+}
+```
+
+This fragment is not a publishable plan: supply the real title, body and selected file contents. There is no
+source-directory option, implicit recursive upload, automatic credential discovery in files, ref deletion or
+private-history import. The helper bounds payload size and artifact count, checks public names, and refuses
+obvious credential mistakes without echoing payloads or API response bodies. This is defense in depth, not a
+secret scanner or export audit. Authentication remains with GitHub CLI; do not put credentials in the payload.
+
+## Races and recovery
+
+1. New branches use create-only refs. Existing branches require an exact expected head and a plan-only diff,
+   including rename sources. Divergent/behind branches or implementation changes are not rewritten by this helper.
+2. Before a ref write, base/head are read again. Existing branches use GitHub's `createCommitOnBranch` mutation
+   with `expectedHeadOid` and explicit repository/branch identity; selected text additions are base64-encoded.
+   The server atomically checks the expected head and creates its descendant commit. A rewind or ancestor
+   recreation between the last observation and mutation therefore fails too; there is no REST PATCH fallback.
+   New branches still use a detached commit and create-only ref POST. Base rechecks remain observational.
+3. PR discovery includes closed drafts and retains the same task. An identical draft is reused; mismatched,
+   duplicate or closed PRs require explicit reconciliation. Concurrent metadata is never overwritten.
+4. Lost ref/commit responses and later PR failures report unverified publication with the freshly observed tip
+   when available, not a stale candidate asserted as the current branch. Inspect that state/history/PR before
+   retrying with its observed `expectedHead` and the same payload; missing/unverifiable refs are not recreated
+   automatically. An unchanged tree creates no new commit. A differing existing PR requires explicit metadata
+   reconciliation, not a replacement task. GraphQL errors or missing commit identity never trigger a PATCH retry.
+5. Report failed/partial publication honestly. Do not delete refs/PRs to make retries pass. No local clean/detached
+   status proves publication. Output records only observed public identity/head and PR, not machine-local paths.
+
+Focused mocked fixtures live in `tools/worktree/publish-plan.test.mjs`; they make no GitHub writes. No live
+publication, workflow activation, merge, private export or destructive cleanup is part of those checks.

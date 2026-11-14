@@ -4,7 +4,7 @@ import { classifyRefreshCandidate, decideRefresh, interpretBranchUpdate, refresh
 import { createGitHubRequest, runRefresh } from './refresh-ready-pull-requests.mjs';
 
 const repository = 'example/xrbuild', head = 'a'.repeat(40), target = 'b'.repeat(40);
-const candidate = (number = 1) => ({ number, state: 'open', draft: false,
+const candidate = (number = 1) => ({ number, state: 'open', draft: false, labels: [],
   base: { ref: 'main', repo: { full_name: repository } }, head: { sha: head, repo: { full_name: repository } } });
 
 function fixture({ pulls = [candidate()], behind = 1, update = { status: 202 }, override = () => undefined } = {}) {
@@ -68,7 +68,7 @@ test('stale head is freshly compared and the only mutation is expected-head upda
   assert.deepEqual(f.calls.map(call => call.path), [
     `/repos/${repository}/pulls?state=open&base=main&per_page=100&page=1`, `/repos/${repository}/pulls/1`,
     `/repos/${repository}/git/ref/heads/main`, `/repos/${repository}/compare/${target}...${head}?per_page=1`,
-    `/repos/${repository}/pulls/1/update-branch`,
+    `/repos/${repository}/pulls/1`, `/repos/${repository}/git/ref/heads/main`, `/repos/${repository}/pulls/1/update-branch`,
   ]);
   assert.deepEqual(mutations(f.calls), [{ path: `/repos/${repository}/pulls/1/update-branch`, method: 'PUT', body: { expected_head_sha: head }, expected: [202, 422] }]);
 });
@@ -84,9 +84,9 @@ test('fresh head and fresh target, not listing data, bind each candidate decisio
   let mainReads = 0;
   const otherHead = 'c'.repeat(40), otherTarget = 'd'.repeat(40);
   const f = fixture({ pulls: [candidate(), { ...candidate(2), head: { ...candidate().head, sha: otherHead } }],
-    override: path => path.endsWith('/git/ref/heads/main') ? { body: { object: { sha: mainReads++ ? otherTarget : target } } } : undefined });
+    override: path => path.endsWith('/git/ref/heads/main') ? { body: { object: { sha: mainReads++ < 2 ? target : otherTarget } } } : undefined });
   await f.run();
-  assert.equal(mainReads, 2);
+  assert.equal(mainReads, 4);
   assert.ok(f.calls.some(call => call.path.includes(`/compare/${otherTarget}...${otherHead}`)));
   assert.equal(mutations(f.calls)[1].body.expected_head_sha, otherHead);
 });

@@ -1,3 +1,5 @@
+import { held, samePullSnapshot } from './snapshot.mjs';
+
 const FULL_SHA = /^[0-9a-f]{40}$/;
 const PAGE_SIZE = 100;
 const MAX_PAGES = 10;
@@ -11,6 +13,7 @@ export function classifyRefreshCandidate(pull, repository) {
   if (pull.state !== 'open') return skip('pull request is not open');
   if (typeof pull.draft !== 'boolean') return fail('draft state is malformed');
   if (pull.draft) return skip('draft pull request');
+  if (held(pull)) return skip('delivery-hold pauses automatic refresh');
   if (pull.base?.ref !== 'main') return skip('base branch is not main');
   if (pull.base?.repo?.full_name !== repository) return skip('base repository is not the governed repository');
   if (pull.head?.repo?.full_name !== repository) return skip('head repository is a fork or unavailable');
@@ -76,6 +79,11 @@ export async function refreshReadyPullRequests({ repository, request, maxPages =
     const comparison = (await request(`${prefix}/compare/${targetSha}...${eligibility.headSha}?per_page=1`)).body;
     const decision = decideRefresh(eligibility, comparison, targetSha);
     if (decision.disposition !== 'update') return decision;
+    const current = (await request(`${prefix}/pulls/${number}`)).body;
+    const currentTarget = (await request(`${prefix}/git/ref/heads/main`)).body?.object?.sha;
+    if (!samePullSnapshot(pull, current, { draft: false }) || classifyRefreshCandidate(current, repository).disposition !== 'eligible' || currentTarget !== targetSha) {
+      return { ...decision, disposition: 'deferred', reason: 'candidate, hold or target changed before refresh' };
+    }
     const response = await request(`${prefix}/pulls/${number}/update-branch`, {
       method: 'PUT', body: { expected_head_sha: decision.headSha }, expected: [202, 422],
     });

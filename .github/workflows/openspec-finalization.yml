@@ -4,7 +4,7 @@ name: OpenSpec finalization
 on:
   pull_request_target:
     branches: [main]
-    types: [opened, ready_for_review, synchronize, reopened, edited]
+    types: [opened, ready_for_review, synchronize, reopened, edited, converted_to_draft, labeled, unlabeled]
   workflow_dispatch:
     inputs:
       pr:
@@ -82,6 +82,7 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch' && !inputs.dry_run) ||
       (github.event_name == 'pull_request_target' && !github.event.pull_request.draft &&
+       !contains(github.event.pull_request.labels.*.name, 'delivery-hold') &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        contains(github.event.pull_request.body, 'openspec-implementation'))
     runs-on: ubuntu-latest

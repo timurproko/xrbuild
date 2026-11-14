@@ -14,18 +14,15 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
 
 - Never add a `Co-Authored-By: Claude` (or any Claude/Anthropic) trailer to commit messages,
   and no "Generated with Claude Code" lines in commits or PR descriptions.
-- Commit only when asked.
+- Delivery authority: [Shared delivery rules](../docs/delivery-rules.md#r02---authority).
 - Keep commit messages concise: a short subject line, then a few bullets only if needed.
-- Tick tasks and PR outcomes as the `Implementation progress` paragraph of `AGENTS.md` (imported above) says.
-  Add plain Acceptance before the final item and leave post-ready CI/integration pending until observed.
-  Only trusted automation promotes completed exact snapshots; do not invoke ready or mark unfinished tasks done.
-  Run focused changed-code checks rather than broad repeated validation loops before pushing.
+- Progress, validation and readiness: [Shared delivery rules](../docs/delivery-rules.md#r05---progress-and-publication).
 
 ## Changes and pull requests
 
-- Every change follows the `change-delivery` skill (`.claude/skills/change-delivery/SKILL.md`): own worktree and
-  branch, plan first as a draft PR, implementation after the maintainer approves, OpenSpec finalization in the PR by
-  the repo bot, handoff, cleanup. Agents never merge, arm auto-merge or push to `main`; the maintainer merges.
+- Delivery policy: [Shared delivery rules](../docs/delivery-rules.md), using the `xrbuild` entry in
+  [Delivery adapters](../docs/delivery-adapters.json). Repository command details:
+  `.claude/skills/change-delivery/SKILL.md`.
 - Missing canonical contracts after an accepted public bootstrap may use an explicitly approved contract-only
   checkpoint under `docs/spec-baseline-reconciliation.md`. Preserve historical plans/tasks and recorded contract
   order; only the normal bot synchronizes/archives the completed checkpoint. A successor stays blocked until
@@ -137,7 +134,9 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   private instructions still apply. Follow the shared Worktrees guidance in `AGENTS.md`; do not add another linkage gate.
   Spec prerequisites are recorded in the active change.
 - `tools/pr-automation` - the PR body link (`pr-body.mjs`), delivery check, OpenSpec finalization, guarded ready-PR
-  branch refresh after main merges, docs auto-merge, unarchived-change report and nightly triage that the workflows run.
+  branch refresh after main merges, plus dormant documentation/triage/reconciliation sources. The reviewed adapter
+  disables the latter three; source presence does not mean they run. Optional one-shot integration command details
+  and offline shared-case verification are in `docs/pr-delivery-governance.md`.
 - `tools/repo-governance` + `config/github-repository-governance.json` - repository settings as code (`pnpm governance`).
 - `.github/` - CI (`ci.yml`: ready PRs keep fast selected checks; full Windows host build/tests run nightly on
   `main` or by explicit CI dispatch, not on PRs or `main` pushes), the bot workflows (OpenSpec finalization and

@@ -312,31 +312,36 @@ pnpm preview:readme
 
 ### Changes and pull requests
 
-`main` takes changes only through a squash-merged PR that passes the `CI required` check. Each task works in its own
-worktree. The helper shares only untracked core `third_party/` entries. For private integration work, provision an
+Delivery policy: [Shared delivery rules](docs/delivery-rules.md), using only the `xrbuild` entry in
+[Delivery adapters](docs/delivery-adapters.json). Repository command details:
+[change-delivery](.claude/skills/change-delivery/SKILL.md) and [portable worktrees](docs/portable-worktrees.md).
+The worktree helper's explicit `--install` setup shares only untracked core `third_party/` entries. For private integration work, provision an
 independent `.xrbuild/` clone in that task worktree; never junction the primary workspace into it. Private source,
 plugin builds, app output and packages stay task-local. Cleanup refuses any `.xrbuild/` or `.artifacts/KEEP` marker;
-preserve those files separately before cleanup (sweep reports protected worktrees as dirty):
+preserve those files separately before cleanup (sweep reports protected worktrees as dirty). The
+[published-local removal engine](docs/published-local-removal.md) retains all refs and currently requires a trusted
+ownership adapter; the default CLI preserves checkouts while that prerequisite is unavailable:
 
 ```text
-pnpm worktree add fix/hand-jitter      # .worktrees/hand-jitter on a new branch from origin/main
+pnpm worktree add fix/hand-jitter      # adopt an existing task branch, else create from origin/main; no implicit install
 pnpm worktree sweep                    # every task worktree: dirty / active / merged / closed / unknown
-pnpm worktree sweep --apply            # remove the merged, clean ones
-pnpm worktree remove hand-jitter       # remove one after its merge (--discard if its PR was closed unmerged)
+pnpm worktree sweep --apply            # merged candidates only; trusted ownership/publication/preservation checks required
+pnpm worktree remove hand-jitter       # one published local checkout, refs retained; ownership adapter required
 ```
 
-A change that needs a plan starts as a draft PR holding only its OpenSpec change, linked in the PR body's Automation
-block; the code follows in the same PR once the plan is approved. Complete Implementation outcomes and their detailed
-pre-ready tasks truthfully; trusted automation, not the agent, marks an unchanged eligible draft ready. Missing bot
-configuration or unfinished task records remain visible blockers. Once ready, the repo bot archives
-the change in the PR (specs synced), and CI's `Delivery` job turns green. The existing narrow documentation-only
-auto-merge policy remains available only when explicitly enabled; the reviewed delivery activation profile leaves that
-auxiliary workflow disabled. Implementation PRs remain maintainer-merged. Ready PRs keep the name guard, OpenSpec,
+Planning, progress and finalization: [R03-R08](docs/delivery-rules.md#r03---portable-planning). Documentation
+integration and activation: [R11](docs/delivery-rules.md#r11---documentation-integration-and-activation).
+The reviewed activation profile leaves documentation auto-merge, nightly triage and OpenSpec reconciliation disabled.
+Optional one-shot integration and `pnpm verify:delivery` are documented in the [governance runbook](docs/pr-delivery-governance.md);
+shared-case verification covers all 50 offline cases after explicit pinned-source preparation; a missing fixture is
+reported incomplete. Offline C39 verification is not compatible released runtime support or live adoption.
+Ready PRs keep the name guard, OpenSpec,
 delivery and relevant Node/workspace checks, but **do not build or test the native host**, even when host code changes.
 A skipped host check is not a successful native build. Pushes to `main` also omit that several-minute lane. The full
 Windows host build and native tests run on the scheduled nightly CI for `main`, or when CI is manually dispatched
-from Actions for a chosen ref before merging a sensitive change. A nightly failure opens a draft `fix/nightly-<date>`
-PR; it cannot retroactively block an earlier merge. The full process for agents is
+from Actions for a chosen ref before merging a sensitive change. The dormant nightly-triage source describes draft
+`fix/nightly-<date>` repair PRs only if separately reviewed and enabled; currently inspect failures in CI directly.
+A nightly result cannot retroactively block an earlier merge. The full process for agents is
 `.claude/skills/change-delivery/SKILL.md`.
 
 Repository settings, the `main` ruleset and the workflow labels are declared in
