@@ -74,6 +74,8 @@ Use delivery-hold consistently across trusted promotion, finalization, automatic
 
 Allow a fresh direct maintainer request naming the exact repository/PR/head/base candidate to be executed once through normal protected squash merge. Re-read identity, hold, finalization, required checks and applicable acceptance; bind expected head and refuse stale/pending/conflicting/ambiguous candidates. Existing non-strict base currency remains; do not add a hidden strict-current-base gate. No bypass, direct main push, independent merge choice or promise to merge later when CI becomes green.
 
+The optional implementation entrypoint is `tools/pr-automation/integrate.mjs`, not a workflow. It accepts an explicit version-1 integration request on stdin with a UUID, human actor and full candidate/body/acceptance/archive binding. Create-only durable tool-state receipts consume attempts, including blocked ones; no pending request, watcher or auto-merge arm survives. The GitHub backend reads trusted-main policy/tool bytes, effective protection, resolved required review threads, exact-head checks and archive/history as data. Current non-strict currency is unchanged. Read-only personal-arm evidence comes from the authorized owner's freshly re-read exact-candidate comment and matching native arm; recognition is not an unattended-continuation guarantee. This request protocol is separate from unchanged OpenSpec version-1 delivery metadata.
+
 Agents do not arm linked-implementation auto-merge. A personally armed route, if used, is scoped to the exact candidate and explicitly stale on relevant head/base/body/acceptance changes; fresh checks cannot substitute for fresh authorization. Ensure cancellation/reconfirmation uses verified arm ownership and exact evidence before advertising unattended continuation. Do not cancel unrelated human arms blindly or represent the native toggle alone as acceptance. Bot/controller integration authority remains limited to independently eligible routine docs under a separately enabled profile.
 
 ### Activation and private boundaries
@@ -81,6 +83,10 @@ Agents do not arm linked-implementation auto-merge. A personally armed route, if
 Correct repository-owned delivery-skill and runbook promises to match live activation without editing OpenSpec skills. This change never activates Docs auto-merge, Nightly triage or OpenSpec reconcile. Conditional contracts describe their behavior only when separately reviewed and enabled. Docs eligibility excludes AGENTS, agent skills, governance/cleanup/privileged authority even under Markdown/docs paths; include full rename sources/destinations and preserve opt-out. Hold and no-auto-merge are blockers. Routine docs remain eligible only if the controller is enabled.
 
 Keep current no-bypass protection, CI required, squash/linear policy and deployment trust. Declare any new label through reviewed governance; actual hosting apply remains separately confirmed. Public changes use neutral names and public evidence only. Private task-local clones stay independent; no shared private dependencies/output, automatic export or false device-validation claims.
+
+### Offline behavioral binding
+
+`delivery-verification.mjs` supplies the approved shared givens (not expected assertions) to local bindings. Calls go through named actual boundaries; observations are compared with every unchanged expected field. Missing IDs, unsupported shortcuts, assertion gaps and copied-result-only bindings cannot certify conformance. Disposable Git fixtures isolate all mutations and mocked remote operations. The current report has all 50 IDs, 49 passing cases and C39 explicitly incomplete, with nonzero CLI status. Full 5.5 completion waits for 3.3 rather than simulating released runtime sequencing. Static installation/boundary checks remain separate from behavioral success and live CI/device evidence.
 
 ## Risks / Trade-offs
 

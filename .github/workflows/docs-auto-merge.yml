@@ -1,10 +1,9 @@
 name: Docs auto-merge
 
-# A ready PR that changes only documentation merges by itself (squash) once "CI required" passes; see
-# tools/pr-automation/docs-auto-merge.mjs for what counts as documentation, the PRs it never takes (linked to an
-# OpenSpec change, editing an active change) and the `no-auto-merge` opt-out. Armed as the repo's GitHub App, so the
-# merge starts CI on main. pull_request_target runs main's copy of the workflow and the script; the PR's code is never
-# checked out.
+# Dormant in the reviewed xrbuild adapter/activation profile; this source does not enable integration.
+# tools/pr-automation/docs-auto-merge.mjs inspects complete paths/renames and only withdraws verified bot arms.
+# It never arms/merges under the frozen disabled adapter. Human/unknown arms remain untouched and blocked.
+# pull_request_target runs trusted main's script without checking out the candidate.
 on:
   pull_request_target:
     branches: [main]

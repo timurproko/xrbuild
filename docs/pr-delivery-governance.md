@@ -23,6 +23,40 @@ Trusted main policy inspects the exact PR head as data with read-only credential
 
 The App's ready event starts ordinary CI. The finalizer uses trusted tools, archives/synchronizes on the PR branch and rechecks before publishing and updating the body. Ordinary PR events validate the final head. Drafts do not emit a successful protected aggregate; selected gates that unexpectedly skip, fail or cancel cannot make `CI required` green. A green gate is not acceptance or permission for an agent to merge.
 
+## Optional protected integration entrypoint
+
+Policy: [R09-R10](delivery-rules.md#r09---one-shot-protected-integration). `tools/pr-automation/integrate.mjs`
+exports `candidateBinding`, `attemptOneShot` and `githubIntegrationBackend`; no workflow invokes this entrypoint.
+The backend refuses GitHub Actions execution even with a human PAT, and compares trusted-main policy/tool bytes,
+no-bypass rules and effective checks, resolved review threads,
+current archive/history and exact-head CI. It retains the adapter's non-strict base-currency setting. Proposed source
+cannot bootstrap its own trust: the tool must already match trusted main. Source tests are not a live merge acceptance.
+
+The optional CLI accepts `--ledger-dir <durable-owned-directory>` and one JSON request on stdin. Initialize that
+create-only tool-state directory separately with `--init-ledger <directory>`; never put decision receipts under
+`.artifacts/` or discard/recycle them. Request fields are `version: 1`, `operation: "merge-once"`,
+`confirmation: "merge this exact candidate once"`, a fresh UUID `decisionId`, the authorized human `actor`, and
+`expected: candidateBinding(pr)`. That binding includes repository/PR/head/base, body/acceptance hashes and the
+version-1 archive/finalized-head association. A blocked attempt consumes its decision, and prints no future authority;
+a new explicit decision is needed for another attempt. This is integration-request syntax, not new OpenSpec metadata.
+Nothing in ordinary implementation delivery runs it or authorizes a merge.
+
+`verifyPersonalArm` is read-only. It reads and re-reads an authorized arm owner's PR comment containing
+`{version:1, operation:"personal-auto-merge", binding:candidateBinding(pr), enabledAt:<native-arm-time>}`,
+and verifies current permission, finalized archive/tasks and native arm identity. A bound result neither infers
+acceptance from the toggle nor certifies unattended continuation. Unresolved/stale human arms stay untouched;
+this tool has no human-arm cancellation or implementation auto-merge arming path.
+
+## Offline shared-case verification
+
+`pnpm verify:delivery` invokes real local boundaries with disposable Git fixtures and mocked remotes, compares every
+assertion in the unchanged shared case table, and emits case IDs, boundary calls and failures. Missing bindings,
+assertion gaps, copied-results-only adapters, modified inputs and drift fail. Its nonzero incomplete report currently
+contains **49 passed cases and C39 incomplete**: released runtime sequencing is not implemented/verified. This is
+not full conformance or a skipped passing case; task 5.5 stays open with task 3.3. Ordinary unit tests separately
+check that this blocker is reported truthfully. No user checkout, companion network, hosting activation or device is
+used by this offline verifier.
+
 ## Ready-PR refresh after merges
 
 `Ready pull-request refresh` reconciles open ready PRs after a PR merges into `main`. It also listens to completion of `Docs auto-merge` as a safe reconciliation bridge if that separately declared workflow is enabled later; this does not enable documentation auto-merge. It runs only trusted default-branch scripts, never candidate code or completed-run artifacts, with globally serialized, non-canceling passes and a ten-minute job limit.
@@ -61,7 +95,7 @@ Unsupported private protection is a hard account-capability blocker. Keep the re
 - Add `--confirm apply-xr-build-governance` to a mutation mode only after reviewing its exact target and writes. Readbacks distinguish partial configuration from configured-but-not-certified automation.
 - `pnpm governance check` and legacy `apply` compare/apply declared repository settings only. They are not complete automation certification. Legacy apply also refuses bypass actors.
 
-The reviewed activation profile disables currently inactive documentation-auto-merge, nightly-triage and reconciliation workflows explicitly. Their existing narrow source policy is preserved, not broadened; re-enabling one requires a reviewed declaration change. An unknown active workflow blocks activation instead of being disabled silently. CI's existing software-only scheduled/native lane remains part of the reviewed CI workflow; this activates no hardware, publication, model or signing operation.
+The reviewed activation profile disables currently inactive documentation-auto-merge, nightly-triage and reconciliation workflows explicitly. Their source presence is not an activation claim. Documentation classification now excludes authority paths and complete rename sources, and only verified automation-owned bot arms can be withdrawn. Re-enabling a dormant controller requires separately approved compatible contract/declaration changes and observed live readback; this delivery makes none. The legacy triage/reconciliation sources are not certified as active contract-compatible controllers by these tests. An unknown active workflow blocks activation instead of being disabled silently. CI's existing software-only scheduled/native lane remains part of the reviewed CI workflow; this activates no hardware, publication, model or signing operation.
 
 A partial application never automatically removes installed protection. Preserve successful restrictions, inspect drift and repair with an approved exact configuration. Roll back only to an equally restrictive known policy; never temporarily permit direct main updates, relax required checks or change visibility to bootstrap.
 

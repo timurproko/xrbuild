@@ -43,9 +43,10 @@ Contract binding: R05-R08; consume the matching IDs in `delivery-cases.json` wit
 
 Contract binding: R01, R09-R11, R17-R20; consume the matching IDs in `delivery-cases.json` without rewriting expectations.
 
-- [ ] 5.1 Support fresh explicit exact-candidate protected squash merge while retaining separate authorization; verify stale/pending/conflicting/held/ambiguous requests and bot integration stay blocked without bypass.
-- [ ] 5.2 Define exact-candidate personal auto-merge evidence and stale-authorization handling without agent arming or blind cancellation; verify changed heads/base/body/acceptance cannot inherit approval.
-- [ ] 5.3 Exclude authority-changing docs and complete rename paths from unattended integration; verify routine eligibility, hold and opt-out without enabling the controller.
-- [ ] 5.4 Reconcile canonical no-bypass and activation-dependent docs/triage/reconcile guidance; verify source validation and live activation are distinct and no hosting mutation is required.
+- [x] 5.1 Support fresh explicit exact-candidate protected squash merge while retaining separate authorization; verify stale/pending/conflicting/held/ambiguous requests and bot integration stay blocked without bypass.
+- [x] 5.2 Define exact-candidate personal auto-merge evidence and stale-authorization handling without agent arming or blind cancellation; verify changed heads/base/body/acceptance cannot inherit approval.
+- [x] 5.3 Exclude authority-changing docs and complete rename paths from unattended integration; verify routine eligibility, hold and opt-out without enabling the controller.
+- [x] 5.4 Reconcile canonical no-bypass and activation-dependent docs/triage/reconcile guidance; verify source validation and live activation are distinct and no hosting mutation is required.
 - [ ] 5.5 Bind every unchanged shared verification case to actual repository behavior and enforce frozen contract bytes, adapter values and owner links; verify all case IDs run without skipped cases, copied expected-result stubs, policy paraphrases or OpenSpec overrides.
-- [ ] 5.6 Preserve the OpenSpec boundary in repository-owned guidance and tooling; verify the complete diff (including additions, deletions and rename paths) leaves OpenSpec skills, generated commands and framework assets unchanged, guidance contains no indirect overrides, and framework-dependent outcomes are reported as separately scoped blockers.
+  - Partial: all 50 IDs are consumed and every expected field is checked against boundary results/effects. The offline report has 49 passing cases, zero assertion failures and C39 explicitly incomplete. Missing cases, assertion gaps and expected-result-only adapters are rejected. Full completion depends on 3.3's actual released-runtime sequencing; no skipped/passing substitute is used.
+- [x] 5.6 Preserve the OpenSpec boundary in repository-owned guidance and tooling; verify the complete diff (including additions, deletions and rename paths) leaves OpenSpec skills, generated commands and framework assets unchanged, guidance contains no indirect overrides, and framework-dependent outcomes are reported as separately scoped blockers.

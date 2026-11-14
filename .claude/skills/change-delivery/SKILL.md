@@ -49,14 +49,17 @@ operations: [protected PR delivery](../../../docs/pr-delivery-governance.md). Pl
 - Name guard: `pnpm check:names`. Public TypeScript: `pnpm check:types`. Focused repository tool tests use
   `node --test tools/<tool>/<selected-file>.test.mjs`; package-specific commands are in the product instructions.
 - Strict change validation: `pnpm exec openspec validate <change-id> --strict`. This invokes unchanged OpenSpec.
-- Contract installation checks: `node --test tools/worktree/agent-guidance.test.mjs`.
+- Contract installation checks: `node --test tools/worktree/agent-guidance.test.mjs`. Shared behavioral report:
+  `pnpm verify:delivery`. It currently exits nonzero with C39 explicitly incomplete, not full conformance.
 - PR check inspection: `gh pr checks <n>`. Promotion, finalization, hold and readiness policy:
   [R06-R08](../../../docs/delivery-rules.md#r06---validation-and-readiness-structure).
 - Trusted repository automation lives in `tools/pr-automation/` and `.github/workflows/`. The finalizer's commit
   title is `docs(openspec): finalize <change-id>`; its archive association is recorded in Automation. Preserve
   that commit when continuing work. Bootstrap/activation command details are in the governance runbook.
-- Legacy controller and body-validator changes for the contract remain open in PR #19. Installing this guidance
-  is not evidence that those behaviors, exact-head CI or live activation have been observed.
+- Structural/hold controllers and the optional protected-integration entrypoint have source/fixture coverage in
+  PR #19. Integration command/request syntax is in the governance runbook; no workflow calls it. Source results
+  are not evidence of live activation, a real protected merge or device acceptance. Runtime sequencing and full
+  shared-case conformance remain incomplete as described below.
 
 ## Handoff and local-operation compatibility
 

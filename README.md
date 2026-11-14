@@ -331,13 +331,16 @@ pnpm worktree remove hand-jitter       # one published local checkout, refs reta
 
 Planning, progress and finalization: [R03-R08](docs/delivery-rules.md#r03---portable-planning). Documentation
 integration and activation: [R11](docs/delivery-rules.md#r11---documentation-integration-and-activation).
-The reviewed activation profile leaves the documentation-auto-merge workflow disabled.
+The reviewed activation profile leaves documentation auto-merge, nightly triage and OpenSpec reconciliation disabled.
+Optional one-shot integration and `pnpm verify:delivery` are documented in the [governance runbook](docs/pr-delivery-governance.md);
+shared-case verification currently reports C39 incomplete pending compatible released runtime support.
 Ready PRs keep the name guard, OpenSpec,
 delivery and relevant Node/workspace checks, but **do not build or test the native host**, even when host code changes.
 A skipped host check is not a successful native build. Pushes to `main` also omit that several-minute lane. The full
 Windows host build and native tests run on the scheduled nightly CI for `main`, or when CI is manually dispatched
-from Actions for a chosen ref before merging a sensitive change. A nightly failure opens a draft `fix/nightly-<date>`
-PR; it cannot retroactively block an earlier merge. The full process for agents is
+from Actions for a chosen ref before merging a sensitive change. The dormant nightly-triage source describes draft
+`fix/nightly-<date>` repair PRs only if separately reviewed and enabled; currently inspect failures in CI directly.
+A nightly result cannot retroactively block an earlier merge. The full process for agents is
 `.claude/skills/change-delivery/SKILL.md`.
 
 Repository settings, the `main` ruleset and the workflow labels are declared in

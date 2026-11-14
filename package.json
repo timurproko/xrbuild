@@ -12,6 +12,7 @@
     "check:names": "node tools/name-guard/name-guard.mjs check",
     "names": "node tools/name-guard/name-guard.mjs",
     "governance": "node tools/repo-governance/governance.mjs",
+    "verify:delivery": "node tools/worktree/delivery-verification.mjs",
     "hooks": "git config core.hooksPath .githooks",
     "worktree": "node tools/worktree/worktree.mjs",
     "task:repos": "node tools/worktree/repository-task.mjs",

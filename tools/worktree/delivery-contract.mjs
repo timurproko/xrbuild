@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { contextEnvironment } from './git-environment.mjs';
 
 export const ROUTING_PARAGRAPH = "Read and follow [Shared delivery rules](docs/delivery-rules.md). Use only this repository's entry in [Delivery adapters](docs/delivery-adapters.json). Do not paraphrase these rules, invent exceptions, or modify OpenSpec skills/framework; report conflicts before proceeding.";
 
@@ -84,12 +85,13 @@ export function isProtectedOpenSpecPath(file) {
 }
 
 export function verifyOpenSpecBoundary({ root,
-  paths = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean),
-  read = relative => fs.readFileSync(path.join(root, relative)) } = {}) {
+  paths = execFileSync('git', ['-c', 'core.hooksPath=/dev/null', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], { cwd: root, env: contextEnvironment(), encoding: 'utf8', timeout: 30_000, maxBuffer: 8 * 1024 * 1024 }).split('\0').filter(Boolean),
+  read = relative => fs.readFileSync(path.join(root, relative)), stat = relative => fs.lstatSync(path.join(root, relative)) } = {}) {
   for (const file of paths.filter(isProtectedOpenSpecPath)) {
     if (!Object.hasOwn(OPEN_SPEC_HASHES, file)) fail(`Unapproved OpenSpec asset added or renamed: ${file}`);
   }
   for (const [file, digest] of Object.entries(OPEN_SPEC_HASHES)) {
+    if (!stat(file).isFile()) fail(`Protected OpenSpec asset is not a regular file: ${file}`);
     // Existing framework assets have ordinary Git text line endings, not the frozen contract's byte requirement.
     const canonical = Buffer.from(read(file)).toString('utf8').replaceAll('\r\n', '\n');
     if (hash(canonical) !== digest) fail(`Protected OpenSpec asset changed: ${file}`);

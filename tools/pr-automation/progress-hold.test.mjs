@@ -70,7 +70,7 @@ test('C21: hold pauses all four controllers, and a hold introduced immediately b
     if (options?.method) writes.automaticRefreshWrites++;
     return { body: path.includes('/pulls?') ? [{ number: 1 }] : { ...held, draft: false } };
   } });
-  await reconcileDocumentation({ number: 1, repository, get: () => ({ ...held, draft: false, body: '', auto_merge: null }), readFiles: () => [{ filename: 'README.md' }], mutate: () => { writes.automationOwnedMergeWrites++; } });
+  await reconcileDocumentation({ number: 1, repository, get: () => ({ ...held, draft: false, body: '', auto_merge: null }), readFiles: () => [{ filename: 'README.md', status: 'modified', patch: '+ Clear intro' }], mutate: () => { writes.automationOwnedMergeWrites++; } });
   assert.deepEqual(writes, expected);
   let reads = 0;
   const result = await reconcile({ number: 1, repository, head: () => head, read: () => tasks,
@@ -91,7 +91,7 @@ test('finalizer rechecks hold before archive, push and final-head body mutation'
   }
 });
 
-test('refresh/docs re-read a newly introduced hold, and release evaluates the fresh candidate', async () => {
+test('refresh re-reads hold/release and docs refuses a newly substituted human arm', async () => {
   let reads = 0, writes = 0;
   const options = { repository, request: async (path, options) => {
     if (options?.method) { writes++; return { status: 202 }; }
@@ -104,8 +104,11 @@ test('refresh/docs re-read a newly introduced hold, and release evaluates the fr
   reads = 2;
   assert.equal((await refreshReadyPullRequests(options))[0].disposition, 'updated'); assert.equal(writes, 1);
   reads = 0;
-  assert.equal((await reconcileDocumentation({ number: 1, repository, get: () => pull({ draft: false, body: '', labels: ++reads === 2 ? [{ name: 'delivery-hold' }] : [] }),
-    readFiles: () => [{ filename: 'README.md' }], mutate: () => { writes++; } })).status, 'deferred');
+  assert.equal((await reconcileDocumentation({ number: 1, repository,
+    get: () => pull({ draft: false, body: '', changed_files: 1, labels: ++reads === 2 ? [{ name: 'delivery-hold' }] : [],
+      auto_merge: { enabled_by: reads === 1 ? { login: 'repo-bot[bot]', type: 'Bot' } : { login: 'maintainer', type: 'User' }, enabled_at: '2026-11-13T12:00:00Z' } }),
+    readFiles: () => [{ filename: 'README.md', status: 'modified', patch: '+ Clear intro' }], verifyOwnedArm: pr => pr.auto_merge.enabled_by.type === 'Bot',
+    mutate: () => { writes++; } })).status, 'deferred');
   assert.equal(writes, 1);
 });
 

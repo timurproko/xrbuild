@@ -4,13 +4,12 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { verifyContractInstallation } from './delivery-contract.mjs';
+import { contextEnvironment } from './git-environment.mjs';
+export { contextEnvironment } from './git-environment.mjs';
 
 const { adapter } = verifyContractInstallation({ root: path.resolve(import.meta.dirname, '../..') });
 const SHA = /^[a-f0-9]{40}$/;
 const fail = message => { throw new Error(message); };
-export const contextEnvironment = () => Object.fromEntries(Object.entries(process.env).filter(([key]) =>
-  !/^GIT_(?:DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|NAMESPACE|CONFIG_PARAMETERS|CONFIG_COUNT|CONFIG_KEY_\d+|CONFIG_VALUE_\d+)$/i.test(key)
-  && !/^(?:GH_REPO|GH_HOST)$/.test(key)));
 export function executeGit(cwd, args, { input } = {}) {
   try {
     return execFileSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], {

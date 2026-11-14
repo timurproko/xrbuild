@@ -134,7 +134,9 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   private instructions still apply. Follow the shared Worktrees guidance in `AGENTS.md`; do not add another linkage gate.
   Spec prerequisites are recorded in the active change.
 - `tools/pr-automation` - the PR body link (`pr-body.mjs`), delivery check, OpenSpec finalization, guarded ready-PR
-  branch refresh after main merges, docs auto-merge, unarchived-change report and nightly triage that the workflows run.
+  branch refresh after main merges, plus dormant documentation/triage/reconciliation sources. The reviewed adapter
+  disables the latter three; source presence does not mean they run. Optional one-shot integration command details
+  and offline shared-case verification are in `docs/pr-delivery-governance.md`.
 - `tools/repo-governance` + `config/github-repository-governance.json` - repository settings as code (`pnpm governance`).
 - `.github/` - CI (`ci.yml`: ready PRs keep fast selected checks; full Windows host build/tests run nightly on
   `main` or by explicit CI dispatch, not on PRs or `main` pushes), the bot workflows (OpenSpec finalization and
