@@ -37,6 +37,18 @@ test('C49: exact offline guidance installation and unchanged OpenSpec assets', (
   assert.equal(/https?:|fetch\(|ghRequest|execFileSync\('gh'/.test(text('tools/worktree/delivery-contract.mjs')), fixture.expect.companionNetworkReadRequiredForOfflineUse);
 });
 
+test('approved paired R11 scope preserves release-specific automation without broadening ordinary documentation', () => {
+  const rulebook = text('docs/delivery-rules.md');
+  const r11 = rulebook.slice(rulebook.indexOf('## R11 -'), rulebook.indexOf('## R12 -'));
+  assert.match(r11, /Within the ordinary documentation auto-merge controller/);
+  assert.match(r11, /Existing release-specific automation, including release-reopening PRs, remains unchanged/);
+  assert.match(r11, /does not expand release eligibility/);
+  assert.match(r11, /Do not disable that existing release-specific route or convert it to manual integration/);
+  const approval = text(`${planningDirectory}/r11-clarification.md`);
+  assert.match(approval, /No further R11 scope approval is needed/);
+  assert.match(approval, /does not.*introduce a new release route in a repository that has none/);
+});
+
 test('C44: a one-byte deployment change cannot be approved by a local rehash', () => {
   const fixture = sharedCase('C44');
   assert.equal(fixture.given.deployedRulebookDiffersByOneByte, true);

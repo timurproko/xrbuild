@@ -24,6 +24,13 @@ test('frozen disabled adapter cannot be enabled by live state, repository auto-m
   for (const change of [{ draft: true }, { labels: ['no-auto-merge'] }, { labels: ['delivery-hold'] }, { sameRepo: false }, { baseRef: 'other' }, { files: [] }]) assert.equal(planAutoMerge(options(change)), 'none');
 });
 
+test('R11 clarification does not reclassify release manifests or grant new ordinary-documentation authority', () => {
+  for (const file of ['package.json', 'pnpm-lock.yaml', 'packages/sdk/package.json']) {
+    assert.equal(classifyDocumentationDiff([{ ...entry, filename: file, patch: '+ Updated version metadata' }]).routine, false);
+    assert.equal(planAutoMerge(options({ files: [file], labels: ['release'], releaseReopening: true, liveState: 'active', controllerEnabled: true })), 'none');
+  }
+});
+
 test('only verified automation-owned bot arms may be withdrawn; human and unknown ownership remain untouched', () => {
   for (const login of ['github-actions[bot]', 'repo-bot[bot]']) {
     assert.equal(planAutoMerge(options({ autoMergeBy: login })), 'none');
