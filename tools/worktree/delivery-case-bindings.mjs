@@ -257,7 +257,10 @@ export const deliveryCaseBindings = {
     const f = gitFixture(ctx); fs.writeFileSync(path.join(f.target, '.gitmodules'), '# Regular descriptor, no gitlinks or initialized modules.\n'); git(f.target, 'add', '.gitmodules'); git(f.target, 'commit', '--quiet', '-m', 'regular descriptor'); git(f.target, 'push', '--quiet', 'origin', f.branch);
     const result = await capture(() => ctx.call('inspection', f.options)); return observed({ blockedSolelyByGitmodules: Boolean(result.error) });
   },
-  async C39(ctx) { const result = await capture(() => ctx.call('runtime')); return { incomplete: result.error?.message ?? 'Compatible released runtime sequencing is not verified' }; },
+  async C39(ctx) {
+    try { return await ctx.call('runtimeSequence', { root: ctx.root }); }
+    catch (error) { if (error.code === 'XRB_FIXTURE_MISSING') return { incomplete: error.message }; throw error; }
+  },
   async C40(ctx) { const result = await capture(() => ctx.call('runtime')); return observed({ unavailableReported: /unavailable/.test(result.error?.message ?? ''), completeSubstituted: Boolean(result.value?.complete), discardSubstituted: Boolean(result.value?.discard), sweepSubstituted: Boolean(result.value?.sweep), runtimeDeletionCalls: result.value?.deletions ?? 0 }); },
   async C41(ctx) {
     const f = gitFixture(ctx), before = git(f.root, 'rev-parse', f.branch);

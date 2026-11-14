@@ -64,6 +64,12 @@ Merged completion and explicit local removal use exact-target entrypoints; sweep
 
 The maintainer explicitly requested groups 4 and 5 to proceed independently while task 3.3 and its PR outcome remain unchecked. Do not wire an unreleased runtime or enable removal to unblock them. Shared-case reporting must distinguish actual unsupported runtime sequencing from completed independent behavioral bindings; incomplete runtime coverage cannot be converted into a skipped passing case. Frozen inputs and the OpenSpec boundary remain unchanged.
 
+### Offline preparation against the proposed runtime
+
+The maintainer authorized preparing and testing the XR local-removal adapter against the immutable proposed A1 revision `e6e52727e4e9a00be3c6ab715d3a9e6d42925ef8`, without live adoption. Explicit fixture preparation may download a hash-pinned, minimal public runtime source closure into ignored dependency cache; ordinary tests/verifiers must never fetch the companion. Tests run the actual pinned request/context/claim/settlement implementation and actual XR preservation/publication preflight in disposable repositories. Only external dependency boundaries may be mocked; ownership records must be created/acquired through A1 itself, not supplied as invented available states or generations.
+
+C39 must observe successful preflight while attached, actual detach, a second live runtime acquiring the target, issuing-shell exit, and settlement refusing deletion while both checkouts and a usable startup context remain. Offline behavioral verification and released-runtime compatibility are separate evidence. The current proposal's `sessionWorktreeClaimState(commonDir, gitDir, options)` reports only `absent|live|unverifiable`; a supported target-bound generation observation for XR's `readClaims(context)` engine is not established. Do not synthesize one from absence, time, PID or raw internal metadata. Missing support blocks execution. Keep task 3.3 and live CLI/declaration adoption disabled until release/API compatibility is verified; never invoke the legacy sweep.
+
 ### Readiness, hold and finalized drafts
 
 Keep unambiguous Proposal/Implementation/Acceptance/Automation linkage and required completion. Accept one-or-more meaningful outcomes and flexible natural language; remove arbitrary count/style/lexical gates while retaining malformed-metadata and substantive validation failures. Local inspection and trusted promotion share one validator. Planning validation never means implementation readiness.
@@ -86,7 +92,7 @@ Keep current no-bypass protection, CI required, squash/linear policy and deploym
 
 ### Offline behavioral binding
 
-`delivery-verification.mjs` supplies the approved shared givens (not expected assertions) to local bindings. Calls go through named actual boundaries; observations are compared with every unchanged expected field. Missing IDs, unsupported shortcuts, assertion gaps and copied-result-only bindings cannot certify conformance. Disposable Git fixtures isolate all mutations and mocked remote operations. The current report has all 50 IDs, 49 passing cases and C39 explicitly incomplete, with nonzero CLI status. Full 5.5 completion waits for 3.3 rather than simulating released runtime sequencing. Static installation/boundary checks remain separate from behavioral success and live CI/device evidence.
+`delivery-verification.mjs` supplies the approved shared givens (not expected assertions) to local bindings. Calls go through named actual boundaries; observations are compared with every unchanged expected field. Missing IDs, unsupported shortcuts, assertion gaps and copied-result-only bindings cannot certify conformance. Disposable Git fixtures isolate all mutations and mocked remote operations. With the explicitly prepared immutable public source pin, the report now has all 50 IDs/assertions passing offline, including actual XR/A1 core behavior for C39. Missing dependency cache reports C39 incomplete/nonzero without automatic fetching; source drift fails. This completes offline behavioral binding under 5.5, not 3.3's released-runtime compatibility/adoption prerequisite. Static installation/boundary checks and live CI/device/release evidence remain separate.
 
 ## Risks / Trade-offs
 

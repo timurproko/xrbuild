@@ -333,7 +333,8 @@ Planning, progress and finalization: [R03-R08](docs/delivery-rules.md#r03---port
 integration and activation: [R11](docs/delivery-rules.md#r11---documentation-integration-and-activation).
 The reviewed activation profile leaves documentation auto-merge, nightly triage and OpenSpec reconciliation disabled.
 Optional one-shot integration and `pnpm verify:delivery` are documented in the [governance runbook](docs/pr-delivery-governance.md);
-shared-case verification currently reports C39 incomplete pending compatible released runtime support.
+shared-case verification covers all 50 offline cases after explicit pinned-source preparation; a missing fixture is
+reported incomplete. Offline C39 verification is not compatible released runtime support or live adoption.
 Ready PRs keep the name guard, OpenSpec,
 delivery and relevant Node/workspace checks, but **do not build or test the native host**, even when host code changes.
 A skipped host check is not a successful native build. Pushes to `main` also omit that several-minute lane. The full

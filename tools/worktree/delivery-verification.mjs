@@ -13,6 +13,7 @@ import { reconcileFinalization } from '../pr-automation/finalize.mjs';
 import { refreshReadyPullRequests } from '../pr-automation/ready-pull-request-refresh.mjs';
 import { reconcileDocumentation, classifyDocumentationDiff } from '../pr-automation/docs-auto-merge.mjs';
 import { attemptOneShot, evaluateIntegration, inspectPersonalArm } from '../pr-automation/integrate.mjs';
+import { verifyOfflineRuntimeSequence } from './offline-runtime-verification.mjs';
 
 export const CASE_BOUNDARIES = Object.freeze({
   C01: ['scope'], C02: ['scope'], C03: ['planning'], C04: ['authority', 'operation'], C05: ['authority'], C06: ['authority', 'operation'],
@@ -21,7 +22,7 @@ export const CASE_BOUNDARIES = Object.freeze({
   C20: ['promotion'], C21: ['promotion', 'finalization', 'refresh', 'documentation'], C22: ['promotion'],
   C23: ['integration'], C24: ['integration'], C25: ['integration'], C26: ['integrationCurrency'], C27: ['integrationCurrency'], C28: ['personalArm'],
   C29: ['documentation'], C30: ['documentationDiff'], C31: ['documentation'], C32: ['handoff'], C33: ['planning'],
-  C34: ['removal'], C35: ['publication'], C36: ['removal'], C37: ['removal'], C38: ['inspection'], C39: ['runtime'], C40: ['runtime'], C41: ['removal'],
+  C34: ['removal'], C35: ['publication'], C36: ['removal'], C37: ['removal'], C38: ['inspection'], C39: ['runtimeSequence'], C40: ['runtime'], C41: ['removal'],
   C42: ['planning'], C43: ['scratch'], C44: ['installation'], C45: ['installation'], C46: ['coverage'], C47: ['behavior'], C48: ['reconciliation'],
   C49: ['installation', 'framework'], C50: ['reconciliation'],
 });
@@ -41,7 +42,7 @@ const boundaries = Object.freeze({
   scope: reviewDeliveryScope, authority: deliveryAuthority, operation: performDeliveryOperation,
   completion: completionEvidence, scratch: implementationScratch, reconciliation: reconciliationGate,
   planning: publishPlan, enter, handoff: describeHandoff, publication: publicationEvidence,
-  removal: removePublishedCheckout, inspection: inspectRemovalTarget, runtime: runtimeCleanupUnavailable,
+  removal: removePublishedCheckout, inspection: inspectRemovalTarget, runtime: runtimeCleanupUnavailable, runtimeSequence: verifyOfflineRuntimeSequence,
   body: inspectBodyProgress, promotion: reconcile, finalization: reconcileFinalization, refresh: refreshReadyPullRequests,
   documentation: reconcileDocumentation, documentationDiff: classifyDocumentationDiff,
   integration: attemptOneShot, integrationCurrency: evaluateIntegration, personalArm: inspectPersonalArm,
@@ -74,12 +75,12 @@ export async function verifySharedCases({ root, bindings, cases = verifyContract
       if (!validBehavior({ calls, required: CASE_BOUNDARIES[fixture.id], observation: result?.observation })) throw new Error('Observation did not invoke all required implementation boundaries');
       const expected = fixture.expectByRepository?.xrbuild ?? fixture.expect;
       if (!isDeepStrictEqual(result.observation, expected)) throw new Error(`Observed assertions differ: ${JSON.stringify(result.observation)}`);
-      rows.push({ id: fixture.id, status: 'passed', boundaries: calls });
+      rows.push({ id: fixture.id, status: 'passed', boundaries: calls, ...(result.evidence ? { evidence: result.evidence } : {}) });
     } catch (error) { rows.push({ id: fixture.id, status: 'failed', reason: error.message, boundaries: calls }); }
     finally { for (const action of cleanup.reverse()) await action(); }
   }
   const coverage = assessCoverage(rows, ids);
-  return { contract: 'portable-delivery-v1', complete: coverage.complete && rows.every(row => row.status === 'passed'),
+  return { contract: 'portable-delivery-v1', scope: 'offline-case-assertions-only', liveRuntimeAdoption: 'disabled', releasedRuntimeCompatibility: 'unverified', complete: coverage.complete && rows.every(row => row.status === 'passed'),
     passed: rows.filter(row => row.status === 'passed').length, incomplete: rows.filter(row => row.status === 'incomplete'),
     failures: rows.filter(row => row.status === 'failed'), coverage, cases: rows };
 }

@@ -68,5 +68,49 @@ Without the trusted ownership prerequisite it cannot remove even a merged clean 
 `tools/worktree/published-removal.test.mjs` uses isolated disposable Git repositories, real non-force Git operations
 and a synthetic claimant registry. It checks remote descendants/offline evidence, each shared preservation hazard,
 normalization/stat-cache defenses, recovery history, journal/recreated-resource safety and missing-runtime blockers.
-Actual preflight/detach/shell-exit/runtime settlement remains task 3.3. Full shared-case coverage and exact-head CI
-are separate evidence; neither component tests nor this runbook certify runtime release or device acceptance.
+Live runtime adoption remains task 3.3. Offline proposed-interface verification below is separate from release
+compatibility, final-head CI and device acceptance.
+
+## Offline proposed-interface preparation (not adoption)
+
+`tools/worktree/proposed-a1-interface.json` pins public revision
+`e6e52727e4e9a00be3c6ab715d3a9e6d42925ef8` and the Git-blob/SHA-256 digests of the minimal test dependency.
+It is not a minimum released version. Explicit preparation downloads only those files into this checkout's ignored
+`.artifacts/a1-interface/<revision>/source` cache; it does not install A1. The durable dependency reference/digests
+are tracked; the cache is reconstructible, non-authoritative tool dependency storage.
+
+```text
+pnpm prepare:delivery-runtime   # explicit public test-source preparation; never run implicitly
+pnpm test:delivery-runtime      # six offline integration checks; requires the prepared dependency
+pnpm verify:delivery           # all 50 immutable shared assertions, including the actual C39 binding
+```
+
+Normal tests/verifiers never fetch the companion. Missing cache means explicit C39 incompleteness/nonzero shared
+verification; changed source bytes fail rather than being rehashed or replaced. With the prepared pinned fixture,
+all 50 offline cases pass. The report explicitly says `offline-case-assertions-only`, live adoption disabled and
+released compatibility unverified. A green unit-test run alone is not that complete offline report.
+
+The integration worker compiles the unchanged pinned request/context/claim/settlement code into disposable tool
+storage. Actual XR preflight inspects source preservation and live publication while the original attachment is
+still owned. A1's own APIs register/acquire/release claims; default pinned process-liveness inspection uses real
+live Node PIDs. An actual child with cwd at the target remains alive through detach and the second owner's
+acquisition, then exits before settlement. C39 observes `cleanup-skipped`, both preserved checkouts, zero sweep/
+deletion calls, and an actual usable startup context. Ownership information and expected assertions are not mocked.
+
+Only external command transport and the `proper-lockfile` dependency are substituted (an in-process test mutex;
+this does not certify native cross-process lock arbitration). Product-path discovery throws if explicit isolated
+`dataDir` is omitted. Tests also cover ignored-content preflight refusal, late content, declaration drift, one-shot
+settlement and the missing generation API. No real user runtime or checkout is detached/removed.
+
+### Precise remaining supported-API gap
+
+At the pin, `sessionWorktreeClaimState(commonDir, gitDir, options)` is an async source export returning only
+`absent | live | unverifiable`. It supplies no target-bound available generation/lease for the repository engine's
+synchronous `readClaims(context) -> {state:"available", target, generation}` rechecks. Inventory status, PID liveness,
+context revision, timestamps and raw internal mutation metadata are not substitutes. The offline adapter reports
+`a1-target-bound-claim-generation-api-unavailable` when the real API reports absence; it never fabricates a token.
+
+`runtime-removal-adapter.mjs` contains real preflight and fail-closed execution diagnostics, but its CLI always
+reports unavailable. Its declaration factory is fixture-only. The deployed `.a1/worktree.json` is unchanged;
+no compatible release, generation bridge, merged-completion wiring or live adoption is certified. Task 3.3 stays
+unchecked until its prerequisites and remaining wiring are actually satisfied. There is no legacy sweep fallback.

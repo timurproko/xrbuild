@@ -8,17 +8,23 @@ import { verifyContractInstallation } from './delivery-contract.mjs';
 import { verifySharedCases, assessCoverage } from './delivery-verification.mjs';
 import { deliveryCaseBindings } from './delivery-case-bindings.mjs';
 import { deliveryAuthority, performDeliveryOperation, implementationScratch, reconciliationGate } from './delivery-decisions.mjs';
+import { readPinnedFixture, PROPOSED_A1 } from './proposed-a1-fixture.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const fixtures = verifyContractInstallation({ root }).cases;
 
-test('all 50 frozen cases invoke repository boundaries; unsupported C39 is incomplete, not passing conformance', async () => {
+test('all 50 cases invoke real boundaries; offline C39 evidence and release compatibility remain separate', async () => {
   const result = await verifySharedCases({ root, bindings: deliveryCaseBindings });
   assert.deepEqual(result.failures, []);
   assert.equal(result.cases.length, 50); assert.equal(result.coverage.complete, true);
-  assert.equal(result.passed, 49); assert.equal(result.complete, false);
-  assert.deepEqual(result.incomplete.map(row => row.id), ['C39']);
-  assert.match(result.incomplete[0].reason, /Compatible released.*unavailable/);
+  let prepared = true;
+  try { readPinnedFixture(root); } catch (error) { if (error.code !== 'XRB_FIXTURE_MISSING') throw error; prepared = false; }
+  assert.equal(result.passed, prepared ? 50 : 49); assert.equal(result.complete, prepared);
+  assert.deepEqual(result.incomplete.map(row => row.id), prepared ? [] : ['C39']);
+  if (!prepared) assert.match(result.incomplete[0].reason, /Pinned offline A1 fixture not prepared/);
+  else assert.equal(result.cases.find(row => row.id === 'C39').evidence.revision, PROPOSED_A1.revision);
+  assert.equal(result.scope, 'offline-case-assertions-only'); assert.equal(result.liveRuntimeAdoption, 'disabled');
+  assert.equal(result.releasedRuntimeCompatibility, 'unverified');
   assert.ok(result.cases.every(row => row.boundaries.length > 0));
 });
 

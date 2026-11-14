@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "repository": "timurproko/a1",
+  "revision": "e6e52727e4e9a00be3c6ab715d3a9e6d42925ef8",
+  "purpose": "offline proposed-interface tests only; not runtime adoption",
+  "files": {
+    "LICENSE": { "gitBlob": "c2716676066a36aa25e61446ca9582f968ab12e4", "sha256": "fae632af7274b7232e5dcecf070af4e06baadd6a00ceca2fe0f5244e101cb0ab" },
+    "src/product-identity.ts": { "gitBlob": "0bda65ad14162e38e7da66f6945c7d849f2d5927", "sha256": "cba4b4010b7f12e98ef5bbc71b9e002d14d2ca63fb8a85949b306077c0328358" },
+    "src/product-identity.json": { "gitBlob": "634711de9dd26f89dc80171a2ce53e6f70b2a4c3", "sha256": "4637e9ebbb818c4ce4943fdcec852a21e820e6bc7902aa27a5182f2fbbdcd5aa" },
+    "src/foundation/lifecycle/session-repository-context.ts": { "gitBlob": "ff2c5a25e8b7bff3ec59a0c2390f5cc2942db439", "sha256": "09461b9fd7cda79751d1336575b94a08d4dd4fd149727fe4a12949ab363a65f4" },
+    "src/foundation/lifecycle/session-worktree-completion.ts": { "gitBlob": "f4b6ba6000c42139bf38bd30a4bd535e697c8322", "sha256": "aab0641e767479025aba3de6b40d01546a7ada8bff892fcba0583c58165cf70a" },
+    "src/foundation/lifecycle/session-claim-lock.ts": { "gitBlob": "f7d2e04565abb0c32205327a8ebc0eaf0bf82da6", "sha256": "567d6684906aa8bd14d277529b70c58c3ddb6d42a54161aa982c6d88a6245f40" },
+    "src/foundation/lifecycle/claim-gate.ts": { "gitBlob": "126a0ccb210e9f6e7a0be5da2d193de13bf462a2", "sha256": "3a501dce80fbcd988477f659cbb73ac28e31041fcec5d5eed7b3082ed80b0f01" },
+    "src/foundation/lifecycle/process-liveness.ts": { "gitBlob": "854aa4af8abfb4cd1425f7083dab1ffdafa0b212", "sha256": "d3c7c4282cf7cb3cc3bde5ecd955a6ecaff18ef6de6f36e6764accade6949084" }
+  }
+}

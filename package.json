@@ -13,6 +13,8 @@
     "names": "node tools/name-guard/name-guard.mjs",
     "governance": "node tools/repo-governance/governance.mjs",
     "verify:delivery": "node tools/worktree/delivery-verification.mjs",
+    "prepare:delivery-runtime": "node tools/worktree/prepare-proposed-a1-fixture.mjs --prepare",
+    "test:delivery-runtime": "node --test tools/worktree/runtime-removal-adapter.offline.mjs",
     "hooks": "git config core.hooksPath .githooks",
     "worktree": "node tools/worktree/worktree.mjs",
     "task:repos": "node tools/worktree/repository-task.mjs",

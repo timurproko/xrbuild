@@ -50,7 +50,9 @@ operations: [protected PR delivery](../../../docs/pr-delivery-governance.md). Pl
   `node --test tools/<tool>/<selected-file>.test.mjs`; package-specific commands are in the product instructions.
 - Strict change validation: `pnpm exec openspec validate <change-id> --strict`. This invokes unchanged OpenSpec.
 - Contract installation checks: `node --test tools/worktree/agent-guidance.test.mjs`. Shared behavioral report:
-  `pnpm verify:delivery`. It currently exits nonzero with C39 explicitly incomplete, not full conformance.
+  `pnpm verify:delivery`. Explicit `pnpm prepare:delivery-runtime` prepares the pinned public test source;
+  `pnpm test:delivery-runtime` tests offline adapter sequencing. Without the dependency C39 remains incomplete;
+  with it all 50 offline assertions run. Neither result certifies a compatible released runtime or live adoption.
 - PR check inspection: `gh pr checks <n>`. Promotion, finalization, hold and readiness policy:
   [R06-R08](../../../docs/delivery-rules.md#r06---validation-and-readiness-structure).
 - Trusted repository automation lives in `tools/pr-automation/` and `.github/workflows/`. The finalizer's commit
@@ -58,8 +60,8 @@ operations: [protected PR delivery](../../../docs/pr-delivery-governance.md). Pl
   that commit when continuing work. Bootstrap/activation command details are in the governance runbook.
 - Structural/hold controllers and the optional protected-integration entrypoint have source/fixture coverage in
   PR #19. Integration command/request syntax is in the governance runbook; no workflow calls it. Source results
-  are not evidence of live activation, a real protected merge or device acceptance. Runtime sequencing and full
-  shared-case conformance remain incomplete as described below.
+  are not evidence of live activation, a real protected merge or device acceptance. Offline proposed-runtime
+  sequencing is tested separately; released-runtime adoption remains incomplete as described below.
 
 ## Handoff and local-operation compatibility
 
@@ -71,7 +73,7 @@ operations: [protected PR delivery](../../../docs/pr-delivery-governance.md). Pl
 - Published local removal, preservation and runtime boundaries: [R13-R15](../../../docs/delivery-rules.md#r13---explicit-published-local-removal).
   The standalone engine's command/API inventory is in [published local removal](../../../docs/published-local-removal.md).
   It retains refs and admits no ignored/cache payloads; without a trusted claimant adapter the CLI blocks disposal.
-  PR #19's runtime wiring remains unfinished. The existing `.a1/worktree.json` is a legacy bulk-sweep declaration,
+  PR #19's live runtime wiring remains unfinished; its offline proposed-interface prototype is not adopted. The existing `.a1/worktree.json` is a legacy bulk-sweep declaration,
   not a compatible exact-completion interface. Compatible released runtime support is not yet verified; report this
   blocker rather than treating legacy `complete`, `discard` or `sweep` as a substitute.
 - Existing command inventories are in `tools/worktree/worktree.mjs`; their presence is not contract conformance
