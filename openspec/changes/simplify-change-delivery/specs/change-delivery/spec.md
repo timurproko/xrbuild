@@ -131,6 +131,8 @@ The maintainer SHALL decide integration. Agents MAY execute a fresh direct reque
 
 ### Requirement: Documentation auto-merge
 
+This requirement governs ordinary documentation auto-merge only. Existing release-specific automation SHALL remain unchanged under its existing eligibility and authorization rules; this clarification SHALL NOT expand its authority, reclassify release PRs as routine documentation or convert the existing release route to manual integration.
+
 Documentation auto-merge SHALL operate only under a separately reviewed enabled profile. When enabled it MAY arm protected App squash auto-merge for unheld ready same-repo main PRs with routine docs-only changes, no active/linked delivery and no opt-out. Complete diffs including rename sources/destinations SHALL be checked. Agent instructions, governance/cleanup authority and privileged-policy docs SHALL be excluded even under Markdown/docs paths. Bot-owned arms SHALL be withdrawn when eligibility disappears; human arms SHALL not be blindly modified. Repository allow-auto-merge alone SHALL not promise a running controller. This change SHALL not activate dormant workflows.
 
 #### Scenario: Docs fix

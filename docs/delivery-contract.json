@@ -3,7 +3,7 @@
   "encoding": "UTF-8 without BOM; LF; one final newline",
   "files": {
     "delivery-rules.md": {
-      "sha256": "2e3caedb76ba2da7d1172c2dde0faed9d333a7d6bfa79634734df17ecd3b4d59",
+      "sha256": "f2518a1e49317eef3c64c79733162b80613afee0cbdaf6e6945117e1a6be9876",
       "installTo": "docs/delivery-rules.md"
     },
     "delivery-adapters.json": {

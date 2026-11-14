@@ -7,13 +7,14 @@ import { contextEnvironment } from './git-environment.mjs';
 
 export const ROUTING_PARAGRAPH = "Read and follow [Shared delivery rules](docs/delivery-rules.md). Use only this repository's entry in [Delivery adapters](docs/delivery-adapters.json). Do not paraphrase these rules, invent exceptions, or modify OpenSpec skills/framework; report conflicts before proceeding.";
 
-// Approved in 8b3b5f98b21ce7c1672dbf7c9a6c82d68b91ccdf. These anchors are deliberately independent
-// of the mutable deployed/planning manifests. Rehashing a modified payload is not approval.
+// Approved in 8b3b5f98b21ce7c1672dbf7c9a6c82d68b91ccdf, with the maintainer-approved paired R11 clarification.
+// Only ordinary documentation auto-merge is restricted; existing release automation is unchanged.
+// These anchors remain independent of mutable manifests; unapproved rehashing is not approval.
 export const APPROVED_HASHES = Object.freeze({
-  'delivery-rules.md': '2e3caedb76ba2da7d1172c2dde0faed9d333a7d6bfa79634734df17ecd3b4d59',
+  'delivery-rules.md': 'f2518a1e49317eef3c64c79733162b80613afee0cbdaf6e6945117e1a6be9876',
   'delivery-adapters.json': '8a8b0c4e395003457ce0f2f7d0eae78a9cde227d4db6f4fc550f764e609fd741',
   'delivery-cases.json': 'e35a6024a97fe355f7eb9d6efbc8502fd67f2191949b08f6338f07d283d61f4c',
-  'delivery-contract.json': '9e1d879d0456d3d10e4f0c54530e08d642f0662cea6de58832f4ae9888c1564a',
+  'delivery-contract.json': '940f241fbdb925c79b2c9717ead2b41e64f05e93b5ff4d9edd96fb3b11f1faa1',
 });
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');

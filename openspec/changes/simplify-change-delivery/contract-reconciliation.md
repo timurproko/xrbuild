@@ -1,5 +1,7 @@
 # Existing-work reconciliation
 
+Paired R11 clarification: the maintainer explicitly approved the scope clarification recorded in `r11-clarification.md`. R11 governs ordinary documentation auto-merge; existing release-specific automation remains unchanged under its existing eligibility and authorization rules. Both repositories' planning/deployed rulebooks and verification hashes are updated together. No release behavior, activation state, adapter value or case expectation changes. This resolves the shared wording conflict only; independent runtime-release prerequisites and their actual verification status remain separate.
+
 ## Checkpoint and authority
 
 Inspected local and fetched remote head: `8b3b5f98b21ce7c1672dbf7c9a6c82d68b91ccdf` on `chore/simplify-change-delivery`, PR #19 in `timurproko/xrbuild`, base `main` at `7d0ea7ebb785c4cbfdc5671250daaae0f3e2d851`. The maintainer's current request to work on PR #19 continues the presented implementation scope. No merge, deletion, hosting activation or private export is requested.
