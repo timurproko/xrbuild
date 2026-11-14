@@ -25,7 +25,7 @@ test('both exact adapters really remove one isolated checkout and retain local/r
   for(const scenario of ['success','merged-success']) {
     const result=await runOfflineRuntimeScenario(scenario);
     assert.equal(result.preflightPassed,true);assert.equal(result.preflightWhileOwned,true);assert.equal(result.detached,true);assert.equal(result.shellExitedBeforeSettlement,true);
-    assert.equal(result.settled.kind,'cleanup-finished');assert.equal(report(result).results[0].disposition,'removed');assert.equal(report(result).results[0].branchPreserved,true);
+    assert.equal(result.settled.kind,'cleanup-finished',`${scenario}: ${JSON.stringify(result.settled)}`);assert.equal(report(result).results[0].disposition,'removed');assert.equal(report(result).results[0].branchPreserved,true);
     assert.equal(result.targetRemoved,true);assert.equal(result.localRefsPreserved,true);assert.equal(result.remoteRefsPreserved,true);assert.equal(result.unrelatedCheckoutPreserved,true);
     assert.equal(result.deletionCalls,1);assert.equal(result.bulkSweepCalls,0);assert.equal(result.sessionUsableOutsideTarget,true);assert.equal(result.replay,null);
     assert.equal(result.expiredScopeRejected,true);assert.equal(result.misboundScopeRejected,true);
@@ -35,7 +35,7 @@ test('both exact adapters really remove one isolated checkout and retain local/r
 
 test('a real second process cannot acquire while XR holds A1 exclusion; JSON generations are unnecessary',async()=>{
   const result=await runOfflineRuntimeScenario('scope-contender');
-  assert.equal(result.contenderCode,'worktree-claim-busy');assert.equal(result.targetRemoved,true);assert.equal(result.deletionCalls,1);
+  assert.equal(result.contenderCode,'worktree-claim-busy');assert.equal(result.targetRemoved,true,JSON.stringify(result.settled));assert.equal(result.deletionCalls,1);
   assert.equal(result.localRefsPreserved,true);assert.equal(result.remoteRefsPreserved,true);assert.equal(result.unrelatedCheckoutPreserved,true);
 });
 
