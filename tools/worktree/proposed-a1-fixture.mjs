@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import pin from './proposed-a1-interface.json' with { type: 'json' };
 for (const entry of Object.values(pin.files)) Object.freeze(entry);
 Object.freeze(pin.files);
@@ -54,14 +55,17 @@ export async function loadPinnedRuntime(root = sourceRoot) {
     }
     // Explicit dataDir is mandatory in every test. Never discover this user's installed A1 state.
     write('src/foundation/lifecycle/paths.js', 'export function resolveProductPaths(){throw Error("Offline fixture must supply isolated dataDir");}\n');
-    // Mock the external OS-lock package, NOT A1 claim records, validation, acquisition, detach or settlement.
+    // Use the actual pinned public dependency: no replacement of OS locking or claim-state observations.
+    const require = createRequire(import.meta.url);
     write('node_modules/proper-lockfile/package.json', '{"type":"module","exports":"./index.js"}\n');
-    write('node_modules/proper-lockfile/index.js', `const held = new Set();
-export default { lockSync(path) { if (held.has(path)) throw Object.assign(Error('busy'), {code:'ELOCKED'}); held.add(path); return () => held.delete(path); } };\n`);
+    write('node_modules/proper-lockfile/index.js', `import {createRequire} from 'node:module';export default createRequire(import.meta.url)(${JSON.stringify(require.resolve('proper-lockfile'))});\n`);
     const load = file => import(pathToFileURL(path.join(directory, 'src/foundation/lifecycle', file)).href);
     return { context: await load('session-repository-context.js'), completion: await load('session-worktree-completion.js'),
-      liveness: await load('process-liveness.js'), revision: pin.revision,
-      mockedDependencies: ['proper-lockfile (in-process mutex; no OS-lock certification)', 'product path discovery (throws; explicit isolated dataDir required)'],
+      contextModuleUrl: pathToFileURL(path.join(directory, 'src/foundation/lifecycle/session-repository-context.js')).href,
+      livenessModuleUrl: pathToFileURL(path.join(directory, 'src/foundation/lifecycle/process-liveness.js')).href,
+      liveness: await load('process-liveness.js'), coordination: await load('session-claim-lock.js'),
+      identity: (await import(pathToFileURL(path.join(directory, 'src/product-identity.js')).href)).PRODUCT_IDENTITY, revision: pin.revision,
+      mockedDependencies: ['product path discovery (throws; explicit isolated dataDir required)'],
       dispose: () => fs.rmSync(directory, { recursive: true, force: true }) };
   } catch (error) { fs.rmSync(directory, { recursive: true, force: true }); throw error; }
 }

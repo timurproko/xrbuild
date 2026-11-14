@@ -74,14 +74,15 @@ compatibility, final-head CI and device acceptance.
 ## Offline proposed-interface preparation (not adoption)
 
 `tools/worktree/proposed-a1-interface.json` pins public revision
-`e6e52727e4e9a00be3c6ab715d3a9e6d42925ef8` and the Git-blob/SHA-256 digests of the minimal test dependency.
+`e9e38e2a0373c68392370f9b59fe797f7306cd00`, the re-inspected current A1 PR interface, and Git-blob/SHA-256 digests
+of its nine-file source/license closure. The former e6e5272 checkpoint remains historical evidence, not the current pin.
 It is not a minimum released version. Explicit preparation downloads only those files into this checkout's ignored
 `.artifacts/a1-interface/<revision>/source` cache; it does not install A1. The durable dependency reference/digests
 are tracked; the cache is reconstructible, non-authoritative tool dependency storage.
 
 ```text
 pnpm prepare:delivery-runtime   # explicit public test-source preparation; never run implicitly
-pnpm test:delivery-runtime      # six offline integration checks; requires the prepared dependency
+pnpm test:delivery-runtime      # ten offline integration checks; requires the prepared dependency
 pnpm verify:delivery           # all 50 immutable shared assertions, including the actual C39 binding
 ```
 
@@ -97,20 +98,53 @@ live Node PIDs. An actual child with cwd at the target remains alive through det
 acquisition, then exits before settlement. C39 observes `cleanup-skipped`, both preserved checkouts, zero sweep/
 deletion calls, and an actual usable startup context. Ownership information and expected assertions are not mocked.
 
-Only external command transport and the `proper-lockfile` dependency are substituted (an in-process test mutex;
-this does not certify native cross-process lock arbitration). Product-path discovery throws if explicit isolated
-`dataDir` is omitted. Tests also cover ignored-content preflight refusal, late content, declaration drift, one-shot
-settlement and the missing generation API. No real user runtime or checkout is detached/removed.
+The worker now uses real `proper-lockfile@4.1.2` (pinned by the root lockfile), not an in-process mutex replacement.
+A separate OS process registers and acquires its own A1 runtime/claim through the actual current APIs. Only command
+transport is substituted; product-path discovery throws if isolated `dataDir` is omitted. No ownership records or
+expected results are stubbed. No real user runtime or checkout is detached/removed.
 
-### Precise remaining supported-API gap
+### Generation requirement resolved as an implementation choice
 
-At the pin, `sessionWorktreeClaimState(commonDir, gitDir, options)` is an async source export returning only
-`absent | live | unverifiable`. It supplies no target-bound available generation/lease for the repository engine's
-synchronous `readClaims(context) -> {state:"available", target, generation}` rechecks. Inventory status, PID liveness,
-context revision, timestamps and raw internal mutation metadata are not substitutes. The offline adapter reports
-`a1-target-bound-claim-generation-api-unavailable` when the real API reports absence; it never fabricates a token.
+The shared rules require verifiable ownership/preservation, not an A1 field named generation. The legacy standalone
+`readClaims(context)` observation path remains intact. The new inactive route instead uses
+`withSessionClaimSnapshot(directory, options, callback)` on the same gate as A1's attachment writers, and calls
+`sessionWorktreeClaimState(commonDir, gitDir, options)` under that exclusion. Absence is not relabeled an available
+generation. An unforgeable in-memory scoped capability binds the actual gate lifetime and checkout/admin identity;
+serialized owner flags, copied objects, expired scopes and other-target scopes are rejected. No token is fabricated
+from a PID, timestamp, inventory row or private claim record.
 
-`runtime-removal-adapter.mjs` contains real preflight and fail-closed execution diagnostics, but its CLI always
-reports unavailable. Its declaration factory is fixture-only. The deployed `.a1/worktree.json` is unchanged;
-no compatible release, generation bridge, merged-completion wiring or live adoption is certified. Task 3.3 stays
-unchecked until its prerequisites and remaining wiring are actually satisfied. There is no legacy sweep fallback.
+Real preflight creates a bounded, create-only journal reservation binding the original head, physical identity,
+content fingerprint and operation/selectors before detach. Async scoped execution retains all existing preservation,
+publication, Git-lock and non-force-removal checks, rechecks ownership under the gate, and journals uncertainty.
+The final Git child is asynchronous so the lease holder can service heartbeat/loss checks. Both prepared declarations
+are exact-target: `localRemoval.preflight/execute` and `cleanupPreflight/cleanup`. Merged completion requires the exact
+merged PR/change/head plus its squash merge commit contained in live main; a deleted source branch is not recreated.
+Both routes retain all local refs and remote resources. No route falls back to a sweep or force removal.
+
+Ten integration tests now cover real successful local and squash-merged removals, retained refs, unrelated merged
+checkouts, actual cross-process contention, acquisition after runtime precheck, ignored/new content, reowned/published
+heads, recreated identities, changed declarations, expired/misbound scopes and replaced gate resources.
+
+### Specific remaining upstream capability: child-lifetime loss fencing
+
+Current `claim-gate.ts` uses a 10-second stale-reclaimable filesystem lease with `onCompromised: () => {}`.
+`withSessionClaimSnapshot` exposes a callback, but no loss-aware child-lifetime exclusion guarantee. This is not a
+missing generation API. A non-destructive integration probe actually suspends the isolated holder's event loop for
+14 seconds: a second OS process then acquires through the real A1 APIs while the original callback has not returned.
+XR detects the lost lease and refuses before removal. The gate-replacement test likewise preserves the checkout.
+
+The inactive bridge checks actual gate identity/freshness, invalidates expired capabilities, and cancels its own
+in-flight Git operation on observed loss, leaving a recoverable journal. Those checks cannot run while the holder
+is suspended. If its destructive child were already running, the present API cannot guarantee that a new owner
+will not be admitted first. Successful normal-path tests are therefore **not** a live loss-fencing certificate.
+
+Minimal upstream requirement: atomically verify the target is unclaimed and keep attachment writers excluded until
+the cleanup child has finished or is proven stopped, including holder suspension/death and gate loss. Use a
+non-reclaimable child-lifetime authority or equivalent fencing; merely adding a nonce/generation, increasing the
+stale timeout, or notifying the suspended parent after takeover is insufficient. Expose that scoped execution/loss
+contract through the existing facilities or a cleanup-specific wrapper; no particular new method name is required.
+A1 still executes repository cleanup rather than deleting files itself.
+
+The prototype CLI remains unavailable and the deployed `.a1/worktree.json` is unchanged. Task 3.3 stays unchecked
+pending that capability/compatibility verification and a compatible release. No minimum release or live adoption is
+claimed. There is no legacy sweep fallback.

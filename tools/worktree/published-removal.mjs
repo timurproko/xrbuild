@@ -2,6 +2,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { contextEnvironment } from './git-environment.mjs';
+import { assertOwnershipExclusion, recheckOwnershipExclusion, ownershipExclusionSignal } from './ownership-exclusion.mjs';
 import { executeGit, identifyRepository, publicationEvidence, registeredContexts } from './portable-context.mjs';
 import { verifyContractInstallation } from './delivery-contract.mjs';
 
@@ -222,7 +226,7 @@ function toolDirectory(root) {
   fs.mkdirSync(directory, { recursive: true }); return directory;
 }
 
-function withLock(directory, slot, operation) {
+function acquireLock(directory, slot) {
   const file = path.join(directory, `${slot}.lock`), content = JSON.stringify({ pid: process.pid, token: randomUUID() }) + '\n';
   let handle;
   try { handle = fs.openSync(file, 'wx'); } catch { fail('Cleanup operation is locked or unverifiable; no takeover attempted'); }
@@ -232,8 +236,13 @@ function withLock(directory, slot, operation) {
     catch { return false; }
   };
   const assertOwned = () => { if (!owned()) fail('Cleanup lock changed; no further mutations attempted'); };
-  try { fs.writeFileSync(handle, content); fs.fsyncSync(handle); assertOwned(); return operation(assertOwned); }
-  finally { fs.closeSync(handle); if (owned()) fs.unlinkSync(file); }
+  try { fs.writeFileSync(handle, content); fs.fsyncSync(handle); assertOwned(); }
+  catch (error) { fs.closeSync(handle); if (owned()) fs.unlinkSync(file); throw error; }
+  return { assertOwned, release() { fs.closeSync(handle); if (owned()) fs.unlinkSync(file); } };
+}
+function withLock(directory, slot, operation) {
+  const lock = acquireLock(directory, slot);
+  try { return operation(lock.assertOwned); } finally { lock.release(); }
 }
 
 function validIdentity(identity) {
@@ -254,7 +263,10 @@ function loadJournal(file) {
   try { record = JSON.parse(bytes); } catch { fail('Partial cleanup journal requires recovery; data preserved'); }
   if (!record || record.version !== 1 || !['prepared', 'removing', 'partial', 'removed'].includes(record.phase)
     || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(record.operation ?? '') || !record.snapshot
-    || Object.keys(record).some(name => !['version', 'operation', 'phase', 'snapshot', 'observedRemoteHead'].includes(name))
+    || Object.keys(record).some(name => !['version', 'operation', 'phase', 'snapshot', 'observedRemoteHead', 'intent'].includes(name))
+    || record.intent !== undefined && (!record.intent || !['local', 'complete'].includes(record.intent.kind)
+      || Object.keys(record.intent).some(name => !['kind', 'change', 'pr'].includes(name))
+      || record.intent.kind === 'complete' && (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(record.intent.change ?? '') || !Number.isSafeInteger(record.intent.pr) || record.intent.pr < 1))
     || Object.keys(record.snapshot).sort().join(',') !== 'admin,branch,common,fingerprint,head,identity,root,target'
     || ['admin', 'branch', 'common', 'root', 'target'].some(name => typeof record.snapshot[name] !== 'string' || !record.snapshot[name] || record.snapshot[name].length > 4096)
     || !/^[a-f0-9]{40}$/.test(record.snapshot.head ?? '') || record.observedRemoteHead !== undefined && !/^[a-f0-9]{40}$/.test(record.observedRemoteHead)
@@ -326,6 +338,74 @@ export function removePublishedCheckout({ root, target, expectedHead, readClaims
     return { removed: true, operation: journal.record.operation, journal: journalFile, branchPreserved,
       replacementPreserved: Boolean(exists(snapshot.target)), localHead: snapshot.head, remoteHead: fresh.remoteHead };
   });
+}
+
+/** Pre-detach snapshot reservation, not ownership/deletion authority. */
+export async function prepareRemovalCheckout(options, { intent = { kind: 'local' }, readPublication } = {}) {
+  const root = canonical(plain(options.root)), target = canonical(plain(options.target));
+  const directory = toolDirectory(root), journalFile = path.join(directory, `${sha(key(target))}.json`);
+  const lock = acquireLock(directory, sha(key(target)));
+  try {
+    const snapshot = inspectRemovalTarget({ ...options, root, target });
+    if ((options.identify ?? identifyRepository)(root) !== adapter.repository) fail('Cleanup repository identity mismatch');
+    const evidence = readPublication ? await readPublication(snapshot) : publicationEvidence(root, snapshot.branch, snapshot.head, { identify: options.identify, execute: options.execute });
+    if (!evidence.publicationVerified || !/^[a-f0-9]{40}$/.test(evidence.remoteHead ?? '')) fail('Publication/merged evidence unavailable; checkout preserved');
+    if (!snapshotEqual(snapshot, inspectRemovalTarget({ ...options, root, target }))) fail('Preflight snapshot changed');
+    const prior = loadJournal(journalFile);
+    if (prior && (prior.record.phase !== 'prepared' || !snapshotEqual(prior.record.snapshot, snapshot) || !equal(prior.record.intent, intent))) fail('Prior operation requires explicit recovery; preflight cannot replace its authority');
+    lock.assertOwned();
+    if (!prior) saveJournal(journalFile, { version: 1, operation: randomUUID(), phase: 'prepared', snapshot, observedRemoteHead: evidence.remoteHead, intent }, null);
+    return snapshot;
+  } finally { lock.release(); }
+}
+
+const executeAsync = promisify(execFile);
+export async function executeScopedNonForceRemoval(root, target, signal) {
+  await executeAsync('git', ['-c', 'core.hooksPath=/dev/null', 'worktree', 'remove', '--', target], {
+    cwd: root, env: contextEnvironment(), encoding: 'utf8', timeout: 30_000, maxBuffer: 8 * 1024 * 1024, signal,
+  });
+}
+
+/** Real execution under a held, target-bound exclusion scope. Legacy generation-based callers are unchanged. */
+export async function removePublishedCheckoutInScope({ scope, intent, readPublication, remove = executeScopedNonForceRemoval, ...options }) {
+  const root = canonical(plain(options.root)), target = canonical(plain(options.target));
+  const directory = toolDirectory(root), journalFile = path.join(directory, `${sha(key(target))}.json`);
+  const lock = acquireLock(directory, sha(key(target)));
+  try {
+    const context = describeTarget({ ...options, root, target });
+    if ((options.identify ?? identifyRepository)(root) !== adapter.repository) fail('Cleanup repository identity mismatch');
+    assertOwnershipExclusion(scope, context);
+    let journal = loadJournal(journalFile);
+    if (!journal || journal.record.phase !== 'prepared' || !equal(journal.record.intent, intent)) fail('Matching pre-detach reservation is required; no retry deletion');
+    const snapshot = inspectRemovalTarget({ ...options, root, target });
+    if (!snapshotEqual(journal.record.snapshot, snapshot)) fail('Checkout changed after preflight; preserved');
+    const publication = async () => {
+      const evidence = readPublication ? await readPublication(snapshot) : publicationEvidence(root, snapshot.branch, snapshot.head, { identify: options.identify, execute: options.execute });
+      if (!evidence.publicationVerified || !/^[a-f0-9]{40}$/.test(evidence.remoteHead ?? '')) fail('Fresh publication/merged evidence unavailable');
+      return evidence;
+    };
+    await recheckOwnershipExclusion(scope, context);
+    const evidence = await publication();
+    if (!snapshotEqual(snapshot, inspectRemovalTarget({ ...options, root, target }))) fail('Content changed during exclusion');
+    await recheckOwnershipExclusion(scope, context);
+    const fresh = await publication();
+    if (fresh.remoteHead !== evidence.remoteHead || (options.identify ?? identifyRepository)(root) !== adapter.repository
+      || !snapshotEqual(snapshot, inspectRemovalTarget({ ...options, root, target }))) fail('Final repository/publication/content changed');
+    await recheckOwnershipExclusion(scope, context); lock.assertOwned();
+    journal = saveJournal(journalFile, { ...journal.record, phase: 'removing', observedRemoteHead: fresh.remoteHead }, journal);
+    assertOwnershipExclusion(scope, context); lock.assertOwned();
+    try { await remove(root, target, ownershipExclusionSignal(scope)); }
+    catch {
+      lock.assertOwned(); saveJournal(journalFile, { ...journal.record, phase: 'partial' }, journal);
+      fail('Non-force scoped removal failed or lost exclusion; explicit recovery required, no fallback');
+    }
+    // Any uncertainty after the command leaves the removing journal for explicit recovery, never retry deletion.
+    assertOwnershipExclusion(scope, context); lock.assertOwned();
+    saveJournal(journalFile, { ...journal.record, phase: 'removed' }, journal);
+    let branchPreserved = false;
+    try { branchPreserved = (options.execute ?? executeGit)(root, ['rev-parse', '--verify', `refs/heads/${snapshot.branch}`]) === snapshot.head; } catch { /* Report, never recreate refs. */ }
+    return { removed: true, branchPreserved, replacementPreserved: Boolean(exists(target)), localHead: snapshot.head, remoteHead: fresh.remoteHead };
+  } finally { lock.release(); }
 }
 
 export function runtimeCleanupUnavailable() {

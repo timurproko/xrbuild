@@ -23,7 +23,7 @@ export async function verifyOfflineRuntimeSequence({ root = sourceRoot } = {}) {
   if (!result.preflightPassed || !result.preflightWhileOwned || !result.detached || result.afterDetachState !== 'absent'
     || !result.secondOwnerAcquired || result.ownerState !== 'live' || result.shellExit !== 0 || !result.shellExitedBeforeSettlement
     || result.settled?.kind !== 'cleanup-skipped' || !/live session/.test(result.settled.detail) || result.replay !== null
-    || result.deletionCalls !== 0 || result.events.length !== 1 || result.directExecution?.results[0]?.reason !== 'live-owner') throw Error('Actual offline runtime sequencing did not establish C39');
+    || result.deletionCalls !== 0 || result.events.length !== 1 || !/Live or unverifiable owner/.test(result.directExecution?.results[0]?.reason ?? '')) throw Error('Actual offline runtime sequencing did not establish C39');
   return { observation: { targetPreserved: result.targetPreserved, unrelatedCheckoutPreserved: result.unrelatedCheckoutPreserved,
     bulkSweepCalls: result.bulkSweepCalls, sessionUsableOutsideTarget: result.sessionUsableOutsideTarget },
     evidence: { revision: result.revision, preflightPassed: result.preflightPassed, detached: result.detached, secondOwnerAcquired: result.secondOwnerAcquired,

@@ -9,8 +9,8 @@ import { preparePinnedRuntimeFixture } from './prepare-proposed-a1-fixture.mjs';
 const sandbox = t => { const root = fs.mkdtempSync(path.join(os.tmpdir(), 'a1-dependency-pin-')); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; };
 
 test('proposed dependency revision/hash entries are pinned, frozen and contain no automatic release/adoption assertion', () => {
-  assert.equal(PROPOSED_A1.revision, 'e6e52727e4e9a00be3c6ab715d3a9e6d42925ef8');
-  assert.equal(Object.keys(PROPOSED_A1.files).length, 8);
+  assert.equal(PROPOSED_A1.revision, 'e9e38e2a0373c68392370f9b59fe797f7306cd00');
+  assert.equal(Object.keys(PROPOSED_A1.files).length, 9);
   assert.throws(() => { PROPOSED_A1.files.LICENSE.sha256 = '0'.repeat(64); }, TypeError);
   assert.throws(() => verifyFixtureBytes('LICENSE', Buffer.from('changed bytes')), /Pinned A1 fixture differs/);
   assert.throws(() => verifyFixtureBytes('../unreviewed.ts', Buffer.from('code')), /Pinned A1 fixture differs/);

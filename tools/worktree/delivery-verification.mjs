@@ -80,7 +80,7 @@ export async function verifySharedCases({ root, bindings, cases = verifyContract
     finally { for (const action of cleanup.reverse()) await action(); }
   }
   const coverage = assessCoverage(rows, ids);
-  return { contract: 'portable-delivery-v1', scope: 'offline-case-assertions-only', liveRuntimeAdoption: 'disabled', releasedRuntimeCompatibility: 'unverified', complete: coverage.complete && rows.every(row => row.status === 'passed'),
+  return { contract: 'portable-delivery-v1', scope: 'offline-case-assertions-only', liveRuntimeAdoption: 'disabled', releasedRuntimeCompatibility: 'unverified', childLifetimeFencing: 'missing-at-proposed-pin', complete: coverage.complete && rows.every(row => row.status === 'passed'),
     passed: rows.filter(row => row.status === 'passed').length, incomplete: rows.filter(row => row.status === 'incomplete'),
     failures: rows.filter(row => row.status === 'failed'), coverage, cases: rows };
 }

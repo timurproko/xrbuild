@@ -73,7 +73,9 @@ operations: [protected PR delivery](../../../docs/pr-delivery-governance.md). Pl
 - Published local removal, preservation and runtime boundaries: [R13-R15](../../../docs/delivery-rules.md#r13---explicit-published-local-removal).
   The standalone engine's command/API inventory is in [published local removal](../../../docs/published-local-removal.md).
   It retains refs and admits no ignored/cache payloads; without a trusted claimant adapter the CLI blocks disposal.
-  PR #19's live runtime wiring remains unfinished; its offline proposed-interface prototype is not adopted. The existing `.a1/worktree.json` is a legacy bulk-sweep declaration,
+  PR #19's exact adapters execute in isolated tests using the current proposed A1 coordination scope; no ownership
+  generation is fabricated. Live adoption is still blocked on release compatibility and child-lifetime loss fencing,
+  not a fictional upstream generation field. The existing `.a1/worktree.json` is a legacy bulk-sweep declaration,
   not a compatible exact-completion interface. Compatible released runtime support is not yet verified; report this
   blocker rather than treating legacy `complete`, `discard` or `sweep` as a substitute.
 - Existing command inventories are in `tools/worktree/worktree.mjs`; their presence is not contract conformance

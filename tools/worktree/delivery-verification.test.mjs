@@ -25,6 +25,7 @@ test('all 50 cases invoke real boundaries; offline C39 evidence and release comp
   else assert.equal(result.cases.find(row => row.id === 'C39').evidence.revision, PROPOSED_A1.revision);
   assert.equal(result.scope, 'offline-case-assertions-only'); assert.equal(result.liveRuntimeAdoption, 'disabled');
   assert.equal(result.releasedRuntimeCompatibility, 'unverified');
+  assert.equal(result.childLifetimeFencing, 'missing-at-proposed-pin');
   assert.ok(result.cases.every(row => row.boundaries.length > 0));
 });
 
