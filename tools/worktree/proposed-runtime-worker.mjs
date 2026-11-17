@@ -16,7 +16,7 @@ async function liveChild(cwd) {
   await new Promise((resolve, reject) => { child.once('error', reject); child.stdout.once('data', resolve); });
   return { child, async stop() { if (child.exitCode === null) child.stdin.end(); return await closed; } };
 }
-async function liveOwner(cwd, runtime) {
+export async function liveOwner(cwd, runtime) {
   const child = spawn(process.execPath, [fileURLToPath(new URL('./proposed-owner-process.mjs', import.meta.url)), runtime.contextModuleUrl, runtime.livenessModuleUrl], {cwd, stdio:['pipe','pipe','pipe','ipc']});
   const closed = new Promise((resolve,reject) => {child.once('error',reject);child.once('close',resolve);});
   let sequence = 0; const pending = new Map();
@@ -24,7 +24,7 @@ async function liveOwner(cwd, runtime) {
   await new Promise((resolve,reject) => {child.once('error',reject);child.once('message',message => message.ready?resolve():reject(Error('Owner startup failed')));});
   return {child,call(operation,args){return new Promise((resolve,reject)=>{const id=++sequence;pending.set(id,{resolve,reject});child.send({id,operation,...args});});},async stop(){if(child.exitCode===null)child.stdin.end();return await closed;}};
 }
-function repository(box, complete) {
+export function repository(box, complete = false) {
   const root = path.join(box, 'primary'), remote = path.join(box, 'remote.git'); fs.mkdirSync(root);
   git(root, 'init', '--quiet', '-b', 'main'); git(root, 'config', 'user.name', 'Fixture'); git(root, 'config', 'user.email', 'fixture@example.invalid');
   fs.writeFileSync(path.join(root, '.gitignore'), '.worktrees/\n.artifacts/\n.xrbuild/\n*.local\n'); fs.writeFileSync(path.join(root, 'source.txt'), 'published fixture source\n');
@@ -47,7 +47,7 @@ function repository(box, complete) {
   return { root, target, unrelated, remote, head, mergeHead, remoteRefs, localRefs, calls, execute, identify };
 }
 export async function runProposedRuntimeScenario(scenario = 'new-owner', cacheRoot = sourceRoot) {
-  if (!['new-owner','success','merged-success','unmerged-complete','new-owner-before-execute','scope-contender','scope-replaced','dirty-preflight','changed-declaration','late-content','reowned-head-change','recreated-target','lease-loss','missing-facility'].includes(scenario)) throw Error('Unknown offline scenario');
+  if (!['new-owner','success','merged-success','unmerged-complete','new-owner-before-execute','scope-contender','dirty-preflight','changed-declaration','late-content','reowned-head-change','recreated-target','suspension','missing-facility','legacy-declaration'].includes(scenario)) throw Error('Unknown offline scenario');
   const runtime = await loadPinnedRuntime(cacheRoot), box = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'xr-runtime-sequence-'))), children = [];
   try {
     const complete = ['merged-success','unmerged-complete'].includes(scenario), f = repository(box, complete), context = runtime.context, completion = runtime.completion;
@@ -60,38 +60,42 @@ export async function runProposedRuntimeScenario(scenario = 'new-owner', cacheRo
     await context.setSessionRepositoryContext(first, f.target, options);
     const acquireOther = options => otherProcess.call('attach',{identity:other,options,target:f.target});
     const events = []; let retainedScope, retainedSnapshot, contenderCode = null, lateAcquired = false, leaseLossObserved = false, misboundScopeRejected = false;
-    const dependencies = { execute:f.execute, identify:f.identify, runtime, runtimeOptions:options,
+    const approvedSnapshot = await runtime.snapshot.captureWorktreeCleanupSnapshot(f.target);
+    const dependencies = { execute:f.execute, identify:f.identify, runtime, runtimeOptions:options, approvedSnapshot,
       readPull: number => ({number,state:'closed',merged:scenario !== 'unmerged-complete',merged_at:'2026-11-14T00:00:00Z',merge_commit_sha:f.mergeHead,
         head:{sha:f.head,ref:'chore/task',repo:{full_name:'timurproko/xrbuild'}},base:{ref:'main',repo:{full_name:'timurproko/xrbuild'}},
         body:'```openspec-implementation\n{"version":1,"change":"fixture"}\n```'}),
-      remove: async (root,target,signal) => { f.calls.push({cwd:root,args:['worktree','remove','--',target]}); await executeScopedNonForceRemoval(root,target,signal); },
+      remove: async (root,target,scope,snapshot) => { f.calls.push({cwd:root,args:['worktree','remove','--',target]}); await executeScopedNonForceRemoval(root,target,scope,snapshot); },
       onScopeHeld: async (scope, snapshot) => {
         retainedScope = scope; retainedSnapshot = snapshot;
         try { assertOwnershipExclusion(scope,{...snapshot,target:f.unrelated}); } catch { misboundScopeRejected = true; }
-        if (scenario === 'lease-loss') {
-          const acquisition = otherProcess.call('attach-after-delay',{identity:other,options:otherOptions,target:f.target,delayMs:11_500});
-          // Actual event-loop suspension in this isolated owner; another OS process can run and reclaim the stale lease.
+        if (scenario === 'suspension') {
+          const acquisition = otherProcess.call('attach-after-delay',{identity:other,options:{...otherOptions,lockTimeoutMs:50},target:f.target,delayMs:11_500})
+            .then(() => { leaseLossObserved = true; }, error => { contenderCode = error.code; });
+          // Actual holder suspension beyond the obsolete lease; the packaged boundary must prevent takeover.
           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,14_000);
           await acquisition;
-          leaseLossObserved = (await context.readActiveSessionRepositoryContext(other,otherOptions))?.cwd === f.target;
         }
         if (scenario === 'scope-contender') {
           try { await acquireOther({...otherOptions,lockTimeoutMs:50}); }
           catch(error) { contenderCode = error.code; }
         }
-        if (scenario === 'scope-replaced') {
-          const gate = path.join(dataDir,runtime.identity.state.sessionWorktreeClaimDirectory,'mutation.authority.gate');
-          fs.renameSync(gate,`${gate}.test-retained`); fs.mkdirSync(gate); // External lock-loss fault, not fabricated ownership information.
-        }
       } };
     const run = async (command,args,cwd) => {
       const attached = await context.readActiveSessionRepositoryContext(first,options);
       const event = {phase:args[1],command,args,cwd,attached:attached?.cwd??null,shellAlive:shell.child.exitCode===null}; events.push(event);
-      if (scenario === 'new-owner-before-execute' && args[1] === 'execute') { await acquireOther(otherOptions); lateAcquired = true; }
+      if (scenario === 'new-owner-before-execute' && args[1] === 'execute') {
+        try { await acquireOther({...otherOptions,lockTimeoutMs:50}); lateAcquired = true; } catch(error) { contenderCode = error.code; }
+      }
       try { const stdout=await invokeOfflineRepositoryAdapter(command,args,cwd,dependencies);event.report=JSON.parse(stdout);return stdout; }
       catch(error) { if(error.stdout)event.report=JSON.parse(error.stdout);throw error; }
     };
     if(scenario==='missing-facility')dependencies.runtime = null;
+    if(scenario==='legacy-declaration') {
+      const d=offlineExactRemovalDeclaration();
+      d.localRemoval.execute=['node','tools/worktree/runtime-removal-adapter.mjs','execute','--repo','{primary}','--path','{worktree}'];
+      fs.writeFileSync(path.join(f.root,'.a1/worktree.json'),JSON.stringify(d)+'\n');
+    }
     if(scenario==='dirty-preflight')fs.writeFileSync(path.join(f.target,'notes.local'),'synthetic ignored content');
     let request, requestError;
     try { request = complete ? await completion.requestSessionWorktreeCompletion(first,{change:'fixture',pr:19},{...options,run}) : await completion.requestSessionWorktreeLocalRemoval(first,{...options,run}); }
@@ -117,7 +121,7 @@ export async function runProposedRuntimeScenario(scenario = 'new-owner', cacheRo
     const directExecution=scenario==='new-owner'?await inspectRuntimeLocalRemoval({phase:'execute',root:f.root,target:f.target,...dependencies}):null;
     let expiredScopeRejected = null;
     if(retainedScope){try{assertOwnershipExclusion(retainedScope,retainedSnapshot);expiredScopeRejected=false;}catch{expiredScopeRejected=true;}}
-    return {revision:runtime.revision,scenario,mockedDependencies:runtime.mockedDependencies,request,events,
+    return {revision:runtime.revision,packageSha256:runtime.packageSha256,scenario,mockedDependencies:runtime.mockedDependencies,request,events,
       preflightPassed:events[0]?.report?.results[0]?.disposition==='eligible',preflightWhileOwned:events[0]?.attached===f.target&&events[0]?.shellAlive===true,
       detached,afterDetachState,secondOwnerAcquired:secondOwner?.cwd===f.target,ownerState,shellExit,shellExitedBeforeSettlement,settled,replay,directExecution,
       targetPreserved:fs.existsSync(f.target),targetRemoved:!fs.existsSync(f.target),unrelatedCheckoutPreserved:fs.existsSync(f.unrelated)&&git(f.unrelated,'rev-parse','HEAD')===git(f.root,'rev-parse','HEAD'),

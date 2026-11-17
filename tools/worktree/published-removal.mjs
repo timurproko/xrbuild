@@ -2,10 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { contextEnvironment } from './git-environment.mjs';
-import { assertOwnershipExclusion, recheckOwnershipExclusion, ownershipExclusionSignal } from './ownership-exclusion.mjs';
+import { assertOwnershipExclusion, recheckOwnershipExclusion, executeOwnershipCommand } from './ownership-exclusion.mjs';
 import { executeGit, identifyRepository, publicationEvidence, registeredContexts } from './portable-context.mjs';
 import { verifyContractInstallation } from './delivery-contract.mjs';
 
@@ -359,11 +356,10 @@ export async function prepareRemovalCheckout(options, { intent = { kind: 'local'
   } finally { lock.release(); }
 }
 
-const executeAsync = promisify(execFile);
-export async function executeScopedNonForceRemoval(root, target, signal) {
-  await executeAsync('git', ['-c', 'core.hooksPath=/dev/null', 'worktree', 'remove', '--', target], {
-    cwd: root, env: contextEnvironment(), encoding: 'utf8', timeout: 30_000, maxBuffer: 8 * 1024 * 1024, signal,
-  });
+export async function executeScopedNonForceRemoval(root, target, scope, context) {
+  if (root !== context.root || target !== context.target) fail('Destructive command target differs from its exclusion');
+  await executeOwnershipCommand(scope, context, 'git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false',
+    '-c', 'gc.auto=0', '-c', 'maintenance.auto=false', 'worktree', 'remove', '--', target]);
 }
 
 /** Real execution under a held, target-bound exclusion scope. Legacy generation-based callers are unchanged. */
@@ -394,7 +390,7 @@ export async function removePublishedCheckoutInScope({ scope, intent, readPublic
     await recheckOwnershipExclusion(scope, context); lock.assertOwned();
     journal = saveJournal(journalFile, { ...journal.record, phase: 'removing', observedRemoteHead: fresh.remoteHead }, journal);
     assertOwnershipExclusion(scope, context); lock.assertOwned();
-    try { await remove(root, target, ownershipExclusionSignal(scope)); }
+    try { await remove(root, target, scope, snapshot); }
     catch {
       lock.assertOwned(); saveJournal(journalFile, { ...journal.record, phase: 'partial' }, journal);
       fail('Non-force scoped removal failed or lost exclusion; explicit recovery required, no fallback');

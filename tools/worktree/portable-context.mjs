@@ -12,7 +12,7 @@ const SHA = /^[a-f0-9]{40}$/;
 const fail = message => { throw new Error(message); };
 export function executeGit(cwd, args, { input } = {}) {
   try {
-    return execFileSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], {
+    return execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false', ...args], {
       cwd, env: contextEnvironment(), input, encoding: 'utf8', stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'], timeout: 30_000, maxBuffer: 8 * 1024 * 1024,
     }).trimEnd();
   } catch {

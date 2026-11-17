@@ -23,10 +23,10 @@ export async function verifyOfflineRuntimeSequence({ root = sourceRoot } = {}) {
   if (!result.preflightPassed || !result.preflightWhileOwned || !result.detached || result.afterDetachState !== 'absent'
     || !result.secondOwnerAcquired || result.ownerState !== 'live' || result.shellExit !== 0 || !result.shellExitedBeforeSettlement
     || result.settled?.kind !== 'cleanup-skipped' || !/live session/.test(result.settled.detail) || result.replay !== null
-    || result.deletionCalls !== 0 || result.events.length !== 1 || !/Live or unverifiable owner/.test(result.directExecution?.results[0]?.reason ?? '')) throw Error('Actual offline runtime sequencing did not establish C39');
+    || result.deletionCalls !== 0 || result.events.length !== 1 || !/(?:live session owns|Live or unverifiable owner)/.test(result.directExecution?.results[0]?.reason ?? '')) throw Error('Actual offline runtime sequencing did not establish C39');
   return { observation: { targetPreserved: result.targetPreserved, unrelatedCheckoutPreserved: result.unrelatedCheckoutPreserved,
     bulkSweepCalls: result.bulkSweepCalls, sessionUsableOutsideTarget: result.sessionUsableOutsideTarget },
-    evidence: { revision: result.revision, preflightPassed: result.preflightPassed, detached: result.detached, secondOwnerAcquired: result.secondOwnerAcquired,
+    evidence: { revision: result.revision, packageSha256: result.packageSha256, preflightPassed: result.preflightPassed, detached: result.detached, secondOwnerAcquired: result.secondOwnerAcquired,
       shellExitedBeforeSettlement: result.shellExitedBeforeSettlement, settlement: result.settled.kind,
       mockedDependencies: result.mockedDependencies, liveAdoption: result.liveAdoption, releasedCompatibility: result.releasedCompatibility } };
 }

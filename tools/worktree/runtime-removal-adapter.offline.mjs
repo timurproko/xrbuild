@@ -8,7 +8,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { verifyOfflineRuntimeSequence, runOfflineRuntimeScenario } from './offline-runtime-verification.mjs';
 import { PROPOSED_A1, readPinnedFixture } from './proposed-a1-fixture.mjs';
-import { preparePinnedRuntimeFixture } from './prepare-proposed-a1-fixture.mjs';
+import { runLifetimeScenario } from './runtime-lifetime-verification.mjs';
+import { loadPinnedRuntime } from './proposed-a1-fixture.mjs';
 import { offlineExactRemovalDeclaration } from './runtime-removal-adapter.mjs';
 const fixture = JSON.parse(fs.readFileSync(new URL('../../docs/delivery-cases.json', import.meta.url))).cases.find(row=>row.id==='C39');
 const report = result => JSON.parse(result.settled.detail);
@@ -18,7 +19,7 @@ test('C39: actual current A1 APIs in separate processes reject the new owner aft
   const result=await verifyOfflineRuntimeSequence();assert.deepEqual(result.observation,fixture.expect);
   assert.equal(result.evidence.revision,PROPOSED_A1.revision);assert.equal(result.evidence.settlement,'cleanup-skipped');
   assert.equal(result.evidence.liveAdoption,'disabled');assert.equal(result.evidence.releasedCompatibility,'unverified');
-  assert.ok(!result.evidence.mockedDependencies.some(name=>name.includes('proper-lockfile')));
+  assert.deepEqual(result.evidence.mockedDependencies,[]);assert.equal(result.evidence.packageSha256,PROPOSED_A1.package.sha256);
 });
 
 test('both exact adapters really remove one isolated checkout and retain local/remote refs and unrelated worktrees',async()=>{
@@ -39,14 +40,15 @@ test('a real second process cannot acquire while XR holds A1 exclusion; JSON gen
   assert.equal(result.localRefsPreserved,true);assert.equal(result.remoteRefsPreserved,true);assert.equal(result.unrelatedCheckoutPreserved,true);
 });
 
-test('owner acquiring after A1 settlement precheck is caught by XR under the shared gate',async()=>{
+test('acquisition attempted after settlement precheck is prevented by the actual packaged boundary',async()=>{
   const result=await runOfflineRuntimeScenario('new-owner-before-execute');
-  assert.equal(result.lateAcquired,true);assert.equal(result.settled.kind,'cleanup-failed');assert.match(report(result).results[0].reason,/Live or unverifiable owner/);preserved(result);
+  assert.equal(result.lateAcquired,false);assert.equal(result.contenderCode,'worktree-claim-busy');assert.equal(result.settled.kind,'cleanup-finished',JSON.stringify(result.settled));
+  assert.equal(result.targetRemoved,true);assert.equal(result.deletionCalls,1);assert.equal(result.localRefsPreserved,true);assert.equal(result.remoteRefsPreserved,true);
 });
 
-test('ignored content, an unmerged PR and missing execution facilities block preflight without detaching',async()=>{
-  for(const scenario of ['dirty-preflight','unmerged-complete','missing-facility']){
-    const result=await runOfflineRuntimeScenario(scenario);assert.match(result.requestError.code,/preflight/);
+test('ignored content, unmerged PRs, missing facilities and legacy declarations block before detach',async()=>{
+  for(const scenario of ['dirty-preflight','unmerged-complete','missing-facility','legacy-declaration']){
+    const result=await runOfflineRuntimeScenario(scenario);assert.match(result.requestError.code,/preflight|unavailable/);
     assert.equal(result.stillAttached,true);assert.equal(result.targetPreserved,true);assert.equal(result.deletionCalls,0);
   }
 });
@@ -58,25 +60,39 @@ test('pre-detach journals reject new content, reowned/published heads and recrea
   }
 });
 
-test('a replaced filesystem gate invalidates actual scoped authority before removal',async()=>{
-  const result=await runOfflineRuntimeScenario('scope-replaced');assert.equal(result.settled.kind,'cleanup-failed');
-  assert.equal(result.expiredScopeRejected,true);preserved(result);
+test('supported snapshot contract refuses incomplete, altered and legacy approvals without minted generations',async()=>{
+  const runtime=await loadPinnedRuntime();
+  for(const expected of [{},{version:0},{version:1,path:'untrusted'}])assert.throws(()=>runtime.snapshot.assertWorktreeCleanupSnapshot(expected,{}),/snapshot changed/);
 });
 
-test('native stale-lease probe: another process can acquire during a suspended callback, so live loss fencing is NOT certified',async()=>{
-  const result=await runOfflineRuntimeScenario('lease-loss');
-  assert.equal(result.leaseLossObserved,true,'Actual current A1/lock package demonstrates the remaining upstream lifetime gap');
-  assert.equal(result.settled.kind,'cleanup-failed');assert.equal(result.expiredScopeRejected,true);preserved(result);
+test('holder suspension beyond the old lease prevents takeover and still completes exact cleanup',async()=>{
+  const result=await runOfflineRuntimeScenario('suspension');
+  assert.equal(result.leaseLossObserved,false);assert.equal(result.contenderCode,'worktree-claim-busy');
+  assert.equal(result.settled.kind,'cleanup-finished',JSON.stringify(result.settled));assert.equal(result.targetRemoved,true);
+  assert.equal(result.localRefsPreserved,true);assert.equal(result.remoteRefsPreserved,true);assert.equal(result.unrelatedCheckoutPreserved,true);
 });
 
-test('explicit preparation reconstructs the current verified source cache without installing A1',t=>{
-  const files=readPinnedFixture(),root=fs.mkdtempSync(path.join(os.tmpdir(),'runtime-prepare-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));const calls=[];
-  const result=preparePinnedRuntimeFixture({root,request:endpoint=>{
-    calls.push(endpoint);if(endpoint===`repos/${PROPOSED_A1.repository}`)return{full_name:PROPOSED_A1.repository,private:false};
-    const prefix=`repos/${PROPOSED_A1.repository}/contents/`,suffix=`?ref=${PROPOSED_A1.revision}`;assert.ok(endpoint.startsWith(prefix)&&endpoint.endsWith(suffix));
-    const file=endpoint.slice(prefix.length,-suffix.length),bytes=files.get(file);assert.ok(bytes);return{encoding:'base64',sha:PROPOSED_A1.files[file].gitBlob,content:bytes.toString('base64')};
-  }});
-  assert.equal(calls.length,files.size+1);for(const[file,bytes]of readPinnedFixture(root))assert.deepEqual(bytes,files.get(file));assert.equal(result.runtimeInstalled,false);assert.equal(result.liveAdoption,'disabled');
+for(const scenario of ['holder-suspension','holder-death','tracked-descendant'])test(`actual packaged child-lifetime exclusion: ${scenario}`,async()=>{
+  const result=await runLifetimeScenario(scenario);
+  for(const name of ['stoppedHolder','targetPreserved','unrelatedPreserved','localRefsPreserved','remoteRefsPreserved','takeoverPrevented','destructiveChildActuallyRan'])assert.equal(result[name],true,name);
+  assert.equal(result.packageSha256,PROPOSED_A1.package.sha256);assert.equal(result.liveAdoption,'disabled');assert.equal(result.releasedCompatibility,'unverified');
+});
+
+test('verified package imports unchanged code/declarations and type-checks an external supported consumer',async t=>{
+  const files=readPinnedFixture(),runtime=await loadPinnedRuntime();
+  assert.equal(files.size,16);assert.deepEqual(runtime.mockedDependencies,[]);assert.equal(runtime.packageSha256,PROPOSED_A1.package.sha256);
+  for(const name of ['worktree-cleanup-snapshot','worktree-claim-boundary'])assert.ok(files.has(`dist/foundation/lifecycle/${name}.d.mts`));
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'xr-package-types-'));t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+  const root=fileURLToPath(new URL('../../',import.meta.url)),file=path.join(directory,'consumer.mts');
+  fs.writeFileSync(file,`import {captureWorktreeCleanupSnapshot,type WorktreeCleanupSnapshot} from ${JSON.stringify(fileURLToPath(runtime.snapshotModuleUrl).replaceAll(path.sep,'/'))};
+import {executeUnclaimedWorktreeCleanup,executeCleanupCommand,withUnclaimedWorktree,type CleanupExecutionOptions} from ${JSON.stringify(fileURLToPath(runtime.boundaryModuleUrl).replaceAll(path.sep,'/'))};
+const expected:WorktreeCleanupSnapshot=await captureWorktreeCleanupSnapshot('typecheck-only');const version:1=expected.version;
+const options:CleanupExecutionOptions={dataDir:'typecheck-only'};
+const result:Promise<string>=executeUnclaimedWorktreeCleanup(expected,'git',[],options);
+const child:Promise<string>=withUnclaimedWorktree(expected,options,()=>executeCleanupCommand('git',[],{...options,protectTarget:true}));void version;void result;void child;\n`);
+  const checked=spawnSync(process.execPath,[path.join(root,'node_modules/typescript/lib/tsc.js'),'--noEmit','--strict','--module','NodeNext','--moduleResolution','NodeNext','--target','ES2024',
+    '--typeRoots',path.join(root,'node_modules/@types'),'--types','node',file],{encoding:'utf8',timeout:25_000});
+  assert.equal(checked.status,0,checked.stdout+checked.stderr);
 });
 
 test('live CLI/declaration remain disabled/unchanged; prepared declarations have exact separate operations and no sweep',()=>{
@@ -84,5 +100,5 @@ test('live CLI/declaration remain disabled/unchanged; prepared declarations have
   const child=spawnSync(process.execPath,[fileURLToPath(new URL('./runtime-removal-adapter.mjs',import.meta.url)),'execute'],{encoding:'utf8'});
   assert.equal(child.status,1);assert.match(child.stderr,/Compatible released.*unavailable/);assert.deepEqual(fs.readFileSync(new URL('../../.a1/worktree.json',import.meta.url)),before);
   const declaration=offlineExactRemovalDeclaration();assert.ok(declaration.cleanup.includes('{worktree}'));assert.ok(declaration.cleanupPreflight.includes('{worktree}'));
-  assert.ok(declaration.localRemoval.execute.includes('{worktree}'));assert.ok(!JSON.stringify(declaration).includes('sweep'));
+  assert.ok(declaration.localRemoval.execute.includes('{worktree}'));assert.ok(!JSON.stringify(declaration).includes('sweep'));assert.ok(declaration.cleanup.includes('{snapshot}'));assert.ok(declaration.localRemoval.execute.includes('{snapshot}'));
 });
