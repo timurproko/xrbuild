@@ -49,6 +49,16 @@ test('approved paired R11 scope preserves release-specific automation without br
   assert.match(approval, /does not.*introduce a new release route in a repository that has none/);
 });
 
+test('overlapping pending governance delta preserves documentation scenarios after delivery finalization', () => {
+  const pending = 'openspec/changes/pr-delivery-governance/specs/change-delivery/spec.md';
+  const requirement = content => content.split('### Requirement: Documentation auto-merge')[1]?.split('\n### Requirement:')[0] ?? '';
+  const names = content => [...requirement(content).matchAll(/^#### Scenario: (.+)$/gm)].map(match => match[1]);
+  const introduced = names(text(`${planningDirectory}/specs/change-delivery/spec.md`));
+  const target = names(text(fs.existsSync(path.join(root, pending)) ? pending : 'openspec/specs/change-delivery/spec.md'));
+  assert.ok(introduced.length > 0);
+  for (const name of introduced) assert.ok(target.includes(name), `Pending delta must not drop finalized scenario: ${name}`);
+});
+
 test('C44: a one-byte deployment change cannot be approved by a local rehash', () => {
   const fixture = sharedCase('C44');
   assert.equal(fixture.given.deployedRulebookDiffersByOneByte, true);
