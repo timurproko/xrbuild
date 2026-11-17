@@ -67,7 +67,18 @@ export async function inspectRuntimeLocalRemoval({ phase, root, target, change, 
       return await removePublishedCheckoutInScope({ ...options, scope, intent, readPublication, ...(remove ? { remove } : {}) });
     });
     Object.assign(row, result, { disposition: 'removed' });
-  } catch (error) { row.reason = error.message; }
+  } catch (error) {
+    row.reason = error.message;
+    const code = error.cleanupCode ?? error.code;
+    row.code = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(code ?? '') ? code : 'XRB_CLEANUP_BLOCKED';
+    row.retry = error.retry ?? (['ENOENT', 'worktree-cleanup-snapshot-changed', 'worktree-claim-busy', 'worktree-cleanup-child-unverifiable', 'attached-session-unverifiable', 'worktree-cleanup-exclusion'].includes(row.code)
+      ? 'unsupported' : 'fresh-evaluation-only');
+    for (const field of ['journal', 'operation', 'journalPhase']) if (error[field]) row[field] = error[field];
+    row.preserved = 'Remaining checkout data, journals, refs and unrelated worktrees are retained; an interrupted command may have partially removed its target.';
+    row.nextAction = row.retry === 'unsupported'
+      ? 'No destructive retry or automatic recovery is supported for this result. Preserve the journal and original approval; uncertain child lifetime needs separately verified recovery, which the pinned public runtime interface does not provide. Do not remove locks, change the claim namespace, force cleanup or use sweep/discard.'
+      : 'Only a fresh explicit evaluation of the same original approval and prepared journal is supported after resolving the blocker; publication, preservation and ownership are rechecked. This does not authorize recovery of uncertain work or lock removal.';
+  }
   return report;
 }
 

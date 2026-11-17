@@ -100,7 +100,7 @@ export async function runProposedRuntimeScenario(scenario = 'new-owner', cacheRo
     let request, requestError;
     try { request = complete ? await completion.requestSessionWorktreeCompletion(first,{change:'fixture',pr:19},{...options,run}) : await completion.requestSessionWorktreeLocalRemoval(first,{...options,run}); }
     catch(error) { requestError={code:error.code,message:error.message}; }
-    if(requestError)return {revision:runtime.revision,scenario,requestError,events,stillAttached:(await context.readActiveSessionRepositoryContext(first,options))?.cwd===f.target,targetPreserved:fs.existsSync(f.target),deletionCalls:0};
+    if(requestError)return {revision:runtime.revision,packageSha256:runtime.packageSha256,scenario,requestError,events,stillAttached:(await context.readActiveSessionRepositoryContext(first,options))?.cwd===f.target,targetPreserved:fs.existsSync(f.target),deletionCalls:0};
     const detached=await context.readActiveSessionRepositoryContext(first,options)===null;
     const common=path.join(f.root,'.git'), admin=git(f.target,'rev-parse','--absolute-git-dir');
     const afterDetachState=await context.sessionWorktreeClaimState(common,admin,options);

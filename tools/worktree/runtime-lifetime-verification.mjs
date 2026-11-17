@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { loadPinnedRuntime } from './proposed-a1-fixture.mjs';
 import { repository, liveOwner } from './proposed-runtime-worker.mjs';
 import { executeGit } from './portable-context.mjs';
+import { inspectRuntimeLocalRemoval } from './runtime-removal-adapter.mjs';
 
 export async function runLifetimeScenario(scenario) {
   if (!['holder-suspension', 'holder-death', 'tracked-descendant'].includes(scenario)) throw Error('Unknown lifetime probe');
@@ -40,7 +41,8 @@ export async function runLifetimeScenario(scenario) {
     const options = { dataDir, runtimeId: 'lifetime-peer-runtime', lockTimeoutMs: 50 };
     await owner.call('register', { identity, options });
     const config = { root: f.root, target: f.target, dataDir, approved, boundaryModuleUrl: runtime.boundaryModuleUrl,
-      port: server.address().port, descendant: scenario === 'tracked-descendant' };
+      port: server.address().port, descendant: scenario === 'tracked-descendant',
+      xrController: scenario === 'holder-death', remote: f.remote };
     holder = spawn(process.execPath, [fileURLToPath(new URL('./runtime-lifetime-process.mjs', import.meta.url)), 'holder', Buffer.from(JSON.stringify(config)).toString('base64url')], {
       cwd: f.root, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     });
@@ -54,7 +56,16 @@ export async function runLifetimeScenario(scenario) {
       catch (error) { return error.code; }
     };
     assert.equal(await claimAttempt(), 'worktree-claim-busy');
-    let settled, stoppedHolder = false;
+    let settled, stoppedHolder = false, journalBefore, crashRetry, retryAfterChild, retryCommands = 0;
+    const journalBytes = () => {
+      const directory = path.join(f.root, '.git', 'xrb-removal');
+      const files = fs.readdirSync(directory).filter(name => name.endsWith('.json'));
+      assert.equal(files.length, 1); return fs.readFileSync(path.join(directory, files[0]), 'utf8');
+    };
+    const retry = () => inspectRuntimeLocalRemoval({ phase: 'execute', root: f.root, target: f.target, approvedSnapshot: approved,
+      runtime, runtimeOptions: { dataDir, lockTimeoutMs: 50 }, execute: executeGit,
+      identify: cwd => executeGit(cwd, ['remote', 'get-url', 'origin']) === f.remote ? 'timurproko/xrbuild' : 'foreign/repository',
+      remove: async () => { retryCommands++; assert.fail('Crashed operation must not launch destructive work on retry'); } });
     if (scenario === 'holder-suspension') {
       holder.send('suspend'); await timed(waitMessage(message => message.suspended));
       await delay(11_500); // Beyond the obsolete stale lease, not a longer production lease or polling exclusion.
@@ -66,7 +77,12 @@ export async function runLifetimeScenario(scenario) {
       assert.equal(await claimAttempt(), 'acquired', 'Only actual child close and normal holder completion release authority');
       await owner.call('detach', { identity, options });
     } else {
-      if (scenario === 'holder-death') { holder.send('die'); const [code] = await timed(holderClosed); assert.equal(code, 73); stoppedHolder = true; await delay(11_500); }
+      if (scenario === 'holder-death') {
+        journalBefore = journalBytes(); assert.equal(JSON.parse(journalBefore).phase, 'removing');
+        holder.send('die'); const [code] = await timed(holderClosed); assert.equal(code, 73); stoppedHolder = true; await delay(11_500);
+        crashRetry = await retry(); assert.equal(crashRetry.results[0].code, 'worktree-claim-busy');
+        assert.equal(crashRetry.results[0].retry, 'unsupported'); assert.equal(journalBytes(), journalBefore);
+      }
       else {
         await timed(waitRole('controller')); sockets.get('controller').write('exit\n');
         settled = await timed(waitMessage(message => message.settled));
@@ -82,11 +98,16 @@ export async function runLifetimeScenario(scenario) {
       if (n === 99) throw Error('Known fixture child has not exited'); await delay(20);
     }
     assert.equal(fs.readFileSync(path.join(f.target, 'source.txt'), 'utf8'), 'tracked cleanup child mutation\n');
+    if (scenario === 'holder-death') {
+      retryAfterChild = await retry(); assert.equal(retryAfterChild.results[0].disposition, 'blocked');
+      assert.equal(journalBytes(), journalBefore); assert.equal(retryCommands, 0);
+    }
     completed = true;
     return { scenario, revision: runtime.revision, packageSha256: runtime.packageSha256, stoppedHolder,
       targetPreserved: fs.existsSync(f.target), unrelatedPreserved: fs.existsSync(f.unrelated),
       localRefsPreserved: executeGit(f.root, ['show-ref', '--heads']) === f.localRefs,
       remoteRefsPreserved: executeGit(f.remote, ['show-ref']) === f.remoteRefs,
+      ...(scenario === 'holder-death' ? { crashRetry, retryAfterChild, retryCommands, journalPhase: JSON.parse(journalBefore).phase, journalPreserved: journalBytes() === journalBefore } : {}),
       takeoverPrevented: true, destructiveChildActuallyRan: true, liveAdoption: 'disabled', releasedCompatibility: 'unverified' };
   } finally {
     if (owner) await owner.stop();

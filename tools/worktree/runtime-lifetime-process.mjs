@@ -28,7 +28,21 @@ if (role === 'mutator') {
     if (message === 'die') process.exit(73);
   });
   try {
-    await boundary.executeUnclaimedWorktreeCleanup(config.approved, process.execPath,
+    if (config.xrController) {
+      const { inspectRuntimeLocalRemoval } = await import('./runtime-removal-adapter.mjs');
+      const { executeOwnershipCommand } = await import('./ownership-exclusion.mjs');
+      const { loadPinnedRuntime } = await import('./proposed-a1-fixture.mjs');
+      const { executeGit } = await import('./portable-context.mjs');
+      const runtime = await loadPinnedRuntime();
+      const dependencies = { root: config.root, target: config.target, approvedSnapshot: config.approved, runtime,
+        runtimeOptions: { dataDir: config.dataDir }, execute: executeGit,
+        identify: cwd => executeGit(cwd, ['remote', 'get-url', 'origin']) === config.remote ? 'timurproko/xrbuild' : 'foreign/repository',
+        remove: (_root, _target, scope, snapshot) => executeOwnershipCommand(scope, snapshot, process.execPath, [self, 'mutator', encoded]) };
+      const preflight = await inspectRuntimeLocalRemoval({ ...dependencies, phase: 'preflight' });
+      if (preflight.results[0].disposition !== 'eligible') throw Error(JSON.stringify(preflight));
+      const result = await inspectRuntimeLocalRemoval({ ...dependencies, phase: 'execute' });
+      if (result.results[0].disposition !== 'removed') throw Error(JSON.stringify(result));
+    } else await boundary.executeUnclaimedWorktreeCleanup(config.approved, process.execPath,
       [self, config.descendant ? 'controller' : 'mutator', encoded], { dataDir: config.dataDir, cwd: config.root, timeoutMs: 30_000 });
     process.send({ settled: 'finished' });
   } catch (error) { process.send({ settled: 'blocked', code: error.code, reason: error.message }); }

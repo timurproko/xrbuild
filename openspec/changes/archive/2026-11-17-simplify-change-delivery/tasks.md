@@ -35,6 +35,9 @@ Contract binding: R12-R16; consume the matching IDs in `delivery-cases.json` wit
   - Maintainer-approved scope split: release verification and live adoption are tracked independently in https://github.com/timurproko/xrbuild/issues/20, not as unfinished implementation in this PR. This tick records completed source/offline adapter work only. The follow-up must verify the published/installed artifact and minimum version, participating writers and actual child-lifetime behavior before adoption; stop incompatible older writers first. Live CLI/declaration remain disabled/unchanged and no fallback sweep runs.
 - [x] 3.4 Cover partial recovery, retries and recreated identities; verify standalone paths remain supported and legacy discard cannot silently broaden remote authority.
 
+- [x] 3.5 Review inactive cleanup crash/retry behavior; preserve original approvals, journals and public child-lifetime boundaries; fix reproduced diagnostics defects, verify no uncertain deletion replay and document unsupported recovery without live adoption.
+  - Real interrupted commands retain bounded public failure code/stage in partial journals and structured refusal guidance. Lost responses, changed HEAD/recreated identity and real holder-death retries make no repeated destructive call; prepared local/merged reevaluations require fresh publication/content/actual-owner checks. Complete runtime 16/16, focused removal/ownership/guidance 55/55 and immutable shared cases 50/50 pass. Released-artifact crash/retry verification and the missing public orphan-recovery capability remain unchecked in issue #20.
+
 ## 4. Progress and readiness
 
 Contract binding: R05-R08; consume the matching IDs in `delivery-cases.json` without rewriting expectations.

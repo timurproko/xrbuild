@@ -60,6 +60,45 @@ test('pre-detach journals reject new content, reowned/published heads and recrea
   }
 });
 
+test('actual interrupted cleanup retains public failure code/journal and refuses every destructive retry',async()=>{
+  const result=await runOfflineRuntimeScenario('retry-interrupted');
+  const row=result.result.results[0];
+  assert.equal(row.disposition,'blocked');assert.equal(row.code,'worktree-cleanup-interrupted');
+  assert.equal(row.retry,'unsupported');assert.equal(row.journalPhase,'partial');assert.match(row.reason,/recovery/);
+  assert.equal(result.failedJournal.phase,'partial');assert.equal(result.failedJournal.failure.code,'worktree-cleanup-interrupted');
+  assert.equal(result.failedJournal.failure.stage,'destructive-command');
+  assert.equal(result.capturedChildClosed,true);assert.equal(result.commands,1);assert.equal(result.afterFirstCommands,1);
+  assert.equal(result.retry.results[0].retry,'unsupported');
+  for(const name of ['targetPreserved','unrelatedPreserved','localRefsPreserved','remoteRefsPreserved','journalUnchanged'])assert.equal(result[name],true,name);
+  for(const attempt of [result.retry,result.preflightRetry,result.changedHead,result.freshApprovalRetry,...result.attempts])assert.equal(attempt.results[0].disposition,'blocked');
+  assert.match(result.changedHead.results[0].reason,/snapshot changed/);
+  assert.equal(JSON.stringify(result).includes('synthetic-private-output'),false,'Untrusted child output must not leak via journal/report');
+});
+
+test('lost successful removal response never retries or grants authority to a recreated checkout',async()=>{
+  const result=await runOfflineRuntimeScenario('retry-lost-result');
+  assert.equal(result.result.results[0].code,'XRB_TEST_RESPONSE_LOST');
+  assert.equal(result.failedJournal.phase,'partial');assert.equal(result.commands,1);assert.equal(result.journalUnchanged,true);
+  for(const attempt of [result.retry,result.recreated,result.freshApprovalRetry,...result.attempts]){
+    assert.equal(attempt.results[0].disposition,'blocked');assert.equal(attempt.results[0].retry,'unsupported');
+  }
+  assert.match(result.recreated.results[0].reason,/snapshot changed/);
+  for(const name of ['targetPreserved','unrelatedPreserved','localRefsPreserved','remoteRefsPreserved'])assert.equal(result[name],true,name);
+});
+
+test('prepared retries recheck actual publication, late data and real editing claims before one exact removal',async()=>{
+  for(const scenario of ['retry-prepared','retry-merged-prepared']) {
+    const result=await runOfflineRuntimeScenario(scenario);
+    assert.equal(result.preflight.results[0].disposition,'eligible');assert.equal(result.preparedUnchanged,true);
+    for(const attempt of result.attempts)assert.equal(attempt.results[0].disposition,'blocked');
+    assert.match(result.attempts[0].results[0].reason,/publication|merged evidence/i);
+    assert.match(result.attempts[1].results[0].reason,/content|uninspected/i);
+    assert.match(result.attempts[2].results[0].reason,/live session owns/);
+    assert.equal(result.result.results[0].disposition,'removed',JSON.stringify(result.result));assert.equal(result.commands,1);assert.equal(result.journalPhase,'removed');
+    for(const name of ['targetRemoved','unrelatedPreserved','localRefsPreserved','remoteRefsPreserved'])assert.equal(result[name],true,name);
+  }
+});
+
 test('supported snapshot contract refuses incomplete, altered and legacy approvals without minted generations',async()=>{
   const runtime=await loadPinnedRuntime();
   for(const expected of [{},{version:0},{version:1,path:'untrusted'}])assert.throws(()=>runtime.snapshot.assertWorktreeCleanupSnapshot(expected,{}),/snapshot changed/);
@@ -76,6 +115,10 @@ for(const scenario of ['holder-suspension','holder-death','tracked-descendant'])
   const result=await runLifetimeScenario(scenario);
   for(const name of ['stoppedHolder','targetPreserved','unrelatedPreserved','localRefsPreserved','remoteRefsPreserved','takeoverPrevented','destructiveChildActuallyRan'])assert.equal(result[name],true,name);
   assert.equal(result.packageSha256,PROPOSED_A1.package.sha256);assert.equal(result.liveAdoption,'disabled');assert.equal(result.releasedCompatibility,'unverified');
+  if(scenario==='holder-death') {
+    assert.equal(result.journalPhase,'removing');assert.equal(result.journalPreserved,true);assert.equal(result.retryCommands,0);
+    assert.equal(result.crashRetry.results[0].code,'worktree-claim-busy');assert.equal(result.retryAfterChild.results[0].disposition,'blocked');
+  }
 });
 
 test('verified package imports unchanged code/declarations and type-checks an external supported consumer',async t=>{

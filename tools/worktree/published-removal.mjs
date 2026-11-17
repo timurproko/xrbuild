@@ -252,6 +252,15 @@ function validIdentity(identity) {
     });
 }
 
+const failureCode = error => /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(error?.cleanupCode ?? error?.code ?? '')
+  ? (error.cleanupCode ?? error.code) : 'unclassified-cleanup-failure';
+function recoveryRequired(journal, file, reason) {
+  return Object.assign(new Error(`${reason}; journal ${journal.record.operation} retained (${journal.record.phase}); remaining checkout data and refs preserved. Automatic/destructive retry is unsupported; explicit recovery required, no fallback`), {
+    code: journal.record.failure?.code ?? 'XRB_REMOVAL_RECOVERY_REQUIRED', retry: 'unsupported',
+    journal: file, operation: journal.record.operation, journalPhase: journal.record.phase,
+  });
+}
+
 function loadJournal(file) {
   if (!exists(file)) return null;
   plain(file);
@@ -260,7 +269,10 @@ function loadJournal(file) {
   try { record = JSON.parse(bytes); } catch { fail('Partial cleanup journal requires recovery; data preserved'); }
   if (!record || record.version !== 1 || !['prepared', 'removing', 'partial', 'removed'].includes(record.phase)
     || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(record.operation ?? '') || !record.snapshot
-    || Object.keys(record).some(name => !['version', 'operation', 'phase', 'snapshot', 'observedRemoteHead', 'intent'].includes(name))
+    || Object.keys(record).some(name => !['version', 'operation', 'phase', 'snapshot', 'observedRemoteHead', 'intent', 'failure'].includes(name))
+    || record.failure !== undefined && (record.phase !== 'partial' || !record.failure
+      || Object.keys(record.failure).sort().join(',') !== 'code,stage' || record.failure.stage !== 'destructive-command'
+      || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(record.failure.code ?? ''))
     || record.intent !== undefined && (!record.intent || !['local', 'complete'].includes(record.intent.kind)
       || Object.keys(record.intent).some(name => !['kind', 'change', 'pr'].includes(name))
       || record.intent.kind === 'complete' && (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(record.intent.change ?? '') || !Number.isSafeInteger(record.intent.pr) || record.intent.pr < 1))
@@ -349,7 +361,8 @@ export async function prepareRemovalCheckout(options, { intent = { kind: 'local'
     if (!evidence.publicationVerified || !/^[a-f0-9]{40}$/.test(evidence.remoteHead ?? '')) fail('Publication/merged evidence unavailable; checkout preserved');
     if (!snapshotEqual(snapshot, inspectRemovalTarget({ ...options, root, target }))) fail('Preflight snapshot changed');
     const prior = loadJournal(journalFile);
-    if (prior && (prior.record.phase !== 'prepared' || !snapshotEqual(prior.record.snapshot, snapshot) || !equal(prior.record.intent, intent))) fail('Prior operation requires explicit recovery; preflight cannot replace its authority');
+    if (prior && prior.record.phase !== 'prepared') throw recoveryRequired(prior, journalFile, 'Prior operation is not a prepared reservation; preflight cannot replace its authority');
+    if (prior && (!snapshotEqual(prior.record.snapshot, snapshot) || !equal(prior.record.intent, intent))) fail('Prior operation requires explicit recovery; preflight cannot replace its authority');
     lock.assertOwned();
     if (!prior) saveJournal(journalFile, { version: 1, operation: randomUUID(), phase: 'prepared', snapshot, observedRemoteHead: evidence.remoteHead, intent }, null);
     return snapshot;
@@ -372,7 +385,8 @@ export async function removePublishedCheckoutInScope({ scope, intent, readPublic
     if ((options.identify ?? identifyRepository)(root) !== adapter.repository) fail('Cleanup repository identity mismatch');
     assertOwnershipExclusion(scope, context);
     let journal = loadJournal(journalFile);
-    if (!journal || journal.record.phase !== 'prepared' || !equal(journal.record.intent, intent)) fail('Matching pre-detach reservation is required; no retry deletion');
+    if (journal && journal.record.phase !== 'prepared') throw recoveryRequired(journal, journalFile, 'Prior cleanup result is not eligible for retry deletion');
+    if (!journal || !equal(journal.record.intent, intent)) fail('Matching pre-detach reservation is required; no retry deletion');
     const snapshot = inspectRemovalTarget({ ...options, root, target });
     if (!snapshotEqual(journal.record.snapshot, snapshot)) fail('Checkout changed after preflight; preserved');
     const publication = async () => {
@@ -391,9 +405,16 @@ export async function removePublishedCheckoutInScope({ scope, intent, readPublic
     journal = saveJournal(journalFile, { ...journal.record, phase: 'removing', observedRemoteHead: fresh.remoteHead }, journal);
     assertOwnershipExclusion(scope, context); lock.assertOwned();
     try { await remove(root, target, scope, snapshot); }
-    catch {
-      lock.assertOwned(); saveJournal(journalFile, { ...journal.record, phase: 'partial' }, journal);
-      fail('Non-force scoped removal failed or lost exclusion; explicit recovery required, no fallback');
+    catch (error) {
+      const failure = { stage: 'destructive-command', code: failureCode(error) };
+      try {
+        lock.assertOwned();
+        journal = saveJournal(journalFile, { ...journal.record, phase: 'partial', failure }, journal);
+      } catch {
+        // Do not repair a replaced lock/journal. The existing removing marker remains uncertain, never retryable.
+        throw Object.assign(recoveryRequired(journal, journalFile, `Non-force scoped command failed (${failure.code}); partial diagnostic could not be persisted`), { code: failure.code });
+      }
+      throw recoveryRequired(journal, journalFile, `Non-force scoped command failed (${failure.code})`);
     }
     // Any uncertainty after the command leaves the removing journal for explicit recovery, never retry deletion.
     assertOwnershipExclusion(scope, context); lock.assertOwned();

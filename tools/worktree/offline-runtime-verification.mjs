@@ -10,11 +10,12 @@ export async function runOfflineRuntimeScenario(scenario = 'new-owner', root = s
   readPinnedFixture(root); // Missing/drifted cache is explicit; never fetch or import an installed runtime.
   const env = Object.fromEntries(Object.entries(contextEnvironment()).filter(([key]) => !/^(?:A1_|PI_|GH_|GITHUB_)/i.test(key)));
   Object.assign(env, { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' });
-  const { stdout } = await execute(process.execPath, [fileURLToPath(new URL('./proposed-runtime-worker.mjs', import.meta.url)), scenario, root], {
+  const worker = scenario.startsWith('retry-') ? './runtime-retry-worker.mjs' : './proposed-runtime-worker.mjs';
+  const { stdout } = await execute(process.execPath, [fileURLToPath(new URL(worker, import.meta.url)), scenario, root], {
     env, encoding: 'utf8', timeout: 120_000, maxBuffer: 4 * 1024 * 1024,
   });
   const result = JSON.parse(stdout);
-  if (result.revision !== PROPOSED_A1.revision || result.scenario !== scenario) throw Error('Offline runtime evidence does not match pinned scenario');
+  if (result.revision !== PROPOSED_A1.revision || result.packageSha256 !== PROPOSED_A1.package.sha256 || result.scenario !== scenario) throw Error('Offline runtime evidence does not match pinned scenario');
   return result;
 }
 

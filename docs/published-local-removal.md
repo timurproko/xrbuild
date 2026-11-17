@@ -46,6 +46,32 @@ never delete recreated paths. Linked/unknown/incomplete journals or locks are re
 Explicit `sweep --apply` retains merged-only selection and rechecks eligibility through the same standalone engine.
 It gains no runtime/open-PR authority and cannot bypass an unavailable trusted ownership provider.
 
+## Interruption and retry/refusal
+
+The adapter reports the failed stage/public code, preserved resources, and whether only a fresh evaluation or no retry
+is supported. A failed destructive command leaves a `partial` journal with bounded `failure.stage`/`failure.code`
+diagnostics. No raw child output, delegated authority, environment or credentials are persisted. Older journals without
+failure metadata remain readable. An unknown public error code is reported as unclassified, not an invented exit status.
+
+- **Prepared, no destructive attempt:** after resolving an ordinary publication/content/live-owner blocker, a fresh
+  explicit evaluation may use only the same original approval and prepared journal. Both local and merged routes
+  recheck live applicable publication, all bounded preservation checks and actual ownership. A prepared journal is
+  not cached eligibility. Runtime settlement is single-use; replay is not a request queue or retry authorization.
+- **Interrupted/uncertain result:** `removing`, `partial`, changed locks/journals, missing resources or lost responses
+  do not authorize another destructive command. Preserve the journal and remaining checkout data. Even if Git actually
+  finished before its response was lost, do not infer completion or recapture approval for a replacement checkout.
+  Refinalized HEADs and physical replacements require distinct review, never reuse of the original journal/approval.
+- **Surviving child/unverifiable ownership:** the actual packaged boundary refuses acquisition/retry and retains
+  exclusion across holder death or suspension. Waiting, observing a dead parent or seeing a child finish is not a
+  supported orphan-recovery mechanism. XR never opens or changes runtime gate files, deletes locks, changes namespaces,
+  evicts gates or falls back to sweep/discard/force.
+
+There is **no automatic uncertain-journal retry** and no XR recovery CLI. The pinned public A1 execution interface
+provides exclusion and lifetime refusal, but no public orphan-inspection/proven-child-stop recovery operation. This is
+an explicit adoption/operational dependency in [issue #20](https://github.com/timurproko/xrbuild/issues/20), not a feature
+implemented by this PR. Preserve the recorded operation and original approval for separately reviewed recovery; do not
+perform production recovery based on these test results. No result authorizes ref deletion or unrelated cleanup.
+
 ## Exact runtime adapter
 
 Only these packaged external modules are used by the XR bridge:
@@ -103,7 +129,9 @@ prior logs did not distinguish age/identity/abort, so that narrower cause remain
 deadlines or retrying until lucky. The compatibility correction removes that entire unsupported observation path and
 uses the corrected packaged non-expiring/child-lifetime boundary. All required success assertions remain unchanged.
 
-The full 13-case runtime suite passes: real exact local/squash-merged removal; retained refs/unrelated checkouts;
+The original 13-case runtime suite passed; the current 16-case suite additionally verifies real command interruption,
+lost removal responses/recreated targets, prepared local/merged retries with fresh publication/content/owner blockers,
+and XR crash journals during actual holder death. Required existing coverage remains: real exact local/squash-merged removal; retained refs/unrelated checkouts;
 preflight while owned, actual detach/issuing-shell close; actual competing SDK acquisition; changed HEAD/content and
 recreated identity; missing/legacy declarations; expired/misbound approval; suspension beyond the obsolete lease;
 holder death with a living destructive child; and a surviving tracked destructive descendant. The latter probes use
