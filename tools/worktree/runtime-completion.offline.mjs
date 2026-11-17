@@ -14,6 +14,7 @@ for (const scenario of ['cli-success','cli-local']) test(`committed declaration 
   assert.equal(report.operation,scenario==='cli-local'?'remove-local':'complete');
   assert.equal(report.results.length,1);assert.equal(report.results[0].disposition,'removed');assert.equal(report.results[0].branchPreserved,true);
   assert.equal(result.journalPhase,'removed');assert.equal(result.replay,null);retainedRefs(result);
+  assert.equal(result.remoteTaskRefPresent,true,'An existing source-branch ref must survive both completion operations');
 });
 for (const scenario of ['cli-private','cli-dirty','cli-unpublished','cli-unmerged','cli-ambiguous','cli-missing-package','cli-legacy']) test(`actual completion refuses before detach: ${scenario}`,async()=>{
   const result=await runOfflineRuntimeScenario(scenario);

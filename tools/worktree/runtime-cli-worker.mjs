@@ -32,6 +32,8 @@ export async function runCliScenario(scenario, cacheRoot = sourceRoot) {
       fs.writeFileSync(path.join(root,'repo'),"console.log('timurproko/xrbuild');\n");
       fs.writeFileSync(path.join(root,'api'),`import fs from'node:fs';const data=JSON.parse(fs.readFileSync('.artifacts/github.json','utf8'));const route=process.argv.at(-1);if(route.includes('/commits/'))console.log(JSON.stringify(data.candidates));else if(/\\/pulls\\/19$/.test(route))console.log(JSON.stringify(data.pull));else process.exit(61);\n`);
     });
+    // Model a merged PR whose source ref was retained; the older merged-success probe covers delete-on-merge.
+    if(scenario==='cli-success')git(f.root,'push','--quiet','origin','chore/task');
     fs.mkdirSync(path.join(f.root,'.artifacts'),{recursive:true});
     const pull={number:19,state:'closed',merged:scenario!=='cli-unmerged',merged_at:'2026-11-18T00:00:00Z',merge_commit_sha:f.mergeHead,
       head:{sha:f.head,ref:'chore/task',repo:{full_name:'timurproko/xrbuild'}},base:{ref:'main',repo:{full_name:'timurproko/xrbuild'}},
@@ -70,7 +72,7 @@ export async function runCliScenario(scenario, cacheRoot = sourceRoot) {
     const settled=await runtime.completion.settleSessionWorktreeCompletion(identity,options),replay=await runtime.completion.settleSessionWorktreeCompletion(identity,options);
     const observation=await runtime.context.withSessionRepositoryObservation(identity,value=>value.cwd,options);
     finished=true;
-    return{revision:runtime.revision,packageSha256:runtime.packageSha256,scenario,preflightOwned,notRemovedBeforeIssuingExit,detached:attached===null,shellExited:shell.exitCode!==null,settled,replay,primaryUsable:observation===f.root,
+    return{revision:runtime.revision,packageSha256:runtime.packageSha256,scenario,remoteTaskRefPresent:remoteRefs.includes('refs/heads/chore/task'),preflightOwned,notRemovedBeforeIssuingExit,detached:attached===null,shellExited:shell.exitCode!==null,settled,replay,primaryUsable:observation===f.root,
       targetRemoved:!fs.existsSync(f.target),targetPreserved:fs.existsSync(f.target),journalPhase:journal().phase,
       localRefsPreserved:git(f.root,'show-ref','--heads')===executionLocalRefs,remoteRefsPreserved:git(f.remote,'show-ref')===remoteRefs,unrelatedPreserved:fs.existsSync(f.unrelated)};
   } finally {if(peer)await peer.stop();if(shell?.exitCode===null)shell.stdin.end();runtime.dispose();if(finished)disposeFixture(box);}
