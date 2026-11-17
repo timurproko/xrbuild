@@ -54,9 +54,10 @@ assertion in the unchanged shared case table, and emits case IDs, boundary calls
 assertion gaps, copied-results-only adapters, modified inputs and drift fail. With the explicitly prepared public
 source pin, **all 50 offline cases pass**, including actual XR/A1 adapter sequencing for C39. Without that dependency,
 C39 is explicitly incomplete and the shared command exits nonzero; ordinary verification never fetches it.
-Preparation and exact API limitations are in [published local removal](published-local-removal.md#offline-proposed-interface-preparation-not-adoption).
-The report's scope is offline case assertions only: **task 3.3 remains incomplete**, live adoption disabled and
-released compatibility unverified. No user checkout, installed A1 runtime, hosting activation or device is used;
+Preparation and exact API limitations are in [published local removal](published-local-removal.md#reproducible-candidate-package-offline-not-adoption).
+The report's scope is offline case assertions only. PR #19 completes the inactive source/offline work; actual release
+verification/adoption remains in [issue #20](https://github.com/timurproko/xrbuild/issues/20), with live adoption disabled
+and released compatibility unverified. No user checkout, installed A1 runtime, hosting activation or device is used;
 unit-test success alone is not a full offline-case or live-compatibility certificate.
 
 ## Ready-PR refresh after merges

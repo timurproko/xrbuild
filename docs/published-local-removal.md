@@ -14,8 +14,10 @@ There is no caller `--owned`, force, recursive fallback or remote-abandonment fl
 The inactive runtime adapter now uses the supported snapshot/execution modules from the verified candidate A1 package,
 not a private claim-store reader or an observed lease. Source/offline compatibility is separate from released-runtime
 adoption. The current `.a1/worktree.json` is still the untouched legacy declaration, not a compatible exact adapter;
-its sweep is never invoked as a fallback. Task 3.3 remains unchecked until an actual compatible released runtime is
-verified and deployed. Do not install the candidate into a daily runtime or infer a minimum release from `0.2.7-dev`.
+its sweep is never invoked as a fallback. PR #19 completes inactive source/offline integration; actual released-runtime
+verification and live adoption are separately tracked in [issue #20](https://github.com/timurproko/xrbuild/issues/20).
+That follow-up must verify the released artifact/minimum version and compatible participating writers before adoption.
+Do not install the candidate into a daily runtime or infer a minimum release from `0.2.7-dev`.
 
 ## Preservation and journals
 

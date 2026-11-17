@@ -59,4 +59,5 @@ refused rather than overwriting another checkout's scratch.
 Focused fixtures: `tools/worktree/portable-context.test.mjs`, `worktree.test.mjs` and `publish-plan.test.mjs`.
 They use isolated Git repositories and mocked runtime/remote operations. Shared-case coverage is tracked separately
 under task 5.5; these component checks do not certify every shared case, a compatible cleanup runtime release,
-exact-final-head CI, live activation or device acceptance. Cleanup migration remains unfinished in PR #19.
+exact-final-head CI, live activation or device acceptance. Inactive cleanup source/offline work is complete in PR #19;
+released-runtime verification and live adoption are separate follow-up work in [issue #20](https://github.com/timurproko/xrbuild/issues/20).

@@ -7,7 +7,7 @@ Task identity is tied to a single local worktree even for remote planning, while
 - Install the exact shared `portable-delivery-v1` rulebook, explicit repository adapters and 50 fixed verification cases; copy approved guidance instead of independently interpreting workflow policy.
 - Permit planning-only draft publication and GitHub administration from any directory/machine without worktree setup, dependency installation or sweep.
 - Preserve repository/branch/history/change/PR identity when adopting an existing proposal on another machine; keep implementation isolated and owned.
-- Make explicit exact-checkout local removal publication- and preservation-based, independent of merge/CI/acceptance, without deleting remote work or silently sweeping unrelated worktrees.
+- Implement publication- and preservation-based exact-checkout removal and verify inactive runtime adapters offline, independent of PR merge/CI/acceptance eligibility and without deleting remote work or silently sweeping unrelated worktrees.
 - Use coherent progress checkpoints, one-or-more meaningful outcomes, material-scope approval, structural validation and explicit pause/resume instead of repeated procedural barriers.
 - Align direct maintainer-requested protected exact-candidate merge with the companion runtime while retaining no independent agent/bot integration authority.
 - Reconcile repository-owned delivery guidance and dormant workflow promises without modifying or overriding OpenSpec skills; preserve legacy histories and keep private/export/device safeguards intact.
@@ -15,6 +15,10 @@ Task identity is tied to a single local worktree even for remote planning, while
 ## Scope boundary
 
 OpenSpec skills and the OpenSpec framework are out of scope. Do not modify, regenerate, replace, or override `openspec-*` skills, generated OpenSpec/`opsx` commands, framework implementation, schemas, templates, or lifecycle semantics. Simplify only repository-owned delivery tooling and guidance around the unchanged framework. Project-specific proposal, design, tasks and specification deltas remain editable; that does not authorize framework changes. If an outcome requires changing OpenSpec, report the blocker and move that work to a separate explicitly approved scope instead of bundling it here.
+
+## Release/adoption follow-up
+
+The maintainer approved separating actual released-runtime verification and live cleanup adoption into https://github.com/timurproko/xrbuild/issues/20. This PR completes repository-owned source and offline candidate compatibility only. Live cleanup stays disabled and the deployed declaration unchanged; the follow-up retains compatible released-artifact/minimum-version verification, participating-writer rollout and released-artifact lifetime probes before any adoption. This split does not change R15, claim released compatibility or authorize installation, activation or deletion.
 
 ## Exact implementation inputs
 
@@ -34,4 +38,4 @@ None.
 
 ## Impact
 
-Public-core tools/worktree, tools/pr-automation, runtime operation declaration, AGENTS.md, `.claude/CLAUDE.md`, the repository-owned `.claude/skills/change-delivery/SKILL.md`, PR template, project-specific OpenSpec context and delivery/governance runbooks; OpenSpec skills, generated commands and framework assets are excluded. Coordinate with https://github.com/timurproko/a1/pull/923 but retain standalone Git/repository operations. This draft includes only public planning artifacts; it authorizes no implementation, private export, hosting apply, workflow activation, merge or deletion.
+Public-core tools/worktree, tools/pr-automation, inactive runtime operation declaration factory, AGENTS.md, `.claude/CLAUDE.md`, the repository-owned `.claude/skills/change-delivery/SKILL.md`, PR template, project-specific OpenSpec context and delivery/governance runbooks; OpenSpec skills, generated commands and framework assets are excluded. Coordinate with https://github.com/timurproko/a1/pull/923 but retain standalone Git/repository operations. Implementation authority comes from the maintainer's scoped requests, not this document. Source/offline completion authorizes no live adoption, private export, hosting apply, workflow activation, merge or deletion.
