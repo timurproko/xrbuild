@@ -76,16 +76,33 @@ test('C10: successful ownership attachment resumes staged, dirty, untracked and 
   fs.writeFileSync(path.join(dir, 'new.txt'), 'new task content');
   fs.mkdirSync(path.join(dir, '.xrbuild')); fs.writeFileSync(path.join(dir, '.xrbuild', 'local.txt'), 'independent private state');
   const before = git(dir, 'status', '--porcelain'), calls = [], log = [];
-  const resumed = enter(f.branch, { ...f.options, log: text => log.push(text), acquireOwnership: target => attachA1(target, (command, args) => { calls.push({ command, args }); }) });
+  const resumed = enter(f.branch, { ...f.options, log: text => log.push(text), acquireOwnership: target => { calls.push({ action: 'confirmed-host-attachment', path: target }); return true; } });
   assert.equal(resumed === dir && git(dir, 'status', '--porcelain') === before, contract.expect.dirtyEditsPreserved);
   assert.equal(git(dir, 'rev-parse', 'HEAD'), original);
   assert.equal(fs.readFileSync(path.join(dir, '.xrbuild', 'local.txt'), 'utf8'), 'independent private state');
-  assert.deepEqual(calls, [{ command: 'a1', args: ['worktree', 'attach', dir] }]);
+  assert.deepEqual(calls, [{ action: 'confirmed-host-attachment', path: dir }]);
   assert.equal(registeredContexts(f.root).filter(item => item.branch === f.branch).length !== 1, contract.expect.replacementCheckoutCreated);
   assert.equal(log.some(line => /reset|inventory/.test(line)), false);
   assert.equal(f.commands.filter(call => call.args[0] === 'reset').length, contract.expect.resetCalls);
   assert.equal(git(dir, 'diff', '--cached', '--name-only'), 'source.txt');
   assert.equal(git(dir, 'diff', '--name-only'), 'source.txt');
+});
+
+test('shell attach exit zero remains queued for new and existing checkouts; no setup or success claim precedes host confirmation', t => {
+  const f = fixture(t); f.proposal(); let setups = 0; const messages = [], calls = [];
+  const acquireOwnership = target => attachA1(target, (command, args) => { calls.push({ command, args }); });
+  const attempt = () => enter(f.branch, { ...f.options, install: true, installFn: () => setups++, log: message => messages.push(message), acquireOwnership });
+  let directory;
+  assert.throws(attempt, error => { directory = error.directory; return error.code === 'XRB_ATTACHMENT_PENDING' && /not confirmed/.test(error.message); });
+  assert.ok(fs.existsSync(directory)); fs.appendFileSync(path.join(directory, 'source.txt'), 'owned pending edit\n');
+  const before = git(directory, 'status', '--porcelain');
+  assert.throws(attempt, error => error.code === 'XRB_ATTACHMENT_PENDING');
+  assert.equal(git(directory, 'status', '--porcelain'), before); assert.equal(setups, 0); assert.deepEqual(messages, []);
+  assert.equal(fs.existsSync(path.join(directory, 'node_modules')), false);
+  assert.equal(calls.length, 2); assert.ok(calls.every(call => call.command === 'a1' && call.args[0] === 'worktree' && call.args[1] === 'attach'));
+  assert.equal(attachA1(directory, () => {}).status, 'queued', 'Silent legacy zero exit is not confirmation either');
+  // A later completed host transition, not an inventory or caller flag, is the supported continuation seam.
+  assert.equal(enter(f.branch, { ...f.options, acquireOwnership: () => true }), directory);
 });
 
 test('C11-C12: busy or failed attachment refuses resume, preserves files and never sets up dependencies', t => {

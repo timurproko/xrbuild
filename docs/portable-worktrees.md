@@ -8,11 +8,15 @@ Policy: [Shared delivery rules](delivery-rules.md), especially R04 and R12, usin
 - `pnpm worktree add <type/short-desc>` prepares an unoccupied task branch in `.worktrees/<short-desc>`.
 - `pnpm worktree enter <type/short-desc>` additionally locates an existing registered checkout of that branch,
   including a matching checkout whose directory name differs from the branch suffix.
-- `--a1` invokes `a1 worktree attach <absolute-path>` for runtime ownership establishment. Successful exit is the
-  confirmation. No runtime inventory inspection or second linkage procedure is performed.
+- `--a1` invokes `a1 worktree attach <absolute-path>` to request a runtime transition. Shell exit zero means queued,
+  not attached. The helper stops with `XRB_ATTACHMENT_PENDING`; its CLI reports the pending request and returns so
+  the issuing tool batch can exit. Wait for the host's supported final transition/trust/resource-reload result before
+  editing or setup. No inventory check or synchronous wait inside the issuing shell can replace that confirmation.
 - `--expected-head <sha>` binds the selected local or fetched head to a previously observed immutable commit.
 - `--install` explicitly links only public core dependencies and invokes frozen package-manager installation.
   Without that flag, entry does not link dependency folders, install packages or provision a private workspace.
+  With `--a1`, even `--install` cannot execute while attachment is queued: after host confirmation, perform setup as
+  a separate action in the newly confirmed context. Do not repeat attach or add a caller-owned confirmation flag.
 
 The helper checks repository identity through read-only GitHub CLI repository lookup and verifies primary is on
 `main`. It fetches the named live base/proposal refs before adopting an unoccupied remote/local branch. It retains

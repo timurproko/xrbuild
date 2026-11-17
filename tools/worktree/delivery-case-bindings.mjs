@@ -141,7 +141,7 @@ export const deliveryCaseBindings = {
   },
   async C10(ctx) {
     const f = gitFixture(ctx); fs.appendFileSync(path.join(f.target, 'source.txt'), 'owned edit\n'); const before = fs.readFileSync(path.join(f.target, 'source.txt'));
-    const target = await ctx.call('enter', f.branch, { ...f.options, acquireOwnership: directory => attachA1(directory, () => {}) });
+    const target = await ctx.call('enter', f.branch, { ...f.options, acquireOwnership: directory => directory === f.target /* Known-owned disposable external-Git context, not a queued shell confirmation. */ });
     return observed({ dirtyEditsPreserved: before.equals(fs.readFileSync(path.join(target, 'source.txt'))), resetCalls: f.calls.filter(args => args[0] === 'reset').length,
       replacementCheckoutCreated: fs.readdirSync(path.join(f.root, '.worktrees')).length !== 1 });
   },

@@ -25,7 +25,9 @@ operations: [protected PR delivery](../../../docs/pr-delivery-governance.md). Pl
   existing contexts. `--install` explicitly links/installs public dependencies. No dependencies are installed by default.
   For standalone task-local setup, the package-manager command is `pnpm install --frozen-lockfile`.
 - A1 entry/attachment syntax is in [Delivery adapters](../../../docs/delivery-adapters.json). Optional `--a1` invokes
-  that supported attachment adapter. Without a verifiable ownership adapter, the helper refuses existing-checkout
+  that supported attachment request. A zero shell exit is queued, not confirmed: exit the batch, await the host's
+  final transition result, then run any installation/editing as a separate action in that confirmed context. The
+  helper never installs on a queued request or polls inventory for confirmation. Without a verifiable ownership adapter, the helper refuses existing-checkout
   adoption; external agents can use ordinary Git in their own checkout without installing or impersonating A1.
   Command details: [portable worktrees](../../../docs/portable-worktrees.md).
   Resume/context policy: [R04](../../../docs/delivery-rules.md#r04---isolated-implementation-and-resume).

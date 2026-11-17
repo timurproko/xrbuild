@@ -225,7 +225,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     else if (cmd === 'handoff' && o._[0]) console.log(handoff(o._[0], { change: o.change ?? null, pr: o.pr ?? null }));
     else throw new Error('usage: worktree add|enter <type/short-desc> [--a1] [--install] [--expected-head <sha>] | remove <name> [--discard] | sweep [--apply] | handoff <name> [--change <id>] [--pr <n>]');
   } catch (e) {
-    console.error(e.message);
-    process.exit(1);
+    if (e.code === 'XRB_ATTACHMENT_PENDING') {
+      console.log(e.message); // Accepted request, not successful attachment/setup. Let the issuing shell exit.
+    } else {
+      console.error(e.message);
+      process.exitCode = 1;
+    }
   }
 }

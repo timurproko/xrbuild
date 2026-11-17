@@ -19,6 +19,7 @@ Contract binding: R04, R12; consume the matching IDs in `delivery-cases.json` wi
 
 - [x] 2.1 Adopt selected existing remote/local task branches without replacing history; verify fresh-machine continuation, local-only commits, divergence and path conflicts.
 - [x] 2.2 Preserve dirty owned resumes and separate dependency setup; verify live-owner refusal, primary isolation, external-agent support and private clone independence.
+  - Corrected queued shell attachment: exit zero produces pending control, not confirmed ownership; no dependency linking/installation or success log runs. Resume installation/editing only after the supported host transition result in a later tool batch. Completed-host/external-owned adapters remain separate, with no inventory polling or confirmation flag.
 - [x] 2.3 Add publication-aware portable handoff; verify detached/clean-but-unpushed work is not advertised as remotely available.
 
 ## 3. Safe exact local removal

@@ -86,9 +86,19 @@ export function refreshSelectedRefs(root, branch, execute = run) {
 }
 
 export function attachA1(dir, execute = execFileSync) {
-  // Exit success is the runtime attachment confirmation. Do not inspect runtime inventories or forge identity.
+  // The shell must exit before A1 can resolve trust/reload resources and confirm the transition.
+  // Never turn queue acceptance (including a silent legacy zero exit) into attachment authority.
   execute('a1', ['worktree', 'attach', dir], { cwd: dir, env: contextEnvironment(), stdio: 'inherit', timeout: 30_000 });
-  return true;
+  return { status: 'queued', path: path.resolve(dir) };
+}
+
+function acquireContextOwnership(dir, acquireOwnership, message) {
+  const result = acquireOwnership?.(dir);
+  if (result?.status === 'queued') throw Object.assign(new Error(
+    'Attachment requested, not confirmed; exit this tool batch and wait for the runtime transition result. No setup ran. After confirmation, run any requested setup separately in the confirmed context.'),
+    { code: 'XRB_ATTACHMENT_PENDING', directory: dir });
+  // true is reserved for a completed host transition/owned external-Git adapter, never a shell exit code.
+  if (result !== true) fail(message);
 }
 
 function checkedContext(root, dir, branch, expectedHead, execute = run) {
@@ -158,7 +168,7 @@ export function prepareContext(branch, { root, name, resume = true, expectedHead
       if (!resume || same(existing.dir, root)) fail('Task branch is already checked out; no replacement created');
       const head = checkedContext(root, existing.dir, branch, expectedHead, execute);
       assertAcquisition();
-      if (!acquireOwnership || acquireOwnership(existing.dir) !== true) fail('Task ownership is unavailable or unverifiable; use an owned Git checkout or a supported attachment adapter');
+      acquireContextOwnership(existing.dir, acquireOwnership, 'Task ownership is unavailable or unverifiable; use an owned Git checkout or a supported attachment adapter');
       checkedContext(root, existing.dir, branch, head, execute);
       verifyPrimary(root, identify, execute);
       assertAcquisition();
@@ -193,7 +203,7 @@ export function prepareContext(branch, { root, name, resume = true, expectedHead
     }
     // Creation/setup partial success is recoverable. Never delete the checkout/ref on attachment/setup failure.
     assertAcquisition();
-    if (acquireOwnership && acquireOwnership(dir) !== true) fail('Attachment failed; created task checkout and history preserved');
+    if (acquireOwnership) acquireContextOwnership(dir, acquireOwnership, 'Attachment failed; created task checkout and history preserved');
     checkedContext(root, dir, branch, head, execute);
     verifyPrimary(root, identify, execute);
     assertAcquisition();
