@@ -14,8 +14,10 @@ copy. Consequently a task-branch declaration does not change current primary beh
 an older primary's legacy declaration as a fallback.
 
 XR imports only the supported `@timurproko/a1/dist/foundation/lifecycle/worktree-cleanup-snapshot.mjs` and
-`worktree-claim-boundary.mjs` modules from an explicitly provisioned primary-checkout dependency. There is no global
-runtime-file copy, automatic dependency/cache discovery, package install, ownership-file reader or parallel lock
+`worktree-claim-boundary.mjs` modules from the primary checkout's explicitly provisioned
+`node_modules/@timurproko/a1` slot (ordinary pnpm links are supported). Resolution cannot fall back to ancestor packages
+or `NODE_PATH` globals. There is no global runtime-file copy, automatic dependency/cache discovery, package install,
+ownership-file reader or parallel lock
 protocol. Missing public APIs produce `XRB_RUNTIME_UNAVAILABLE`; A1 receives `xrb-runtime-unavailable` in the bounded
 preflight refusal and retains the attachment. Detailed public diagnostics remain in XR's JSON report. XR's queue-only
 helper also checks this dependency before issuing an A1 request. Compatible paired runtimes reject legacy declarations

@@ -6,10 +6,12 @@ import { pathToFileURL } from 'node:url';
 import { requireOwnershipFacilities } from './ownership-exclusion.mjs';
 export async function loadCleanupRuntime(root) {
   try {
-    const require = createRequire(path.join(path.resolve(root), 'package.json'));
-    const manifest = JSON.parse(fs.readFileSync(require.resolve('@timurproko/a1/package.json'), 'utf8'));
+    // Pin resolution to the explicitly provisioned slot (including ordinary pnpm links), not ancestor/NODE_PATH globals.
+    const manifestPath = path.join(path.resolve(root), 'node_modules', '@timurproko', 'a1', 'package.json');
+    const require = createRequire(manifestPath);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     if (manifest.name !== '@timurproko/a1' || typeof manifest.version !== 'string') throw Error('Package identity mismatch');
-    const load = name => import(pathToFileURL(require.resolve(`@timurproko/a1/dist/foundation/lifecycle/${name}.mjs`)).href);
+    const load = name => import(pathToFileURL(require.resolve(`./dist/foundation/lifecycle/${name}.mjs`)).href);
     const runtime = { snapshot: await load('worktree-cleanup-snapshot'), boundary: await load('worktree-claim-boundary'), version: manifest.version };
     requireOwnershipFacilities(runtime, {});
     return runtime;

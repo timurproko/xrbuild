@@ -26,6 +26,16 @@ test('malformed transport and unexpanded legacy snapshot refuse before any adapt
   await assert.rejects(()=>invokeRepositoryAdapter('node',base,process.cwd()),/Invalid approved snapshot/);
   await assert.rejects(()=>invokeRepositoryAdapter('node',[...base,'--force'],process.cwd()),/Unexpected exact adapter/);
 });
+test('runtime dependency resolution never falls back to an ancestor package',async t=>{
+  const box=fs.mkdtempSync(path.join(os.tmpdir(),'xr-ancestor-runtime-'));t.after(()=>fs.rmSync(box,{recursive:true,force:true}));
+  const root=path.join(box,'primary'),directory=path.join(box,'node_modules/@timurproko/a1');
+  fs.mkdirSync(root);fs.mkdirSync(path.join(directory,'dist/foundation/lifecycle'),{recursive:true});
+  fs.writeFileSync(path.join(directory,'package.json'),JSON.stringify({name:'@timurproko/a1',version:'999.0.0',type:'module'}));
+  fs.writeFileSync(path.join(directory,'dist/foundation/lifecycle/worktree-cleanup-snapshot.mjs'),'globalThis.xrbAncestorRuntimeImported=true;export function captureWorktreeCleanupSnapshot(){};export function assertWorktreeCleanupSnapshot(){};');
+  fs.writeFileSync(path.join(directory,'dist/foundation/lifecycle/worktree-claim-boundary.mjs'),'export function withUnclaimedWorktree(){};export function executeCleanupCommand(){};');
+  await assert.rejects(()=>loadCleanupRuntime(root),error=>error.code==='XRB_RUNTIME_UNAVAILABLE');
+  assert.equal(globalThis.xrbAncestorRuntimeImported,undefined);
+});
 test('package version text cannot substitute for supported public APIs',async t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'xr-unsupported-runtime-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const directory=path.join(root,'node_modules/@timurproko/a1');fs.mkdirSync(directory,{recursive:true});
