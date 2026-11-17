@@ -4,7 +4,7 @@ const scopes = new WeakMap();
 const failure = message => Object.assign(new Error(message), { code: 'worktree-cleanup-exclusion' });
 const binding = context => JSON.stringify(['root', 'target', 'common', 'admin', 'branch', 'head', 'identity'].map(key => context[key]));
 export function requireOwnershipFacilities(runtime, options) {
-  if (!options?.dataDir || typeof runtime?.snapshot?.captureWorktreeCleanupSnapshot !== 'function'
+  if (!options || typeof runtime?.snapshot?.captureWorktreeCleanupSnapshot !== 'function'
     || typeof runtime.snapshot?.assertWorktreeCleanupSnapshot !== 'function' || typeof runtime.boundary?.withUnclaimedWorktree !== 'function'
     || typeof runtime.boundary?.executeCleanupCommand !== 'function') throw failure('Supported packaged cleanup boundary unavailable');
 }

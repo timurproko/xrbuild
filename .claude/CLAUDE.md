@@ -126,9 +126,13 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
 - `tools/fetch-deps` - native binaries with pinned SHA-256s: the core's into `third_party/`, the workspace
   plugins' (`--workspace`) into `<workspace>/third_party/`.
 - `tools/name-guard` - the name guard (hashes in `banned.sha256`).
-- `tools/worktree` - `pnpm worktree add|enter|remove|sweep|handoff`: task worktrees in `.worktrees/` share only
+- `tools/worktree` - `pnpm worktree add|enter|complete|runtime-remove|remove|sweep|handoff`: task worktrees in `.worktrees/` share only
   fetched core dependencies. Private workspaces must be cloned independently; builds stay worktree-local.
   Cleanup refuses `.xrbuild/` or `.artifacts/KEEP`, even with clean outer Git status; sweep preserves them as dirty.
+  After a verified merge, attached A1 sessions use `a1 worktree complete`: paired exact preflight, return outside the
+  target, issuing-batch exit, then XR cleanup from primary. No sweep is declared and no remote merge event starts
+  filesystem cleanup. Explicit published-local removal stays distinct. Package/rollout prerequisites and exact tested
+  artifacts: `docs/worktree-runtime-compatibility.md`; unsupported runtimes refuse before detach/destruction.
   `pnpm task:repos` routes core/embedded/private/paired tasks, explicitly provisions independent private clones only when
   needed, and records exact tested HEAD/work state in ignored artifacts. No implicit export/stage/PR/push/merge/cleanup;
   private instructions still apply. Follow the shared Worktrees guidance in `AGENTS.md`; do not add another linkage gate.

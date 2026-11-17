@@ -11,13 +11,34 @@ programmatic `removePublishedCheckout` API retains its trusted `readClaims(conte
 registry is not a deployed runtime provider; the default standalone CLI still fails closed without such a provider.
 There is no caller `--owned`, force, recursive fallback or remote-abandonment flag. Legacy `--discard` remains blocked.
 
-The inactive runtime adapter now uses the supported snapshot/execution modules from the verified candidate A1 package,
-not a private claim-store reader or an observed lease. Source/offline compatibility is separate from released-runtime
-adoption. The current `.a1/worktree.json` is still the untouched legacy declaration, not a compatible exact adapter;
-its sweep is never invoked as a fallback. PR #19 completes inactive source/offline integration; actual released-runtime
-verification and live adoption are separately tracked in [issue #20](https://github.com/timurproko/xrbuild/issues/20).
-That follow-up must verify the released artifact/minimum version and compatible participating writers before adoption.
-Do not install the candidate into a daily runtime or infer a minimum release from `0.2.7-dev`.
+After verifying a task PR merged, an attached A1 agent uses **`a1 worktree complete`**. The committed
+`.a1/worktree.json` now declares paired `cleanupPreflight` / `cleanup` commands targeting only `{worktree}` and
+carrying the original `{snapshot}`. It no longer declares sweep. A1 runs XR preservation/merged-evidence preflight
+while still attached, returns the session to its startup checkout (normally primary), then settles cleanup from the
+selected repository's verified primary **after the issuing tool batch/shell exits**. A blocked preflight retains the
+attachment; a post-detach blocker retains the checkout and leaves the session usable outside it. A1 itself deletes no
+checkout data. A remote merge event alone never starts filesystem cleanup.
+
+`pnpm worktree complete` only queues that same A1 command and reports requested, not settled; yield the batch and
+await the runtime's final transition/cleanup report. **`a1 worktree remove-local`** (or `pnpm worktree runtime-remove`)
+is the distinct explicit published-local operation, using `localRemoval.preflight` / `localRemoval.execute`. It needs
+live source-branch containment, not a merge, acceptance or finished CI. It cannot substitute for merged completion.
+Neither operation deletes local/remote refs, commits, PRs or unrelated checkouts.
+
+The repository bridge resolves only an explicitly provisioned `@timurproko/a1` dependency from the primary checkout,
+using its supported public snapshot/execution modules. It does not import daily/global runtime internals, discover a
+test cache, install packages or implement parallel ownership coordination. With a compatible paired runtime, missing
+package/APIs, legacy snapshot expansion or an unsupported declaration refuse before detach/destruction, without
+complete/discard/sweep fallback. The repository helper checks public package availability before queuing A1 as well.
+The published legacy host does not support this ordering; it must not be used, as the compatibility record explains.
+Use the **same verified compatible released package and claim namespace** for participating attachment and cleanup
+writers; separately stop incompatible writers before rollout. This task performs no live installation or cleanup.
+
+No compatible published package has yet been verified. See [runtime compatibility](worktree-runtime-compatibility.md)
+for exact registry artifacts inspected, candidate tested, required capabilities and the genuine external prerequisite.
+[Issue #20](https://github.com/timurproko/xrbuild/issues/20) records released-package verification/participating-writer
+rollout, **not deferred repository wiring**. Do not infer a minimum release from `0.2.7-dev` or install the candidate
+into a daily runtime.
 
 ## Preservation and journals
 
@@ -66,11 +87,14 @@ failure metadata remain readable. An unknown public error code is reported as un
   supported orphan-recovery mechanism. XR never opens or changes runtime gate files, deletes locks, changes namespaces,
   evicts gates or falls back to sweep/discard/force.
 
-There is **no automatic uncertain-journal retry** and no XR recovery CLI. The pinned public A1 execution interface
-provides exclusion and lifetime refusal, but no public orphan-inspection/proven-child-stop recovery operation. This is
-an explicit adoption/operational dependency in [issue #20](https://github.com/timurproko/xrbuild/issues/20), not a feature
-implemented by this PR. Preserve the recorded operation and original approval for separately reviewed recovery; do not
-perform production recovery based on these test results. No result authorizes ref deletion or unrelated cleanup.
+There is **no automatic uncertain-journal retry** and no XR recovery CLI. The current candidate A1 documents a
+supported generation-bound inspection/recovery operation for newly witnessed Windows x64/local NTFS v2 gates;
+other platforms and historical unwitnessed gates retain conservative refusal. Use only a compatible runtime's
+documented platform-specific recovery contract after positive lifetime proof, never a private-file recipe. Recovering
+an A1 gate does not clear XR journals, approve deletion or reapprove changed HEADs/recreated checkouts. Preserve the
+recorded operation and original approval for separately reviewed recovery; do not perform production recovery based
+on these tests. Released-artifact/rollout verification remains in issue #20. No result authorizes ref deletion or
+unrelated cleanup.
 
 ## Exact runtime adapter
 
@@ -80,10 +104,15 @@ Only these packaged external modules are used by the XR bridge:
 - `@timurproko/a1/dist/foundation/lifecycle/worktree-claim-boundary.mjs`: `withUnclaimedWorktree`,
   `executeUnclaimedWorktreeCleanup` and `executeCleanupCommand`.
 
-Prepared `localRemoval.preflight/execute` and `cleanupPreflight/cleanup` arrays target one `{worktree}` and carry the
+Committed `localRemoval.preflight/execute` and `cleanupPreflight/cleanup` arrays target one `{worktree}` and carry the
 runtime's `{snapshot}`. XR validates that original approval; it never captures a new approval to replace a changed
 published HEAD or recreated checkout. Local completion still needs live remote containment. Merged completion checks
 exact PR/change/head plus the squash merge commit contained in freshly observed main, including a deleted source branch.
+Bare completion discovers exactly one PR associated with the approved HEAD/branch and same repository/base via
+read-only GitHub transport; absent, ambiguous or truncated discovery blocks. Its PR/change selectors are bound in
+XR's pre-detach journal and must match execution discovery. Fresh merged-PR/live-main evidence is checked again;
+local-only publication cannot stand in for it. The declaration deliberately needs no optional runtime selectors;
+XR derives them from that exact HEAD, not handoff scratch or a replacement checkout.
 Neither route deletes/recreates refs or unrelated worktrees.
 
 The full repository controller remains inside A1's non-expiring unclaimed-target boundary. Every destructive Git child
@@ -102,10 +131,10 @@ than deleting checkout data itself.
 
 `tools/worktree/proposed-a1-interface.json` pins:
 
-- Source revision `e86f628b08d56070bb61845b8f15ba122cf5cfb1`, Git tree `b9d993e69d97ce3b06308c118843f53a1dedc50d`.
+- Source revision `691b381c29fe5c5d558491ff519b300bf426a730`, Git tree `2c1518b90e86a85d5702ef48f258df62f5038585`.
 - Candidate `@timurproko/a1@0.2.7-dev`; this is not a verified released version.
-- Archive SHA-256 `6796fa6d2281a413aa65ca92f635a1e76d2f3ea04a281dcbf2c2d0f762e5b254` and SHA-512 integrity.
-- Frozen dependency-lock identity, source blob/digests and the actual built sixteen-file import/declaration/license closure.
+- Archive SHA-256 `bb76eb2ae0d152acacd5def472398da7115b5411043968b80c3cf6a65a7b80d0` and SHA-512 integrity.
+- Frozen dependency-lock identity, source blob/digests and the actual built nineteen-file import/declaration/license closure.
 
 `pnpm prepare:delivery-runtime` explicitly verifies the public source, creates or checks an isolated dependency clone
 under this checkout's ignored `.artifacts/a1-candidate/<revision>/`, installs frozen dependencies with lifecycle scripts
@@ -129,7 +158,7 @@ prior logs did not distinguish age/identity/abort, so that narrower cause remain
 deadlines or retrying until lucky. The compatibility correction removes that entire unsupported observation path and
 uses the corrected packaged non-expiring/child-lifetime boundary. All required success assertions remain unchanged.
 
-The original 13-case runtime suite passed; the current 16-case suite additionally verifies real command interruption,
+The existing 16-case runtime suite verifies real command interruption,
 lost removal responses/recreated targets, prepared local/merged retries with fresh publication/content/owner blockers,
 and XR crash journals during actual holder death. Required existing coverage remains: real exact local/squash-merged removal; retained refs/unrelated checkouts;
 preflight while owned, actual detach/issuing-shell close; actual competing SDK acquisition; changed HEAD/content and
@@ -139,6 +168,14 @@ actual packaged runners/processes, mutate a controlled fixture file, and prove a
 Abandoned intent remains blocked even after the child stops, rather than being silently evicted. No user checkout,
 runtime or private workspace is detached/removed by these probes.
 
-All observations are candidate/offline evidence. Released compatibility, live declaration adoption, finalization and
-finalized-head required CI, live protection/activation and device/human acceptance remain separate. Candidate compatibility
+The additional 15-case CLI orchestration suite uses the committed declaration, actual packaged A1 completion
+request/settlement APIs and real XR CLI children (only external GitHub transport is replaced). It proves successful
+merged and distinct published-local removal, pre-detach private/dirty/unpublished/unmerged/ambiguous/missing-package/
+legacy refusal, and post-detach live-owner/HEAD/recreation/uncertain-journal/declaration/PR-change-association preservation. It
+observes a prepared journal with the issuing shell still alive, exits that shell before settlement, checks primary
+usability, retained refs/unrelated checkouts and single-use settlement.
+
+All observations are candidate/offline evidence. The declaration/CLI integration is implemented here; released
+compatibility, actual rollout, finalization and exact-head required CI, live protection/activation and device/human
+acceptance remain separate. Candidate compatibility
 does not authorize readiness, merge, package release or migration of incompatible older attachment writers.

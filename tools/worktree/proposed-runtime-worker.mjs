@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { loadPinnedRuntime, sourceRoot } from './proposed-a1-fixture.mjs';
 import { executeGit } from './portable-context.mjs';
+import { disposeFixture } from './fixture-disposal.mjs';
 import { executeScopedNonForceRemoval } from './published-removal.mjs';
 import { assertOwnershipExclusion } from './ownership-exclusion.mjs';
 import { offlineExactRemovalDeclaration, invokeOfflineRepositoryAdapter, inspectRuntimeLocalRemoval } from './runtime-removal-adapter.mjs';
@@ -24,11 +25,12 @@ export async function liveOwner(cwd, runtime) {
   await new Promise((resolve,reject) => {child.once('error',reject);child.once('message',message => message.ready?resolve():reject(Error('Owner startup failed')));});
   return {child,call(operation,args){return new Promise((resolve,reject)=>{const id=++sequence;pending.set(id,{resolve,reject});child.send({id,operation,...args});});},async stop(){if(child.exitCode===null)child.stdin.end();return await closed;}};
 }
-export function repository(box, complete = false) {
+export function repository(box, complete = false, setup = () => {}) {
   const root = path.join(box, 'primary'), remote = path.join(box, 'remote.git'); fs.mkdirSync(root);
   git(root, 'init', '--quiet', '-b', 'main'); git(root, 'config', 'user.name', 'Fixture'); git(root, 'config', 'user.email', 'fixture@example.invalid');
   fs.writeFileSync(path.join(root, '.gitignore'), '.worktrees/\n.artifacts/\n.xrbuild/\n*.local\n'); fs.writeFileSync(path.join(root, 'source.txt'), 'published fixture source\n');
   fs.mkdirSync(path.join(root, '.a1')); fs.writeFileSync(path.join(root, '.a1/worktree.json'), JSON.stringify(offlineExactRemovalDeclaration()) + '\n');
+  setup(root);
   git(root, 'add', '.'); git(root, 'commit', '--quiet', '-m', 'offline adapter fixture');
   git(root, 'init', '--quiet', '--bare', remote); git(root, 'remote', 'add', 'origin', remote); git(root, 'push', '--quiet', 'origin', 'main');
   const target = path.join(root, '.worktrees/task'), unrelated = path.join(root, '.worktrees/unrelated');
@@ -81,6 +83,7 @@ export async function runProposedRuntimeScenario(scenario = 'new-owner', cacheRo
           catch(error) { contenderCode = error.code; }
         }
       } };
+    dependencies.readMergedCandidates = () => [dependencies.readPull(19)];
     const run = async (command,args,cwd) => {
       const attached = await context.readActiveSessionRepositoryContext(first,options);
       const event = {phase:args[1],command,args,cwd,attached:attached?.cwd??null,shellAlive:shell.child.exitCode===null}; events.push(event);
@@ -98,7 +101,7 @@ export async function runProposedRuntimeScenario(scenario = 'new-owner', cacheRo
     }
     if(scenario==='dirty-preflight')fs.writeFileSync(path.join(f.target,'notes.local'),'synthetic ignored content');
     let request, requestError;
-    try { request = complete ? await completion.requestSessionWorktreeCompletion(first,{change:'fixture',pr:19},{...options,run}) : await completion.requestSessionWorktreeLocalRemoval(first,{...options,run}); }
+    try { request = complete ? await completion.requestSessionWorktreeCompletion(first,{},{...options,run}) : await completion.requestSessionWorktreeLocalRemoval(first,{...options,run}); }
     catch(error) { requestError={code:error.code,message:error.message}; }
     if(requestError)return {revision:runtime.revision,packageSha256:runtime.packageSha256,scenario,requestError,events,stillAttached:(await context.readActiveSessionRepositoryContext(first,options))?.cwd===f.target,targetPreserved:fs.existsSync(f.target),deletionCalls:0};
     const detached=await context.readActiveSessionRepositoryContext(first,options)===null;
@@ -130,7 +133,7 @@ export async function runProposedRuntimeScenario(scenario = 'new-owner', cacheRo
       bulkSweepCalls:events.filter(event=>event.args.includes('sweep')).length,deletionCalls:f.calls.filter(call=>call.args[0]==='worktree'&&call.args[1]==='remove').length,
       sessionUsableOutsideTarget:observed.cwd===f.root&&observed.revision==='unlinked'&&observed.source==='published fixture source\n',
       contenderCode,lateAcquired,leaseLossObserved,misboundScopeRejected,expiredScopeRejected,liveAdoption:'disabled',releasedCompatibility:'unverified'};
-  } finally {for(const child of children)await child.stop();runtime.dispose();fs.rmSync(box,{recursive:true,force:true});}
+  } finally {for(const child of children)await child.stop();runtime.dispose();disposeFixture(box);}
 }
 if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
   try{console.log(JSON.stringify(await runProposedRuntimeScenario(process.argv[2],process.argv[3])));}catch(error){console.error(JSON.stringify({error:error.message,code:error.code}));process.exitCode=1;}

@@ -8,10 +8,10 @@ import { preparePinnedRuntimeFixture } from './prepare-proposed-a1-fixture.mjs';
 const sandbox = t => { const root = fs.mkdtempSync(path.join(os.tmpdir(), 'a1-candidate-pin-')); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; };
 
 test('source/tree and actual candidate archive/module identities are immutable, not a released-version assertion', () => {
-  assert.equal(PROPOSED_A1.revision, 'e86f628b08d56070bb61845b8f15ba122cf5cfb1');
-  assert.equal(PROPOSED_A1.sourceTree, 'b9d993e69d97ce3b06308c118843f53a1dedc50d');
-  assert.equal(PROPOSED_A1.package.sha256, '6796fa6d2281a413aa65ca92f635a1e76d2f3ea04a281dcbf2c2d0f762e5b254');
-  assert.equal(Object.keys(PROPOSED_A1.files).length, 16);
+  assert.equal(PROPOSED_A1.revision, '691b381c29fe5c5d558491ff519b300bf426a730');
+  assert.equal(PROPOSED_A1.sourceTree, '2c1518b90e86a85d5702ef48f258df62f5038585');
+  assert.equal(PROPOSED_A1.package.sha256, 'bb76eb2ae0d152acacd5def472398da7115b5411043968b80c3cf6a65a7b80d0');
+  assert.equal(Object.keys(PROPOSED_A1.files).length, 19);
   assert.throws(() => { PROPOSED_A1.files.LICENSE.sha256 = '0'.repeat(64); }, TypeError);
   assert.throws(() => { PROPOSED_A1.package.sha256 = '0'.repeat(64); }, TypeError);
   assert.throws(() => verifyFixtureBytes('LICENSE', Buffer.from('changed bytes')), /package file differs/);

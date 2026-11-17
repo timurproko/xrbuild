@@ -63,7 +63,7 @@ operations: [protected PR delivery](../../../docs/pr-delivery-governance.md). Pl
 - Structural/hold controllers and the optional protected-integration entrypoint have source/fixture coverage in
   PR #19. Integration command/request syntax is in the governance runbook; no workflow calls it. Source results
   are not evidence of live activation, a real protected merge or device acceptance. Offline proposed-runtime
-  sequencing is tested separately; released-runtime adoption remains incomplete as described below.
+  sequencing is tested separately; released-runtime verification/rollout remains incomplete as described below.
 
 ## Handoff and local-operation compatibility
 
@@ -75,12 +75,22 @@ operations: [protected PR delivery](../../../docs/pr-delivery-governance.md). Pl
 - Published local removal, preservation and runtime boundaries: [R13-R15](../../../docs/delivery-rules.md#r13---explicit-published-local-removal).
   The standalone engine's command/API inventory is in [published local removal](../../../docs/published-local-removal.md).
   It retains refs and admits no ignored/cache payloads; without a trusted claimant adapter the CLI blocks disposal.
-  PR #19's exact adapters are verified offline against the actual reproducibly built A1 candidate package using its
-  supported snapshot and tracked child-lifetime boundary. No private lease reader, fabricated generation or polling
-  exclusion remains. Source compatibility is verified separately; live adoption is still blocked on actual released
-  compatibility and participating-writer rollout, not missing A1 source. The existing `.a1/worktree.json` is a legacy bulk-sweep declaration,
-  not a compatible exact-completion interface. Compatible released runtime support is not yet verified; report this
-  blocker rather than treating legacy `complete`, `discard` or `sweep` as a substitute.
+  After verifying the PR merged, use **`a1 worktree complete`**; `pnpm worktree complete` only queues that same request.
+  The committed `.a1/worktree.json` uses paired exact preflight/execute commands with the original snapshot, not sweep.
+  Preflight runs while attached; A1 returns to startup (normally primary), then invokes XR from the selected primary
+  after the issuing batch/shell exits. Await the runtime's final transition/cleanup report, not a synchronous shell wait.
+  Local/remote refs and unrelated worktrees remain. Before-detach blockers retain attachment; later blockers preserve
+  the target with a usable outside context. No GitHub-triggered filesystem cleanup exists.
+  Explicit `a1 worktree remove-local` (`pnpm worktree runtime-remove`) uses a distinct pair and live source-branch
+  publication, not merged completion. Bare completion binds one unambiguous exact-head merged PR/change in its journal.
+  Dirty/private/unpublished/owned/changed/uncertain state blocks removal. No private lease reader, fabricated generation,
+  polling exclusion or untracked destructive child remains.
+  The primary declaration and explicitly provisioned public package dependency must support this contract. No compatible
+  released package is verified: current published channel artifacts lack the public modules. Report the exact external
+  prerequisite in [runtime compatibility](../../../docs/worktree-runtime-compatibility.md), never use a legacy declaration,
+  discard or sweep as a substitute. Repository wiring and isolated candidate end-to-end testing are implemented here;
+  issue #20 tracks released-artifact verification/participating-writer rollout, not deferred integration. No runtime
+  installation, user-process termination or cleanup of real worktrees is authorized by this implementation task.
 - Existing command inventories are in `tools/worktree/worktree.mjs`; their presence is not contract conformance
   or deletion authority. Scratch/private boundaries: [R16](../../../docs/delivery-rules.md#r16---scratch-and-private-boundaries).
 

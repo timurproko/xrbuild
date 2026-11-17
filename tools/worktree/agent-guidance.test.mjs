@@ -132,8 +132,11 @@ test('entry points link shared policy without old progress, prose-count or autho
   assert.match(text('AGENTS.md'), /Never clean up a worktree containing private workspace data/);
   const skill = text('.claude/skills/change-delivery/SKILL.md');
   assert.match(skill, /Private|private/);
-  assert.match(skill, /legacy bulk-sweep/);
-  assert.match(skill, /not a compatible exact-completion interface/);
+  assert.match(skill, /a1 worktree complete/);
+  assert.match(skill, /paired exact preflight\/execute commands/);
+  assert.match(skill, /after the issuing batch\/shell exits/);
+  assert.match(skill, /No compatible\s+released package is verified/);
+  assert.match(skill, /not deferred integration/);
   assert.match(skill, /fresh remote HEAD\/containment evidence/);
   assert.match(skill, /not automatic cleanup enrollment or acceptance/);
 });

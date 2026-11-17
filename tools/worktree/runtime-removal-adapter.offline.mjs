@@ -123,7 +123,7 @@ for(const scenario of ['holder-suspension','holder-death','tracked-descendant'])
 
 test('verified package imports unchanged code/declarations and type-checks an external supported consumer',async t=>{
   const files=readPinnedFixture(),runtime=await loadPinnedRuntime();
-  assert.equal(files.size,16);assert.deepEqual(runtime.mockedDependencies,[]);assert.equal(runtime.packageSha256,PROPOSED_A1.package.sha256);
+  assert.equal(files.size,19);assert.deepEqual(runtime.mockedDependencies,[]);assert.equal(runtime.packageSha256,PROPOSED_A1.package.sha256);
   for(const name of ['worktree-cleanup-snapshot','worktree-claim-boundary'])assert.ok(files.has(`dist/foundation/lifecycle/${name}.d.mts`));
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'xr-package-types-'));t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
   const root=fileURLToPath(new URL('../../',import.meta.url)),file=path.join(directory,'consumer.mts');
@@ -138,10 +138,10 @@ const child:Promise<string>=withUnclaimedWorktree(expected,options,()=>executeCl
   assert.equal(checked.status,0,checked.stdout+checked.stderr);
 });
 
-test('live CLI/declaration remain disabled/unchanged; prepared declarations have exact separate operations and no sweep',()=>{
+test('committed declaration enables exact separate operations; unavailable packages refuse without fallback',()=>{
   const before=fs.readFileSync(new URL('../../.a1/worktree.json',import.meta.url));
   const child=spawnSync(process.execPath,[fileURLToPath(new URL('./runtime-removal-adapter.mjs',import.meta.url)),'execute'],{encoding:'utf8'});
-  assert.equal(child.status,1);assert.match(child.stderr,/Compatible released.*unavailable/);assert.deepEqual(fs.readFileSync(new URL('../../.a1/worktree.json',import.meta.url)),before);
-  const declaration=offlineExactRemovalDeclaration();assert.ok(declaration.cleanup.includes('{worktree}'));assert.ok(declaration.cleanupPreflight.includes('{worktree}'));
+  assert.equal(child.status,1);assert.match(child.stdout,/XRB_RUNTIME_UNAVAILABLE/);assert.deepEqual(fs.readFileSync(new URL('../../.a1/worktree.json',import.meta.url)),before);
+  const declaration=offlineExactRemovalDeclaration();assert.deepEqual(JSON.parse(before),declaration);assert.ok(declaration.cleanup.includes('{worktree}'));assert.ok(declaration.cleanupPreflight.includes('{worktree}'));
   assert.ok(declaration.localRemoval.execute.includes('{worktree}'));assert.ok(!JSON.stringify(declaration).includes('sweep'));assert.ok(declaration.cleanup.includes('{snapshot}'));assert.ok(declaration.localRemoval.execute.includes('{snapshot}'));
 });

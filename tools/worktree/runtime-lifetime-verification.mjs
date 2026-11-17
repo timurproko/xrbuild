@@ -12,6 +12,7 @@ import { loadPinnedRuntime } from './proposed-a1-fixture.mjs';
 import { repository, liveOwner } from './proposed-runtime-worker.mjs';
 import { executeGit } from './portable-context.mjs';
 import { inspectRuntimeLocalRemoval } from './runtime-removal-adapter.mjs';
+import { disposeFixture } from './fixture-disposal.mjs';
 
 export async function runLifetimeScenario(scenario) {
   if (!['holder-suspension', 'holder-death', 'tracked-descendant'].includes(scenario)) throw Error('Unknown lifetime probe');
@@ -114,7 +115,7 @@ export async function runLifetimeScenario(scenario) {
     for (const socket of sockets.values()) socket.destroy();
     await new Promise(resolve => server.close(resolve));
     // All successful probes await their exact fixture children. A failed probe retains its box for diagnosis.
-    if (completed) fs.rmSync(box, { recursive: true, force: true });
+    if (completed) disposeFixture(box);
     runtime.dispose();
   }
 }

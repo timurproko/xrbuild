@@ -54,10 +54,39 @@ Existing local record fields (`worktree`, `branch`, `change`, `pr`, `head`, `tim
 fields add the actual local/remote observations. A linked `.artifacts/` directory or linked/hardlinked record is
 refused rather than overwriting another checkout's scratch.
 
+## Complete the merged task
+
+After verifying the task PR merged, use **`a1 worktree complete`** in the attached A1 session. The repository's
+committed `.a1/worktree.json` declares the paired exact preflight/execute path, not sweep. `pnpm worktree complete`
+is a queue-only alias; it never removes the issuing cwd itself. Let the tool batch exit and await A1's final report.
+Preflight runs while attached; successful completion returns the session to startup (normally primary), then cleanup
+runs from the selected primary after the issuing shell exits. Only the completed target may be removed; local/remote
+refs, commits, PRs and unrelated checkouts stay. A blocker before detach retains attachment; a later blocker preserves
+the target and leaves the session usable outside it. A remote merge notification never triggers a filesystem sweep.
+
+Explicit **`a1 worktree remove-local`** (`pnpm worktree runtime-remove`) is separate: it uses the declared
+`localRemoval` pair and needs live source-branch containment, not a merged PR. Bare merged completion discovers one
+unambiguous exact-head PR/change and binds it in the pre-detach journal; it never substitutes published-local removal.
+Dirty/private/KEEP/unknown ignored/unpublished data, another owner, changed approval or uncertain state block disposal.
+See [published local removal](published-local-removal.md) for all preservation/journal details.
+
+The declaration is read from primary, so the task copy does not alter current behavior until merged. Supported public
+package APIs and compatible participating attachment writers are prerequisites; an unsupported runtime/package or
+legacy declaration refuses before detachment/destruction on the compatible paired path, without sweep/discard fallback.
+The obsolete published host lacks that ordering and must not be used; XR's helper checks package availability before
+queuing the request. The current published
+channel artifacts lack the public modules; no minimum compatible version or live verification is claimed. Exact
+artifact evidence and the remaining release prerequisite are in [runtime compatibility](worktree-runtime-compatibility.md).
+Repository wiring is implemented here, not deferred to issue #20. No runtime install or real worktree cleanup is
+part of this change.
+
 ## Verification
 
 Focused fixtures: `tools/worktree/portable-context.test.mjs`, `worktree.test.mjs` and `publish-plan.test.mjs`.
 They use isolated Git repositories and mocked runtime/remote operations. Shared-case coverage is tracked separately
 under task 5.5; these component checks do not certify every shared case, a compatible cleanup runtime release,
-exact-final-head CI, live activation or device acceptance. Inactive cleanup source/offline work is complete in PR #19;
-released-runtime verification and live adoption are separate follow-up work in [issue #20](https://github.com/timurproko/xrbuild/issues/20).
+exact-final-head CI, live activation or device acceptance. `pnpm test:delivery-runtime` additionally exercises actual
+packaged completion request/settlement, the committed declaration and real XR CLI children in isolated fixtures.
+Candidate end-to-end results do not certify a released/installed runtime. Released-package verification and
+participating-writer rollout remain in [issue #20](https://github.com/timurproko/xrbuild/issues/20), not deferred
+repository integration.

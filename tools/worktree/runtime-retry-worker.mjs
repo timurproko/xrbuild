@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { loadPinnedRuntime, sourceRoot } from './proposed-a1-fixture.mjs';
 import { repository, liveOwner } from './proposed-runtime-worker.mjs';
 import { executeGit } from './portable-context.mjs';
+import { disposeFixture } from './fixture-disposal.mjs';
 import { inspectRuntimeLocalRemoval } from './runtime-removal-adapter.mjs';
 import { executeScopedNonForceRemoval } from './published-removal.mjs';
 import { executeOwnershipCommand } from './ownership-exclusion.mjs';
@@ -97,7 +98,7 @@ export async function runRetryScenario(scenario, cacheRoot = sourceRoot) {
     if (peer) await peer.stop();
     if (server) await new Promise(resolve => server.close(resolve));
     runtime.dispose();
-    if (finished) fs.rmSync(box, { recursive: true, force: true });
+    if (finished) disposeFixture(box);
   }
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

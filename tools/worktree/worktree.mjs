@@ -4,8 +4,10 @@
 // task-local clones, never shared. Cleanup preserves .xrbuild/ and worktrees marked with .artifacts/KEEP.
 //
 //   pnpm worktree add <type/short-desc>        adopt an unoccupied local/remote task branch, or create from origin/main
-//   pnpm worktree enter <type/short-desc>      prepare/resume the selected task; --a1 uses successful runtime attachment
+//   pnpm worktree enter <type/short-desc>      prepare/resume the selected task; --a1 queues runtime attachment
 //                                              --install explicitly links public dependencies and installs them
+//   pnpm worktree complete                    queue a1 worktree complete; await the runtime result after batch exit
+//   pnpm worktree runtime-remove              queue the distinct a1 worktree remove-local operation
 //   pnpm worktree remove <name>               exact published-local removal, retaining refs; trusted ownership required
 //                                              --discard is a separate unsupported route, never a force fallback
 //   pnpm worktree sweep [--apply]              every task worktree as dirty / active / merged / closed / unknown;
@@ -22,7 +24,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attachA1, contextEnvironment, describeHandoff, prepareContext, registeredContexts, writeHandoffRecord } from './portable-context.mjs';
-import { inspectRemovalTarget, preservationReason, removePublishedCheckout, runtimeCleanupUnavailable } from './published-removal.mjs';
+import { inspectRemovalTarget, preservationReason, removePublishedCheckout } from './published-removal.mjs';
+import { runRuntimeAdapter } from './runtime-removal-adapter.mjs';
+import { loadCleanupRuntime } from './a1-cleanup-runtime.mjs';
 export { preservationReason } from './published-removal.mjs';
 
 const TYPES = ['feat', 'fix', 'refactor', 'docs', 'test', 'chore', 'ci', 'perf'];
@@ -149,6 +153,21 @@ function context(branch, { root = primaryRoot(), install = false, installFn = in
   });
 }
 
+// Windows npm CLI shims require cmd; this transport accepts only the fixed argument vectors below, never user text.
+function executeCompletionRequest(command, args, options) {
+  return process.platform === 'win32'
+    ? execFileSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', `${command} ${args.join(' ')}`], options)
+    : execFileSync(command, args, options);
+}
+/** Queue the runtime-owned transition only; never run repository deletion from the issuing cwd/batch. */
+export async function requestCompletion({ local = false, root = primaryRoot(), loadRuntime = loadCleanupRuntime, execute = executeCompletionRequest } = {}) {
+  await loadRuntime(root); // Refuse missing public package support before even queuing an older runtime's command.
+  execute('a1', ['worktree', local ? 'remove-local' : 'complete'], {
+    env: contextEnvironment(), stdio: 'inherit', timeout: 30_000,
+  });
+  return 'Completion requested, not settled. Exit this tool batch; A1 confirms the context transition and exact repository cleanup result separately.';
+}
+
 export function add(branch, options = {}) { return context(branch, options, false); }
 
 /** Existing context resumes only after verified ownership; dirty task edits are never reset. */
@@ -221,9 +240,15 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       const rows = sweep({ apply: Boolean(o.apply) });
       if (o.apply && rows.some(row => row.cleanup === 'blocked')) process.exitCode = 1;
     }
-    else if (['runtime-remove', 'complete'].includes(cmd)) runtimeCleanupUnavailable();
+    else if (['runtime-remove', 'complete'].includes(cmd)) {
+      if (o._.length || Object.keys(o).some(key => key !== '_')) throw new Error('Unknown exact completion option; merged selectors are discovered from the approved HEAD');
+      console.log(await requestCompletion({ local: cmd === 'runtime-remove' }));
+    }
+    else if (cmd === 'runtime-adapter') {
+      await runRuntimeAdapter(rest).then(stdout => console.log(stdout), error => { if (error.stdout) console.log(error.stdout); throw error; });
+    }
     else if (cmd === 'handoff' && o._[0]) console.log(handoff(o._[0], { change: o.change ?? null, pr: o.pr ?? null }));
-    else throw new Error('usage: worktree add|enter <type/short-desc> [--a1] [--install] [--expected-head <sha>] | remove <name> [--discard] | sweep [--apply] | handoff <name> [--change <id>] [--pr <n>]');
+    else throw new Error('usage: worktree add|enter <type/short-desc> [--a1] [--install] [--expected-head <sha>] | complete | runtime-remove | remove <name> [--discard] | sweep [--apply] | handoff <name> [--change <id>] [--pr <n>]');
   } catch (e) {
     if (e.code === 'XRB_ATTACHMENT_PENDING') {
       console.log(e.message); // Accepted request, not successful attachment/setup. Let the issuing shell exit.

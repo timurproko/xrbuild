@@ -320,9 +320,20 @@ independent `.xrbuild/` clone in that task worktree; never junction the primary 
 plugin builds, app output and packages stay task-local. Cleanup refuses any `.xrbuild/` or `.artifacts/KEEP` marker;
 preserve those files separately before cleanup (sweep reports protected worktrees as dirty). The
 [published-local removal engine](docs/published-local-removal.md) retains all refs and currently requires a trusted
-ownership adapter; the default CLI preserves checkouts while that prerequisite is unavailable:
+ownership adapter; the default standalone CLI preserves checkouts while that prerequisite is unavailable.
+For an attached A1 task whose PR is verified merged, use **`a1 worktree complete`**: paired preservation preflight,
+return outside the task, issuing-batch exit, then exact-target XR cleanup from primary. The committed declaration
+contains no sweep. Explicit `a1 worktree remove-local` is a distinct published-local operation. Refs, PRs and unrelated
+checkouts remain; unsafe or unverifiable data/ownership blocks removal. An unsupported runtime/package refuses before
+detachment, without sweep/discard fallback. See [runtime compatibility](docs/worktree-runtime-compatibility.md) for
+the tested candidate and actual published artifacts still missing the required APIs; no compatible minimum version,
+live installation or released end-to-end verification is claimed.
+
+Repository helper inventory:
 
 ```text
+pnpm worktree complete                 # queue a1 worktree complete; await the runtime result after the batch exits
+pnpm worktree runtime-remove           # distinct explicit a1 worktree remove-local request
 pnpm worktree add fix/hand-jitter      # adopt an existing task branch, else create from origin/main; no implicit install
 pnpm worktree sweep                    # every task worktree: dirty / active / merged / closed / unknown
 pnpm worktree sweep --apply            # merged candidates only; trusted ownership/publication/preservation checks required

@@ -2,17 +2,17 @@
   "version": 2,
   "purpose": "offline-candidate-package-only; live adoption disabled",
   "repository": "timurproko/a1",
-  "revision": "e86f628b08d56070bb61845b8f15ba122cf5cfb1",
-  "sourceTree": "b9d993e69d97ce3b06308c118843f53a1dedc50d",
+  "revision": "691b381c29fe5c5d558491ff519b300bf426a730",
+  "sourceTree": "2c1518b90e86a85d5702ef48f258df62f5038585",
   "node": "v24.21.0",
   "npm": "11.13.0",
   "package": {
     "name": "@timurproko/a1",
     "version": "0.2.7-dev",
     "filename": "timurproko-a1-0.2.7-dev.tgz",
-    "sha256": "6796fa6d2281a413aa65ca92f635a1e76d2f3ea04a281dcbf2c2d0f762e5b254",
-    "integrity": "sha512-M94tvBGudj9ynhtg1HO50GId949auSNxcyflpjhzBxvGqaLCaVg+qvVnIjNF0l6nViGKaOTuX3vxcSEV9rl6cQ==",
-    "size": 4460117
+    "sha256": "bb76eb2ae0d152acacd5def472398da7115b5411043968b80c3cf6a65a7b80d0",
+    "integrity": "sha512-gfr8e6EUYzmkCoZdatk7/FyKsH2OVIra8hYJqZs57lZvh3kcDclDc23z1mEwPqAtNa8MiVUfxV8OL2SZ2pAtKQ==",
+    "size": 4480908
   },
   "lockSha256": "7e687b8939ee6ea5d314a9699cbb6be3a03fb9d236a5d6d843dca11f20afb3d1",
   "files": {
@@ -41,16 +41,28 @@
       "gitBlob": "627151cad0a82e6a589342e6e30f544bfbebcce3"
     },
     "dist/foundation/lifecycle/worktree-claim-boundary.mjs": {
-      "sha256": "7a017d95fb8ef91c9a6b6833dc19ca46e52695ef01c7ee43cc7ba4ab1905c712",
+      "sha256": "78019b7de58900633c7cc438e7b01757d8c779d3be573835badd18d21e56d2ab",
       "source": "src/foundation/lifecycle/worktree-claim-boundary.mjs",
-      "sourceSha256": "27b1f1c5118236fb6c7f88891c7d7756e3274590af9d6ae1d77510e72e01278d",
-      "gitBlob": "50b5bd5508c1d3883054062adaac3d5c1dbad12b"
+      "sourceSha256": "6e0df991a42e481fd35998a0155794dda0d20f4d35642f5d7179d4a6114a24ec",
+      "gitBlob": "c05488024f2b0fbd70c3ee7662d54ad9742d764c"
     },
     "dist/foundation/lifecycle/claim-gate-core.mjs": {
-      "sha256": "152e7fdcc418ec03aa612a3560917843825d03bf9473c73fa0a90bbb5ab31f74",
+      "sha256": "5a824975ea051f0d025f6815aed6050187f602b60041a158ea280a2c56f11dd7",
       "source": "src/foundation/lifecycle/claim-gate-core.mjs",
+      "sourceSha256": "84171220ea8fae020aede228bdc4c6854c6f9663b9ddb621aeaa13542c4437cd",
+      "gitBlob": "c4c1511f357f5ca78233054f6fa4d447ea2a43c2"
+    },
+    "dist/foundation/lifecycle/claim-gate-legacy.mjs": {
+      "sha256": "152e7fdcc418ec03aa612a3560917843825d03bf9473c73fa0a90bbb5ab31f74",
+      "source": "src/foundation/lifecycle/claim-gate-legacy.mjs",
       "sourceSha256": "89e2d01c2fa5ffb8fdc658d06e0a71675da3f40a05d7cfdcba3230cc0ca9a507",
       "gitBlob": "7f01ef690dd2cc2a97a51300e707f67594a6dcb8"
+    },
+    "dist/foundation/lifecycle/claim-gate-witness.mjs": {
+      "sha256": "e0c02a85809b34393431106e8d416c154dbf0500d4c817ed41a18b2ae5b655d4",
+      "source": "src/foundation/lifecycle/claim-gate-witness.mjs",
+      "sourceSha256": "65ae221048e3907ec48da299bc0f86a1888d833c7a5bb0167b048ed8293aded0",
+      "gitBlob": "71870d94a387a85766195154e80099990ea321ad"
     },
     "dist/foundation/lifecycle/worktree-claim-boundary.d.mts": {
       "sha256": "46b6fec3e82b0c774451ec8c3664619b64fd746c7faf84a86a213d87d747688b",
@@ -89,16 +101,16 @@
       "gitBlob": "df5cb031779eb509901c14495eb88cb99bd7927c"
     },
     "dist/foundation/lifecycle/session-claim-lock.js": {
-      "sha256": "b4767d84121016be168cda66ac373c218bdaca7e3afe1c70434707db7af985b2",
+      "sha256": "535c85d12225b4b1c6165fcf2829fa493d59d02bd5e0cf4d31d3f6faf81878c8",
       "source": "src/foundation/lifecycle/session-claim-lock.ts",
-      "sourceSha256": "567d6684906aa8bd14d277529b70c58c3ddb6d42a54161aa982c6d88a6245f40",
-      "gitBlob": "f7d2e04565abb0c32205327a8ebc0eaf0bf82da6"
+      "sourceSha256": "d0c0e54d65e32535bda7c37264bd19010008030f4abbc841c6a569fa4ff5f47b",
+      "gitBlob": "e203541c4fecc626ae38f1ae70c90f5b010b192f"
     },
     "dist/foundation/lifecycle/claim-gate.js": {
-      "sha256": "5e7b8f2b722f8aab86631b744988009524940b593b5d24a126fbe13ead773f27",
+      "sha256": "77fde745b9306220f685adf0ed605dd761a098064c5920b858ba538045fb91c7",
       "source": "src/foundation/lifecycle/claim-gate.ts",
-      "sourceSha256": "5e7b8f2b722f8aab86631b744988009524940b593b5d24a126fbe13ead773f27",
-      "gitBlob": "87d04a46332b7919ca5057c9e09211f6fcb63db3"
+      "sourceSha256": "77fde745b9306220f685adf0ed605dd761a098064c5920b858ba538045fb91c7",
+      "gitBlob": "4a4f1e18f89b8e759e3718de4aaf97b0c9b4e154"
     },
     "dist/foundation/lifecycle/worktree-git-environment.js": {
       "sha256": "a0ea4b3a7ebc33461f7c6690efeec47dcf8e6be760cec875a277d0b410baefd1",
@@ -111,6 +123,12 @@
       "source": "src/foundation/lifecycle/session-worktree-completion.ts",
       "sourceSha256": "388fa1760ccf3ba6dd3151c7f39370db8c1b5642910b00ad4842bb18282c36f8",
       "gitBlob": "36d35f81f4b28c03459736f8cf75fa7aa4ad0f95"
+    },
+    "dist/foundation/lifecycle/claim-gate-witness.ps1": {
+      "sha256": "57b325db4ac0d4ffeb84b8666afb8a7b8ae3e0c3438dff1c74d1f789dc1a6615",
+      "source": "src/foundation/lifecycle/claim-gate-witness.ps1",
+      "sourceSha256": "57b325db4ac0d4ffeb84b8666afb8a7b8ae3e0c3438dff1c74d1f789dc1a6615",
+      "gitBlob": "011f32241e32c087f3ca465ae468a66b9065449c"
     }
   }
 }
