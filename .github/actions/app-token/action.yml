@@ -1,13 +1,13 @@
 name: Repo bot token
 description: >-
-  Mints a short-lived token for the repo's GitHub App (variable XRB_BOT_APP_ID, secret XRB_BOT_PRIVATE_KEY) and the
+  Mints a short-lived token for the repo's GitHub App (variable DELIVERY_BOT_APP_ID, secret DELIVERY_BOT_PRIVATE_KEY) and the
   commit identity that goes with it. Stops with a message naming what is missing when the App is not configured.
 inputs:
   app-id:
-    description: vars.XRB_BOT_APP_ID
+    description: vars.DELIVERY_BOT_APP_ID
     required: false
   private-key:
-    description: secrets.XRB_BOT_PRIVATE_KEY
+    description: secrets.DELIVERY_BOT_PRIVATE_KEY
     required: false
 outputs:
   token:
@@ -29,8 +29,8 @@ runs:
         KEY_SET: ${{ inputs.private-key != '' }}
       run: |
         missing=()
-        [ -n "$APP_ID" ] || missing+=("the Actions variable XRB_BOT_APP_ID")
-        [ "$KEY_SET" = "true" ] || missing+=("the Actions secret XRB_BOT_PRIVATE_KEY")
+        [ -n "$APP_ID" ] || missing+=("the Actions variable DELIVERY_BOT_APP_ID")
+        [ "$KEY_SET" = "true" ] || missing+=("the Actions secret DELIVERY_BOT_PRIVATE_KEY")
         if [ ${#missing[@]} -gt 0 ]; then
           printf '::error title=Repo bot not configured::Set %s (see the repo bot section of README.md).\n' "$(IFS=' and '; echo "${missing[*]}")"
           exit 1
