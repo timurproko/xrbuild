@@ -1,15 +1,15 @@
 name: CI
 
-# Every PR to main runs the checks its changes need; "CI required" collects them and is the one check the main ruleset
+# Every PR to develop runs the checks its changes need; "CI required" collects them and is the one check the develop ruleset
 # requires. A draft runs only the light jobs; marking it ready (or editing its body or labels) runs the rest. Pushes to
-# main run the fast jobs; the nightly schedule and explicit dispatch also build and test the native host. Delivery
+# develop run the fast jobs; the nightly schedule and explicit dispatch also build and test the native host. Delivery
 # rules are not checked here: the shared Delivery workflow publishes its own check.
 on:
   pull_request:
-    branches: [main]
+    branches: [develop, main]
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, labeled, unlabeled]
   push:
-    branches: [main]
+    branches: [develop, main]
   schedule:
     - cron: '17 1 * * *'
   workflow_dispatch:
@@ -17,8 +17,8 @@ on:
 permissions:
   contents: read
 
-# A new push to a PR cancels its older run; runs on main (push, nightly, dispatch) each get their own group, so every
-# commit on main is checked to the end.
+# A new push to a PR cancels its older run; runs on develop (push, nightly, dispatch) each get their own group, so every
+# commit on develop is checked to the end.
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-run-{0}', github.run_id) }}
   cancel-in-progress: true
@@ -125,7 +125,7 @@ jobs:
   native:
     name: Host build and tests
     needs: [readiness]
-    # Deliberately skip every PR and main push; a dispatch can check a sensitive change before merge.
+    # Deliberately skip every PR and develop push; a dispatch can check a sensitive change before merge.
     if: needs.readiness.outputs.ready == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     runs-on: windows-latest
     steps:
