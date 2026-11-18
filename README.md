@@ -340,8 +340,8 @@ The `develop` ruleset and the Actions event policy are declared in `protection/r
 
 **Repo bot.** Install a repository-scoped GitHub App with Contents and Pull requests (read/write), Metadata (read),
 and only additional read permissions required by enabled probes; no webhook is needed. Its id is
-the Actions variable `XRB_BOT_APP_ID` and a private key the secret `XRB_BOT_PRIVATE_KEY`; the `Bot probe` workflow
-checks both. To rotate the key, generate a new one on the App's page, replace the secret, and delete the old key.
+the Actions variable `DELIVERY_BOT_APP_ID` and a private key the secret `DELIVERY_BOT_PRIVATE_KEY`; every repository uses
+these two names. To rotate the key, generate a new one on the App's page, replace the secret, and delete the old key.
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/separator-dark.svg"><img src="docs/assets/readme/separator.svg" alt="" width="280"></picture></p>
 

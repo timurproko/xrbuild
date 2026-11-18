@@ -28,5 +28,5 @@ jobs:
       pr: ${{ inputs.pr }}
       dry_run: ${{ inputs.dry_run || false }}
     secrets:
-      app_id: ${{ vars.XRB_BOT_APP_ID }}
-      app_private_key: ${{ secrets.XRB_BOT_PRIVATE_KEY }}
+      app_id: ${{ vars.DELIVERY_BOT_APP_ID }}
+      app_private_key: ${{ secrets.DELIVERY_BOT_PRIVATE_KEY }}
