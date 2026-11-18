@@ -49,7 +49,7 @@ For a PR, core CI SHALL always run the name guard and OpenSpec validation, SHALL
 - **THEN** its integration checks belong to that private repository rather than the public core's required check graph
 
 ### Requirement: Drafts skip heavy jobs
-For a draft PR, CI SHALL skip Node tests, host build and the delivery check while running name guard and OpenSpec validation. A draft SHALL NOT be promoted on the basis of a lightweight CI pass. Trusted readiness automation SHALL promote only a complete linked implementation draft; its ready event SHALL trigger all applicable PR checks, and the finalizer's archive commit SHALL trigger exact-head PR validation again. The host build remains reserved for nightly or explicit dispatch even after promotion.
+For a draft PR, CI SHALL skip Node tests and host build while running name guard and OpenSpec validation. A draft SHALL NOT be promoted on the basis of a lightweight CI pass. Trusted readiness automation SHALL promote only a complete linked implementation draft; its ready event SHALL trigger all applicable PR checks, and the finalizer's archive commit SHALL trigger exact-head PR validation again. The host build remains reserved for nightly or explicit dispatch even after promotion.
 
 #### Scenario: Plan draft
 - **WHEN** a draft PR holding a plan is pushed
@@ -62,13 +62,6 @@ For a draft PR, CI SHALL skip Node tests, host build and the delivery check whil
 #### Scenario: Completed implementation
 - **WHEN** trusted automation promotes a completed draft to ready and finalizes it on its branch
 - **THEN** CI runs all applicable PR jobs on the final commit before `CI required` can make it merge-eligible
-
-### Requirement: Policy from the base commit
-Scripts that decide readiness, promotion and delivery SHALL be read from the PR's base commit, not from its head; PR files SHALL be treated as data, not executed with the App credential.
-
-#### Scenario: PR weakens the delivery script
-- **WHEN** a PR changes readiness or delivery scripts
-- **THEN** its own trusted workflow still runs `main`'s versions of those scripts
 
 ### Requirement: Nightly run
 CI SHALL run every job on `main`'s head once a night, whatever changed, including the full Windows host build and native tests. An explicit workflow dispatch SHALL also permit a full run on the selected ref. The nightly run SHALL cover builds and unit tests only; checks that need a 3D display, a hand tracker or the rig's GPU stay manual.
@@ -121,30 +114,3 @@ The OpenSpec CLI pinned for CI and finalization SHALL report requirement text ov
 #### Scenario: Invalid requirement
 - **WHEN** a change adds a requirement without a scenario
 - **THEN** strict OpenSpec validation fails and the finalizer does not commit the archive
-
-### Requirement: Automatic refresh of stale ready pull requests
-Trusted default-branch automation SHALL reconcile open ready same-repository PRs targeting `main` after a PR merges into main. It SHALL also safely reconcile after completion of the existing documentation-auto-merge workflow without enabling that workflow. It SHALL skip drafts, forks, closed PRs and other base branches, leave current heads unchanged, and update stale branches only through an expected-head-bound update-branch request using the event-producing repository App identity. It SHALL use bounded requests and pagination, report conflicts and head races without force pushes, and report operational failures without claiming validation success. It SHALL NOT execute candidate code, merge PRs, arm auto-merge, promote drafts or manufacture statuses.
-
-#### Scenario: Another PR merges
-- **WHEN** a PR merges into main and an open same-repository non-draft PR is behind current main
-- **THEN** trusted automation requests an expected-head-bound branch update with the App identity and accepted updates trigger ordinary PR synchronization checks on the new head
-
-#### Scenario: Current branch or ineligible candidate
-- **WHEN** a listed PR already contains main, is a draft or fork, has closed, or no longer targets main
-- **THEN** refresh reports its current or skipped disposition and makes no branch update for that candidate
-
-#### Scenario: Head changes during reconciliation
-- **WHEN** the candidate head changes after it is read and before the update request is accepted
-- **THEN** the expected-head guard prevents replacement of the new head and refresh reports a deferred race rather than forcing an update
-
-#### Scenario: Conflict or operational failure
-- **WHEN** a stale branch conflicts with main or an independent update request fails
-- **THEN** refresh reports the blocked or failed candidate and continues other candidates where safe, while authentication or authorization failures abort the pass and operational failures fail the job
-
-#### Scenario: Documentation merge completion bridge
-- **WHEN** the separately enabled documentation-auto-merge workflow completes
-- **THEN** refresh reads trusted main policy and fresh open PR state without using the completed run's candidate code or artifacts, and repeated reconciliation makes no write to current branches
-
-#### Scenario: Old workflow run stalled
-- **WHEN** a ready PR already contains main but an earlier required job stalled
-- **THEN** branch refresh leaves its head unchanged and does not fabricate a pass or claim that rerunning the historical workflow validates a newer base
