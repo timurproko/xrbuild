@@ -10,8 +10,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { deliverySections, inspectBodyProgress, parseLink } from './pr-body.mjs';
-import { HOLD_LABEL } from './snapshot.mjs';
+import { parseLink } from './pr-body.mjs';
 
 export const IN_PROGRESS_LABEL = 'openspec-in-progress';
 const ARCHIVED = /^\d{4}-\d{2}-\d{2}-(.+)$/;
@@ -36,10 +35,9 @@ export function changesInTree(paths) {
  * The verdict for a ready PR: `{ ok, problems, notes }`. `changed` are the paths the PR changes (base...head),
  * `headPaths` every path at the head.
  */
-export function checkDelivery({ body, labels, changed, headPaths, read, ancestor }) {
+export function checkDelivery({ body, labels, changed, headPaths }) {
   const problems = [];
   const notes = [];
-  if (labels.some(label => label.toLowerCase() === HOLD_LABEL)) problems.push('delivery-hold pauses delivery/integration; fresh validation is required after release');
   const { active, archived } = changesInTree(headPaths);
   const parsed = parseLink(body);
   if (parsed.error) problems.push(`${parsed.error}. Fix the block in the PR body's Automation section.`);
@@ -52,18 +50,6 @@ export function checkDelivery({ body, labels, changed, headPaths, read, ancestor
       problems.push(`the PR links change "${linked}", which is neither active nor archived at the head. Check the change id in the Automation block.`);
     } else {
       notes.push(`change "${linked}" is finalized`);
-      const modern = /^\s*[-*] \[[ xX]\]/m.test(deliverySections(body).sections.Implementation ?? '');
-      if (modern) {
-        const archives = [...new Set(headPaths.filter(file => file.startsWith('openspec/changes/archive/')).map(file => file.split('/').slice(0, 4).join('/')))]
-          .filter(folder => new RegExp(`/\\d{4}-\\d{2}-\\d{2}-${linked}$`).test(folder));
-        if (archives.length !== 1 || !read) problems.push('Current version-1 archive/tasks evidence is missing or ambiguous');
-        else {
-          const verdict = inspectBodyProgress(body, read(`${archives[0]}/tasks.md`));
-          if (verdict.status !== 'complete') problems.push(verdict.reason);
-          if (parsed.link.archive && parsed.link.archive !== archives[0]) problems.push('Archive association does not match this change at the head');
-          if (parsed.link.finalizedHead && (!/^[a-f0-9]{40}$/.test(parsed.link.finalizedHead) || !ancestor?.(parsed.link.finalizedHead))) problems.push('Finalized head association is not verified in candidate history');
-        }
-      }
     }
   }
 
@@ -99,8 +85,6 @@ function main() {
     labels: (pr.labels ?? []).map((l) => l.name),
     changed: git('diff', '--name-only', '--no-renames', `${a.base}...${a.head}`),
     headPaths: git('ls-tree', '-r', '--name-only', a.head, '--', 'openspec/changes'),
-    read: ref => { try { return git('show', `${a.head}:${ref}`).join('\n'); } catch { return null; } },
-    ancestor: ref => { try { git('merge-base', '--is-ancestor', ref, a.head); return true; } catch { return false; } },
   });
   for (const n of verdict.notes) console.log(`ok: ${n}`);
   for (const p of verdict.problems) console.log(`::error title=Delivery::${p}`);

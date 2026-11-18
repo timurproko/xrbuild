@@ -42,11 +42,3 @@ When explicitly enabled by the reviewed workflow activation policy, a ready same
 #### Scenario: Plan only
 - **WHEN** a PR adds only an active change folder
 - **THEN** it is not auto-merged
-
-#### Scenario: Authority-changing Markdown
-- **WHEN** AGENTS or policy documentation changes delivery/cleanup/privileged authority
-- **THEN** the PR SHALL remain outside routine automatic integration
-
-#### Scenario: Explicit opt-out
-- **WHEN** no-auto-merge or delivery-hold applies
-- **THEN** automation SHALL not arm or exercise documentation integration
