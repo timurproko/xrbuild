@@ -1,0 +1,32 @@
+name: Delivery
+
+# The change-delivery automation lives in timurproko/MyWorkflows and is shared by every repository: draft promotion,
+# OpenSpec finalization, the delivery check, ready pull-request refresh and merged-branch deletion. This file only
+# forwards events and the delivery bot's credentials to it; it runs nothing from the pull request.
+on:
+  pull_request_target:
+    types: [opened, synchronize, ready_for_review, converted_to_draft, reopened, edited, closed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Implementation PR number to reconcile
+        type: string
+        required: true
+      dry_run:
+        description: Report the candidate classification without pushing
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  delivery:
+    uses: timurproko/MyWorkflows/.github/workflows/delivery.yml@main
+    with:
+      pr: ${{ inputs.pr }}
+      dry_run: ${{ inputs.dry_run || false }}
+    secrets:
+      app_id: ${{ vars.XRB_BOT_APP_ID }}
+      app_private_key: ${{ secrets.XRB_BOT_PRIVATE_KEY }}

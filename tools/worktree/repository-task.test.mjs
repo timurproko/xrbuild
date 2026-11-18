@@ -143,11 +143,11 @@ test('CLI writes ignored create-only records, redacts private config, and binds 
 });
 
 test('instruction matrix and prerequisite order are explicit without overwriting predecessor changes', async () => {
-  const instructions = await fs.readFile(path.join(REPO, '.claude/CLAUDE.md'), 'utf8'), delivery = await fs.readFile(path.join(REPO, '.claude/skills/change-delivery/SKILL.md'), 'utf8');
+  const instructions = await fs.readFile(path.join(REPO, '.claude/CLAUDE.md'), 'utf8'), delivery = await fs.readFile(path.join(REPO, 'AGENTS.md'), 'utf8');
   assert.match(instructions, /audited source snapshot/); assert.match(instructions, /never enroll private packages/i);
   assert.match(delivery, /Route engine and approved `embedded\/` changes to the core PR/);
   assert.match(delivery, /private-only work.*independent private PR/i);
-  assert.match(delivery, /Paired tasks use separate PRs/i); assert.match(delivery, /Never merge, arm auto-merge or push to `main`/);
+  assert.match(delivery, /Paired tasks use separate PRs/i); assert.match(delivery, /Never arm auto-merge or push to `main`/);
   const prerequisites = await fs.readFile(path.join(REPO, 'openspec/changes/bundled-extensions/prerequisites.md'), 'utf8');
   assert.match(prerequisites, /user-workspace-public-core.*split-private-workspace.*bundled-extensions/s);
   assert.match(prerequisites, /bot.*finalization/i); assert.match(prerequisites, /never.*overwrite.*predecessor/i);
@@ -155,11 +155,10 @@ test('instruction matrix and prerequisite order are explicit without overwriting
 
 test('accepted contract checkpoints require approval, historical preservation and ordinary bot delivery', async () => {
   const read = file => fs.readFile(path.join(REPO, file), 'utf8');
-  const [instructions, delivery, context, governance, checkpoint] = await Promise.all([
-    '.claude/CLAUDE.md', '.claude/skills/change-delivery/SKILL.md', 'openspec/config.yaml',
-    'docs/pr-delivery-governance.md', 'docs/spec-baseline-reconciliation.md',
+  const [instructions, delivery, context, checkpoint] = await Promise.all([
+    '.claude/CLAUDE.md', 'AGENTS.md', 'openspec/config.yaml', 'docs/spec-baseline-reconciliation.md',
   ].map(read));
-  for (const entry of [instructions, delivery, context, governance]) {
+  for (const entry of [instructions, delivery, context]) {
     assert.match(entry, /spec-baseline-reconciliation\.md/);
     assert.match(entry, /explicitly.*approved/i);
     assert.match(entry, /bot-finalized and maintainer-merged/);

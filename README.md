@@ -279,9 +279,8 @@ Layout:
 | `packages/control-panel` | `@xr-build/control-panel`: the control panel (Node server + browser UI) |
 | `packages/desktop-package` | `@xr-build/desktop-package`: built-in portable Windows package |
 | `templates/` | the new workspace and the new app the panel creates |
-| `tools/` | `fetch-deps`, `name-guard`, `worktree`, `pr-automation`, `repo-governance`, `preview-readme`, Start-menu installers |
-| `config/` | `github-repository-governance.json`: repository settings as code |
-| `.github/` | CI, the bot workflows, the PR template |
+| `tools/` | `fetch-deps`, `name-guard`, `worktree`, `pr-automation`, `preview-readme`, Start-menu installers |
+| `.github/` | CI, nightly triage, the shared delivery caller, the PR template |
 | `openspec/` | the plan: specs and changes |
 | `.xrbuild/` | ignored independent private workspace clone; owns projects, plugins and LFS assets separately from core |
 
@@ -326,31 +325,18 @@ pnpm worktree remove hand-jitter       # remove one after its merge (--discard i
 ```
 
 A change that needs a plan starts as a draft PR holding only its OpenSpec change, linked in the PR body's Automation
-block; the code follows in the same PR once the plan is approved. Complete Implementation outcomes and their detailed
-pre-ready tasks truthfully; trusted automation, not the agent, marks an unchanged eligible draft ready. Missing bot
-configuration or unfinished task records remain visible blockers. Once ready, the repo bot archives
-the change in the PR (specs synced), and CI's `Delivery` job turns green. The existing narrow documentation-only
-auto-merge policy remains available only when explicitly enabled; the reviewed delivery activation profile leaves that
-auxiliary workflow disabled. Implementation PRs remain maintainer-merged. Ready PRs keep the name guard, OpenSpec,
-delivery and relevant Node/workspace checks, but **do not build or test the native host**, even when host code changes.
-A skipped host check is not a successful native build. Pushes to `main` also omit that several-minute lane. The full
-Windows host build and native tests run on the scheduled nightly CI for `main`, or when CI is manually dispatched
-from Actions for a chosen ref before merging a sensitive change. A nightly failure opens a draft `fix/nightly-<date>`
-PR; it cannot retroactively block an earlier merge. The full process for agents is
-`.claude/skills/change-delivery/SKILL.md`.
+block; the code follows in the same PR once the plan is approved. The shared delivery workflow
+(`.github/workflows/delivery.yml` forwards events to `timurproko/MyWorkflows`) marks a fully ticked draft ready,
+archives the change in the PR with its specs synced, and publishes the `delivery / Delivery check`. Implementation PRs
+remain maintainer-merged. Ready PRs keep the name guard, OpenSpec and relevant Node/workspace checks, but **do not
+build or test the native host**, even when host code changes. A skipped host check is not a successful native build.
+Pushes to `main` also omit that several-minute lane. The full Windows host build and native tests run on the scheduled
+nightly CI for `main`, or when CI is manually dispatched from Actions for a chosen ref before merging a sensitive
+change. A nightly failure opens a draft `fix/nightly-<date>` PR; it cannot retroactively block an earlier merge. The
+full process for agents is the shared `change-delivery` skill, with this repository's additions in `AGENTS.md`.
 
-Repository settings, the `main` ruleset and the workflow labels are declared in
-`config/github-repository-governance.json`. No administrator or bot bypass is declared. The maintainer checks them
-locally with their own `gh` login; change them in a PR, then review capability preflight and explicitly scoped activation:
-
-```text
-pnpm governance preflight
-pnpm governance protect --confirm apply-xr-build-governance
-pnpm governance activate-ci --confirm apply-xr-build-governance
-```
-
-See [protected PR delivery](docs/pr-delivery-governance.md) for full bot activation, bootstrap, blocked private-account
-capabilities and exact-head canary acceptance. Partial CI-only activation does not certify automatic readiness.
+The `main` ruleset and the Actions event policy are declared in `protection/repositories.json` of
+`timurproko/MyWorkflows` and installed with `delivery protect --repo timurproko/xrbuild --apply`.
 
 **Repo bot.** Install a repository-scoped GitHub App with Contents and Pull requests (read/write), Metadata (read),
 and only additional read permissions required by enabled probes; no webhook is needed. Its id is

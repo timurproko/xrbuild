@@ -48,17 +48,17 @@ test('fast PR checks remain path-selected and the required check accepts only in
   assert.match(changes, /\\\.github\//);
   assert.match(job('node'), /needs\.changes\.outputs\.node == 'true'/);
   const required = job('required');
-  assert.match(required, /needs: \[readiness, changes, names, openspec, delivery, node, embedded, native\]/);
+  assert.match(required, /needs: \[readiness, changes, names, openspec, node, embedded, native\]/);
   assert.match(required, /always\(\) && \(github\.event_name != 'pull_request' \|\| !github\.event\.pull_request\.draft\)/);
   assert.match(required, /node tools\/pr-automation\/required\.mjs/);
   const ready = { readiness: { result: 'success', outputs: { ready: 'true' } }, changes: { result: 'success', outputs: { node: 'true', embedded: 'true' } },
-    names: { result: 'success' }, openspec: { result: 'success' }, delivery: { result: 'success' }, node: { result: 'success' }, embedded: { result: 'success' }, native: { result: 'skipped' } };
+    names: { result: 'success' }, openspec: { result: 'success' }, node: { result: 'success' }, embedded: { result: 'success' }, native: { result: 'skipped' } };
   assert.deepEqual(requiredProblems(ready, 'pull_request'), []);
   for (const result of ['skipped', 'failure', 'cancelled', undefined]) {
-    for (const name of ['node', 'embedded', 'delivery']) assert.ok(requiredProblems({ ...ready, [name]: { result } }, 'pull_request').length, `${name}: ${result}`);
+    for (const name of ['node', 'embedded']) assert.ok(requiredProblems({ ...ready, [name]: { result } }, 'pull_request').length, `${name}: ${result}`);
   }
   assert.ok(requiredProblems({ ...ready, readiness: { result: 'success', outputs: { ready: 'false' } } }, 'pull_request').length);
-  assert.deepEqual(requiredProblems({ ...ready, delivery: { result: 'skipped' }, native: { result: 'success' } }, 'schedule'), []);
+  assert.deepEqual(requiredProblems({ ...ready, native: { result: 'success' } }, 'schedule'), []);
   for (const node of ['true', 'false']) for (const embedded of ['true', 'false']) {
     const selected = { ...ready, changes: { result: 'success', outputs: { node, embedded } },
       node: { result: node === 'true' ? 'success' : 'skipped' }, embedded: { result: embedded === 'true' ? 'success' : 'skipped' } };

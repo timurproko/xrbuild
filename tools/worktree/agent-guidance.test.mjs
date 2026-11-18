@@ -8,44 +8,21 @@ const shared = 'In an active A1 session, use `a1 worktree enter <branch>` or `a1
 
 test('shared guidance retains task attachment through implementation and review without coordination gates', async () => {
   const read = file => fs.readFile(path.join(root, file), 'utf8');
-  const [agents, delivery, instructions] = await Promise.all([
-    'AGENTS.md', '.claude/skills/change-delivery/SKILL.md', '.claude/CLAUDE.md',
-  ].map(read));
+  const [agents, instructions] = await Promise.all(['AGENTS.md', '.claude/CLAUDE.md'].map(read));
+  const delivery = agents;
   assert.ok(agents.includes(shared));
-  for (const text of [agents, delivery, instructions]) {
+  for (const text of [agents, instructions]) {
     assert.doesNotMatch(text, /a1 session (?:link-worktree|worktrees)|require.*inventory.*current|Re-link and confirm/);
     assert.doesNotMatch(text, /detach` when handing off or finishing/);
   }
-  assert.match(delivery, /shared Worktrees guidance in `AGENTS.md`/);
+  assert.match(delivery, /shared `change-delivery` skill of `timurproko\/MyWorkflows`/);
   assert.match(delivery, /Dependency setup is separate from attachment/);
   assert.match(delivery, /Private workspaces|private clones/i);
   assert.match(delivery, /\.xrbuild\/.*\.artifacts\/KEEP/s);
-  assert.match(delivery, /Never merge, arm auto-merge or push to `main`/);
+  assert.match(delivery, /Never arm auto-merge or push to `main`/);
   assert.match(delivery, /`a1 worktree complete` instead and never cleans its own\s+attached checkout/);
   assert.match(delivery, /declared in the committed `\.a1\/worktree\.json`/);
   assert.doesNotMatch(delivery, /git config --local a1\.worktreeCleanup/);
   assert.deepEqual(JSON.parse(await read('.a1/worktree.json')), { cleanup: ['node', 'tools/worktree/worktree.mjs', 'sweep', '--apply'] });
   assert.match(agents, /Never clean up a worktree containing private workspace data/);
-});
-
-const progress = 'Plan `tasks.md` as one task group per PR `## Implementation` outcome, in the same order. Then work one outcome at a time: write its code and tests, tick its `tasks.md` tasks, commit and push, and tick that outcome in the PR body (`[ ]` to `[x]`, nothing else) before starting the next one. A tick means the code and tests are written: CI, broad test runs, and manual validation never delay it, and a later defect is fixed in a new commit. Never save ticks for handoff.';
-
-test('every agent runtime reads one shared rule for ticking outcomes while implementing', async () => {
-  const read = async file => (await fs.readFile(path.join(root, file), 'utf8')).replaceAll('\r\n', '\n');
-  const [agents, instructions] = await Promise.all(['AGENTS.md', '.claude/CLAUDE.md'].map(read));
-  assert.ok(agents.includes(`## Implementation progress\n\n${progress}\n`));
-  assert.match(instructions, /^@\.\.\/AGENTS\.md$/m);
-  assert.ok(!instructions.includes(progress));
-  assert.match(instructions, /`Implementation progress` paragraph of `AGENTS\.md`/);
-});
-
-test('the delivery skill and PR template follow the shared progress rule without restating it', async () => {
-  const read = file => fs.readFile(path.join(root, file), 'utf8');
-  const [delivery, template] = await Promise.all(['.claude/skills/change-delivery/SKILL.md', '.github/pull_request_template.md'].map(read));
-  assert.match(delivery, /`Implementation progress` paragraph of `AGENTS[.]md`/);
-  assert.match(delivery, /one task group per PR Implementation outcome, in the same order/);
-  assert.match(delivery, /No task is about ticking PR\s+outcomes or handing off/);
-  assert.ok(!delivery.includes('Never save ticks for handoff'));
-  assert.doesNotMatch(delivery, /only when its verify clause holds/);
-  assert.match(template, /`Implementation progress` in AGENTS[.]md/);
 });
