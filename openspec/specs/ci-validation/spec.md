@@ -7,7 +7,7 @@ happens when the nightly run fails.
 ## Requirements
 
 ### Requirement: One required check
-CI SHALL end with a `CI required` job that fails when any other CI job failed or was cancelled, and passes when every job succeeded or was skipped as not needed. The `main` ruleset SHALL require only that check. A skipped native host job on a PR SHALL NOT be represented as native validation having passed.
+CI SHALL end with a `CI required` job that fails when any other CI job failed or was cancelled, and passes when every job succeeded or was skipped as not needed. The `develop` ruleset SHALL require only that check. A skipped native host job on a PR SHALL NOT be represented as native validation having passed.
 
 #### Scenario: Skipped host build
 - **WHEN** a PR changes only `packages/sdk/`
@@ -18,7 +18,7 @@ CI SHALL end with a `CI required` job that fails when any other CI job failed or
 - **THEN** the host build is skipped and `CI required` passes without claiming the host compiled
 
 ### Requirement: Jobs by changed paths
-For a PR, core CI SHALL always run the name guard and OpenSpec validation, SHALL run Node tests when `packages/`, `tools/`, `templates/`, the pnpm files or `ci.yml` change, and SHALL NOT run the host build or native host tests regardless of changed paths. Main pushes SHALL run non-host core jobs. Scheduled main runs and explicit dispatches SHALL also run host build/tests. Core CI SHALL NOT require private workspace source, assets or credentials; private integration jobs belong to private CI. Ready public embedded-module, shared-contract, dependency and relevant compiler changes SHALL select the implemented Windows embedded public-boundary lane, including frozen public installation, strict production type checks and synthetic compiler/service/package boundary checks, without private credentials or hardware. The generic core-only build SHALL remain independent of optional device dependencies. Selected public checks that unexpectedly skip SHALL NOT produce a successful required aggregate.
+For a PR, core CI SHALL always run the name guard and OpenSpec validation, SHALL run Node tests when `packages/`, `tools/`, `templates/`, the pnpm files or `ci.yml` change, and SHALL NOT run the host build or native host tests regardless of changed paths. Main pushes SHALL run non-host core jobs. Scheduled develop runs and explicit dispatches SHALL also run host build/tests. Core CI SHALL NOT require private workspace source, assets or credentials; private integration jobs belong to private CI. Ready public embedded-module, shared-contract, dependency and relevant compiler changes SHALL select the implemented Windows embedded public-boundary lane, including frozen public installation, strict production type checks and synthetic compiler/service/package boundary checks, without private credentials or hardware. The generic core-only build SHALL remain independent of optional device dependencies. Selected public checks that unexpectedly skip SHALL NOT produce a successful required aggregate.
 
 #### Scenario: Native change
 - **WHEN** a PR changes a file under `native/host/`
@@ -29,7 +29,7 @@ For a PR, core CI SHALL always run the name guard and OpenSpec validation, SHALL
 - **THEN** Node tests and the applicable embedded public-boundary checks are selected, host build/tests remain skipped, and no private workspace asset/runtime job is required
 
 #### Scenario: Main push
-- **WHEN** a change lands on main and its push workflow runs
+- **WHEN** a change lands on develop and its push workflow runs
 - **THEN** CI runs its non-host core jobs without checking out private workspace assets
 
 #### Scenario: Explicit full run
@@ -64,14 +64,14 @@ For a draft PR, CI SHALL skip Node tests and host build while running name guard
 - **THEN** CI runs all applicable PR jobs on the final commit before `CI required` can make it merge-eligible
 
 ### Requirement: Nightly run
-CI SHALL run every job on `main`'s head once a night, whatever changed, including the full Windows host build and native tests. An explicit workflow dispatch SHALL also permit a full run on the selected ref. The nightly run SHALL cover builds and unit tests only; checks that need a 3D display, a hand tracker or the rig's GPU stay manual.
+CI SHALL run every job on `develop`'s head once a night, whatever changed, including the full Windows host build and native tests. An explicit workflow dispatch SHALL also permit a full run on the selected ref. The nightly run SHALL cover builds and unit tests only; checks that need a 3D display, a hand tracker or the rig's GPU stay manual.
 
 #### Scenario: Quiet day
 - **WHEN** no PR merged during the day
-- **THEN** the nightly run still builds the host and runs every test suite on `main`
+- **THEN** the nightly run still builds the host and runs every test suite on `develop`
 
 #### Scenario: Nightly native failure
-- **WHEN** the scheduled host build or native tests fail on `main`
+- **WHEN** the scheduled host build or native tests fail on `develop`
 - **THEN** `CI required` fails and the existing nightly triage reports the failure without retroactively blocking a merged PR
 
 #### Scenario: Manual full check

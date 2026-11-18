@@ -25,8 +25,8 @@ with `--apply` SHALL remove only `merged` worktrees with a clean tree. A `closed
 Before task edits, an agent SHALL create or re-enter its registered worktree and bind its canonical absolute root to the active session. In A1, the agent SHALL use `a1 session link-worktree <absolute-path>` and confirm `a1 session worktrees` displays that same path and branch as `current`. Linking SHALL NOT grant cleanup or merge authority or adopt another task's checkout. Resume and task switching SHALL revalidate the native link; failure SHALL block task edits.
 
 #### Scenario: New task from primary checkout
-- **WHEN** an agent receives a delivery request while the primary checkout is on `main`
-- **THEN** it creates an isolated branch and worktree, links that exact absolute root with the native session command, and confirms the displayed current branch and path while `main` stays unchanged
+- **WHEN** an agent receives a delivery request while the primary checkout is on `develop`
+- **THEN** it creates an isolated branch and worktree, links that exact absolute root with the native session command, and confirms the displayed current branch and path while `develop` stays unchanged
 
 #### Scenario: Draft PR appears
 - **WHEN** the linked task's draft PR is created
