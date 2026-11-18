@@ -6,10 +6,10 @@ name: CI
 # rules are not checked here: the shared Delivery workflow publishes its own check.
 on:
   pull_request:
-    branches: [develop, main]
+    branches: [develop]
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, labeled, unlabeled]
   push:
-    branches: [develop, main]
+    branches: [develop]
   schedule:
     - cron: '17 1 * * *'
   workflow_dispatch:
