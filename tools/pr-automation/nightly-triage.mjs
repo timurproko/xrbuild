@@ -103,7 +103,7 @@ export function prBody({ change, date, runUrl, sha, jobs }) {
     '## Acceptance', '',
     `- The ${date} nightly CI failure on \`main\` is repaired, and its failed jobs pass on the fix head without weakened assertions, budgets, timeouts or coverage.`, '',
     '## Automation', '', '<details>', '<summary>Used by CI to link this PR to its OpenSpec change</summary>', '',
-    '```openspec-implementation', JSON.stringify({ version: 1, change }), '```', '', '</details>',
+    '```openspec-implementation', JSON.stringify({ version: 3, change }), '```', '', '</details>',
   ].join('\n');
 }
 

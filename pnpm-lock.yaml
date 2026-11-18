@@ -61,8 +61,6 @@ importers:
 
   tools/public-history: {}
 
-  tools/repo-governance: {}
-
   tools/worktree: {}
 
 packages:

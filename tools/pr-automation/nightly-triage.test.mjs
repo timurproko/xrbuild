@@ -4,10 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { OPENSPEC_BIN } from './finalize.mjs';
 import { apiClients, failureComment, failureSummary, jobLog, logTail, planTriage, prBody, scaffold } from './nightly-triage.mjs';
-import { parseLink } from './pr-body.mjs';
-import { inspectProgress } from './promote.mjs';
+
+// The pinned OpenSpec CLI (this package's devDependency) validates the generated scaffold.
+const OPENSPEC_BIN = path.join(import.meta.dirname, 'node_modules', '@fission-ai', 'openspec', 'bin', 'openspec.js');
 
 test('first failure opens a PR, a repeat comments, green comments only with a PR open', () => {
   assert.equal(planTriage({ conclusion: 'failure', openPr: null }), 'open');
@@ -86,8 +86,10 @@ test('the scaffold is valid, preserves evidence, and the PR body is promotion-co
   const body = prBody(input);
   assert.match(tasks, /- \[ \] 1\.1/);
   assert.match(files['openspec/changes/fix-nightly-2026-10-11/design.md'], /Run tests[\s\S]*not ok 3/);
-  assert.deepEqual(parseLink(body).link, { version: 1, change: 'fix-nightly-2026-10-11' });
-  assert.deepEqual(inspectProgress(body, tasks), { status: 'incomplete', reason: 'Implementation has open items' });
+  assert.match(body, /```openspec-implementation\n\{"version":3,"change":"fix-nightly-2026-10-11"\}\n```/);
+  // The generated draft is incomplete until the fixer ticks its outcomes; the shared delivery bot promotes it then.
+  assert.match(body, /## Implementation\n\n- \[ \] /);
+  assert.doesNotMatch(body, /- \[x\] /);
   assert.match(failureComment({ summary: input.summary }), /opened this repair[\s\S]*Run tests[\s\S]*not ok 3/);
   assert.match(failureComment({ summary: input.summary, repeated: true }), /another failure/);
 });

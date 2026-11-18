@@ -12,20 +12,15 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
 
 ## Git
 
-- Never add a `Co-Authored-By: Claude` (or any Claude/Anthropic) trailer to commit messages,
-  and no "Generated with Claude Code" lines in commits or PR descriptions.
 - Commit only when asked.
 - Keep commit messages concise: a short subject line, then a few bullets only if needed.
-- Tick tasks and PR outcomes as the `Implementation progress` paragraph of `AGENTS.md` (imported above) says.
-  Add plain Acceptance before the final item and leave post-ready CI/integration pending until observed.
-  Only trusted automation promotes completed exact snapshots; do not invoke ready or mark unfinished tasks done.
-  Run focused changed-code checks rather than broad repeated validation loops before pushing.
+- Run focused changed-code checks rather than broad repeated validation loops before pushing.
 
 ## Changes and pull requests
 
-- Every change follows the `change-delivery` skill (`.claude/skills/change-delivery/SKILL.md`): own worktree and
+- Every change follows the shared `change-delivery` skill of `timurproko/MyWorkflows` (see `AGENTS.md`): own worktree and
   branch, plan first as a draft PR, implementation after the maintainer approves, OpenSpec finalization in the PR by
-  the repo bot, handoff, cleanup. Agents never merge, arm auto-merge or push to `main`; the maintainer merges.
+  the delivery bot, handoff, cleanup. Agents never arm auto-merge or push to `main`.
 - Missing canonical contracts after an accepted public bootstrap may use an explicitly approved contract-only
   checkpoint under `docs/spec-baseline-reconciliation.md`. Preserve historical plans/tasks and recorded contract
   order; only the normal bot synchronizes/archives the completed checkpoint. A successor stays blocked until
@@ -33,12 +28,9 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
 - Commits and PR titles: `type(scope): subject` (scope: `host`, `plugin-sdk`, `sdk`, `ui-kit`, `app-icon`,
   `panel`, `templates`, `fetch-deps`, `name-guard`, `openspec`, `ci`, `claude`, ...). The PR title becomes the
   squash commit on `main`.
-- Core changes reach `main` only through a PR: the `protect-main` ruleset (squash only, required check "CI required")
-  and the other repository settings are declared in `config/github-repository-governance.json`; change them there and
-  inspect `pnpm governance preflight`, then apply an explicitly approved `protect`, `activate-ci` or `activate` mode
-  with `--confirm apply-xr-build-governance`. No administrator/bot bypass is allowed. Unsupported account protection
-  and missing bot setup are owner prerequisites, never reasons to change visibility, billing or required checks.
-  See `docs/pr-delivery-governance.md`; repository policy files alone do not certify live activation.
+- Core changes reach `main` only through a PR. The `protect-main` ruleset (squash only, required check "CI required")
+  and the Actions event policy are declared in `protection/repositories.json` of `timurproko/MyWorkflows` and installed
+  with `delivery protect --repo <owner/name> --apply`; change them there, never by hand in GitHub.
 - Workspace-only changes belong exclusively to the independent private repository: the maintainer uses ordinary
   Git inside `.xrbuild/`. There is no workspace main-push exception or workspace-push command in core. Agents
   never push to `main` in either repository and never use an admin bypass to merge a PR.
@@ -136,15 +128,10 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   needed, and records exact tested HEAD/work state in ignored artifacts. No implicit export/stage/PR/push/merge/cleanup;
   private instructions still apply. Follow the shared Worktrees guidance in `AGENTS.md`; do not add another linkage gate.
   Spec prerequisites are recorded in the active change.
-- `tools/pr-automation` - the PR body link (`pr-body.mjs`), delivery check, OpenSpec finalization, guarded ready-PR
-  branch refresh after main merges, docs auto-merge, unarchived-change report and nightly triage that the workflows run.
-- `tools/repo-governance` + `config/github-repository-governance.json` - repository settings as code (`pnpm governance`).
+- `tools/pr-automation` - the `CI required` aggregate (`required.mjs`) and nightly triage.
 - `.github/` - CI (`ci.yml`: ready PRs keep fast selected checks; full Windows host build/tests run nightly on
-  `main` or by explicit CI dispatch, not on PRs or `main` pushes), the bot workflows (OpenSpec finalization and
-  reconcile, ready-PR refresh, docs auto-merge, nightly triage, bot probe; scoped App token for refresh, `actions/app-token`
-  for other bots), PR template. Refresh updates only stale ready same-repository PRs with expected-head guards, emitting
-  ordinary CI events without merging PRs; drafts/forks are skipped and conflicts need manual resolution. See
-  `docs/pr-delivery-governance.md` for activation and stalled-run limits.
+  `main` or by explicit CI dispatch, not on PRs or `main` pushes), nightly triage, the PR template, and
+  `delivery.yml`, which only forwards pull-request events and the bot credentials to the shared delivery workflow.
 - `.xrbuild` - ignored independent private clone: projects, plugins and pinned Git LFS dependencies, with its own
   `.git` and LFS hooks; credentials, installed packages and generated builds stay ignored in that repository.
 - `tools/add-to-start.vbs` - adds the ordinary "XR Build" user-workspace shortcut; `--repo` and `--user` can
@@ -236,8 +223,8 @@ and selected bundled native rebuilds keep the nightly/manual lane. Never describ
 Tests: `node --test "test/**/*.test.ts"` in `packages/sdk`, `packages/ui-kit`, `packages/app-icon`,
 `packages/control-panel` (Node runs the .ts directly; no TypeScript parameter properties, type stripping refuses
 them). The control-panel package's `pnpm test` bounds file parallelism to two workers without changing test deadlines
-or within-test competing writers; `node --test` in `tools/fetch-deps`, `tools/name-guard`, `tools/worktree`, `tools/pr-automation`,
-`tools/repo-governance` and `tools/public-history` (`pnpm test` runs them all); `pnpm check:names`.
+or within-test competing writers; `node --test` in `tools/fetch-deps`, `tools/name-guard`, `tools/worktree`, `tools/pr-automation`
+and `tools/public-history` (`pnpm test` runs them all); `pnpm check:names`.
 
 Use the CMake bundled with VS Build Tools
 (`Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe`) if none is on PATH.

@@ -5,7 +5,6 @@ export function requiredProblems(needs, event) {
   expect('readiness', 'success');
   if (needs.readiness?.outputs?.ready !== 'true') problems.push('candidate is not ready');
   for (const name of ['changes', 'names', 'openspec']) expect(name, 'success');
-  expect('delivery', event === 'pull_request' ? 'success' : 'skipped');
   for (const name of ['node', 'embedded']) {
     const selected = needs.changes?.outputs?.[name];
     if (!['true', 'false'].includes(selected)) problems.push(`${name} selection is missing`);
