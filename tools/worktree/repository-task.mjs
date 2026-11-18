@@ -55,7 +55,7 @@ export async function verifyTaskCore(core, expectedRemote, allowLocal = false) {
   await plain(core); const root = canonical(core), marker = await fs.lstat(path.join(root, '.git'));
   if (!marker.isFile() || marker.isSymbolicLink() || marker.nlink !== 1 || canonical(git(root, ['rev-parse', '--show-toplevel'])) !== root) throw new Error('Use the registered linked task worktree, never the primary checkout');
   const branch = git(root, ['branch', '--show-current']);
-  if (!BRANCH.test(branch)) throw new Error('The task must use its own typed non-main branch');
+  if (!BRANCH.test(branch)) throw new Error('The task must use its own typed non-default branch');
   const common = canonical(path.resolve(root, git(root, ['rev-parse', '--git-common-dir'])));
   if (remoteIdentity(git(root, ['remote', 'get-url', 'origin']), allowLocal) !== remoteIdentity(expectedRemote, allowLocal)) throw new Error('Core remote does not match the expected repository');
   return { root, branch, common, remote: remoteIdentity(expectedRemote, allowLocal), head: git(root, ['rev-parse', 'HEAD']) };
@@ -126,7 +126,7 @@ export async function repositoryInventory(options) {
   let dependency = 'not-required';
   if (options.requiredCore) {
     if (!/^[a-f0-9]{40}$/.test(options.requiredCore)) throw new Error('Core dependency must be an immutable commit');
-    dependency = git(core.root, ['merge-base', '--is-ancestor', options.requiredCore, 'refs/remotes/origin/main'], true) && git(core.root, ['merge-base', '--is-ancestor', options.requiredCore, core.head], true) ? 'merged' : 'blocked-or-unknown';
+    dependency = git(core.root, ['merge-base', '--is-ancestor', options.requiredCore, 'refs/remotes/origin/develop'], true) && git(core.root, ['merge-base', '--is-ancestor', options.requiredCore, core.head], true) ? 'merged' : 'blocked-or-unknown';
   }
   return { version: 1, scope: route.scope, paths: route, repositories, requiredCore: options.requiredCore ?? null, dependency, delivery: 'manual' };
 }

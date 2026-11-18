@@ -491,7 +491,7 @@ pushes, creates PRs, merges or cleans repositories. Git routing overrides/hooks 
 
 Inventory and tested records are create-only ignored files (`--record=` chooses a fresh name). Tested attestations bind
 both HEAD and dirty/untracked work fingerprints; changed work or an unmet required core revision fails verification.
-`requiredCore` must be reachable from both the observed `origin/main` tracking ref and the selected task core HEAD;
+`requiredCore` must be reachable from both the observed `origin/develop` tracking ref and the selected task core HEAD;
 private-only dependencies also bind that tested core. This is a local handoff, not proof of fresh remote CI/PR policy. Public summaries omit private identifiers; private policy/delivery stays manual. Delivery still
 requires explicit authorization and actual remote dependency checks. Task-private compatibility is tested separately in its independently provisioned clone; the public routing/provisioning matrix uses disposable synthetic repositories.
 

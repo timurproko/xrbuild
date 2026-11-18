@@ -90,8 +90,8 @@ test('public embedded contracts select frozen typechecked/compiler checks withou
   assert.match(job('node'), /pnpm check:types/);
 });
 
-test('only a scheduled main failure automatically enters nightly triage with separate read and write credentials', () => {
-  assert.match(triage, /github\.event\.workflow_run\.event == 'schedule' && github\.event\.workflow_run\.head_branch == 'main'/);
+test('only a scheduled default-branch failure automatically enters nightly triage with separate read and write credentials', () => {
+  assert.match(triage, /github\.event\.workflow_run\.event == 'schedule' && github\.event\.workflow_run\.head_branch == github\.event\.repository\.default_branch/);
   assert.match(triage, /workflows: \[CI\]/);
   assert.match(triage, /actions: read/);
   assert.match(triage, /issues: write/);

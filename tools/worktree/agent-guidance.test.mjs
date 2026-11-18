@@ -19,7 +19,7 @@ test('shared guidance retains task attachment through implementation and review 
   assert.match(delivery, /Dependency setup is separate from attachment/);
   assert.match(delivery, /Private workspaces|private clones/i);
   assert.match(delivery, /\.xrbuild\/.*\.artifacts\/KEEP/s);
-  assert.match(delivery, /Never arm auto-merge or push to `main`/);
+  assert.match(delivery, /Never arm auto-merge or push to `develop`/);
   assert.match(delivery, /`a1 worktree complete` instead and never cleans its own\s+attached checkout/);
   assert.match(delivery, /declared in the committed `\.a1\/worktree\.json`/);
   assert.doesNotMatch(delivery, /git config --local a1\.worktreeCleanup/);

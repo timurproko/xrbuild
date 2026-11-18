@@ -104,7 +104,7 @@ test('states: dirty wins, then the PR decides; no PR is active work', () => {
 function repoWith(branches) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-repo-'));
   const g = (...a) => execFileSync('git', ['-C', root, ...a], { stdio: 'pipe' }).toString().trim();
-  g('init', '--quiet', '-b', 'main');
+  g('init', '--quiet', '-b', 'develop');
   fs.writeFileSync(path.join(root, '.gitignore'), '.worktrees/\n.artifacts/\nthird_party/*\n.xrbuild/\n');
   g('add', '-A');
   g('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '--quiet', '-m', 'init');
@@ -112,16 +112,16 @@ function repoWith(branches) {
   return { root, g };
 }
 
-test('enter creates a branch from origin/main and reuses only that clean registered checkout', () => {
+test('enter creates a branch from origin/develop and reuses only that clean registered checkout', () => {
   const { root, g } = repoWith([]);
-  g('update-ref', 'refs/remotes/origin/main', g('rev-parse', 'HEAD'));
+  g('update-ref', 'refs/remotes/origin/develop', g('rev-parse', 'HEAD'));
   fs.mkdirSync(path.join(root, 'third_party', 'browser'), { recursive: true });
   fs.mkdirSync(path.join(root, '.xrbuild', 'third_party', 'runtime'), { recursive: true });
   let installs = 0;
   const options = { root, fetch: false, installFn: (dir) => { installs++; fs.mkdirSync(path.join(dir, 'node_modules')); }, log: () => {} };
   const dir = enter('ci/task-setup', options);
   assert.equal(dir, path.join(root, '.worktrees', 'task-setup'));
-  assert.equal(g('branch', '--show-current'), 'main', 'primary remains on main');
+  assert.equal(g('branch', '--show-current'), 'develop', 'primary remains on develop');
   assert.equal(taskWorktrees(root).find((w) => w.name === 'task-setup').branch, 'ci/task-setup');
   assert.ok(fs.lstatSync(path.join(dir, 'third_party', 'browser')).isSymbolicLink());
   assert.ok(!fs.existsSync(path.join(dir, '.xrbuild')));
@@ -151,7 +151,7 @@ test('Claude Code hook re-enters a registered task and prints its path last', ()
 
 test('failed install leaves a registered checkout that enter can repair; unregistered collision is refused', () => {
   const { root, g } = repoWith([]);
-  g('update-ref', 'refs/remotes/origin/main', g('rev-parse', 'HEAD'));
+  g('update-ref', 'refs/remotes/origin/develop', g('rev-parse', 'HEAD'));
   assert.throws(() => enter('ci/needs-deps', { root, fetch: false, log: () => {}, installFn: () => { throw new Error('offline'); } }), /retry with worktree enter/);
   assert.equal(taskWorktrees(root).find((w) => w.name === 'needs-deps').branch, 'ci/needs-deps');
   const dir = enter('ci/needs-deps', { root, log: () => {}, installFn: (cwd) => fs.mkdirSync(path.join(cwd, 'node_modules')) });

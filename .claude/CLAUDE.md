@@ -20,20 +20,20 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
 
 - Every change follows the shared `change-delivery` skill of `timurproko/MyWorkflows` (see `AGENTS.md`): own worktree and
   branch, plan first as a draft PR, implementation after the maintainer approves, OpenSpec finalization in the PR by
-  the delivery bot, handoff, cleanup. Agents never arm auto-merge or push to `main`.
+  the delivery bot, handoff, cleanup. Agents never arm auto-merge or push to `develop`.
 - Missing canonical contracts after an accepted public bootstrap may use an explicitly approved contract-only
   checkpoint under `docs/spec-baseline-reconciliation.md`. Preserve historical plans/tasks and recorded contract
   order; only the normal bot synchronizes/archives the completed checkpoint. A successor stays blocked until
   the checkpoint is bot-finalized and maintainer-merged. This grants no export, hosting, cleanup or merge authority.
 - Commits and PR titles: `type(scope): subject` (scope: `host`, `plugin-sdk`, `sdk`, `ui-kit`, `app-icon`,
   `panel`, `templates`, `fetch-deps`, `name-guard`, `openspec`, `ci`, `claude`, ...). The PR title becomes the
-  squash commit on `main`.
-- Core changes reach `main` only through a PR. The `protect-main` ruleset (squash only, required check "CI required")
+  squash commit on `develop`.
+- Core changes reach `develop` only through a PR. The `protect-develop` ruleset (squash only, required check "CI required")
   and the Actions event policy are declared in `protection/repositories.json` of `timurproko/MyWorkflows` and installed
   with `delivery protect --repo <owner/name> --apply`; change them there, never by hand in GitHub.
 - Workspace-only changes belong exclusively to the independent private repository: the maintainer uses ordinary
   Git inside `.xrbuild/`. There is no workspace main-push exception or workspace-push command in core. Agents
-  never push to `main` in either repository and never use an admin bypass to merge a PR.
+  never push to the default branch in either repository and never use an admin bypass to merge a PR.
 
 ## Names stay out of the core
 
@@ -130,7 +130,7 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   Spec prerequisites are recorded in the active change.
 - `tools/pr-automation` - the `CI required` aggregate (`required.mjs`) and nightly triage.
 - `.github/` - CI (`ci.yml`: ready PRs keep fast selected checks; full Windows host build/tests run nightly on
-  `main` or by explicit CI dispatch, not on PRs or `main` pushes), nightly triage, the PR template, and
+  `develop` or by explicit CI dispatch, not on PRs or `develop` pushes), nightly triage, the PR template, and
   `delivery.yml`, which only forwards pull-request events and the bot credentials to the shared delivery workflow.
 - `.xrbuild` - ignored independent private clone: projects, plugins and pinned Git LFS dependencies, with its own
   `.git` and LFS hooks; credentials, installed packages and generated builds stay ignored in that repository.

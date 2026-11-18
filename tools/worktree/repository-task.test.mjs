@@ -18,7 +18,7 @@ async function fixture(t) {
   }
   // Fixture origins are created without pushing or merging any main branch.
   git(seed, 'clone', '--bare', '--no-hardlinks', seed, coreRemote); git(privateSeed, 'clone', '--bare', '--no-hardlinks', privateSeed, privateRemote);
-  git(seed, 'remote', 'add', 'origin', coreRemote); git(seed, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  git(seed, 'remote', 'add', 'origin', coreRemote); git(seed, 'update-ref', 'refs/remotes/origin/develop', 'HEAD');
   const core = path.join(root, 'task'); git(seed, 'worktree', 'add', '-b', 'feat/repository-fixture', core);
   const options = { core, coreRemote, privateRemote, privateBranch: 'feat/repository-fixture', allowLocal: true, paths: ['packages/sdk/src/core.ts', '.xrbuild/projects/unsorted/example/index.html'] };
   return { root, seed, privateSeed, options, main: git(seed, 'rev-parse', 'main') };
@@ -147,7 +147,7 @@ test('instruction matrix and prerequisite order are explicit without overwriting
   assert.match(instructions, /audited source snapshot/); assert.match(instructions, /never enroll private packages/i);
   assert.match(delivery, /Route engine and approved `embedded\/` changes to the core PR/);
   assert.match(delivery, /private-only work.*independent private PR/i);
-  assert.match(delivery, /Paired tasks use separate PRs/i); assert.match(delivery, /Never arm auto-merge or push to `main`/);
+  assert.match(delivery, /Paired tasks use separate PRs/i); assert.match(delivery, /Never arm auto-merge or push to `develop`/);
   const prerequisites = await fs.readFile(path.join(REPO, 'openspec/changes/bundled-extensions/prerequisites.md'), 'utf8');
   assert.match(prerequisites, /user-workspace-public-core.*split-private-workspace.*bundled-extensions/s);
   assert.match(prerequisites, /bot.*finalization/i); assert.match(prerequisites, /never.*overwrite.*predecessor/i);

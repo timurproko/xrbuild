@@ -1,6 +1,6 @@
 name: Nightly triage
 
-# After the scheduled CI run on main: a failure opens (or comments on) one draft PR `fix/nightly-<date>` labelled
+# After the scheduled CI run on the default branch: a failure opens (or comments on) one draft PR `fix/nightly-<date>` labelled
 # `nightly-failure` with an OpenSpec change scaffold and the failure summary; a green run is noted on it. Never merges.
 # See tools/pr-automation/nightly-triage.mjs. Dispatch with a run id to triage any CI run by hand.
 on:
@@ -23,14 +23,14 @@ jobs:
     name: Triage
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.event == 'schedule' && github.event.workflow_run.head_branch == 'main')
+      (github.event.workflow_run.event == 'schedule' && github.event.workflow_run.head_branch == github.event.repository.default_branch)
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
       issues: write
     steps:
-      - name: Check out main's scripts
+      - name: Check out the default branch's scripts
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: base

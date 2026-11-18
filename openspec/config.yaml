@@ -25,4 +25,4 @@ context: |
   blocked until the checkpoint is bot-finalized and maintainer-merged. No private export or hosting authority follows.
   A change ships in the PR that implements it, as the shared `change-delivery` skill of `timurproko/MyWorkflows` describes:
   plan first as a draft PR linked to the change, implementation after
-  approval, then the repo bot archives the change in that PR so main gets the code and the synced specs together.
+  approval, then the repo bot archives the change in that PR so develop gets the code and the synced specs together.

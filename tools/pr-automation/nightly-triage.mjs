@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Nightly triage: after the scheduled CI run on main, a failure opens one draft PR `fix/nightly-<date>` (label
+// Nightly triage: after the scheduled CI run on develop, a failure opens one draft PR `fix/nightly-<date>` (label
 // `nightly-failure`) holding an OpenSpec change scaffold with the failure summary, linked to it; while that PR is
 // open, later failures and the next green run become comments on it. Never merges, marks ready or arms auto-merge.
 //
@@ -45,7 +45,7 @@ export function logTail(log, lines = TAIL_LINES) {
 
 /** Markdown summary of a failed run: [{ name, steps: [names], tail }]. */
 export function failureSummary({ runUrl, sha, jobs }) {
-  const parts = [`Nightly CI on \`main\` failed at ${sha.slice(0, 7)}: ${runUrl}`, ''];
+  const parts = [`Nightly CI on \`develop\` failed at ${sha.slice(0, 7)}: ${runUrl}`, ''];
   for (const job of jobs) {
     parts.push(`### ${job.name}`, '', `Failed step${job.steps.length === 1 ? '' : 's'}: ${job.steps.join(', ') || 'unknown'}`, '', '```text', job.tail, '```', '');
   }
@@ -72,14 +72,14 @@ export function scaffold({ change, date, runUrl, sha, jobs, summary }) {
     [`${dir}/.openspec.yaml`]: `schema: spec-driven\ncreated: ${date}\n# A fix that changes behaviour adds spec deltas and drops this line.\nskip_specs: true\n`,
     [`${dir}/proposal.md`]: [
       '## Why', '',
-      `Nightly CI failed on \`main\` at \`${sha.slice(0, 7)}\` (${runUrl}). Failed: ${jobList(jobs)}. This change starts from the recorded evidence instead of the failure email.`, '',
+      `Nightly CI failed on \`develop\` at \`${sha.slice(0, 7)}\` (${runUrl}). Failed: ${jobList(jobs)}. This change starts from the recorded evidence instead of the failure email.`, '',
       '## What Changes', '',
       '- Reproduce the failure from the recorded jobs, steps and logs, and identify the introducing change or environmental cause.',
       '- Fix the cause without weakening assertions, budgets, timeouts or coverage.', '',
     ].join('\n'),
     [`${dir}/design.md`]: [
       '# Design', '', '## Context', '',
-      'Opened by nightly triage from the completed run. The workflow reran nothing and did not edit `main`.', '',
+      'Opened by nightly triage from the completed run. The workflow reran nothing and did not edit `develop`.', '',
       '## Decisions', '', '- To be written once the cause is known: what failed, why, and the smallest safe fix.', '',
       '## Evidence', '', summary, '',
     ].join('\n'),
@@ -98,10 +98,10 @@ export function scaffold({ change, date, runUrl, sha, jobs, summary }) {
 export function prBody({ change, date, runUrl, sha, jobs }) {
   return [
     '## Proposal', '',
-    `Fix the ${date} nightly CI failure on \`main\` at [\`${sha.slice(0, 7)}\`](${runUrl}), where ${jobList(jobs)} failed; the detailed evidence is in the triage comment and change design.`, '',
+    `Fix the ${date} nightly CI failure on \`develop\` at [\`${sha.slice(0, 7)}\`](${runUrl}), where ${jobList(jobs)} failed; the detailed evidence is in the triage comment and change design.`, '',
     '## Implementation', '', ...TRIAGE_IMPLEMENTATION_ITEMS.map((item) => `- [ ] ${item}`), '',
     '## Acceptance', '',
-    `- The ${date} nightly CI failure on \`main\` is repaired, and its failed jobs pass on the fix head without weakened assertions, budgets, timeouts or coverage.`, '',
+    `- The ${date} nightly CI failure on \`develop\` is repaired, and its failed jobs pass on the fix head without weakened assertions, budgets, timeouts or coverage.`, '',
     '## Automation', '', '<details>', '<summary>Used by CI to link this PR to its OpenSpec change</summary>', '',
     '```openspec-implementation', JSON.stringify({ version: 3, change }), '```', '', '</details>',
   ].join('\n');
@@ -152,7 +152,7 @@ async function main(a) {
   console.log(`run ${run.id} (${run.event}, ${run.conclusion}) at ${run.head_sha.slice(0, 7)}: ${plan}`);
   if (plan === 'none') return;
   if (plan === 'comment-green') {
-    workflowApi(`repos/${repoName}/issues/${openPr.number}/comments`, 'POST', { body: `Nightly CI on \`main\` is green again at ${run.head_sha.slice(0, 7)}: ${run.html_url}` });
+    workflowApi(`repos/${repoName}/issues/${openPr.number}/comments`, 'POST', { body: `Nightly CI on \`develop\` is green again at ${run.head_sha.slice(0, 7)}: ${run.html_url}` });
     return;
   }
 
@@ -185,7 +185,7 @@ async function main(a) {
   git('-c', `user.name=${m[1]}`, '-c', `user.email=${m[2]}`, 'commit', '--quiet', '--no-verify', '-m', `docs(openspec): scaffold ${change}`);
   git('push', '--quiet', '--force-with-lease', 'origin', `HEAD:refs/heads/${branch}`);
   const pr = api(`repos/${repoName}/pulls`, 'POST', {
-    title: `fix(ci): nightly failure ${date}`, head: branch, base: 'main', draft: true,
+    title: `fix(ci): nightly failure ${date}`, head: branch, base: 'develop', draft: true,
     body: prBody({ change, date, runUrl: run.html_url, sha: run.head_sha, jobs }),
   });
   workflowApi(`repos/${repoName}/issues/${pr.number}/labels`, 'POST', { labels: [NIGHTLY_LABEL] });

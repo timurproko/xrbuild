@@ -311,14 +311,14 @@ pnpm preview:readme
 
 ### Changes and pull requests
 
-`main` takes changes only through a squash-merged PR that passes the `CI required` check. Each task works in its own
+`develop` takes changes only through a squash-merged PR that passes the `CI required` check. Each task works in its own
 worktree. The helper shares only untracked core `third_party/` entries. For private integration work, provision an
 independent `.xrbuild/` clone in that task worktree; never junction the primary workspace into it. Private source,
 plugin builds, app output and packages stay task-local. Cleanup refuses any `.xrbuild/` or `.artifacts/KEEP` marker;
 preserve those files separately before cleanup (sweep reports protected worktrees as dirty):
 
 ```text
-pnpm worktree add fix/hand-jitter      # .worktrees/hand-jitter on a new branch from origin/main
+pnpm worktree add fix/hand-jitter      # .worktrees/hand-jitter on a new branch from origin/develop
 pnpm worktree sweep                    # every task worktree: dirty / active / merged / closed / unknown
 pnpm worktree sweep --apply            # remove the merged, clean ones
 pnpm worktree remove hand-jitter       # remove one after its merge (--discard if its PR was closed unmerged)
@@ -330,12 +330,12 @@ block; the code follows in the same PR once the plan is approved. The shared del
 archives the change in the PR with its specs synced, and publishes the `delivery / Delivery check`. Implementation PRs
 remain maintainer-merged. Ready PRs keep the name guard, OpenSpec and relevant Node/workspace checks, but **do not
 build or test the native host**, even when host code changes. A skipped host check is not a successful native build.
-Pushes to `main` also omit that several-minute lane. The full Windows host build and native tests run on the scheduled
-nightly CI for `main`, or when CI is manually dispatched from Actions for a chosen ref before merging a sensitive
+Pushes to `develop` also omit that several-minute lane. The full Windows host build and native tests run on the scheduled
+nightly CI for `develop`, or when CI is manually dispatched from Actions for a chosen ref before merging a sensitive
 change. A nightly failure opens a draft `fix/nightly-<date>` PR; it cannot retroactively block an earlier merge. The
 full process for agents is the shared `change-delivery` skill, with this repository's additions in `AGENTS.md`.
 
-The `main` ruleset and the Actions event policy are declared in `protection/repositories.json` of
+The `develop` ruleset and the Actions event policy are declared in `protection/repositories.json` of
 `timurproko/MyWorkflows` and installed with `delivery protect --repo timurproko/xrbuild --apply`.
 
 **Repo bot.** Install a repository-scoped GitHub App with Contents and Pull requests (read/write), Metadata (read),
