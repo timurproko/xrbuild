@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { finalizeChange, openTasks } from './finalize.mjs';
+import { finalizeChange, openTasks, readFinalizationTasks } from './finalize.mjs';
 
 const AUTHOR = 'test-bot[bot] <1+test-bot[bot]@users.noreply.github.com>';
 
@@ -42,8 +42,15 @@ test('a change with open tasks is not finalized and nothing is committed', () =>
 
 test('a done change is archived with its specs synced, in one commit by the bot; a second run is a no-op', () => {
   const { repo, g } = fixture('- [x] 1.1 done\n');
+  assert.equal(readFinalizationTasks(repo, { change: 'add-thing' }), '- [x] 1.1 done');
   const r = finalizeChange({ repo, change: 'add-thing', author: AUTHOR });
   assert.equal(r.status, 'finalized');
+  const association = { version: 1, change: 'add-thing', archive: r.archive, finalizedHead: r.commit };
+  assert.equal(readFinalizationTasks(repo, association), '- [x] 1.1 done');
+  assert.equal(readFinalizationTasks(repo, { change: 'add-thing' }), '- [x] 1.1 done', 'lost body-update repair uses tracked archive tasks');
+  assert.throws(() => readFinalizationTasks(repo, { ...association, finalizedHead: 'f'.repeat(40) }), /history/);
+  assert.throws(() => readFinalizationTasks(repo, { ...association, archive: 'openspec/changes/archive/2000-01-01-add-thing' }), /association/);
+  assert.throws(() => readFinalizationTasks(repo, { ...association, finalizedHead: undefined }), /invalid/);
   assert.match(r.archive, /^openspec\/changes\/archive\/\d{4}-\d{2}-\d{2}-add-thing$/);
   assert.ok(!fs.existsSync(path.join(repo, 'openspec/changes/add-thing')));
   assert.match(fs.readFileSync(path.join(repo, 'openspec/specs/demo/spec.md'), 'utf8'), /### Requirement: Thing/);

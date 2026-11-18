@@ -1,1 +1,10 @@
 .githooks/* text eol=lf
+# Frozen delivery inputs and deployed copies must retain their approved bytes on Windows.
+docs/delivery-rules.md text eol=lf
+docs/delivery-adapters.json text eol=lf
+docs/delivery-cases.json text eol=lf
+docs/delivery-contract.json text eol=lf
+openspec/changes/**/delivery-rules.md text eol=lf
+openspec/changes/**/delivery-adapters.json text eol=lf
+openspec/changes/**/delivery-cases.json text eol=lf
+openspec/changes/**/delivery-contract.json text eol=lf

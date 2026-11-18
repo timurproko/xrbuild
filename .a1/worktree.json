@@ -1,3 +1,48 @@
 {
-  "cleanup": ["node", "tools/worktree/worktree.mjs", "sweep", "--apply"]
+  "cleanupPreflight": [
+    "node",
+    "tools/worktree/runtime-removal-adapter.mjs",
+    "preflight-complete",
+    "--repo",
+    "{primary}",
+    "--path",
+    "{worktree}",
+    "--approved-snapshot",
+    "{snapshot}"
+  ],
+  "cleanup": [
+    "node",
+    "tools/worktree/runtime-removal-adapter.mjs",
+    "execute-complete",
+    "--repo",
+    "{primary}",
+    "--path",
+    "{worktree}",
+    "--approved-snapshot",
+    "{snapshot}"
+  ],
+  "localRemoval": {
+    "preflight": [
+      "node",
+      "tools/worktree/runtime-removal-adapter.mjs",
+      "preflight",
+      "--repo",
+      "{primary}",
+      "--path",
+      "{worktree}",
+      "--approved-snapshot",
+      "{snapshot}"
+    ],
+    "execute": [
+      "node",
+      "tools/worktree/runtime-removal-adapter.mjs",
+      "execute",
+      "--repo",
+      "{primary}",
+      "--path",
+      "{worktree}",
+      "--approved-snapshot",
+      "{snapshot}"
+    ]
+  }
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { sameFinalizationSnapshot } from './finalize.mjs';
-const original = { number: 1, node_id: 'PR_fixture', state: 'open', draft: false, body: 'human text',
+const original = { number: 1, node_id: 'PR_fixture', state: 'open', draft: false, labels: [], body: 'human text',
   base: { ref: 'main', sha: 'b'.repeat(40), repo: { full_name: 'owner/project' } },
   head: { ref: 'chore/task', sha: 'a'.repeat(40), repo: { full_name: 'owner/project' } } };
 

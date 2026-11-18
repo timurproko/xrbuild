@@ -1,0 +1,59 @@
+{
+  "contract": "portable-delivery-v1",
+  "policy": "Only these repository-specific values may differ. Existing aliases and historical records remain compatible. Unknown or conflicting values block the affected operation; implementers must not add policy exceptions.",
+  "shared": {
+    "rootInstructions": "AGENTS.md",
+    "deployedDirectory": "docs",
+    "runtimeDeclaration": ".a1/worktree.json",
+    "runtimeEntry": "a1 worktree enter <branch>",
+    "runtimeAttach": "a1 worktree attach <absolute-path>",
+    "runtimeDetach": "a1 worktree detach",
+    "runtimeMergedCompletion": "a1 worktree complete",
+    "holdLabel": "delivery-hold",
+    "documentationOptOutLabel": "no-auto-merge",
+    "mergeMethod": "squash",
+    "bypassAllowed": false,
+    "newLocalRemovalSemantics": "One exact published checkout; preflight before detach, execute outside it, retain local branch and remote resources. Concrete adapter wiring uses the compatible released A1 interface; missing support blocks rather than substitutes another operation.",
+    "contractCheckSemantics": "Read identical cases, bind local implementations, assert observed effects, compare all deployed contract files with approved planning bytes and SHA-256 digests. Do not fetch the companion repository during ordinary offline operations."
+  },
+  "repositories": {
+    "a1": {
+      "repository": "timurproko/a1",
+      "baseBranch": "develop",
+      "packageManager": "npm",
+      "instructionEntry": "CLAUDE.md",
+      "deliverySkill": ".agents/skills/change-delivery/SKILL.md",
+      "deliveryRunbook": "docs/openspec-archive-automation.md",
+      "cleanupEntrypoint": "scripts/governance/local-worktree-cleanup.mjs",
+      "newDeliveryMetadataVersion": 3,
+      "requiredCheck": "Development validation required",
+      "baseCurrency": "strict-current-target",
+      "acceptanceBinding": "Exact finalized version-3 head, archive and conditional acceptance manifest matching the PR's plain acceptance scenarios; preserve legacy readers.",
+      "documentationAutoMerge": "active",
+      "nightlyTriage": "active",
+      "openSpecReconciliation": "active-legacy-archive-and-verification",
+      "implementationTestRunner": "existing focused repository test runner",
+      "privatePreservation": "Preserve all unknown/private/KEEP/nested/unpublished content under the existing cleanup gates."
+    },
+    "xrbuild": {
+      "repository": "timurproko/xrbuild",
+      "baseBranch": "main",
+      "packageManager": "pnpm",
+      "instructionEntry": ".claude/CLAUDE.md",
+      "deliverySkill": ".claude/skills/change-delivery/SKILL.md",
+      "deliveryRunbook": "docs/pr-delivery-governance.md",
+      "cleanupEntrypoint": "tools/worktree/worktree.mjs",
+      "newDeliveryMetadataVersion": 1,
+      "requiredCheck": "CI required",
+      "baseCurrency": "existing-non-strict-protection-no-added-up-to-date-gate",
+      "acceptanceBinding": "Existing finalized version-1 change/archive association and applicable plain acceptance evidence; do not import the version-3 manifest format or rewrite historical/in-progress records.",
+      "documentationAutoMerge": "disabled_manually",
+      "nightlyTriage": "disabled_manually",
+      "openSpecReconciliation": "disabled_manually",
+      "implementationTestRunner": "existing focused Node test runner",
+      "privatePreservation": "Preserve ignored independent .xrbuild workspaces and .artifacts/KEEP in addition to all shared preservation gates; never provision or export private data implicitly."
+    }
+  },
+  "activationNote": "These values preserve the reviewed activation profile; each remote mutation still verifies current authoritative state. Disagreement is a blocker, not permission to apply settings. This contract does not activate a workflow or change branch protection.",
+  "commandNote": "Entrypoint locations and existing runtime commands are bindings, not authority. New implementation function names and exact-target option parsing may differ internally, but may not alter the shared rules or expected cases. In particular, the old xrbuild sweep declaration must not remain an exact-completion substitute."
+}

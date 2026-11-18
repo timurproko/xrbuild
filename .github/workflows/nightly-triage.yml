@@ -1,5 +1,7 @@
 name: Nightly triage
 
+# Dormant in the reviewed activation profile; source/dispatch presence is not observed activation.
+# Conditional legacy behavior, requiring separate review before enabling:
 # After the scheduled CI run on main: a failure opens (or comments on) one draft PR `fix/nightly-<date>` labelled
 # `nightly-failure` with an OpenSpec change scaffold and the failure summary; a green run is noted on it. Never merges.
 # See tools/pr-automation/nightly-triage.mjs. Dispatch with a run id to triage any CI run by hand.

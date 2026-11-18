@@ -1,19 +1,19 @@
 ## Proposal
 
-<!-- One or two sentences: what changes and why. The title is `type(scope): subject` and becomes the squash commit. -->
+<!-- Describe what changes and why. Delivery policy: ../docs/delivery-rules.md; adapters: ../docs/delivery-adapters.json.
+     The title is `type(scope): subject` and becomes the squash commit. -->
 
 ## Implementation
 
-<!-- For a linked implementation draft: use at least two outcome-sized checkboxes; two to five is recommended
-     for readability, not enforced as a maximum. Tick each as `Implementation progress` in AGENTS.md says: after its
-     own push and before starting the next one; do not mark the PR ready yourself. -->
+<!-- Outcomes and progress: Shared delivery rules R05 (../docs/delivery-rules.md#r05---progress-and-publication).
+     Readiness: R06-R08 in that same contract. -->
 
 - [ ]
 
 ## Acceptance
 
-<!-- Added when the implementation is complete: one to ten plain outcome bullets (no checkboxes,
-     no generic CI or review items). Delete this section for a plan-only draft. -->
+<!-- Acceptance structure and binding: Shared delivery rules R06-R07 and the xrbuild adapter.
+     Delete this section for a plan-only draft. -->
 
 -
 

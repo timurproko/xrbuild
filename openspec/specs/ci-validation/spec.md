@@ -49,7 +49,7 @@ For a PR, core CI SHALL always run the name guard and OpenSpec validation, SHALL
 - **THEN** its integration checks belong to that private repository rather than the public core's required check graph
 
 ### Requirement: Drafts skip heavy jobs
-For a draft PR, CI SHALL skip Node tests, host build and the delivery check while running name guard and OpenSpec validation. A draft SHALL NOT be promoted on the basis of a lightweight CI pass. Trusted readiness automation SHALL promote only a complete linked implementation draft; its ready event SHALL trigger all applicable PR checks, and the finalizer's archive commit SHALL trigger exact-head PR validation again. The host build remains reserved for nightly or explicit dispatch even after promotion.
+For a draft PR, CI SHALL skip Node tests, host build and the delivery check while running name guard and OpenSpec validation. A draft SHALL NOT be promoted on the basis of a lightweight CI pass. Trusted readiness automation SHALL promote only a complete unheld linked implementation draft; its ready event SHALL trigger all applicable PR checks, and the finalizer's archive commit SHALL trigger exact-head PR validation again. The host build remains reserved for nightly or explicit dispatch even after promotion.
 
 #### Scenario: Plan draft
 - **WHEN** a draft PR holding a plan is pushed
@@ -79,24 +79,24 @@ CI SHALL run every job on `main`'s head once a night, whatever changed, includin
 
 #### Scenario: Nightly native failure
 - **WHEN** the scheduled host build or native tests fail on `main`
-- **THEN** `CI required` fails and the existing nightly triage reports the failure without retroactively blocking a merged PR
+- **THEN** `CI required` fails and nightly triage reports the failure only when separately enabled without retroactively blocking a merged PR
 
 #### Scenario: Manual full check
 - **WHEN** the maintainer dispatches CI for a ref before merging a sensitive native change
 - **THEN** the full host build and tests run without changing the required PR check policy
 
 ### Requirement: Nightly triage
-When a nightly run fails, a workflow SHALL read the completed run, jobs and logs with its trusted workflow token,
+When separately reviewed/enabled nightly triage receives a failed run, its workflow SHALL read the completed run, jobs and logs with its trusted workflow token,
 use that token for labels and triage comments, and use the repository GitHub App for the branch push and pull-request
 creation. It SHALL open one draft PR
 `fix/nightly-<date>` labelled `nightly-failure` and linked to an OpenSpec change. The draft SHALL use the normal
-delivery layout with a proposal scoped to the failed run and jobs, two unchecked implementation outcomes and one
+delivery layout with a proposal scoped to the failed run and jobs, one or more meaningful unchecked implementation outcomes and one
 acceptance outcome. Its initial triage comment and generated change design SHALL contain the run link, failed jobs,
 failed steps and bounded log excerpts. While such a PR is open, later failures SHALL be added to it as comments, and
 a green nightly run SHALL be noted on it. The workflow SHALL NOT merge, mark ready or arm auto-merge.
 
 #### Scenario: First failure
-- **WHEN** the nightly run fails and no `nightly-failure` PR is open
+- **WHEN** enabled nightly triage receives a failed run and no `nightly-failure` PR is open
 - **THEN** an actionable draft repair PR is opened with the detailed failure evidence in its triage comment and change design
 
 #### Scenario: Restricted repository App
@@ -111,6 +111,10 @@ a green nightly run SHALL be noted on it. The workflow SHALL NOT merge, mark rea
 - **WHEN** a nightly run succeeds while a `nightly-failure` PR is open
 - **THEN** the open PR gets a comment identifying the green run and remains open for the maintainer
 
+#### Scenario: Triage remains disabled
+- **WHEN** the reviewed activation profile leaves triage disabled
+- **THEN** instructions SHALL not promise automatic repair drafts or enable it as a side effect of delivery simplification
+
 ### Requirement: OpenSpec length advice does not block validation
 The OpenSpec CLI pinned for CI and finalization SHALL report requirement text over 500 characters as informational rather than failing strict validation solely on length. CI and finalization SHALL retain strict validation for other warnings and errors.
 
@@ -123,14 +127,14 @@ The OpenSpec CLI pinned for CI and finalization SHALL report requirement text ov
 - **THEN** strict OpenSpec validation fails and the finalizer does not commit the archive
 
 ### Requirement: Automatic refresh of stale ready pull requests
-Trusted default-branch automation SHALL reconcile open ready same-repository PRs targeting `main` after a PR merges into main. It SHALL also safely reconcile after completion of the existing documentation-auto-merge workflow without enabling that workflow. It SHALL skip drafts, forks, closed PRs and other base branches, leave current heads unchanged, and update stale branches only through an expected-head-bound update-branch request using the event-producing repository App identity. It SHALL use bounded requests and pagination, report conflicts and head races without force pushes, and report operational failures without claiming validation success. It SHALL NOT execute candidate code, merge PRs, arm auto-merge, promote drafts or manufacture statuses.
+Trusted default-branch automation SHALL reconcile open ready same-repository PRs targeting `main` after a PR merges into main. It SHALL also safely reconcile after completion of the existing documentation-auto-merge workflow without enabling that workflow. It SHALL skip held PRs, drafts, forks, closed PRs and other base branches and recheck hold before mutation, leave current heads unchanged, and update stale branches only through an expected-head-bound update-branch request using the event-producing repository App identity. It SHALL use bounded requests and pagination, report conflicts and head races without force pushes, and report operational failures without claiming validation success. It SHALL NOT execute candidate code, merge PRs, arm auto-merge, promote drafts or manufacture statuses.
 
 #### Scenario: Another PR merges
 - **WHEN** a PR merges into main and an open same-repository non-draft PR is behind current main
 - **THEN** trusted automation requests an expected-head-bound branch update with the App identity and accepted updates trigger ordinary PR synchronization checks on the new head
 
 #### Scenario: Current branch or ineligible candidate
-- **WHEN** a listed PR already contains main, is a draft or fork, has closed, or no longer targets main
+- **WHEN** a listed PR already contains main, is held, a draft or fork, has closed, or no longer targets main
 - **THEN** refresh reports its current or skipped disposition and makes no branch update for that candidate
 
 #### Scenario: Head changes during reconciliation
@@ -148,3 +152,7 @@ Trusted default-branch automation SHALL reconcile open ready same-repository PRs
 #### Scenario: Old workflow run stalled
 - **WHEN** a ready PR already contains main but an earlier required job stalled
 - **THEN** branch refresh leaves its head unchanged and does not fabricate a pass or claim that rerunning the historical workflow validates a newer base
+
+#### Scenario: Hold appears before refresh
+- **WHEN** a candidate gains delivery-hold after enumeration
+- **THEN** fresh pre-mutation verification SHALL prevent its branch update

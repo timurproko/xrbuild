@@ -13,11 +13,11 @@ const sha = 'a'.repeat(40);
 const base = 'b'.repeat(40);
 const tasks = '# Tasks\n- [x] first; verify unit tests\n- [x] second; verify integration test\n';
 const body = `## Proposal\n\nImprove the delivery path.\n\n## Implementation\n\n- [x] Deliver one change.\n- [x] Preserve existing work.\n\n## Acceptance\n\n- Completed changes become ready.\n\n## Automation\n\n\`\`\`openspec-implementation\n{"version":1,"change":"sample-change"}\n\`\`\`\n`;
-const pr = { number: 9, node_id: 'PR_test', state: 'open', draft: true, body,
+const pr = { number: 9, node_id: 'PR_test', state: 'open', draft: true, labels: [], body,
   base: { ref: 'main', sha: base, repo: { full_name: repository } },
   head: { ref: 'ci/sample-change', sha, repo: { full_name: repository } } };
 
-test('completion needs valid headings, at least 2 checked implementation outcomes, plain acceptance and detailed tasks', () => {
+test('completion needs valid structure, meaningful checked outcomes, plain acceptance and detailed tasks', () => {
   assert.deepEqual(inspectProgress(body, tasks), { status: 'complete' });
   const detailed = body.replace('- [x] Preserve existing work.', '- [x] Preserve existing work.\n- [x] Cover routing.\n- [x] Cover diagnostics.\n- [x] Cover empty states.\n- [x] Cover package setup.');
   assert.deepEqual(inspectProgress(detailed, tasks), { status: 'complete' }, 'two to five outcomes are recommended, not a hard maximum');
@@ -79,7 +79,8 @@ test('a completed draft promotes, finalizes in its own branch, and Delivery acce
     assert.equal(result.status, 'finalized');
     assert.notEqual(result.commit, head);
     const paths = git('ls-tree', '-r', '--name-only', 'HEAD', '--', 'openspec/changes').split('\n');
-    const verdict = checkDelivery({ body, labels: [], headPaths: paths, changed: paths });
+    const verdict = checkDelivery({ body, labels: [], headPaths: paths, changed: paths,
+      read: ref => git('show', `HEAD:${ref}`), ancestor: ref => { try { git('merge-base', '--is-ancestor', ref, 'HEAD'); return true; } catch { return false; } } });
     assert.deepEqual(verdict.problems, []);
     assert.equal(verdict.ok, true);
     const ci = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
@@ -97,7 +98,7 @@ test('workflow consumes only the base script, checks exact head and does not gra
   assert.match(workflow, /--inspect/);
   assert.match(workflow, /steps\.inspect\.outputs\.status == 'complete'/);
   assert.match(workflow, /--ignore-scripts/);
-  assert.match(workflow, /types: \[opened, ready_for_review, synchronize, reopened, edited\]/);
+  assert.match(workflow, /types: \[opened, ready_for_review, synchronize, reopened, edited, converted_to_draft, labeled, unlabeled\]/);
   assert.match(workflow, /!github\.event\.pull_request\.draft/);
   assert.match(workflow, /persist-credentials: false/);
   assert.doesNotMatch(workflow, /gh pr merge|enablePullRequestAutoMerge/);

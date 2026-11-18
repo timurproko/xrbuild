@@ -50,6 +50,8 @@
     "bot": { "app_id_variable": "XRB_BOT_APP_ID", "private_key_secret": "XRB_BOT_PRIVATE_KEY" },
     "trusted_files": [
       "tools/pr-automation/promote.mjs",
+      "tools/pr-automation/pr-body.mjs",
+      "tools/pr-automation/snapshot.mjs",
       "tools/pr-automation/finalize.mjs",
       ".github/actions/app-token/action.yml",
       "tools/pr-automation/ready-pull-request-refresh.mjs",
@@ -66,6 +68,7 @@
     }
   },
   "labels": [
+    { "name": "delivery-hold", "color": "d93f0b", "description": "Pause delivery promotion, finalization, refresh and automation-owned integration" },
     { "name": "no-auto-merge", "color": "bfd4f2", "description": "Keep a docs-only PR from merging by itself" },
     { "name": "openspec-in-progress", "color": "c5def5", "description": "Edits an OpenSpec change delivered over several PRs" },
     { "name": "openspec-reconcile", "color": "fbca04", "description": "OpenSpec changes merged without being archived" },
