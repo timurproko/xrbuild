@@ -1,57 +1,15 @@
-# XR Build
+# Development
 
 Runs three.js web apps on 3D displays with hand input, and packages them for station platforms. The **core**
 (engine) is the host, plugin ABI, SDK, ui-kit and control panel. Displays, inputs, platforms and packagers are
 providers behind abstract contracts; every concrete integration is a plugin. Reviewed public modules may live in the
 core-owned `embedded/` workspace; generic engine code stays independent of concrete integrations. Authorized developers separately clone a
 private development **workspace** at the ignored `.xrbuild/` path (see [Workspace](#workspace)). It owns its Git
-history and instructions; read its `CLAUDE.md` and each affected plugin's instructions before private edits. Ordinary users use `XRB_HOME`, else `%USERPROFILE%\.xrbuild`; explicit
+history and documentation; read its `docs/` and each affected plugin's `DEVELOPMENT.md` before private edits. Ordinary users use `XRB_HOME`, else `%USERPROFILE%\.xrbuild`; explicit
 repository-development commands or the separate XR Build Dev Start-menu shortcut select this checkout's `.xrbuild/`. The plan lives in OpenSpec (`openspec/specs/`, `openspec/changes/`).
 
-@../AGENTS.md
-
-## Git
-
-- Commit only when asked.
-- Keep commit messages concise: a short subject line, then a few bullets only if needed.
-- Run focused changed-code checks rather than broad repeated validation loops before pushing.
-
-## Changes and pull requests
-
-- Every change follows the shared `change-delivery` skill of `timurproko/MyWorkflows` (see `AGENTS.md`): own worktree and
-  branch, plan first as a draft PR, implementation after the maintainer approves, OpenSpec finalization in the PR by
-  the delivery bot, handoff, cleanup. Agents never arm auto-merge or push to `develop`.
-- Missing canonical contracts after an accepted public bootstrap may use an explicitly approved contract-only
-  checkpoint under `docs/spec-baseline-reconciliation.md`. Preserve historical plans/tasks and recorded contract
-  order; only the normal bot synchronizes/archives the completed checkpoint. A successor stays blocked until
-  the checkpoint is bot-finalized and maintainer-merged. This grants no export, hosting, cleanup or merge authority.
-- Commits and PR titles: `type(scope): subject` (scope: `host`, `plugin-sdk`, `sdk`, `ui-kit`, `app-icon`,
-  `panel`, `templates`, `fetch-deps`, `name-guard`, `openspec`, `ci`, `claude`, ...). The PR title becomes the
-  squash commit on `develop`.
-- Core changes reach `develop` only through a PR. The `protect-develop` ruleset (squash only, required check "CI required")
-  and the Actions event policy are declared in `protection/repositories.json` of `timurproko/MyWorkflows` and installed
-  with `delivery protect --repo <owner/name> --apply`; change them there, never by hand in GitHub.
-- Workspace-only changes belong exclusively to the independent private repository: the maintainer uses ordinary
-  Git inside `.xrbuild/`. There is no workspace main-push exception or workspace-push command in core. Agents
-  never push to the default branch in either repository and never use an admin bypass to merge a PR.
-
-## Names stay out of the core
-
-- Never use a proprietary name - a vendor, product or SDK, client, person, or where code came from - in core files,
-  paths outside `.xrbuild/`, OpenSpec artifacts or commit messages. Describe the role instead ("a 3D display", "a hand
-  tracker", "a station platform"); in examples use made-up names (`stereo-panel`, `tracker`, `station`). The entire
-  private `.xrbuild/` clone is outside the core naming rule: plugin paths, project samples, manifests and
-  pinned LFS dependency filenames may use external names. No `.xrbuild/` exception applies to core contents.
-  Do not publish `.xrbuild/` or its LFS objects as part of a public export.
-- `pnpm check:names` (`tools/name-guard`) enforces that boundary from hashes only (`banned.sha256`, no plain list anywhere);
-  a Claude Code hook refuses such edits and installing dependencies enables a pre-commit check. To ban another name:
-  `pnpm names add <name>` (`--exact` for one whose lower-case form is an ordinary word), then commit the hash file.
-- A concrete integration belongs in the selected workspace (`.xrbuild/plugins/<name>` for repository development)
-  or, after an explicit public export audit/approval, in `embedded/plugins/<name>`. Never put concrete integration
-  branches in the generic engine. Core features reach plugins only through the C ABI (`native/plugin-sdk/include/xrb_plugin.h`), the host channel
-  and the packager contract (`packages/control-panel/src/packagers.ts`). A plugin-specific need is a plugin key
-  (`--plugin.<name>.<key>=`), a capability or a new neutral ABI call, never a plugin branch in the core.
-- Docs and specs describe roles ("a display plugin", "a station platform"), not plugins.
+Related: [Confidentiality](confidentiality.md) for what must stay out of this repository, and
+[Private workspace](private-workspace.md) for the ignored `.xrbuild/` clone.
 
 ## Layout
 
@@ -116,21 +74,17 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   build snapshots with locked source-bound receipts; discovery never installs private/user packages or writes product source.
   Operational content checks are not export/license approval; actual promoted-module/distribution acceptance remains open.
   Reviewed cache cleanup removes only owned obsolete working generations, preserving reserved/published/current/unknown/
-  Git/private/KEEP data and all user configuration/recordings. It never cleans a worktree or auto-removes stale locks.
+  Git/private/KEEP data and all user configuration/recordings. It never auto-removes stale locks.
   See `docs/embedded-extensions.md` for implemented contracts and remaining rollout work.
 - `tools/fetch-deps` - native binaries with pinned SHA-256s: the core's into `third_party/`, the workspace
   plugins' (`--workspace`) into `<workspace>/third_party/`.
 - `tools/name-guard` - the name guard (hashes in `banned.sha256`).
-- `tools/worktree` - `pnpm worktree add|enter|remove|sweep|handoff`: task worktrees in `.worktrees/` share only
-  fetched core dependencies. Private workspaces must be cloned independently; builds stay worktree-local.
-  Cleanup refuses `.xrbuild/` or `.artifacts/KEEP`, even with clean outer Git status; sweep preserves them as dirty.
-  `pnpm task:repos` routes core/embedded/private/paired tasks, explicitly provisions independent private clones only when
-  needed, and records exact tested HEAD/work state in ignored artifacts. No implicit export/stage/PR/push/merge/cleanup;
-  private instructions still apply. Follow the shared Worktrees guidance in `AGENTS.md`; do not add another linkage gate.
-  Spec prerequisites are recorded in the active change.
+- `tools/worktree` - `pnpm worktree add|enter`: a task checkout in `.worktrees/` shares only the fetched core
+  dependencies; its builds stay local to it. A private workspace is cloned into it independently, never linked.
+  `pnpm task:repos` provisions such an independent private clone when a task needs one.
 - `tools/pr-automation` - the `CI required` aggregate (`required.mjs`) and nightly triage.
 - `.github/` - CI (`ci.yml`: ready PRs keep fast selected checks; full Windows host build/tests run nightly on
-  `develop` or by explicit CI dispatch, not on PRs or `develop` pushes), nightly triage, the PR template, and
+  `develop` or by explicit CI dispatch, not on PRs or `develop` pushes), nightly triage, and
   `delivery.yml`, which only forwards pull-request events and the bot credentials to the shared delivery workflow.
 - `.xrbuild` - ignored independent private clone: projects, plugins and pinned Git LFS dependencies, with its own
   `.git` and LFS hooks; credentials, installed packages and generated builds stay ignored in that repository.
@@ -138,68 +92,6 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   explicitly retarget that shortcut. `tools/add-dev-to-start.vbs` adds a separate "XR Build Dev" shortcut that
   invokes the stable checkout's `start-repo.vbs`. Install Start-menu shortcuts from a stable checkout, not a
   disposable task worktree; use the task worktree's repository launcher directly for task-specific development.
-
-## Workspace
-
-- `.xrbuild/` is an independent private Git clone physically inside the checkout but ignored as a whole by core.
-  It keeps its own `.git`, `package.json`, `pnpm-workspace.yaml` and LFS attributes/hooks. Never stage the clone,
-  its Git metadata/private history or private binaries in core Git, and never enroll private packages in the core
-  pnpm workspace. Public promotion is a separately approved, audited source snapshot, not a copy of the clone or
-  a history merge. It is not a submodule or symlink.
-- Provision each task's private clone explicitly; never junction the primary workspace into a task. Use `XRB_CORE`
-  to select that task's core. Preserve private uncommitted/unpushed work and move the private clone separately
-  before core worktree cleanup. Mark important ignored artifacts with `.artifacts/KEEP` until separately preserved.
-- Core CI runs without private assets or credentials. Private dependency/runtime/integration checks belong to the
-  private repository. See `docs/workspace-split.md` for staged migration and recovery. Detachment alone does not
-  remove private history; keep hosting private until an isolated history audit and separate licensing review.
-- `pnpm panel:repo`, `start-repo.vbs` and `pnpm fetch-deps:repo` explicitly select the current checkout's
-  `.xrbuild/`. Explicit panel workspaces default to port 5181; user-mode panels default to 5180, and
-  `XRB_PANEL_PORT` overrides either for that invocation. A port occupied by another workspace is refused, not reused.
-  `pnpm panel`, `start.vbs` and plain `pnpm fetch-deps --workspace` retain `XRB_HOME`, else
-  `%USERPROFILE%\.xrbuild`. The old `%USERPROFILE%\.xr-build` is not migrated; set `XRB_HOME` to keep using it.
-  Never set a permanent `XRB_HOME` to the primary checkout: it would bypass task worktrees.
-- Layout: `projects/<section>/<name>` (projects: a folder with an `xrb-project.json`; sections are the panel's sections,
-  `projects/unsorted/` for none, `projects/archive/<name>` archived; folder names unique), `plugins/<name>`,
-  plugin-owned originals under `plugins/<name>/samples/<sample>` (imported editable copies go to `projects/plugins/`),
-  and `xrb-panel.json`; pinned `third_party/` assets use Git LFS. Ignored: `plugins/*/bin/`, `builds/`, `node_modules/`,
-  `dist/`, `build/`, `jsconfig.json`. Never stage credentials, signing material, installed packages, compiled plugin
-  binaries, runtime state or generated output.
-- Read a plugin's own `CLAUDE.md` before changing it; run its documented focused tests.
-- Apps get the SDK from the core's sources, never from a registry: the panel sets `XRB_CORE` for app scripts and
-  in its own process; the app's Vite config aliases `@xr-build/sdk` / `@xr-build/ui-kit` to it and dedupes three.
-  Workspace code (packagers too) reaches core modules only through `XRB_CORE`, never by a relative path.
-- Plugins build against the core with the CMake variables the panel passes: `XRB_PLUGIN_SDK`, `XRB_THIRD_PARTY`
-  (selected origin's dependencies), `XRB_CORE_THIRD_PARTY` (core), `XRB_PLUGIN_BIN_DIR` (resolved output).
-  Workspace plugins retain `plugins/<p>/bin/`; embedded plugin rebuilds use a core/source-scoped cache under the
-  selected workspace's `build/native/`, never embedded sources. Incomplete/failed output is unavailable until a
-  successful rebuild. Native provider roots are queried separately; conflicting or invalid roots are excluded from
-  runs and package mappings. `--core-only` skips optional plugins; `--plugins-only` rebuilds plugins without writing
-  the installed host/product tree. Managed full/core-only rebuilds use selected-workspace `build/native/h-<core-key>/b`
-  and publish immutable `r-<generation>/` runtime snapshots. Receipts gate activation; failures never fall back to packaged
-  output. Runs, provider queries, icon jobs, packages and CLI host tests use the selected snapshot. Old snapshots and
-  product-side legacy plugins are not automatically removed; standalone developer CMake paths remain explicit.
-  Rebuild checks desktop prerequisites through an optional checklist. Explicit consent-bound background setup uses
-  fixed system packages, a verified official signed-bootstrapper fallback, or pinned fresh `build/native-deps/`
-  generations. Toolchain installation is one grouped action; fallback verification/elevation uses fixed arguments,
-  exclusive storage, bounded HTTPS downloads and a write/delete-denying verification lease. Checked receipts select dependency
-  roots for managed host/plugin builds. Browsing never installs tools. Active setup excludes other jobs/native runs
-  and panel quit/restart, preserves failures/foreign locks, and never requests an automatic reboot.
-  Core Theme (System/Light/Dark) is immediate browser-local appearance, not a workspace/runtime preference.
-  `/design` provides a Main shared-component catalog and isolated workflow cases with mocked-only installs/builds;
-  old gallery links redirect. Same-origin previews share Theme. Its standard XR Build Design header/menu includes
-  explicit shared Restart/Rebuild handlers (case frames remain mocked) and is exposed in app navigation
-  only for Dev/repository launch mode, directly after Settings before the maintenance divider, never inferred from browser query or
-  workspace preferences. Registered tools discover the same navigation metadata; managed documents replace stale
-  build-time return-address tags with the serving panel origin. Managed tool aliases are bounded, reserved/collision-checked
-  local GET/HEAD redirects owned by the selected plugin; short tool routes do not rename provider/storage IDs. Full worktree UX review needs independently provisioned
-  task-local workspace data and explicit service setup, not the primary workspace or a synthetic gallery substitute. Preserve a
-  running process's mode; never restart active work to change visibility. Keep component visuals in the shared design
-  system, including compact xrb-choice-list rows, not copied fixture palettes. Shared scrollbars overlay document,
-  nested and modal content without gutters while preserving native scrolling and forced-colors fallback; standalone
-  static adapters must serve scrollbars.js and workspace-layout.js alongside design-system.js. Apps and Design Main use the shared workspace grid/sidebar/card-stack templates and document scrolling; only isolated workflow demos use preview frames. Layout sizing and rhythm belong in shared primitives, not product-specific copies. Small is the single reduced control size;
-  primary buttons do not stretch by default, maintenance colors belong only to bulbs, and warning/error banners
-  share geometry and typography.
-  See `docs/desktop-setup.md`; actual administrative/native acceptance remains separately provisioned work.
 
 ## Build and run (Windows, VS 2022 Build Tools)
 
@@ -287,8 +179,3 @@ Logs: `%LOCALAPPDATA%\XRBuild\logs` (`xrb-host.log`).
   display with a switchable session it also keeps the session and toggles physical mono/stereo over `kSetView`,
   confirmed with `kView`. `--camera-projection=orthographic` selects the initial camera and `--view=2d` starts a
   switchable display session in 2D.
-
-## Commands for the user
-
-- Whenever you give the user a command to run themselves (manual test, build, dev server, script, git step), give exactly one Git Bash line in one fenced code block, starting with `cd <absolute path of the repo or worktree> && ...`, so it can be pasted into any Git Bash window regardless of its current directory. Example: `cd /d/Git/xr-build/.worktrees/my-task && pnpm test`.
-- Use Git Bash syntax only: forward-slash paths (`/d/Git/...`), `export VAR=value` or `VAR=value cmd`, `&&` between steps. Never PowerShell or cmd syntax, never several lines, never assume the user is already in the right folder.
