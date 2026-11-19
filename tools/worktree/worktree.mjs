@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Task checkouts: one per task in .worktrees/<name> (git-ignored), on its own branch from origin/develop.
+// Task checkouts: one per task in .worktrees/<name> (git-ignored), on its own branch from origin/main.
 // Only fetched core third_party/ entries are linked (directory junctions). Private workspaces are independent
 // task-local clones, never shared.
 //
@@ -113,10 +113,10 @@ export function add(branch, { root = primaryRoot(), install = true, installFn = 
   const name = worktreeName(branch);
   const dir = path.join(root, '.worktrees', name);
   if (fs.existsSync(dir)) throw new Error(`${dir} exists`);
-  if (fetch) git(root, ['fetch', '--quiet', 'origin', 'develop']);
-  git(root, ['worktree', 'add', '--quiet', '-b', branch, dir, 'origin/develop'], { stdio: 'inherit' });
-  // A branch from origin/develop tracks it; pushing goes to origin/<branch> instead.
-  // Git may already have left this branch without an upstream (e.g. a local-only origin/develop fixture).
+  if (fetch) git(root, ['fetch', '--quiet', 'origin', 'main']);
+  git(root, ['worktree', 'add', '--quiet', '-b', branch, dir, 'origin/main'], { stdio: 'inherit' });
+  // A branch from origin/main tracks it; pushing goes to origin/<branch> instead.
+  // Git may already have left this branch without an upstream (e.g. a local-only origin/main fixture).
   try { git(dir, ['branch', '--quiet', '--unset-upstream'], { stdio: ['ignore', 'pipe', 'pipe'] }); }
   catch (error) { if (!/no upstream information/.test(String(error.stderr))) throw error; }
   linkWorktreeDependencies(root, dir, log);
