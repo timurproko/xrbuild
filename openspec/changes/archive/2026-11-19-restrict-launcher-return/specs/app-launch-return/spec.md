@@ -1,3 +1,7 @@
+## Purpose
+
+Decides when an app opened by a launcher offers a way back to that launcher, and which return addresses it trusts.
+
 ## ADDED Requirements
 
 ### Requirement: Return only to a trusted launcher
