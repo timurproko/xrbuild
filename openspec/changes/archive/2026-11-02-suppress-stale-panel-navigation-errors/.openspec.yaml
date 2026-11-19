@@ -1,4 +1,0 @@
-schema: spec-driven
-created: 2026-11-02
-# Refines presentation of an existing restart-required state; no requirement changes.
-skip_specs: true
