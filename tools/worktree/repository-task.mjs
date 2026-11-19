@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-const BRANCH = /^(?:feat|fix|refactor|docs|test|chore|ci|perf)\/[a-z0-9][a-z0-9-]*$/;
+const BRANCH = /^(?:feature|fix|refactor|docs|test|chore|style)\/[a-z0-9][a-z0-9-]*$/;
 const inside = (root, file) => { const relative = path.relative(root, file); return !relative || relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); };
 const canonical = file => realpathSync.native(path.resolve(file));
 function git(root, args, acceptFailure = false, env = process.env) {
