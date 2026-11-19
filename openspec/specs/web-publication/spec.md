@@ -133,44 +133,6 @@ A production publisher SHALL target an explicitly configured public publication 
 - **WHEN** the hosting target is wrong, the route belongs to another identity or output contains unsafe entries
 - **THEN** the publisher refuses to push or dispatch without changing the public site
 
-### Requirement: Publication repository cutover
-A publication-repository migration SHALL preserve the complete publisher-owned site state, including publication identities, slugs, inventory, root association data, custom-domain file and route bytes. The old deployment branch SHALL remain available until the new origin serves and verifies that state. After cutover, the old repository SHALL no longer hold a publication branch or custom-domain claim.
-
-#### Scenario: Migrate existing routes
-- **WHEN** publication state moves to the new public repository's `main:docs/` subtree
-- **THEN** the source and destination site-tree digests match before the old private branch is removed
-
-#### Scenario: Cutover verified
-- **WHEN** the custom origin serves the migrated inventory, every recorded route and the association document from the new repository
-- **THEN** the publisher target can switch and the old deployment branch can be retired
-
-#### Scenario: Cutover fails
-- **WHEN** the custom origin does not verify
-- **THEN** the old deployment branch remains available and no route is claimed migrated
-
-### Requirement: Safe transition to Actions hosting
-A change to local-build publication under Actions Pages SHALL require a reviewed coordinated handoff. The public workflow SHALL retire public-source publish/unpublish operations before accepting local output as the sole source of site decisions, while preserving a redeploy-only path and the existing `docs/` tree. Neither the transition nor its tests SHALL trigger a production publication without maintainer confirmation.
-
-#### Scenario: Before cutover
-- **WHEN** public-source publishing is still enabled or the replacement output path is unverified
-- **THEN** local publication refuses to push and the existing site continues to serve untouched
-
-#### Scenario: After verified cutover
-- **WHEN** redeploy-only workflow deployment and unchanged site content have been verified
-- **THEN** a maintainer can enable local-build publication without switching Pages hosting modes
-
-#### Scenario: Cutover rollback
-- **WHEN** replacement deployment fails to verify
-- **THEN** the maintainer retains and can redeploy the last-known-good committed `docs/` tree without changing the custom domain
-
-#### Scenario: Source-driven workflow still active
-- **WHEN** the public workflow can still update routes from public app source
-- **THEN** local publishing refuses to write so that two publication writers cannot race
-
-#### Scenario: Coordinated cutover
-- **WHEN** the public workflow only redeploys committed output and the local publisher has validated the repository and site
-- **THEN** a maintainer may explicitly publish the selected local app, without changing Pages settings or unrelated routes
-
 ### Requirement: Optional versioned release capability
 A publisher MAY expose a complete versioned release capability: read-only history/status, version-aware publication and activation of a retained owned release. The core SHALL validate that capability and gate its release APIs/UI on support. Existing publisher modules SHALL retain their legacy behavior without being assigned synthetic version history.
 

@@ -325,25 +325,6 @@ Both embedded and user workspaces SHALL use `projects/unsorted/` as the canonica
 - **WHEN** templates, project operations or current documentation refer to the unsectioned project directory
 - **THEN** they use lowercase `projects/unsorted/` without special migration or legacy-alias handling
 
-### Requirement: Audited source promotion
-Moving workspace material into the public embedded workspace SHALL require an explicit per-module source/asset allowlist, confidentiality and redistribution review, neutral public configuration, focused tests and approval of the public export. Private Git ancestry SHALL NOT be imported. Client-facing projects and related assets SHALL remain private. Destination intent SHALL NOT substitute for content review.
-
-#### Scenario: Mixed public and restricted functionality
-- **WHEN** a candidate plugin contains generic UI or synthetic behavior together with a restricted native adapter/runtime
-- **THEN** only the independently reviewed public component may be embedded and the restricted component remains external behind a neutral contract
-
-#### Scenario: Archived non-client project
-- **WHEN** a reviewed archived project is promoted
-- **THEN** its archive placement is preserved and private provider defaults, deployment state and machine settings are excluded or externalized
-
-#### Scenario: Uncertain client ownership
-- **WHEN** the client-project path or asset ownership is not confirmed
-- **THEN** export of that material is blocked and it remains private
-
-#### Scenario: Retire old private copy
-- **WHEN** a reviewed embedded replacement is available
-- **THEN** retirement of its private predecessor is delivered independently after compatibility checks without deleting local overrides or merging private history into public history
-
 ### Requirement: User-owned embedded project organization
 Embedded projects SHALL participate in the same section list, project order and Projects/Archive tabs as user projects. User metadata SHALL override installed default section/archive placement without physically moving or deleting embedded folders. Reorder, section creation/rename/removal, move to Unsorted, archive and unarchive SHALL persist across panel restart. Organization SHALL retain qualified logical project, settings and deployment identity independent of section/archive placement. Layout HTTP updates SHALL require the current saved-state revision. Mixed-origin section operations SHALL validate all affected state and destinations before changes and preserve normal user-project folder semantics. Existing malformed or linked metadata SHALL report an error without silently replacing it.
 
@@ -409,30 +390,6 @@ Explicit source-consuming actions SHALL refresh changed embedded inputs under pr
 #### Scenario: Personal and product separation
 - **WHEN** a source refresh carries personal choices, identity, icons or recordings across an installed default-section relocation or restart
 - **THEN** those values remain in their proper user-owned scope, inherit current compatible source defaults, keep logical organization/identity, and do not rewrite installed product files or ordinary projects
-
-### Requirement: Retire duplicate embedded starter without removing templates
-
-The product catalog SHALL omit the former embedded Test app at `embedded/projects/unsorted/test` and its package registration. The canonical `templates/app` and normal New project workflow SHALL remain available, including generated 3D icon/theme inputs and required notices. Retiring installed content SHALL NOT delete ordinary user projects, independent copies, retained working sources, settings or recordings.
-
-#### Scenario: Fresh installed catalog
-
-- **WHEN** the panel discovers the installed embedded workspace
-- **THEN** the retired duplicate Test app is absent while the remaining seven shipped projects retain their existing core/archive placement and identities
-
-#### Scenario: Frozen package graph
-
-- **WHEN** the revised embedded workspace is installed or tested in a managed writable snapshot
-- **THEN** its six remaining packages resolve with the matching frozen lockfile and there is no importer for the retired app
-
-#### Scenario: User creates a project
-
-- **WHEN** the user confirms New project with a valid new name
-- **THEN** the canonical template generates that editable app normally, including its generated 3D icon, colour/theme inputs and required font notice, without relying on any embedded Test source
-
-#### Scenario: Existing personal projects and state
-
-- **WHEN** the product update no longer ships the former embedded starter
-- **THEN** ordinary projects and independent copies named Test or otherwise remain discoverable, and existing user-owned embedded working state remains preserved without automatic cleanup
 
 ### Requirement: Generated hand view independent of optional bridge startup
 

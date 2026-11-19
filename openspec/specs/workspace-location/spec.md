@@ -50,52 +50,6 @@ The panel and workspace dependency tool SHALL accept an explicit workspace path.
 - **WHEN** the maintainer runs the development Start-menu installer from a stable checkout
 - **THEN** Windows receives a distinct **XR Build Dev** shortcut that launches that checkout's `start-repo.vbs`, while **XR Build** continues to use the ordinary user workspace
 
-### Requirement: Embedded workspace versioning
-The development workspace at `.xrbuild/` SHALL be an independent private Git clone ignored as a whole by the core, not a submodule, symlink or junction. Its own history SHALL version plugin source, projects when not separately selected, manifests, locks and pinned dependencies, with binaries stored through Git LFS. Credentials, signing material, installed packages, compiled output and generated builds SHALL remain ignored. Separate project repositories SHALL retain exclusive ownership of their app source and package metadata.
-
-#### Scenario: Core staging
-- **WHEN** an authorized maintainer edits a file inside the nested private workspace and stages ordinary core changes
-- **THEN** core Git does not stage the workspace file or its nested Git metadata
-
-#### Scenario: Import an existing workspace
-- **WHEN** a maintainer imports existing integration files into the private workspace repository
-- **THEN** that repository tracks their source and LFS pointers while the core ignores the entire nested workspace
-
-#### Scenario: Build the embedded workspace
-- **WHEN** projects use plugins from the nested private integration workspace
-- **THEN** installed packages, compiled binaries and generated output remain ignored in both repositories while pinned dependencies stay tracked privately
-
-#### Scenario: Private workspace commit
-- **WHEN** an authorized maintainer commits private integration changes
-- **THEN** the commit belongs only to the workspace repository and not to core history
-
-#### Scenario: Private integrations with public projects
-- **WHEN** the selected project repository is distinct from the private integration workspace
-- **THEN** project source and app package metadata are tracked only in the selected project repository
-
-#### Scenario: Fresh public clone
-- **WHEN** a user clones the public core without private-repository credentials
-- **THEN** the core has no tracked private workspace files or private LFS download requirement and ordinary user-workspace mode remains usable
-
-#### Scenario: Fresh clone with LFS
-- **WHEN** an authorized maintainer separately clones the private workspace with Git LFS
-- **THEN** its pinned integration binaries materialize under that workspace using its own attributes and LFS storage
-
-### Requirement: Private workspace naming boundary
-The repository's core paths and file contents SHALL satisfy the neutral-name policy. The name guard SHALL exempt paths and contents beneath `.xrbuild/` as private workspace material. Core code SHALL NOT depend on private integration identities, and credentials or signing material SHALL NOT be tracked in the private workspace.
-
-#### Scenario: External names in private workspace
-- **WHEN** a private project, plugin path or pinned dependency under `.xrbuild/` contains an external identifier
-- **THEN** the core name guard permits it without affecting the plugin's runtime behavior
-
-#### Scenario: Prohibited name outside private workspace
-- **WHEN** a tracked path or core file outside `.xrbuild/` contains a prohibited name
-- **THEN** the name guard rejects it
-
-#### Scenario: Plugin supplies a user-facing label
-- **WHEN** a private plugin declares a product-specific label
-- **THEN** the panel displays that label without requiring the core to embed a product-specific constant
-
 ### Requirement: Local catalog in an embedded project preview
 When the panel serves a launcher project's browser preview, the launcher SHALL list available apps from that panel's selected project repository, without requiring the production publication inventory. A published launcher SHALL continue to read its configured publication inventory. The published inventory SHALL support both the publisher route-prefix root and named child routes; the launcher SHALL omit only its own canonical route and show every other valid published entry. Catalog cards SHALL use a valid same-origin manifest icon when available and otherwise use the finalized project favicon supplied by the browser build.
 
@@ -181,17 +135,6 @@ The launcher SHALL support its existing mouse and hand interactions without rend
 
 - **WHEN** the launcher receives supported hand input
 - **THEN** card and page controls remain interactive after the launcher-specific mouse cursor object is removed
-
-### Requirement: Independent task workspace ownership
-Core task worktrees SHALL NOT automatically share the primary private workspace through a link or shared dependency tree. Private development MAY use an independently provisioned task-local clone. Core worktree cleanup SHALL refuse to discard a nested private repository through an outer clean-status check alone.
-
-#### Scenario: Task-local private changes
-- **WHEN** a task has its own private workspace clone
-- **THEN** explicit repository-development commands select that task's workspace and private edits do not modify the primary clone
-
-#### Scenario: Cleanup with nested Git repository
-- **WHEN** a clean core worktree still contains an independently versioned private workspace
-- **THEN** automated core cleanup refuses removal until the private clone has been preserved and handled separately
 
 ### Requirement: Explicit panel catalog in development runs
 
