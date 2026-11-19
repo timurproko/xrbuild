@@ -137,12 +137,15 @@ export async function createCoordinator(options = {}) {
     ['/startup.css', [path.join(assets,'startup.css'),'text/css; charset=utf-8']],
     ['/design-system.css', [path.join(system,'design-system.css'),'text/css; charset=utf-8']],
     ['/design-system.js', [path.join(system,'design-system.js'),'text/javascript; charset=utf-8']],
+    // design-system.js re-exports these; the startup page fails to load without every one of them.
     ['/scrollbars.js', [path.join(system,'scrollbars.js'),'text/javascript; charset=utf-8']],
+    ['/workspace-layout.js', [path.join(system,'workspace-layout.js'),'text/javascript; charset=utf-8']],
+    ['/theme.js', [path.join(system,'theme.js'),'text/javascript; charset=utf-8']],
   ]);
   const server = http.createServer(async (req,res) => {
     const reply = (status, body, type = 'application/json') => { res.writeHead(status, {'content-type':type}); res.end(type === 'application/json' ? JSON.stringify(body) : body); };
     res.setHeader('cache-control','no-store'); res.setHeader('x-content-type-options','nosniff'); res.setHeader('referrer-policy','no-referrer');
-    res.setHeader('content-security-policy', "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+    res.setHeader('content-security-policy', "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
     try {
       if (req.headers.host !== new URL(origin).host || req.headers.origin && req.headers.origin !== origin) return reply(403,{error:'Foreign startup request'});
       const url = new URL(req.url, origin); if (url.search) return reply(400,{error:'Query parameters are not accepted'});

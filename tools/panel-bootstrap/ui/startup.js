@@ -38,7 +38,7 @@ $('#startup-copy').addEventListener('click', async () => {
   catch { $('#startup-output').focus(); const range = document.createRange(); range.selectNodeContents($('#startup-output')); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range); $('#startup-hint').textContent = 'Output selected. Copy it with your keyboard.'; }
 });
 $('#startup-close').addEventListener('click', async () => {
-  try { await api('/api/close','POST'); stopped = true; dialog.close(); $('main p').textContent = 'Setup closed. You can close this tab or reopen the shortcut to try again.'; }
+  try { await api('/api/close','POST'); stopped = true; dialog.close(); $('main .xrb-spinner').hidden = true; $('main p').textContent = 'Setup closed. You can close this tab or reopen the shortcut to try again.'; }
   catch (error) { disconnected(error); }
 });
 async function follow() {
