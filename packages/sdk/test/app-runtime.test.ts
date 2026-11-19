@@ -16,7 +16,7 @@ test('managed camera defaults to perspective and only panel previews accept laun
   assert.equal(cameraProjectionFromBuild('', { hostname: 'example.test', pathname: '/apps/demo/' }), 'perspective');
   assert.equal(cameraProjectionFromLaunch('?xrb-camera=orthographic', { hostname: 'example.test', pathname: '/apps/demo/' }), null);
   const launched = new URL(appLaunchUrl('https://example.test/apps/demo/', { returnUrl: 'https://example.test/apps/launcher/', projection: 'orthographic' }));
-  assert.equal(cameraProjectionFromLaunch(launched.search, { hostname: launched.hostname, pathname: launched.pathname }), 'orthographic');
+  assert.equal(cameraProjectionFromLaunch(launched.search, { protocol: launched.protocol, hostname: launched.hostname, pathname: launched.pathname }), 'orthographic');
   const resumed = new URL(appResumeUrl('https://example.test/apps/launcher/', 'orthographic'));
   assert.equal(cameraProjectionFromLaunch(resumed.search, { href: resumed.href }), 'orthographic');
   assert.equal(cameraProjectionFromLaunch(loopback.search, loopback), 'orthographic');

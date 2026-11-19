@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { appLaunchContext, appLaunchUrl, appResumeProjectionFromLocation, appResumeUrl } from '../src/launch-context.ts';
 import { returnTargetFromLaunch } from '../src/return-overlay.ts';
+import { installAppShell } from '../src/app-shell.ts';
 
 test('one bounded launch context carries return and projection across distribution origins', () => {
   const sameOrigin = appLaunchUrl('http://127.0.0.1:5182/preview/ui-kit/?xrb-xr=enter', {
@@ -68,6 +69,42 @@ test('the return control reuses the destination runtime instead of creating anot
   assert.match(runtime, /resumedPageCover[\s\S]*revealResumeCover\(\)/, 'the resumed launcher fades in after its first frame');
   assert.match(runtime, /this\.returnControl\?\.attach\(scene, this\.view\.panel, this\.visibleDisplay\(\), isOrthographicCamera\(camera\)/);
   assert.match(control, /appResumeUrl\(this\.returnUrl, this\.projection\)/);
+});
+
+test('only a trusted launcher origin gets a return control', () => {
+  const accepted: Array<[string, string]> = [
+    ['https://apps.example/demo/', 'https://apps.example/launcher/'],
+    ['http://localhost:5173/', 'http://127.0.0.1:5181/preview/launcher/'],
+    ['https://apps.example/demo/', 'http://127.0.0.1:5182/preview/launcher/'],
+    ['http://[::1]:5173/', 'http://localhost:5181/'],
+    ['https://xrbuild.dev/apps/ui-kit/', 'https://app.local/'],
+  ];
+  for (const [app, launcher] of accepted) assert.equal(returnTargetFromLaunch(appLaunchUrl(app, { returnUrl: launcher })), new URL(launcher).href, launcher);
+
+  for (const foreign of ['https://elsewhere.example/', 'http://apps.example/launcher/', 'https://apps.example:8443/', 'https://127.0.0.1/', 'http://app.local/', 'https://app.local.evil.example/'])
+    assert.equal(returnTargetFromLaunch(appLaunchUrl('https://apps.example/demo/', { returnUrl: foreign })), null, foreign);
+});
+
+test('Escape does not navigate to a foreign return address', () => {
+  const g = globalThis as typeof globalThis & Record<string, any>;
+  const saved = new Map(['location', 'addEventListener', 'removeEventListener'].map(key => [key, Object.getOwnPropertyDescriptor(g, key)]));
+  const events = new EventTarget();
+  let navigations = 0;
+  Object.assign(g, {
+    location: { href: appLaunchUrl('https://apps.example/demo/', { returnUrl: 'https://elsewhere.example/' }), assign() { navigations++; } },
+    addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events),
+  });
+  const dispose = installAppShell({ host: null, projection: () => 'perspective', returnToLauncher: () => { navigations++; return true; } });
+  try {
+    const event = new Event('keydown', { cancelable: true });
+    Object.assign(event, { key: 'Escape', repeat: false });
+    events.dispatchEvent(event);
+    assert.equal(navigations, 0);
+    assert.equal(event.defaultPrevented, false);
+  } finally {
+    dispose();
+    for (const [key, descriptor] of saved) { if (descriptor) Object.defineProperty(g, key, descriptor); else delete g[key]; }
+  }
 });
 
 test('direct, malformed and unbounded links have no return control', () => {
