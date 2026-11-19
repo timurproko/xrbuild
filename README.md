@@ -280,7 +280,7 @@ Layout:
 | `packages/desktop-package` | `@xr-build/desktop-package`: built-in portable Windows package |
 | `templates/` | the new workspace and the new app the panel creates |
 | `tools/` | `fetch-deps`, `name-guard`, `worktree`, `pr-automation`, `preview-readme`, Start-menu installers |
-| `.github/` | CI, nightly triage, the shared delivery caller, the PR template |
+| `.github/` | CI, nightly triage, the shared delivery caller |
 | `openspec/` | the plan: specs and changes |
 | `.xrbuild/` | ignored independent private workspace clone; owns projects, plugins and LFS assets separately from core |
 
@@ -292,7 +292,7 @@ pnpm test
 ```
 
 Keep core paths and files neutral: no vendor, product, client or person names outside `.xrbuild/` (the rule in
-`.claude/CLAUDE.md` and `openspec/config.yaml`). The entire private `.xrbuild/` subtree is exempt, including
+[docs/confidentiality.md](docs/confidentiality.md)). The entire private `.xrbuild/` subtree is exempt, including
 project samples, plugins and pinned LFS binaries; exclude it from any future public export. `pnpm check:names`
 enforces the core boundary. The banned names exist
 only as hashes (`tools/name-guard/banned.sha256`), never as a plain list. `pnpm names add <name>` bans one more
@@ -324,16 +324,12 @@ pnpm worktree sweep --apply            # remove the merged, clean ones
 pnpm worktree remove hand-jitter       # remove one after its merge (--discard if its PR was closed unmerged)
 ```
 
-A change that needs a plan starts as a draft PR holding only its OpenSpec change, linked in the PR body's Automation
-block; the code follows in the same PR once the plan is approved. The shared delivery workflow
-(`.github/workflows/delivery.yml` forwards events to `timurproko/MyWorkflows`) marks a fully ticked draft ready,
-archives the change in the PR with its specs synced, and publishes the `delivery / Delivery check`. Implementation PRs
-remain maintainer-merged. Ready PRs keep the name guard, OpenSpec and relevant Node/workspace checks, but **do not
+How a change is delivered is defined by the shared workflow of `timurproko/MyWorkflows`;
+`.github/workflows/delivery.yml` only forwards events to it. Ready PRs keep the name guard, OpenSpec and relevant Node/workspace checks, but **do not
 build or test the native host**, even when host code changes. A skipped host check is not a successful native build.
 Pushes to `develop` also omit that several-minute lane. The full Windows host build and native tests run on the scheduled
 nightly CI for `develop`, or when CI is manually dispatched from Actions for a chosen ref before merging a sensitive
-change. A nightly failure opens a draft `fix/nightly-<date>` PR; it cannot retroactively block an earlier merge. The
-full process for agents is the shared `change-delivery` skill, with this repository's additions in `AGENTS.md`.
+change. A nightly failure opens a draft `fix/nightly-<date>` PR; it cannot retroactively block an earlier merge.
 
 The `develop` ruleset and the Actions event policy are declared in `protection/repositories.json` of
 `timurproko/MyWorkflows` and installed with `delivery protect --repo timurproko/xrbuild --apply`.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Name guard: core paths and contents outside the private .xrbuild/ workspace must stay neutral
-// (the rule: .claude/CLAUDE.md, openspec/config.yaml). The entire private workspace is excluded. The banned names exist
+// (the rule: docs/confidentiality.md, openspec/config.yaml). The entire private workspace is excluded. The banned names exist
 // only as hashes (banned.sha256); no plain
 // list is kept anywhere. Text and paths are split into words (on non-alphanumerics and camel-case
 // boundaries); every word, run of 2-3 words, and their concatenation is hashed and looked up. A word inside

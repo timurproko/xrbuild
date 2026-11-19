@@ -1,24 +1,21 @@
-# XR Build agent work
+# Agent instructions
 
-Generic engine code and approved public modules under `embedded/` belong to the core PR. `embedded/` is core-owned, not another repository; it shares plugin/project layouts with the selected user workspace. Private-only work belongs to a private PR, without an empty public PR. Paired work needs separate PRs and a private/local handoff; never expose private repository links, source inventories or client details in public artifacts. Public promotion requires separately approved, audited snapshots, never private history. Use `pnpm task:repos` with ignored local configuration for explicit routing/provisioning and exact tested-revision handoffs; it grants no export, delivery or cleanup permission. Follow the active change's prerequisite order and leave spec synchronization/archive to the repository bot.
+This file is `templates/AGENTS.md` of `timurproko/MyWorkflows`, identical in every repository that uses the shared
+delivery workflow. Never edit it in a repository: change the template, then run `delivery instructions --apply`.
 
-The ignored `.xrbuild/` folder is an independent private workspace clone, not part of core Git history, a submodule or a junction. Follow the Workspace section of `.claude/CLAUDE.md`, the private clone's `CLAUDE.md` and each affected plugin's instructions. Change private files only in the task's independently provisioned clone inside its linked worktree. Never clean up a worktree containing private workspace data or an `.artifacts/KEEP` preservation marker.
+## Delivering a change
 
-Before planning or changing this repository, read `.claude/CLAUDE.md` and load the shared `change-delivery` skill of `timurproko/MyWorkflows`, which owns PR delivery for every repository: the draft-PR plan, ticking outcomes as they land, automatic readiness and OpenSpec finalization, handoff, merge rules and cleanup. If it is not available on this machine, install it once: `git clone https://github.com/timurproko/MyWorkflows.git ~/.workflow && node ~/.workflow/bin/delivery.mjs install`. Keep the primary checkout on `develop`. Where a rule here is stricter than the skill, the rule here wins; attachment grants no cleanup or merge authority.
+Load the shared `change-delivery` skill before planning, making, shipping, merging or cleaning up after any change.
+It is the only source of delivery rules; this repository states none.
 
-## XR Build delivery specifics
+If the skill is not available on this machine, install it once:
+`git clone https://github.com/timurproko/MyWorkflows.git ~/.workflow && node ~/.workflow/bin/delivery.mjs install`
 
-These apply on top of the shared skill.
+## Knowing the project
 
-- Route engine and approved `embedded/` changes to the core PR; embedded is part of core Git, not a nested repository. Route private-only work to its independent private PR without an empty public PR. Paired tasks use separate PRs and one private/local handoff recording tested revisions and dependencies. A plan approval permits implementation, not private-source export: each public snapshot needs an audited allowlist and explicit export approval, without importing private ancestry.
-- Use `pnpm task:repos` with bounded ignored `.artifacts/repositories.json` for explicit owner routing, opt-in independent private provisioning and create-only tested-revision records. Core/embedded-only work needs no private clone. The helper never stages, exports, pushes, creates PRs, merges or cleans. Follow `docs/embedded-extensions.md` and the active change's `prerequisites.md`; predecessor synchronization/archive belongs to the bot's ordered delivery, never manual overwriting of an older active change.
-- A missing canonical baseline after an accepted public bootstrap may use an explicitly maintainer-approved, contract-only checkpoint: follow `docs/spec-baseline-reconciliation.md`. Bind contracts to the accepted public tree, review predecessor contracts in their recorded order, and leave historical plans and task completion unchanged. The checkpoint needs its own complete verified tasks and normal bot finalization; it is not an open-task bypass. A successor stays blocked until that checkpoint is bot-finalized and maintainer-merged, then updates only its own ledger with the observed baseline.
-- Never arm auto-merge or push to `develop` (or the private repository's default branch), and never use an admin bypass to merge.
-- Dependency setup is separate from attachment: after entering a task worktree, prepare its public dependencies with the repository helper (`pnpm worktree enter`) when needed, and install task-local dependencies directly for an edited resume. Provision private clones independently and only when needed.
-- Run `pnpm check:names` and strict change validation with the quick targeted checks before pushing.
-- Hand off with `pnpm worktree handoff <short-desc> --change <change-id> --pr <n>` and fill its skeleton in the reply.
-- Cleanup here is `pnpm worktree sweep` (`--apply` removes only merged, clean worktrees), not the shared cleanup command, because a task holding `.xrbuild/` or `.artifacts/KEEP` is preserved as dirty even when outer Git is clean. Preserve private repositories and marked backups separately first; never remove the protection to make sweep pass. An A1 session still attached to the merged task runs `a1 worktree complete` instead and never cleans its own attached checkout: the command returns the session to primary first, then runs this sweep as declared in the committed `.a1/worktree.json`. A PR closed unmerged: `pnpm worktree remove <short-desc> --discard`, only when the maintainer says its work is not needed.
-
-## Worktrees
-
-In an active A1 session, use `a1 worktree enter <branch>` or `a1 worktree attach <absolute-path>`. Work in the returned directory; success is the attachment confirmation. Keep the task attached after implementation completion and review handoff so follow-up fixes retain its checkout and PR. After a verified merge, run `a1 worktree complete`: it returns the session to primary before repository cleanup runs, so never clean the attached checkout directly. Use `a1 worktree detach` only when explicitly requested or switching tasks; it preserves files and branches. Runtime shutdown releases claims automatically. A1 owns coordination, retries, and recovery; `a1 worktree list` is informational. Outside A1, use ordinary Git worktrees.
+- `README.md` holds the most important things to know about this repository. It is written for people first,
+  because it is the page they see, and you read it too. Read it before anything else.
+- `docs/` holds the detail that is specific to this repository and maintained by its owner: how to build, run and
+  test it, and what must stay private. Read what applies to your change, and follow it.
+- `openspec/specs/`, when present, is written by agents for agents: it records what the product does. Read the specs
+  of the area you change, and update them through an OpenSpec change in the same pull request.
