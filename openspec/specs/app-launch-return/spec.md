@@ -1,7 +1,7 @@
 # app-launch-return Specification
 
 ## Purpose
-TBD - created by archiving change restrict-launcher-return. Update Purpose after archive.
+Decides when an app opened by a launcher offers a way back to that launcher, and which return addresses it trusts.
 
 ## Requirements
 

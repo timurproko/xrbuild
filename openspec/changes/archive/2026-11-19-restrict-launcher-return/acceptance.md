@@ -22,8 +22,8 @@ The maintainer integration decision accepts these scenarios:
     "Escape in an app launched with a foreign return address does not navigate anywhere.",
     "Same-origin, loopback development and native host launchers keep their return control and Escape return."
   ],
-  "archiveDigest": "454e66bf9215c64ef6eb1165d9514f5bfab50ce28bc27828b180fc6f56a52f0e",
-  "specDigest": "4c950492c4cf7d9c9d9dc0ba294e00d1d48a3f7cca5c03d5919de4b4d1586e1f",
+  "archiveDigest": "e015b12ce2961e5225dc005868b34e3960b9b7305803a7d806919f4eab669ed7",
+  "specDigest": "913794658c4346053397cf886a2cc07bad31d798bf145fec3f3d36162954d2c2",
   "tasksDigest": "38d46fc06e338f435ad5dd468b13f2b47670f4b8ad0dbd4e59a9ec9abd0ee2de",
   "evidenceDigest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "knownGaps": []
