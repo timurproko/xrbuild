@@ -19,8 +19,8 @@ async function fixture(t) {
   // Fixture origins are created without pushing or merging any main branch.
   git(seed, 'clone', '--bare', '--no-hardlinks', seed, coreRemote); git(privateSeed, 'clone', '--bare', '--no-hardlinks', privateSeed, privateRemote);
   git(seed, 'remote', 'add', 'origin', coreRemote); git(seed, 'update-ref', 'refs/remotes/origin/develop', 'HEAD');
-  const core = path.join(root, 'task'); git(seed, 'worktree', 'add', '-b', 'feat/repository-fixture', core);
-  const options = { core, coreRemote, privateRemote, privateBranch: 'feat/repository-fixture', allowLocal: true, paths: ['packages/sdk/src/core.ts', '.xrbuild/projects/unsorted/example/index.html'] };
+  const core = path.join(root, 'task'); git(seed, 'worktree', 'add', '-b', 'feature/repository-fixture', core);
+  const options = { core, coreRemote, privateRemote, privateBranch: 'feature/repository-fixture', allowLocal: true, paths: ['packages/sdk/src/core.ts', '.xrbuild/projects/unsorted/example/index.html'] };
   return { root, seed, privateSeed, options, main: git(seed, 'rev-parse', 'main') };
 }
 
