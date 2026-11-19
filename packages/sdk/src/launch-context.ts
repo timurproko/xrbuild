@@ -51,6 +51,19 @@ function pageUrl(location?: LaunchLocationLike, search?: string): URL | null {
   }
 }
 
+/** The origin the native host serves its launcher from. */
+const NATIVE_APP_ORIGIN = 'https://app.local';
+
+/**
+ * Security: a launch link is untrusted input, so the return address must be a launcher this page can trust:
+ * its own origin, a loopback development server, or the native host. Anything else would be an open redirect.
+ */
+function trustedReturnOrigin(target: URL, page: URL): boolean {
+  if (!HTTP.has(target.protocol)) return false;
+  if (target.origin === page.origin || target.origin === NATIVE_APP_ORIGIN) return true;
+  return target.protocol === 'http:' && LOOPBACK.has(target.hostname.toLowerCase());
+}
+
 /** Reads the bounded, versioned context attached by an XR Build launcher. */
 export function appLaunchContext(href = typeof location === 'undefined' ? '' : location.href): AppLaunchContext | null {
   try {
@@ -59,7 +72,7 @@ export function appLaunchContext(href = typeof location === 'undefined' ? '' : l
     const rawReturn = page.searchParams.get('xrb-return');
     if (!rawReturn) return null;
     const target = new URL(rawReturn, page);
-    if (!HTTP.has(target.protocol)) return null;
+    if (!trustedReturnOrigin(target, page)) return null;
     const value = page.searchParams.get('xrb-camera');
     const projection = value === 'perspective' || value === 'orthographic' ? value : undefined;
     return { returnUrl: target.href, ...(projection ? { projection } : {}) };
