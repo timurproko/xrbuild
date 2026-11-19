@@ -296,8 +296,8 @@ Keep core paths and files neutral: no vendor, product, client or person names ou
 project samples, plugins and pinned LFS binaries; exclude it from any future public export. `pnpm check:names`
 enforces the core boundary. The banned names exist
 only as hashes (`tools/name-guard/banned.sha256`), never as a plain list. `pnpm names add <name>` bans one more
-(`--exact` for a name whose lower-case form is an ordinary word); commit the changed hash file. Enable the
-pre-commit check once per clone:
+(`--exact` for a name whose lower-case form is an ordinary word); commit the changed hash file. Installing
+dependencies enables the pre-commit check; to enable it by hand:
 
 ```text
 pnpm hooks
