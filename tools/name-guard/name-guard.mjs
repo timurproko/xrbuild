@@ -10,7 +10,8 @@
 //   node tools/name-guard/name-guard.mjs check --staged    the staged files (the pre-commit hook)
 //   node tools/name-guard/name-guard.mjs hook              Claude Code PreToolUse hook (JSON on stdin)
 //   node tools/name-guard/name-guard.mjs add <name> [--exact] [--force]   adds the name's hashes only
-//   (--exact: that exact case only, for a name whose lower-case form is an ordinary word in code)
+//   (--exact: that exact case only, for a name whose lower-case form is an ordinary word in code; a common word
+//   is accepted only with an upper-case letter in that spelling, or with --force)
 //
 // Hashes keep a name from being published by accident. They are not secrecy: a short name can be found
 // by hashing a dictionary. Never write a name that must stay secret into the core in any form.
@@ -27,7 +28,7 @@ export const HASH_FILE = path.join(HERE, 'banned.sha256');
 const PREFIX = 'xrb-name-guard:';
 const MAX_WORDS = 3;
 
-/** Words that are too common to ban alone: `add` refuses them without --force. */
+/** Words that are too common to ban alone: `add` refuses them without --force or a capitalised --exact spelling. */
 const COMMON = new Set(('a an and app apps as at be by core data dev display do for from hand hands host in input is it '
   + 'name new not of on or out panel platform plugin plugins run test the to tool use user view web with xr').split(' '));
 
@@ -61,6 +62,19 @@ export function nameKeys(name, exact = false) {
   if (exact) return [`=${ws.join(' ')}`];
   const lower = ws.map((w) => w.toLowerCase());
   return [...new Set([lower.join(' '), lower.join('')])];
+}
+
+/**
+ * Keys `add` stores for a name. A single common word is refused unless forced, or given `exact` in a spelling with an
+ * upper-case letter: that exact key never matches the ordinary lower-case word.
+ */
+export function addKeys(name, { exact = false, force = false } = {}) {
+  const keys = nameKeys(name, exact);
+  const single = words(name).filter((w) => !w.whole);
+  if (force || single.length !== 1 || !COMMON.has(single[0].word.toLowerCase())) return keys;
+  if (exact && /[A-Z]/.test(single[0].word)) return keys;
+  const why = exact ? 'an all-lower-case exact ban would flag ordinary text' : 'banned alone it would flag ordinary text';
+  throw new Error(`"${name}" is a common word: ${why}. Ban it with another word, a capitalised --exact spelling, or --force`);
 }
 
 /** Keys of every word and run of words in a text, with where they start. */
@@ -212,10 +226,7 @@ async function main(argv) {
     const exact = rest.includes('--exact'), force = rest.includes('--force');
     const name = rest.filter((a) => !a.startsWith('--')).join(' ').trim();
     if (!name) throw new Error('usage: add <name> [--exact] [--force]');
-    const keys = nameKeys(name, exact);
-    const single = words(name).filter((w) => !w.whole);
-    if (!force && single.length === 1 && COMMON.has(single[0].word.toLowerCase()))
-      throw new Error(`"${name}" is a common word: banned alone it would flag ordinary text. Ban it with another word, use --exact, or --force`);
+    const keys = addKeys(name, { exact, force });
     await writeHashes(new Set([...banned, ...keys.map(hashOf)]));
     console.log(`name guard: added ${keys.length} hash(es) to ${path.relative(REPO, HASH_FILE)}; commit it`);
     return 0;

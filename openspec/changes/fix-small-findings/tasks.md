@@ -1,8 +1,8 @@
 ## 1. `names add --exact` bans a common word in its capitalised exact spelling
 
-- [ ] 1.1 Move the common-word refusal into an exported helper that lets `--exact` through when the spelling has an upper-case letter
-- [ ] 1.2 Keep refusing an all-lower-case exact spelling without `--force`, with a message that names only the options that apply
-- [ ] 1.3 Tests cover a refused plain common word, an accepted capitalised exact common word, a refused lower-case exact common word, and `--force`
+- [x] 1.1 Move the common-word refusal into an exported helper that lets `--exact` through when the spelling has an upper-case letter
+- [x] 1.2 Keep refusing an all-lower-case exact spelling without `--force`, with a message that names only the options that apply
+- [x] 1.3 Tests cover a refused plain common word, an accepted capitalised exact common word, a refused lower-case exact common word, and `--force`
 
 ## 2. The nightly triage test validates its scaffold with the shared OpenSpec version
 
