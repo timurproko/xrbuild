@@ -312,23 +312,23 @@ pnpm preview:readme
 ### Changes and pull requests
 
 Each task works in its own checkout under `.worktrees/`. The helper creates it on a new branch from
-`origin/develop`, links only the untracked core `third_party/` entries into it and installs its dependencies. For
+`origin/main`, links only the untracked core `third_party/` entries into it and installs its dependencies. For
 private integration work, provision an independent `.xrbuild/` clone in that checkout; never junction the primary
 workspace into it. Private source, plugin builds, app output and packages stay local to the task.
 
 ```text
-pnpm worktree add fix/hand-jitter      # .worktrees/hand-jitter on a new branch from origin/develop
+pnpm worktree add fix/hand-jitter      # .worktrees/hand-jitter on a new branch from origin/main
 pnpm worktree enter fix/hand-jitter    # the same, or re-enter it and repair a failed install
 ```
 
 How a change is delivered is defined by the shared workflow of `timurproko/MyWorkflows`;
 `.github/workflows/delivery.yml` only forwards events to it. Ready PRs keep the name guard, OpenSpec and relevant Node/workspace checks, but **do not
 build or test the native host**, even when host code changes. A skipped host check is not a successful native build.
-Pushes to `develop` also omit that several-minute lane. The full Windows host build and native tests run on the scheduled
-nightly CI for `develop`, or when CI is manually dispatched from Actions for a chosen ref before merging a sensitive
+Pushes to `main` also omit that several-minute lane. The full Windows host build and native tests run on the scheduled
+nightly CI for `main`, or when CI is manually dispatched from Actions for a chosen ref before merging a sensitive
 change. A nightly failure opens a draft `fix/nightly-<date>` PR; it cannot retroactively block an earlier merge.
 
-The `develop` ruleset and the Actions event policy are declared in `protection/repositories.json` of
+The `main` ruleset and the Actions event policy are declared in `protection/repositories.json` of
 `timurproko/MyWorkflows` and installed with `delivery protect --repo timurproko/xrbuild --apply`.
 
 **Repo bot.** Install a repository-scoped GitHub App with Contents and Pull requests (read/write), Metadata (read),

@@ -84,7 +84,7 @@ Related: [Confidentiality](confidentiality.md) for what must stay out of this re
   `pnpm task:repos` provisions such an independent private clone when a task needs one.
 - `tools/pr-automation` - the `CI required` aggregate (`required.mjs`) and nightly triage.
 - `.github/` - CI (`ci.yml`: ready PRs keep fast selected checks; full Windows host build/tests run nightly on
-  `develop` or by explicit CI dispatch, not on PRs or `develop` pushes), nightly triage, and
+  `main` or by explicit CI dispatch, not on PRs or `main` pushes), nightly triage, and
   `delivery.yml`, which only forwards pull-request events and the bot credentials to the shared delivery workflow.
 - `.xrbuild` - ignored independent private clone: projects, plugins and pinned Git LFS dependencies, with its own
   `.git` and LFS hooks; credentials, installed packages and generated builds stay ignored in that repository.
