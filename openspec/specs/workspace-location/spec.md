@@ -1,7 +1,7 @@
 # workspace-location Specification
 
 ## Purpose
-Define how ordinary and repository-development workspaces are selected and kept separate from the core, including the private embedded workspace and its tracked dependencies.
+Define how ordinary and repository-development workspaces and project repositories are selected and kept separate from the core, and how a launcher finds its app catalog in each runtime mode.
 
 ## Requirements
 

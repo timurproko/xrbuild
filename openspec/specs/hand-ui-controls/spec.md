@@ -1,8 +1,8 @@
 # hand-ui-controls Specification
 
 ## Purpose
-A shared package of 3D controls for 3D-display apps (buttons, switches, sliders, dials, trackball and labels) built on the
-shared hand interaction model, so every app gets the same look, feel and fixes.
+A shared package of 3D controls for 3D-display apps (buttons, switches, sliders, dials, segmented controls, trackball and
+labels) built on the shared hand interaction model, so every app gets the same look, feel and fixes.
 
 ## Requirements
 

@@ -1,8 +1,8 @@
 # ci-validation Specification
 
 ## Purpose
-What CI checks for a PR, a draft, `main` and the nightly run, the one check the `main` ruleset requires, and what
-happens when the nightly run fails.
+What this repository's CI runs for a draft or ready pull request, a push to `develop`, the nightly run and an explicit
+dispatch, how the `CI required` check is decided, and what happens when the nightly run fails.
 
 ## Requirements
 

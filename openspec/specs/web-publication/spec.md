@@ -1,7 +1,7 @@
 # web-publication Specification
 
 ## Purpose
-Defines how the core delegates WebXR publication to workspace plugins while preserving stable routes, isolated updates and trustworthy status.
+Defines how the core delegates WebXR publication to publisher plugins while preserving stable routes, isolated updates, release history and trustworthy status.
 
 ## Requirements
 
