@@ -82,8 +82,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      # Keep the same pinned CLI as finalization: overlong requirements are INFO, other warnings fail strict.
-      - run: npx --yes @fission-ai/openspec@1.11.0 validate --all --strict --no-interactive
+      # The shared delivery workflow pins the one OpenSpec version; this runs that version, the same as finalization.
+      - uses: timurproko/MyWorkflows/actions/openspec@main
 
   node:
     name: Node tests
