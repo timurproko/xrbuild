@@ -311,17 +311,14 @@ pnpm preview:readme
 
 ### Changes and pull requests
 
-`develop` takes changes only through a squash-merged PR that passes the `CI required` check. Each task works in its own
-worktree. The helper shares only untracked core `third_party/` entries. For private integration work, provision an
-independent `.xrbuild/` clone in that task worktree; never junction the primary workspace into it. Private source,
-plugin builds, app output and packages stay task-local. Cleanup refuses any `.xrbuild/` or `.artifacts/KEEP` marker;
-preserve those files separately before cleanup (sweep reports protected worktrees as dirty):
+Each task works in its own checkout under `.worktrees/`. The helper creates it on a new branch from
+`origin/develop`, links only the untracked core `third_party/` entries into it and installs its dependencies. For
+private integration work, provision an independent `.xrbuild/` clone in that checkout; never junction the primary
+workspace into it. Private source, plugin builds, app output and packages stay local to the task.
 
 ```text
 pnpm worktree add fix/hand-jitter      # .worktrees/hand-jitter on a new branch from origin/develop
-pnpm worktree sweep                    # every task worktree: dirty / active / merged / closed / unknown
-pnpm worktree sweep --apply            # remove the merged, clean ones
-pnpm worktree remove hand-jitter       # remove one after its merge (--discard if its PR was closed unmerged)
+pnpm worktree enter fix/hand-jitter    # the same, or re-enter it and repair a failed install
 ```
 
 How a change is delivered is defined by the shared workflow of `timurproko/MyWorkflows`;
