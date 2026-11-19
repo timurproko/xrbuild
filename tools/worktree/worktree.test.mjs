@@ -5,12 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { classify, enter, handoff, linkThirdParty, linkWorktreeDependencies, remove, sweep, taskWorktrees, unlinkThirdParty, unlinkWorktreeDependencies, worktreeName } from './worktree.mjs';
+import { enter, linkThirdParty, linkWorktreeDependencies, taskWorktrees, unlinkThirdParty, unlinkWorktreeDependencies, worktreeName } from './worktree.mjs';
 import { taskBranch } from './claude-create.mjs';
 
 test('a branch is <type>/<short-desc>; the worktree is named after the description', () => {
   assert.equal(worktreeName('fix/hand-jitter'), 'hand-jitter');
-  assert.equal(worktreeName('feat/ui-kit-slider2'), 'ui-kit-slider2');
+  assert.equal(worktreeName('feature/ui-kit-slider2'), 'ui-kit-slider2');
   for (const bad of ['hand-jitter', 'Fix/x', 'fix/Hand', 'wip/x', 'fix/a/b', 'fix/-x']) {
     assert.throws(() => worktreeName(bad), /type/, bad);
   }
@@ -55,7 +55,7 @@ test('a materialized workspace dependency is kept instead of being replaced by a
 });
 
 test('removing a worktree folder that still holds a junction removes the link, not its target', () => {
-  // remove() deletes what git leaves behind with fs.rmSync; a junction left in it must not take the target along.
+  // Cleanup deletes a finished checkout with a recursive remove; a junction left in it must not take the target along.
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-'));
   const target = path.join(tmp, 'primary', 'cef');
   fs.mkdirSync(target, { recursive: true });
@@ -91,15 +91,6 @@ test('only core dependencies are linked; the private workspace is never shared',
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test('states: dirty wins, then the PR decides; no PR is active work', () => {
-  assert.equal(classify({ dirty: true, pr: 'MERGED' }), 'dirty');
-  assert.equal(classify({ dirty: false, pr: 'unknown' }), 'unknown');
-  assert.equal(classify({ dirty: false, pr: 'MERGED' }), 'merged');
-  assert.equal(classify({ dirty: false, pr: 'CLOSED' }), 'closed');
-  assert.equal(classify({ dirty: false, pr: 'OPEN' }), 'active');
-  assert.equal(classify({ dirty: false, pr: null }), 'active');
-});
-
 /** A primary checkout with one task worktree per given branch under .worktrees/. */
 function repoWith(branches) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-repo-'));
@@ -119,31 +110,31 @@ test('enter creates a branch from origin/develop and reuses only that clean regi
   fs.mkdirSync(path.join(root, '.xrbuild', 'third_party', 'runtime'), { recursive: true });
   let installs = 0;
   const options = { root, fetch: false, installFn: (dir) => { installs++; fs.mkdirSync(path.join(dir, 'node_modules')); }, log: () => {} };
-  const dir = enter('ci/task-setup', options);
+  const dir = enter('chore/task-setup', options);
   assert.equal(dir, path.join(root, '.worktrees', 'task-setup'));
   assert.equal(g('branch', '--show-current'), 'develop', 'primary remains on develop');
-  assert.equal(taskWorktrees(root).find((w) => w.name === 'task-setup').branch, 'ci/task-setup');
+  assert.equal(taskWorktrees(root).find((w) => w.name === 'task-setup').branch, 'chore/task-setup');
   assert.ok(fs.lstatSync(path.join(dir, 'third_party', 'browser')).isSymbolicLink());
   assert.ok(!fs.existsSync(path.join(dir, '.xrbuild')));
   fs.mkdirSync(path.join(root, 'third_party', 'added'));
-  assert.equal(enter('ci/task-setup', options), dir);
+  assert.equal(enter('chore/task-setup', options), dir);
   assert.ok(fs.lstatSync(path.join(dir, 'third_party', 'added')).isSymbolicLink(), 're-entry links newly fetched core dependencies');
   assert.ok(!fs.existsSync(path.join(dir, '.xrbuild')), 're-entry does not provision private data');
   assert.equal(installs, 1, 'no second install on reuse');
-  assert.equal(taskBranch('ci--task-setup'), 'ci/task-setup');
-  assert.throws(() => taskBranch('ci--../nope'), /worktree name/);
-  assert.throws(() => enter('fix/task-setup', options), /belongs to ci\/task-setup/);
+  assert.equal(taskBranch('chore--task-setup'), 'chore/task-setup');
+  assert.throws(() => taskBranch('chore--../nope'), /worktree name/);
+  assert.throws(() => enter('fix/task-setup', options), /belongs to chore\/task-setup/);
   fs.writeFileSync(path.join(dir, 'new-file'), 'uncommitted');
-  assert.throws(() => enter('ci/task-setup', options), /dirty/);
+  assert.throws(() => enter('chore/task-setup', options), /dirty/);
   fs.rmSync(root, { recursive: true, force: true });
 });
 
 test('Claude Code hook re-enters a registered task and prints its path last', () => {
-  const { root } = repoWith(['ci/hook-check']);
+  const { root } = repoWith(['chore/hook-check']);
   const dir = path.join(root, '.worktrees', 'hook-check');
   fs.mkdirSync(path.join(dir, 'node_modules'));
   const hook = new URL('./claude-create.mjs', import.meta.url);
-  const result = spawnSync(process.execPath, [fileURLToPath(hook)], { input: JSON.stringify({ name: 'ci--hook-check', cwd: root }), encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [fileURLToPath(hook)], { input: JSON.stringify({ name: 'chore--hook-check', cwd: root }), encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(fs.realpathSync.native(result.stdout.trim()).toLowerCase(), fs.realpathSync.native(dir).toLowerCase());
   fs.rmSync(root, { recursive: true, force: true });
@@ -152,84 +143,11 @@ test('Claude Code hook re-enters a registered task and prints its path last', ()
 test('failed install leaves a registered checkout that enter can repair; unregistered collision is refused', () => {
   const { root, g } = repoWith([]);
   g('update-ref', 'refs/remotes/origin/develop', g('rev-parse', 'HEAD'));
-  assert.throws(() => enter('ci/needs-deps', { root, fetch: false, log: () => {}, installFn: () => { throw new Error('offline'); } }), /retry with worktree enter/);
-  assert.equal(taskWorktrees(root).find((w) => w.name === 'needs-deps').branch, 'ci/needs-deps');
-  const dir = enter('ci/needs-deps', { root, log: () => {}, installFn: (cwd) => fs.mkdirSync(path.join(cwd, 'node_modules')) });
+  assert.throws(() => enter('chore/needs-deps', { root, fetch: false, log: () => {}, installFn: () => { throw new Error('offline'); } }), /retry with worktree enter/);
+  assert.equal(taskWorktrees(root).find((w) => w.name === 'needs-deps').branch, 'chore/needs-deps');
+  const dir = enter('chore/needs-deps', { root, log: () => {}, installFn: (cwd) => fs.mkdirSync(path.join(cwd, 'node_modules')) });
   assert.ok(fs.existsSync(path.join(dir, 'node_modules')));
   fs.mkdirSync(path.join(root, '.worktrees', 'collision'));
-  assert.throws(() => enter('ci/collision', { root, fetch: false }), /not a registered task worktree/);
-  fs.rmSync(root, { recursive: true, force: true });
-});
-
-test('sweep lists every task worktree; --apply removes only the merged clean one and its branch', () => {
-  const { root, g } = repoWith(['feat/merged', 'feat/dirty', 'feat/open', 'feat/closed', 'feat/unknown', 'feat/dirty-merged']);
-  fs.writeFileSync(path.join(root, '.worktrees', 'dirty', 'wip.txt'), 'x');
-  fs.writeFileSync(path.join(root, '.worktrees', 'dirty-merged', 'wip.txt'), 'x');
-  const states = { 'feat/merged': 'MERGED', 'feat/dirty': 'OPEN', 'feat/open': 'OPEN', 'feat/closed': 'CLOSED', 'feat/unknown': 'unknown', 'feat/dirty-merged': 'MERGED' };
-  const prState = (b) => states[b];
-  const quiet = () => {};
-  const rows = sweep({ root, prState, log: quiet });
-  assert.deepEqual(Object.fromEntries(rows.map((r) => [r.name, r.state])), { merged: 'merged', dirty: 'dirty', open: 'active', closed: 'closed', unknown: 'unknown', 'dirty-merged': 'dirty' });
-  assert.equal(taskWorktrees(root).length, 6, 'without --apply nothing is removed');
-
-  sweep({ root, prState, apply: true, log: quiet });
-  assert.deepEqual(taskWorktrees(root).map((w) => w.name).sort(), ['closed', 'dirty', 'dirty-merged', 'open', 'unknown']);
-  assert.ok(!fs.existsSync(path.join(root, '.worktrees', 'merged')));
-  assert.equal(g('branch', '--list', 'feat/merged'), '', 'the merged branch is deleted');
-  fs.rmSync(root, { recursive: true, force: true });
-});
-
-test('cleanup preserves private clones, unversioned workspaces, links and marked artifacts', () => {
-  for (const kind of ['clone', 'folder', 'link', 'marker']) {
-    const { root, g } = repoWith(['feat/protected']);
-    const dir = path.join(root, '.worktrees', 'protected');
-    const workspace = path.join(dir, '.xrbuild');
-    try {
-      if (kind === 'marker') {
-        fs.mkdirSync(path.join(dir, '.artifacts'));
-        fs.writeFileSync(path.join(dir, '.artifacts', 'KEEP'), 'private backup');
-      } else if (kind === 'link') {
-        const target = path.join(root, 'third_party', 'private');
-        fs.mkdirSync(target, { recursive: true });
-        fs.symlinkSync(target, workspace, 'junction');
-      } else {
-        fs.mkdirSync(workspace);
-        fs.writeFileSync(path.join(workspace, 'uncommitted.txt'), 'private');
-        if (kind === 'clone') execFileSync('git', ['init', '--quiet', workspace]);
-      }
-      assert.equal(execFileSync('git', ['-C', dir, 'status', '--porcelain']).toString(), '');
-      const opts = { root, prState: () => 'MERGED', log: () => {} };
-      assert.throws(() => remove('protected', opts), /preserved separately/);
-      assert.equal(sweep({ ...opts, apply: true })[0].state, 'dirty');
-      assert.ok(fs.existsSync(dir));
-      assert.notEqual(g('branch', '--list', 'feat/protected'), '');
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
-  }
-});
-
-test('a closed PR\'s worktree is removed only with --discard, and --discard refuses an open or merged PR', () => {
-  const { root, g } = repoWith(['feat/closed', 'feat/open', 'feat/merged']);
-  const states = { 'feat/closed': 'CLOSED', 'feat/open': 'OPEN', 'feat/merged': 'MERGED' };
-  const opts = { root, prState: (b) => states[b], log: () => {} };
-  assert.throws(() => remove('closed', opts), /closed unmerged: remove it with --discard/);
-  assert.throws(() => remove('open', { ...opts, discard: true }), /PR is OPEN/);
-  assert.throws(() => remove('merged', { ...opts, discard: true }), /PR is MERGED/);
-  remove('closed', { ...opts, discard: true });
-  assert.ok(!fs.existsSync(path.join(root, '.worktrees', 'closed')));
-  assert.equal(g('branch', '--list', 'feat/closed'), '');
-  assert.throws(() => remove('nope', opts), /no worktree/);
-  fs.rmSync(root, { recursive: true, force: true });
-});
-
-test('handoff records the worktree in .artifacts/handoff.json and returns the report skeleton', () => {
-  const { root, g } = repoWith(['feat/thing']);
-  const report = handoff('thing', { root, change: 'add-thing', pr: '12', now: new Date('2026-10-11T08:00:00Z') });
-  const dir = path.join(root, '.worktrees', 'thing');
-  const record = JSON.parse(fs.readFileSync(path.join(dir, '.artifacts', 'handoff.json'), 'utf8'));
-  assert.deepEqual({ ...record, worktree: undefined }, { worktree: undefined, branch: 'feat/thing', change: 'add-thing', pr: 12, head: g('rev-parse', 'HEAD'), time: '2026-10-11T08:00:00.000Z' });
-  assert.match(report, /^Worktree: .*thing\nBranch and PR: feat\/thing, #12 \(change add-thing\)\nCommit: [0-9a-f]{7}\nCommands run: \nBehaviour: \nGaps: \nManual test: $/);
-  assert.equal(execFileSync('git', ['-C', dir, 'status', '--porcelain']).toString(), '', '.artifacts/ is ignored');
+  assert.throws(() => enter('chore/collision', { root, fetch: false }), /not a registered task worktree/);
   fs.rmSync(root, { recursive: true, force: true });
 });

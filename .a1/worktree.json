@@ -1,3 +1,8 @@
 {
-  "cleanup": ["node", "tools/worktree/worktree.mjs", "sweep", "--apply"]
+  "cleanup": [
+    "node",
+    "--eval",
+    "require(\"node:child_process\").execSync(\"delivery cleanup --apply --path \\\"\" + process.argv[1] + \"\\\"\", { stdio: \"inherit\" })",
+    "{worktree}"
+  ]
 }
