@@ -1,7 +1,7 @@
 # bundled-extensions Specification
 
 ## Purpose
-Define the accepted public embedded-module baseline: common workspace contracts, origin-aware discovery, immutable installed defaults, user-owned state, isolated builds and explicitly reviewed public promotion. Workflow restoration remains a separate successor.
+Define the embedded-module contracts: a workspace structure shared with user workspaces, origin-aware discovery, immutable installed defaults, user-owned state and isolated builds.
 
 ## Requirements
 
