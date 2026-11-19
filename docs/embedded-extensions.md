@@ -473,27 +473,3 @@ a managed core rebuild publishes a clean cached runtime without deleting product
 `test/native-build.fixture.ts` in the control-panel package is an explicitly run Windows compiler smoke test, separate
 from the fast test glob. It builds a synthetic cached host and plugins from both origins against synthetic SDK/dependency headers;
 it requires no private source, runtime download, native device or production configuration.
-
-## Delivery boundaries
-
-Engine and approved embedded modules use the public core PR. Private-only work uses a private PR without an empty
-public PR. Paired work has separate PRs and a private/local handoff recording tested revisions and dependencies.
-Public source promotion requires an exact reviewed allowlist, confidentiality/license checks and explicit export
-approval. Never import private Git ancestry or publish private inventories, client material, credentials or binaries.
-The independent-clone, linked-worktree and KEEP preservation rules remain unchanged.
-
-`pnpm task:repos <route|provision|inventory|record|verify> --config=.artifacts/repositories.json` uses bounded ignored
-local configuration with explicit affected paths and expected remotes. Core/embedded paths route public; `.xrbuild/`
-paths route private; paired work retains separate owners. Case/path aliases are rejected. `provision` is explicit and only
-needed for private/paired scope; it creates an independent task clone with separate Git/object/LFS storage and a typed
-branch, refuses existing/shared destinations, and requires private instructions before edits. It never stages, exports,
-pushes, creates PRs, merges or cleans repositories. Git routing overrides/hooks cannot redirect task operations.
-
-Inventory and tested records are create-only ignored files (`--record=` chooses a fresh name). Tested attestations bind
-both HEAD and dirty/untracked work fingerprints; changed work or an unmet required core revision fails verification.
-`requiredCore` must be reachable from both the observed `origin/develop` tracking ref and the selected task core HEAD;
-private-only dependencies also bind that tested core. This is a local handoff, not proof of fresh remote CI/PR policy. Public summaries omit private identifiers; private policy/delivery stays manual. Delivery still
-requires explicit authorization and actual remote dependency checks. Task-private compatibility is tested separately in its independently provisioned clone; the public routing/provisioning matrix uses disposable synthetic repositories.
-
-`openspec/changes/bundled-extensions/prerequisites.md` records predecessor synchronization order. Canonical synchronization/
-archive remains the repository bot's delivery gate; older active changes are not overwritten or manually finalized.

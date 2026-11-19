@@ -1,4 +1,0 @@
-schema: spec-driven
-created: 2026-11-02
-# Restores a compatibility launcher for already-running older panels; no requirement changes.
-skip_specs: true
