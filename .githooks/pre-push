@@ -1,4 +1,4 @@
 #!/bin/sh
 # Keeps the shared delivery workflow present and current on this machine (tools/workflow-bootstrap). It never
-# blocks a push. Enable with `pnpm hooks`.
+# blocks a push. Installing dependencies enables it; `pnpm hooks` does so by hand.
 node tools/workflow-bootstrap/workflow-bootstrap.mjs </dev/null || true

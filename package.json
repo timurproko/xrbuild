@@ -12,7 +12,7 @@
     "check:names": "node tools/name-guard/name-guard.mjs check",
     "names": "node tools/name-guard/name-guard.mjs",
     "hooks": "git config core.hooksPath .githooks",
-    "prepare": "node tools/workflow-bootstrap/workflow-bootstrap.mjs",
+    "prepare": "git config core.hooksPath .githooks && node tools/workflow-bootstrap/workflow-bootstrap.mjs",
     "worktree": "node tools/worktree/worktree.mjs",
     "task:repos": "node tools/worktree/repository-task.mjs",
     "panel": "node packages/control-panel/src/server.ts --open",

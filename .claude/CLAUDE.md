@@ -44,7 +44,7 @@ repository-development commands or the separate XR Build Dev Start-menu shortcut
   pinned LFS dependency filenames may use external names. No `.xrbuild/` exception applies to core contents.
   Do not publish `.xrbuild/` or its LFS objects as part of a public export.
 - `pnpm check:names` (`tools/name-guard`) enforces that boundary from hashes only (`banned.sha256`, no plain list anywhere);
-  a Claude Code hook refuses such edits and `pnpm hooks` adds a pre-commit check. To ban another name:
+  a Claude Code hook refuses such edits and installing dependencies enables a pre-commit check. To ban another name:
   `pnpm names add <name>` (`--exact` for one whose lower-case form is an ordinary word), then commit the hash file.
 - A concrete integration belongs in the selected workspace (`.xrbuild/plugins/<name>` for repository development)
   or, after an explicit public export audit/approval, in `embedded/plugins/<name>`. Never put concrete integration
