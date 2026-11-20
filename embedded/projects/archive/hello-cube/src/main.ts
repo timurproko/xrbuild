@@ -42,14 +42,15 @@ scene.add(grid);
 // Click/pinch to select: the raycaster uses the canvas rect, so mouse and hands behave the same.
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
-renderer.domElement.addEventListener('click', (e) => {
+function onClick(e: MouseEvent) {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
   const hit = raycaster.intersectObjects(cubes)[0];
   for (const c of cubes) (c.material as THREE.MeshStandardMaterial).color.set(c === hit?.object ? '#ffffff' : c.userData.base);
   console.log(`CLICK ${hit ? `cube ${cubes.indexOf(hit.object as THREE.Mesh)}` : 'nothing'}`);
-});
+}
+renderer.domElement.addEventListener('click', onClick);
 
 let last = 0;
 app.setFrame(({ timeMs }) => {
@@ -61,3 +62,27 @@ app.setFrame(({ timeMs }) => {
   }
 });
 app.start();
+
+let disposed = false;
+/** Stop the runtime before releasing the sample-owned controls, GPU resources and canvas. */
+export function dispose() {
+  if (disposed) return;
+  disposed = true;
+  window.removeEventListener('pagehide', onPageHide);
+  app.dispose();
+  controls.dispose();
+  renderer.domElement.removeEventListener('click', onClick);
+  for (const cube of cubes) {
+    cube.geometry.dispose();
+    cube.material.dispose();
+  }
+  grid.dispose();
+  scene.clear();
+  renderer.dispose();
+  renderer.domElement.remove();
+}
+function onPageHide(event: PageTransitionEvent) {
+  // A cached page can be restored; the browser suspends it without destroying its resources.
+  if (!event.persisted) dispose();
+}
+window.addEventListener('pagehide', onPageHide);
