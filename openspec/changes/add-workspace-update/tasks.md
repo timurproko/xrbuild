@@ -18,5 +18,5 @@
 
 ## 4. Command line and docs
 
-- [ ] 4.1 `pnpm update:repo` runs the job for `.xrbuild` through `workspace-update-cli.ts`
-- [ ] 4.2 `docs/private-workspace.md` names the Update workspace action
+- [x] 4.1 `pnpm update:repo` runs the job for `.xrbuild` through `workspace-update-cli.ts`
+- [x] 4.2 `docs/private-workspace.md` names the Update workspace action

@@ -45,7 +45,7 @@ test('the behind hint and the update menu item read a status that never fetches'
   const [app,index]=await Promise.all(['app.js','index.html'].map(file=>fs.readFile(path.join(ui,file),'utf8')));
   assert.match(index,/id="workspace-chip" class="chip rebuild" data-maintenance="update" hidden/);
   assert.match(app,/workspace behind \$\{remote\} by \$\{status\.behind\}/);
-  assert.match(app,/remote last checked \$\{ago\(status\.checkedMs\)\}/);
+  assert.match(app,/Remote last checked \$\{ago\(status\.checkedMs\)\}/);
   assert.match(app,/item\.setAttribute\('aria-disabled', 'true'\)/);
   assert.match(app,/api\('GET', '\/api\/workspace\/update'\)/);
   assert.doesNotMatch(app,/api\('POST', '\/api\/workspace\/update'\)/,'only the explicit menu action starts an update');

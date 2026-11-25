@@ -13,6 +13,9 @@ never leave it.
 - Core CI runs without private assets or credentials. Private dependency/runtime/integration checks belong to the
   private repository. See `docs/workspace-split.md` for staged migration and recovery. Detachment alone does not
   remove private history; keep hosting private until an isolated history audit and separate licensing review.
+- **Update workspace** (panel menu, next to Rebuild; `pnpm update:repo` from a terminal) fetches, fast-forwards the
+  selected workspace clone, runs `git lfs pull` and rebuilds; it never stashes, merges, rebases or discards, and never
+  updates the core checkout. Rebuild stays build-only.
 - `pnpm panel:repo`, `start-repo.vbs` and `pnpm fetch-deps:repo` explicitly select the current checkout's
   `.xrbuild/`. Explicit panel workspaces default to port 5181; user-mode panels default to 5180, and
   `XRB_PANEL_PORT` overrides either for that invocation. A port occupied by another workspace is refused, not reused.

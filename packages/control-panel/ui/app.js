@@ -2371,17 +2371,17 @@ function renderHost() {
 function renderWorkspaceUpdate() {
   const status = state.workspaceUpdate, chip = $('#workspace-chip'), item = $('#workspace-update');
   const remote = status?.upstream?.split('/')[0] || 'origin';
-  const checked = status?.checkedMs ? `remote last checked ${ago(status.checkedMs)}` : 'remote not checked yet';
+  const checked = status?.checkedMs ? `Remote last checked ${ago(status.checkedMs)}` : 'Remote not checked yet';
   const behind = !!status?.available && status.behind > 0;
   if (chip) {
     chip.hidden = !behind;
     chip.textContent = behind ? `workspace behind ${remote} by ${status.behind}` : '';
-    chip.title = behind ? `${checked}; choose Update workspace to fetch, pull and rebuild` : '';
+    chip.title = behind ? `${checked}. Choose Update workspace to fetch, pull and rebuild.` : '';
   }
   if (item) {
     if (status && !status.available) item.setAttribute('aria-disabled', 'true'); else item.removeAttribute('aria-disabled');
     item.title = !status ? '' : !status.available ? status.reason ?? ''
-      : status.behind ? `Behind ${remote} by ${status.behind} (${checked})` : `Up to date with ${remote} as of the last check (${checked})`;
+      : status.behind ? `Behind ${remote} by ${status.behind}. ${checked}.` : `Up to date with ${remote} at the last check. ${checked}.`;
   }
 }
 
