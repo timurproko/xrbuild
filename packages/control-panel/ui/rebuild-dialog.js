@@ -19,10 +19,43 @@ function safePanelOrigin(value) {
   } catch { return null; }
 }
 
+/** Update workspace steps, in order, as announced by `step <id>` job lines. */
+export const UPDATE_STEPS = Object.freeze([
+  Object.freeze({id: 'check', title: 'Check', message: 'Checking the workspace'}),
+  Object.freeze({id: 'fetch', title: 'Fetch', message: 'Fetching from the remote'}),
+  Object.freeze({id: 'pull', title: 'Pull', message: 'Pulling new commits'}),
+  Object.freeze({id: 'lfs', title: 'LFS', message: 'Downloading LFS files'}),
+  Object.freeze({id: 'rebuild', title: 'Rebuild', message: 'Rebuilding'}),
+]);
+
+function updatePresentation(job, error, running, failed, phase) {
+  const latest = [...(job?.lines ?? [])].reverse().find((line) => line.startsWith('step '))?.slice('step '.length);
+  const at = Math.max(0, UPDATE_STEPS.findIndex((step) => step.id === latest)), step = UPDATE_STEPS[at];
+  const upToDate = job?.result?.state === 'up-to-date';
+  const doing = step.id === 'rebuild' ? `Rebuilding ${phase ? phase.slice('plugin '.length) : 'plugins'}` : step.message;
+  return {
+    step: step.id,
+    title: running ? 'Updating workspace' : failed ? 'Update failed' : upToDate ? 'Already up to date' : 'Workspace updated',
+    message: error || (running ? `Step ${at + 1} of ${UPDATE_STEPS.length}, ${step.title}: ${doing}…`
+      : failed ? job?.error || `${step.title} failed: see the output below.` : job?.result?.summary || 'The workspace is up to date.'),
+  };
+}
+
 export function rebuildPresentation(job, error = '') {
   const running = !error && (!job || job.state === 'running' || job.state === 'queued');
   const failed = !!error || job?.state === 'failed';
   const setup = job?.kind === 'desktop-setup';
+  if (job?.kind === 'workspace-update') {
+    const phase = [...(job.lines ?? [])].reverse().find((line) => line.startsWith('plugin '));
+    return {
+      state: running ? 'running' : failed ? 'failed' : 'done',
+      ...updatePresentation(job, error, running, failed, phase),
+      output: job.lines?.length ? job.lines.slice(-20).join('\n') : error ? 'The job could not start.' : 'Waiting for output…',
+      running,
+      succeeded: !running && !failed,
+      viewJobDisabled: job.id == null,
+    };
+  }
   const restart = setup && job?.result?.restartRequired === true;
   const phase = [...(job?.lines ?? [])].reverse().find((line) => line.startsWith('plugin '));
   return {
@@ -112,7 +145,8 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
   return controller;
 }
 
-export async function rebuildHostInPlace(origin = globalThis.location?.origin, options = {}) {
+/** Starts one maintenance job from a menu and follows it in the shared progress dialog. */
+async function followJobInPlace(origin, route, placeholder, options, label) {
   const safe = safePanelOrigin(origin);
   if (!safe) throw new Error('Invalid local panel origin');
   const defaultViewJob = (job) => {
@@ -124,15 +158,15 @@ export async function rebuildHostInPlace(origin = globalThis.location?.origin, o
   let started;
   try {
     if (!await desktopSetupBeforeRebuild(safe, {progress,onJob:options.onJob})) return null;
-    progress.show();
-    const response = await fetch(new URL('/api/host/rebuild', safe), {method: 'POST'});
+    progress.show(placeholder);
+    const response = await fetch(new URL(route, safe), {method: 'POST'});
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.error || `Rebuild failed (${response.status})`);
+    if (!response.ok) throw new Error(body.error || `${label} failed (${response.status})`);
     started = body;
     progress.render(started);
     options.onJob?.(started);
   } catch (error) {
-    progress.show(null, error instanceof Error ? error.message : String(error));
+    progress.show(placeholder, error instanceof Error ? error.message : String(error));
     return null;
   }
 
@@ -142,7 +176,7 @@ export async function rebuildHostInPlace(origin = globalThis.location?.origin, o
     try {
       const response = await fetch(new URL('/api/jobs', safe), {cache: 'no-store'});
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || `Rebuild status failed (${response.status})`);
+      if (!response.ok) throw new Error(body.error || `${label} status failed (${response.status})`);
       const job = body.jobs?.find((candidate) => candidate.id === started.id);
       if (!job) continue;
       progress.render(job);
@@ -156,6 +190,15 @@ export async function rebuildHostInPlace(origin = globalThis.location?.origin, o
       return null;
     }
   }
-  progress.render(started, 'The rebuild is taking longer than expected.');
+  progress.render(started, `The ${label.toLowerCase()} is taking longer than expected.`);
   return null;
+}
+
+export function rebuildHostInPlace(origin = globalThis.location?.origin, options = {}) {
+  return followJobInPlace(origin, '/api/host/rebuild', null, options, 'Rebuild');
+}
+
+/** Update workspace: fast-forward the workspace, pull LFS content, rebuild. Git refusals arrive as the job error. */
+export function updateWorkspaceInPlace(origin = globalThis.location?.origin, options = {}) {
+  return followJobInPlace(origin, '/api/workspace/update', {kind: 'workspace-update', state: 'running', lines: []}, options, 'Update');
 }

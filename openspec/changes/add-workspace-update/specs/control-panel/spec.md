@@ -43,6 +43,11 @@ The control panel SHALL offer an Update workspace action that brings the selecte
 - **WHEN** the pull succeeds and the LFS pull fails
 - **THEN** the panel does not rebuild and reports that LFS files are missing and Update should be run again
 
+#### Scenario: Behind hint without fetching
+
+- **WHEN** the last fetch found 2 upstream commits the workspace does not have
+- **THEN** the panel shows "workspace behind origin by 2" with when the remote was last checked, and it never fetches on its own: only Update fetches
+
 #### Scenario: Workspace cannot be updated
 
 - **WHEN** the workspace is not a Git clone, its branch has no upstream, or Git LFS is not installed

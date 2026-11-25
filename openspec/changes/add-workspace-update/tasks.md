@@ -12,9 +12,9 @@
 
 ## 3. Panel menu and dialog
 
-- [ ] 3.1 Menu item `update` next to Rebuild, its id reserved in `navigation.ts`, disabled with the status reason
-- [ ] 3.2 Step-aware dialog in `rebuild-dialog.js` and the "workspace behind origin by N" hint on the host chip
-- [ ] 3.3 `rebuild-dialog.test.ts` and `navigation.test.ts` cover the new item and steps
+- [x] 3.1 Menu item `update` next to Rebuild, its id reserved in `navigation.ts`, disabled with the status reason
+- [x] 3.2 Step-aware dialog in `rebuild-dialog.js` and a "workspace behind origin by N" chip next to the host chip whose tooltip says when the remote was last checked; the panel never fetches on a timer
+- [x] 3.3 `rebuild-dialog.test.ts`, `navigation.test.ts` and the header order tests cover the new item, hint and steps
 
 ## 4. Command line and docs
 

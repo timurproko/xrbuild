@@ -12,7 +12,9 @@ can use a real temporary Git remote and clone and a stubbed `git lfs`.
 1. **Preflight** (writes nothing): the workspace is a Git work tree, its branch has an upstream, `git lfs` is
    available; no host running or starting; no `host-rebuild`, `desktop-setup` or other `workspace-update` job active.
    `GET workspace/update` returns the same checks plus ahead, behind and dirty from the last fetch, so the menu item
-   can be disabled with a reason and the host chip can say "workspace behind origin by N".
+   can be disabled with a reason and a chip next to the host chip can say "workspace behind origin by N". The count
+   is as of the last fetch (the `FETCH_HEAD` time), which the chip's tooltip states; the panel never fetches on a
+   timer, only Update fetches.
 2. `git fetch`. A failure stops with "Could not reach the remote. Nothing changed."
 3. `git rev-list --left-right --count HEAD...@{u}`: ahead and behind both above zero stops as diverged ("merge or
    rebase by hand"); behind zero ends with "Already up to date" and no rebuild.
