@@ -4,7 +4,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test, type TestContext } from 'node:test';
-import type { JobContext } from '../src/jobs.ts';
+import { JobRunner, type JobContext } from '../src/jobs.ts';
+import { freePort } from '../src/host-runner.ts';
+import { createServer } from '../src/server.ts';
 import { overwrittenFiles, runGit, updateWorkspace, workspaceUpdateStatus, WorkspaceUpdateError, type GitRunner } from '../src/workspace-update.ts';
 
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.invalid', GIT_TERMINAL_PROMPT: '0' };
@@ -184,4 +186,70 @@ test('overwritten file lists are read from Git output', () => {
     'Aborting',
   ].join('\n');
   assert.deepEqual(overwrittenFiles(output), ['a.txt', 'dir/b.txt', 'new.txt']);
+});
+
+/** The panel with its workspace at the fixture clone; desktop setup is idle and the rebuild is gated by the test. */
+async function serverFixture(t: TestContext) {
+  const f = await fixture(t), core = path.join(f.root, 'core');
+  await fs.mkdir(core);
+  const server = createServer({ repo: core, workspace: f.workspace, workspaceKind: 'explicit', port: await freePort() });
+  const gate = { release: () => {}, wait: Promise.resolve() };
+  const hold = () => { gate.wait = new Promise<void>((resolve) => { gate.release = resolve; }); };
+  server.panel.desktopSetup = { isBusy: async () => false, deps: { tools: async () => ({ cmake: null, generator: 'test' }) } } as never;
+  server.panel.workspaceUpdateDeps = { git: f.deps.git, coreHostCurrent: async () => true, rebuild: async (pluginsOnly) => { f.rebuilds.push(pluginsOnly); await gate.wait; return ['tracker']; } };
+  await new Promise<void>((resolve) => server.server.listen(server.port, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const request = async (method: string, route: string) => {
+    const response = await fetch(new URL(route, server.url), { method, headers: { origin: new URL(server.url).origin, 'content-type': 'application/json' } });
+    return { status: response.status, data: await response.json() as any };
+  };
+  return { ...f, server, request, hold, gate };
+}
+
+test('GET workspace/update reports status and POST runs the update as a job', async (t) => {
+  const f = await serverFixture(t);
+  await f.publish('shared.txt', 'two\n');
+  const status = await f.request('GET', '/api/workspace/update');
+  assert.equal(status.status, 200); assert.equal(status.data.available, true); assert.equal(status.data.behind, 0);
+  const started = await f.request('POST', '/api/workspace/update');
+  assert.equal(started.status, 202); assert.equal(started.data.kind, 'workspace-update');
+  const job = await f.server.panel.jobs.wait(f.server.panel.jobs.get(started.data.id)!);
+  assert.equal(job.state, 'done', job.error ?? '');
+  assert.equal((job.result as { commits: number }).commits, 1);
+  assert.equal((await f.request('GET', '/api/workspace/update')).data.behind, 0);
+});
+
+test('update, rebuild and run never overlap, and a running host refuses the update', async (t) => {
+  const f = await serverFixture(t), panel = f.server.panel;
+  await f.publish('shared.txt', 'two\n');
+  f.hold();
+  const started = await f.request('POST', '/api/workspace/update');
+  assert.equal(started.status, 202);
+  while (!f.rebuilds.length) await new Promise((resolve) => setTimeout(resolve, 20));
+  const rebuild = await f.request('POST', '/api/host/rebuild');
+  assert.equal(rebuild.status, 409); assert.match(rebuild.data.error, /workspace update/);
+  assert.equal((await f.request('POST', '/api/workspace/update')).status, 409);
+  await assert.rejects(panel.run({ id: 'demo', manifest: {} } as never, 'native'), /workspace update to finish/);
+  f.gate.release();
+  assert.equal((await panel.jobs.wait(panel.jobs.get(started.data.id)!)).state, 'done');
+  (panel as unknown as { preparingNativeRun: boolean }).preparingNativeRun = true;
+  const busy = await f.request('POST', '/api/workspace/update');
+  assert.equal(busy.status, 409); assert.match(busy.data.error, /stop the running or starting host first/);
+});
+
+test('the job runner keeps a workspace update apart from every other job in both directions', async () => {
+  for (const kind of ['web-build', 'package', 'host-rebuild', 'icon-render', 'publication', 'workspace-update'] as const) for (const reverse of [false, true]) {
+    const jobs = new JobRunner(); let release!: () => void;
+    const job = jobs.start(reverse ? kind : 'workspace-update', null, 'active', () => new Promise<void>((resolve) => { release = resolve; }));
+    assert.throws(() => jobs.start(reverse ? 'workspace-update' : kind, null, 'conflict', async () => {}), /workspace update/);
+    release(); await jobs.wait(job);
+  }
+});
+
+test('POST workspace/update refuses a workspace that is not a clone, with the reason', async (t) => {
+  const f = await serverFixture(t);
+  await fs.rm(path.join(f.workspace, '.git'), { recursive: true, force: true });
+  const refused = await f.request('POST', '/api/workspace/update');
+  assert.equal(refused.status, 409); assert.equal(refused.data.error, 'The workspace is not a Git clone.');
+  assert.equal(f.server.panel.jobs.list().length, 0);
 });

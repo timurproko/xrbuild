@@ -3,7 +3,7 @@
 import { spawn, type SpawnOptions } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 
-export type JobKind = 'web-build' | 'package' | 'packager-setup' | 'tool-setup' | 'publication' | 'host-rebuild' | 'icon-render' | 'cache-cleanup' | 'desktop-setup';
+export type JobKind = 'web-build' | 'package' | 'packager-setup' | 'tool-setup' | 'publication' | 'host-rebuild' | 'icon-render' | 'cache-cleanup' | 'desktop-setup' | 'workspace-update';
 export type JobState = 'queued' | 'running' | 'done' | 'failed';
 export type JobOperation = 'publish' | 'update' | 'activate' | 'delete-release' | 'unpublish';
 
@@ -145,6 +145,8 @@ export class JobRunner extends EventEmitter {
     for (const j of this.active()) {
       if (kind === 'desktop-setup' || j.kind === 'desktop-setup') return `${j.title} is active: desktop setup cannot overlap other jobs`;
       if (kind === 'cache-cleanup' || j.kind === 'cache-cleanup') return `${j.title} is active: cache maintenance cannot overlap other jobs`;
+      // A workspace update changes the sources every other job reads, and ends with a native rebuild.
+      if (kind === 'workspace-update' || j.kind === 'workspace-update') return `${j.title} is active: a workspace update cannot overlap other jobs`;
       if (j.kind === kind) {
         if (kind === 'publication') continue;
         return `a ${kind} job is already running (${j.title})`;
