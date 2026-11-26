@@ -20,7 +20,8 @@ async function components(t: TestContext) {
   await write('embedded/package.json', { private: true, packageManager: 'pnpm@9.15.9' });
   await write('embedded/pnpm-workspace.yaml', "packages:\n  - 'projects/*/*'\n  - 'plugins/*'\n");
   await write('embedded/pnpm-lock.yaml', "lockfileVersion: '9.0'\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\nimporters:\n  .: {}\n  plugins/demo: {}\n");
-  await write('embedded/plugins/demo/xrb-plugin.json', { title: 'Demo', type: 'publisher', version: '1.0.0' });
+  await write('embedded/plugins/demo/xrb-plugin.json', { title: 'Demo', type: 'publisher', version: '1.0.0', exports: { 'camera-calibration': './calibration.mjs' } });
+  await write('embedded/plugins/demo/calibration.mjs', `export function createCalibrationTools(){return {status:()=>({available:true,reason:'fixture before'}),handle:()=>false,close(){}};}`);
   await write('embedded/plugins/demo/package.json', { name: 'demo', type: 'module', xrBuild: { publisher: './publisher.mjs', packager: './packager.mjs' } });
   await write('embedded/plugins/demo/packager.mjs', `import fs from 'node:fs/promises';import path from 'node:path';export const packager={name:'demo-pack',target:'webxr',standalone:true,identityFields:[],validate:()=>[],async build(o){await fs.mkdir(o.out,{recursive:true});const file=path.join(o.out,'fixture.zip');await fs.writeFile(file,'fake-package');return {file,sizeBytes:12};}};`);
   const module = (label: string) => `export const publisher={name:'demo',label:${JSON.stringify(label)},origin:'https://example.test',validate:()=>[],status:async()=>({state:'unpublished',selectedUrl:''}),publish:async()=>({}),unpublish:async()=>({})};`;
@@ -56,6 +57,23 @@ async function components(t: TestContext) {
   return { ...f, coreRepo: f.core, core, user, server, first, ctx, request, change, write,
     fail(value: boolean) { fail = value; }, counts: () => ({ installs, nativeBuilds, launches }) };
 }
+
+test('explicit Rebuild installs missing service dependencies and refreshes idle Calibration generations', async t => {
+  const f = await components(t);
+  assert.equal((await f.request('/api/calibration', 'GET')).body.capture.reason, 'fixture before');
+  await f.write('embedded/plugins/demo/calibration.mjs', `export function createCalibrationTools(){return {status:()=>({available:true,reason:'fixture after'}),handle:()=>false,close(){}};}`);
+  await f.coreRepo.publish(); git(f.core, 'pull', '--ff-only');
+  assert.equal((await f.request('/api/calibration', 'GET')).body.recovery, 'rebuild');
+  const rebuild = await f.request('/api/host/rebuild');
+  assert.equal((await f.server.panel.jobs.wait(f.server.panel.jobs.get(rebuild.body.id)!)).state, 'done');
+  assert.equal((await f.request('/api/calibration', 'GET')).body.capture.reason, 'fixture after');
+  const before = f.counts().installs;
+  await fs.rm(serviceStateRoot(f.core, f.user), { recursive: true });
+  const initial = await f.request('/api/host/rebuild');
+  const done = await f.server.panel.jobs.wait(f.server.panel.jobs.get(initial.body.id)!);
+  assert.equal(done.state, 'done', done.lines.join('\n')); assert.ok(f.counts().installs > before);
+  assert.equal((await f.request('/api/calibration', 'GET')).body.available, true);
+});
 
 for (const origin of ['workspace', 'bundled']) for (const action of ['rebuild', 'run', 'build', 'package', 'preview']) test(`${origin} ${action} recovers changed service inputs in its own logged job without restart`, async t => {
   const f = await components(t);

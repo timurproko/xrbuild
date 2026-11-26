@@ -393,16 +393,17 @@ export class Panel {
   private async prepareRebuild(ctx: JobContext, native: boolean, force = false): Promise<void> {
     const services = await embeddedServiceReadiness(this.repo, this.workspace);
     const buildNative = native && (force || await this.nativeRebuildNeeded());
-    if (!services.needsBuild && !buildNative && !this.servicesPending) return;
+    const prepareServices = services.needsBuild || force && !services.installed && await fs.access(path.join(this.repo, 'embedded/package.json')).then(() => true, () => false);
+    if (!prepareServices && !buildNative && !this.servicesPending) return;
     if (this.handSessions.busy || this.preparingRebuild || this.pluginConsumers || this.runner.busy || this.preparingNativeRun || this.preparingPreview || this.settingsWrites.size || this.jobs.active().length > 1)
       throw new Error('Stop apps and other jobs, then retry Rebuild.');
     this.preparingRebuild = true;
     try {
-      if (services.needsBuild || this.servicesPending) {
+      if (prepareServices || this.servicesPending) {
         ctx.line('Rebuild: preparing application components…');
         this.changingPlugins = true;
         try {
-          if (services.needsBuild) await this.rebuildDeps.setupServices(this.repo, this.workspace, ctx);
+          if (prepareServices) await this.rebuildDeps.setupServices(this.repo, this.workspace, ctx);
           await this.refreshPluginServices();
           this.hub.send('plugins-changed', {}); this.hub.send('projects-changed', {});
         } finally { this.changingPlugins = false; }
