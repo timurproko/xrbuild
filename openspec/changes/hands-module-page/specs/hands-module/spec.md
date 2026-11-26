@@ -4,24 +4,24 @@
 
 ### Requirement: Core-owned Hands surface
 
-Hands SHALL remain accessible independently of optional input plugins or compiled diagnostic viewers. `/hands/` SHALL be the only Hands product page, titled Hands, with tabbed left and right panels, a large central 3D viewport and header render/tracking fps chips. Former Hands and diagnostic page routes SHALL redirect to it; no separate acquisition diagnostic page or navigation entry SHALL remain.
+Hands SHALL remain accessible independently of optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands product page, titled Hands, with a provider-centred three-column hand view, calibration and recorder sections. Old diagnostic routes and the legacy `/hand-tracking/` alias SHALL return normal not-found responses without redirects. No separate diagnostic identity/page/link SHALL remain.
 
 #### Scenario: Diagnostic plugin absent
-- **WHEN** the user opens Hands without the optional input plugin or compiled viewer
-- **THEN** the full core layout, source picker, adjustment sections and empty viewport open without requiring plugin setup
-- **AND** missing or empty source availability is stated without replacing the saved choice
+- **WHEN** the user opens Hands without the optional hand tools plugin or checked tool build
+- **THEN** the core layout, provider picker and available core controls still open
+- **AND** dependent calibration/recording actions show one-line unavailability reasons instead of a page-wide setup wall
 
 #### Scenario: Diagnostic installed
-- **WHEN** the optional input plugin is installed
-- **THEN** its provider remains eligible for the normal picker but no separate acquisition diagnostic page or link is offered
+- **WHEN** the optional calibration/recording implementation is available
+- **THEN** those retained tools are reachable inside Hands without a second product page or laboratory navigation
 
-#### Scenario: Old route opened
-- **WHEN** the user opens `/hands-diagnostics`, `/hands-diagnostics/`, `/hand-tracking` or `/hand-tracking/`
-- **THEN** navigation redirects to `/hands/` instead of loading or starting the old tool
+#### Scenario: Old route requested
+- **WHEN** a client requests `/hands-diagnostics`, `/hands-diagnostics/`, `/hand-tracking`, `/hand-tracking/` or their children
+- **THEN** the panel returns its normal not-found response with no redirect or old page startup
 
 ### Requirement: Minimal provider picker with availability
 
-Hands SHALL put the global provider picker first in Source, followed by purpose, availability/reason and explicit source Save/Reload. It SHALL retain missing choices, distinguish installed from running/device status and label changes as next-launch-only. The viewport SHALL identify itself as idle until frames come from an explicitly started provider session, never from a generated substitute or an unrelated app's historical status.
+Hands SHALL put the global provider picker first, followed by purpose, availability/reason and explicit source Save/Reload. It SHALL retain missing choices, distinguish installed from running/device status and label changes as next-launch-only. Provider session status and historical app status SHALL be distinct; camera calibration data or replay SHALL NOT impersonate the selected provider's live hand.
 
 #### Scenario: Saved source unavailable
 - **WHEN** the chosen provider is disabled, missing or failed
@@ -31,70 +31,88 @@ Hands SHALL put the global provider picker first in Source, followed by purpose,
 - **WHEN** a source is installed and enabled but no run has checked its device
 - **THEN** Hands says it is not started and does not claim that hardware is connected or running
 
-#### Scenario: Page-only delivery before standalone sessions
-- **WHEN** Hands opens before standalone provider Start/Stop is available
-- **THEN** the viewport contains no hand and explains next to source status that the selected provider runs when an app is launched and live viewing here is not yet available
-- **AND** any previous app status is explicitly historical and does not populate the viewport
+#### Scenario: Standalone live session not available
+- **WHEN** Hands opens before the separate provider-session capability is delivered
+- **THEN** its hand view is idle and the source notice says the selected provider runs when an app is launched and live viewing here is not yet available
 
-#### Scenario: Source Save independent of adjustments
-- **WHEN** the user saves a provider while adjustment fields have unsaved edits
-- **THEN** only the provider selection is saved and adjustment drafts are not silently committed or discarded
+#### Scenario: Source Save independent of tools
+- **WHEN** the user saves a provider with adjustment drafts or an open calibration/recording tool
+- **THEN** only source selection is saved, without committing/discarding those drafts or starting acquisition
 
 ## ADDED Requirements
 
-### Requirement: No generated fixture mode
+### Requirement: No generated or laboratory modes
 
-Hands SHALL NOT expose Local fixture delivery, a Fixture picker, generated preview animation, fixture Pause/Restart or fixture-only interaction targets. Synthetic SHALL be selectable only as an ordinary installed provider with the same selection and lifecycle semantics as other providers. Navigation, source failure and an idle session SHALL NOT select Synthetic or inject generated hand frames.
+Hands SHALL NOT expose generated fixtures, fixture controls/tests/targets, browser hand-landmark acquisition, general depth-hand surface reconstruction, two-view fusion or benchmarks. Their implementation and build/test entry points SHALL be removed except primitives required by retained calibration or existing recording compatibility. Synthetic SHALL remain only an ordinary installed provider choice, never a preview/fallback.
 
-#### Scenario: Open with no provider
-- **WHEN** Hands opens with no available provider
-- **THEN** the source reason and empty viewport are shown without generated hands, camera requests or fixture controls
+#### Scenario: Hands opened idle
+- **WHEN** Hands opens without a live provider session
+- **THEN** no generated hand, fixture action or automatic Synthetic choice appears
 
-#### Scenario: Synthetic provider installed
-- **WHEN** an installed Synthetic provider is available
-- **THEN** it appears only as a regular provider option and is not started or saved merely by opening Hands
+#### Scenario: Mixed dependency removed
+- **WHEN** obsolete laboratory code shares a helper with calibration or recording compatibility
+- **THEN** the required helper remains independently usable without importing the removed engine
 
-### Requirement: Shared pipeline and profile view
+### Requirement: Camera calibration retains its true scope
 
-Hands SHALL use the same canonical processing, saved global adjustment profile, filtering, gestures, scene mapping and standard hand appearance as managed SDK apps. It SHALL NOT use the raw diagnostic pipeline or disable app-default filtering. View, Reset and fullscreen SHALL control the viewport only; scene reset SHALL NOT reset the saved profile, provider choice or calibration.
+Hands SHALL retain camera-to-camera spatial calibration with its required native RGB-D/marker or manual static-target measurement path, validation, compatible persistence and import/export. It SHALL identify the result as a camera transform, not global hand placement or provider calibration. Calibration-only capture SHALL require an explicit action and existing prerequisites; hand inference and fusion SHALL NOT be prerequisites.
 
-#### Scenario: Idle page uses applied profile
-- **WHEN** Hands opens without a provider session
-- **THEN** the SDK view loads the validated applied global profile but shows no hand data and no invented tracking rate
+#### Scenario: Calibration performed
+- **WHEN** the optional native calibration dependencies and two valid camera profiles are available and the user explicitly starts calibration
+- **THEN** the existing marker/manual-target measurement and validated camera-transform save/export can run without hand-model workers or a fusion engine
 
-#### Scenario: Shared frame processing
-- **WHEN** an authorized provider frame is supplied to the Hands view adapter
-- **THEN** it is processed with the same profile and default SDK behavior as an app, with geometry applied once and appearance affecting drawing only
+#### Scenario: Existing result imported
+- **WHEN** an existing supported camera calibration is opened
+- **THEN** its transform, source identities, validation and original storage/format remain readable without treating it as applied to app hands
 
-#### Scenario: Reset view
-- **WHEN** the user resets or changes the view or enters fullscreen
-- **THEN** only scene/camera state changes and no provider or profile write occurs
+#### Scenario: Native calibration unavailable
+- **WHEN** calibration capture prerequisites are absent
+- **THEN** its action states the concrete missing prerequisite and does not silently start an alternative source
 
-### Requirement: Adjustment and processing panels
+### Requirement: Existing recordings remain readable
 
-Hands SHALL expose Source and Post-processing tabs on the left and Adjustments, Output and Stats tabs on the right. Adjustments SHALL contain Position and size and Appearance together, with independent draft resets and one explicit Apply using the global profile. Until a post-processing registry exists, its tab SHALL state in one sentence that no post-processing plugins are installed, without fake plugins or controls.
+Hands SHALL preserve list/import/read/export and ordinary playback of existing pose CSV, RGB, RGB-D and paired recordings with their original coordinate/timing/provenance semantics. Basic recorded-data playback SHALL NOT require live capture, new hand inference, benchmarks or fusion. Play/Pause/seek SHALL remain recording controls, independent of removed fixture actions.
 
-#### Scenario: Opening tabs
-- **WHEN** Hands opens normally
-- **THEN** Source and Adjustments are initially selected and the other capability tabs remain visible
+#### Scenario: Existing CSV replay
+- **WHEN** a supported on-disk pose recording is selected
+- **THEN** its original time/coordinate-tagged joints replay without migration or being relabelled as selected-provider input
 
-#### Scenario: Apply adjustments
-- **WHEN** the user applies Position and size or Appearance drafts
-- **THEN** the existing revision-safe global adjustment operation is used without saving an unsaved source choice
-- **AND** saved versus applied or failed delivery status remains explicit
+#### Scenario: Existing media replay
+- **WHEN** supported recorded RGB/depth or paired media is imported
+- **THEN** its saved streams and observations remain readable/playable without model re-inference or two-view fusion
 
-#### Scenario: No tracking metrics
-- **WHEN** no Hands provider session is feeding the viewport
-- **THEN** Output identifies the idle state and tracking fps/frame-age values are unavailable rather than measurements attributed to the selected provider
+### Requirement: New hand recording requires an actual session
 
-### Requirement: Retired acquisition UI preserves data
+Hands SHALL NOT claim that the former camera recorder already records the selected skeleton provider. New selected-provider recording SHALL require actual session frames and a compatible versioned provenance contract. Until that dependency is delivered, Hands SHALL explain that recording needs a live hand session rather than expose a pretend-working start action. Existing recording readers SHALL remain available independently.
 
-Browser camera landmarks, native RGB-D capture, markers/calibration, surface reconstruction, two-view fusion, benchmarks and diagnostic recording/replay SHALL NOT be reachable from the product UI or old tool endpoints. Retiring those workflows SHALL NOT delete, migrate or rewrite preferences, calibration, recordings, user exports or optional model files. Existing provider-level replay configuration SHALL remain separate and unchanged.
+#### Scenario: No stream for recording
+- **WHEN** no supported live recording producer is connected
+- **THEN** Hands states the live-session requirement and does not generate, write or mislabel replacement frames
 
-#### Scenario: Retired tool requested
-- **WHEN** a client requests an obsolete diagnostic service or asset route
-- **THEN** it does not activate capture, bridge services, inference, asset setup or the old viewer
+#### Scenario: Legacy provenance retained
+- **WHEN** old camera-relative or camera-metric data is replayed
+- **THEN** it is not silently stamped as canonical provider data or adjusted twice through the global profile
 
-#### Scenario: Existing user data
-- **WHEN** the new Hands page is opened or its source/adjustments are saved
-- **THEN** plugin preferences/calibration and stored recordings remain unchanged in their existing workspace locations
+### Requirement: Shared profile view and minimal component slots
+
+Hands SHALL use the shared SDK pipeline and applied global profile for actual provider frames, with no diagnostic filtering override. It SHALL host a post-processing selector mount and the existing grouped Position and size / Appearance component with explicit Apply. Only calibration and recorder need tool tabs. View/Reset/fullscreen SHALL affect scene state, not source/profile/calibration persistence.
+
+#### Scenario: Global controls applied
+- **WHEN** adjustment drafts are applied
+- **THEN** the existing revision-safe profile operation is used independently of source drafts and calibration/recording storage
+
+#### Scenario: Parallel components connected
+- **WHEN** post-processing or live-session components are integrated
+- **THEN** they use the documented persistent selector/action roots and SDK frame adapter without replacing the page
+
+#### Scenario: Idle metrics
+- **WHEN** no tracked stream feeds the active view
+- **THEN** tracking fps is unavailable and render fps measures actual rendering rather than a fabricated provider rate
+
+### Requirement: User data survives source cleanup
+
+Removing old feature code SHALL NOT delete, migrate or rewrite user preferences, calibration, recordings, exports, models, caches or projects. Existing explicit tool operations SHALL retain validated user-owned storage behavior. Opening Hands or saving global source/adjustments SHALL NOT mutate calibration or recording files.
+
+#### Scenario: Page opened or source saved
+- **WHEN** Hands opens or saves the global source/profile
+- **THEN** existing calibration/preferences/recordings remain byte-identical unless a separate explicit operation intentionally writes them

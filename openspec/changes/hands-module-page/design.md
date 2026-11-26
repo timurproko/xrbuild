@@ -2,153 +2,106 @@
 
 ## Context
 
-See proposal.md for motivation. The person's correction supersedes the earlier preview recommendation: **no fixture or generated preview**, and no separate advanced diagnostic page.
+This **latest simplified revision supersedes both earlier plans**. There is only Hands. Keep the provider, shared hand view, post-processing selector mount, global adjustments, calibration and recorder/replay. Remove other laboratory features **including their code**, except genuine dependencies of those retained tools. Old page routes are removed, never redirected.
 
-Observed at planning time:
+Partial shell work from the earlier approval is uncommitted. It is not a finished implementation of this revised scope; no feature code or user data has been deleted. PR 50 remains open at the last check. The following findings are source inspection, not hardware validation.
 
-- Main is `48a59a5`, including merged PR 48. `ui/hands.html` and `hands.js` are core-owned source configuration; `server.ts` reserves `/hands/` and `/hand-tracking/`. `hands-state.ts` owns revision-safe workspace `config/hands/profile.json`.
-- The optional public input plugin currently registers `/hands-diagnostics/`. Its nested sample provides the requested three-column layout, header chips, orbit/view/reset/fullscreen controls, Output and Stats. Its `main.ts` also combines camera/depth/recording/fusion workflows and constructs `HandInput` with smoothing, prediction and grace disabled. Copying that application would copy the wrong hand pipeline and optional dependency boundary.
-- Native providers currently start with the complete app host. There is no selected-provider session behind the core Hands page, and historical app status does not supply live browser frames.
-- PR 50 is still open, at `c7c2a1e8f78b7f0a968e87aea56f46533edc2338` when inspected. Its design owns the shared profile validator, ingress transform, visual appearance, explicit Apply and run-bound delivery. Its final controls are a self-contained `hands-adjustments.js` mount with load/apply callbacks and refresh/dispose, deliberately independent of source-card markup.
-- Core already serves three.js and a strict subset of SDK browser modules for its icon preview. The new core viewer must not depend on optional diagnostic build/service setup.
+## What calibration actually is
 
-## Goals / Non-Goals
+The old page has **camera-to-camera spatial calibration**, not hand-position calibration or a skeleton-provider correction:
 
-**Goals:** reuse the existing page's visual topology, not its laboratory application; preserve global source and adjustment semantics; have one SDK-based viewport whose future provider-session transport can be connected without replacing the page or controls.
+- Manual path: `src/live/multiview/panel.ts` collects static target pairs through `RgbdPanel`'s native RGB-D surface probe, bound to different camera serials and exact profiles. It needs at least six fit and three held-out check pairs, fixed-camera confirmation and uncertainty evidence. `calibration.ts` fits and validates `pA = R * pB + t`, in metres, with residuals/profile hashes.
+- Marker path: `automatic-calibration.ts`, `marker.ts` and the marker dialog currently embedded in `multiview/viewer.ts` consume synchronized selected RGB/depth packets and native marker observations from two cameras. Marker calibration can start **without hand-model workers**. It still needs the optional input plugin's checked native bridge, device runtime, marker detector/assets, valid intrinsics/depth and two camera profiles. It is not supplied by the new real hand-provider session.
+- Manual results live in the tab until explicit export as `hand-tracking-spatial-calibration.json`. Marker Done stores up to eight validated results under `handtracking.fusion-calibrations.v1` through workspace storage, ultimately in workspace `config/plugins/input-hands/preferences.json`; the shared manual panel can also adopt/export the result. Capture choices share that preferences file. Imported results do not prove that the physical rig is unchanged.
+- **Consumers today:** the old two-view viewer/fusion registers camera B into A; fusion setup export includes the result. SDK/apps/global `config/hands/profile.json` do not consume it. Removing fusion removes that runtime consumer. Keeping calibration still permits measurement, validation, save/import/export, but must not claim to calibrate the selected provider or improve app hand placement.
 
-**Non-Goals in this first PR:** standalone provider startup, app observation, camera acquisition, model/runtime setup, native ABI changes, post-processing loader/ABI, mesh support, recording migration, new filters or calibration. No generated-hand feature, fixture controls or fixture-only tests/targets. Ordinary software regressions may use fake metadata/transports; they do not introduce a product fixture mode or run installed providers.
+**Recommendation:** keep a compact “Camera calibration” section/dialog as a stand-alone measurement/export utility, with only calibration-specific camera selection, explicit Start/Stop, marker preview and manual-target fallback inside that dialog. Extract it from the fusion viewer; do not retain fusion merely because its class currently hosts calibration. Keep native packet/device/clock validation, marker capture, intrinsics/projection, depth-probe sampling, rigid fit/validation and persistence. Remove hand-landmark inference and full hand-surface reconstruction; extracting the small shared point-sampling primitive is necessary because marker/probe code imports it today. Calibrating app-hand position remains the PR 50 Position and size controls, not this camera transform.
 
-## Decisions
+## What the recorder actually records
 
-### 1. Two back-to-back PRs, with explicit limits of the first
+There are several existing formats; “the recorder” is not one native hand-stream recorder:
 
-**Recommend the split:** ship this page-only change first, followed immediately by a separately planned live-provider session change. Removing the fixture means the first page has an honest empty canvas, not a live-hand demonstration. This limitation is deliberate and must appear in the UI and handoff, not be hidden by animation.
-
-| Delivery | Scope | Estimate |
+| Existing recording | What is stored/replayed | Live dependencies today |
 | --- | --- | --- |
-| This PR: Hands working-surface shell | Three-column core UI, real provider picker/status, idle SDK viewport and real adjustment controls, post-processing slot, Output/Stats, diagnostic UI retirement and isolated screenshots | 3–4 engineer-days after adjustment integration is available |
-| Immediately following PR: real live Hands | Explicit selected-provider Start/Stop, headless worker, exclusive app/session acquisition lease, authenticated transport, SDK ingress/profile updates, errors/no-hand/cleanup states and real-hand interaction targets | 5–8 engineer-days, excluding physical-device acceptance |
-| Alternative: one combined PR | Both scopes, first useful live hand delivered only when native lifecycle/lease is finished | 8–12 engineer-days before delivery |
+| On-disk pose CSV v1 (`recording/csv.ts`, `csv-panel.ts`) | Relative time, coordinate-space tag, hand ID/handedness, 21 XYZ joints with per-joint validity; no images, native gesture capabilities or global profile snapshot | Subscribes to browser camera landmarks (`hand-relative`), RGB-D reconstructed hand surfaces (`camera-metric`), or fusion output; it does **not** subscribe to the selected skeleton provider |
+| RGB clip v1 (`format.ts`, recorder/replay) | PNG frames plus model observations, source/runtime/model hashes, clocks, relative timing and provenance; bounded tab memory, explicit import/export | Browser camera and landmark worker for new capture; recorded-observation replay needs neither a camera nor new inference |
+| RGB-D clip v2 (`depth-format.ts`, depth recorder/replay) | Compressed native RGB/depth packets, exact device/profile/intrinsics calibration, timing, optional observations and sampling settings | Native RGB-D bridge; raw recording can omit hand-model observations. Recorded packets can be decoded/displayed without live hardware |
+| Paired clip (`multiview/recording.ts`) | Two nested RGB-D streams, shared-page receive-time provenance, distinct camera identities | Two native streams to create new clips. Existing A/B streams can be replayed independently without fusion or benchmarks |
 
-The combined PR is technically possible, but holds a straightforward UI replacement behind cross-process safety work. The split avoids rebuilding anything: the core viewport has one empty-frame-capable SDK adapter now; the following PR supplies its transport and session status. PR 50's shared controls/profile are reused in both. The next PR needs its own approval; this PR does not sneak in native worker work. No third interim fixture implementation.
+CSV files stay in workspace `.xrb/hand-tracking/recordings/`; preferences/calibration stay in `config/plugins/input-hands/preferences.json`; exported clips/calibration remain wherever the person saved them. Existing storage uses bounded regular-file/containment checks and explicit same-origin writes; retain those protections and existing format validation.
 
-### 2. Exact layout and initial tabs
+**Conflict and recommendation:** removing browser landmarks, hand-surface reconstruction and fusion removes **all three producers of today's pose CSV recorder**. It cannot keep recording exactly as today without retaining the very acquisition engines the person has removed. Keep existing recording list/import/export/read/seek/playback with original coordinate labels, and retain raw image/depth/paired decoding needed for old media files, but remove re-inference, comparison, benchmarks and fusion playback. For new useful recording, connect to the selected provider via the separate live-provider task. Until that seam exists, show “Recording needs a live hand session” and no pretend-working Start recording control. Do not stamp panel-space/app-adjusted frames as legacy `hand-relative` or `camera-metric`, discard native signals, or replay them through global transforms twice. A new provider-stream recording schema/provenance contract must be agreed with that task before enabling writes; old formats remain unchanged. This is an explicit dependency/behavior decision, not a claim that the old recorder already supports provider frames.
+
+## Minimal layout
 
 ```text
-XR Build  Hands v                           [render fps] [hand tracking fps]
+XR Build · Hands                         [render fps] [hand tracking fps]
 
-+-----------------------+  +--------------------------------+  +---------------------------+
-| SOURCE | POST-        |  | [View v]     [Reset] [fullscreen]|  | ADJUSTMENTS | OUTPUT |    |
-|          PROCESSING   |  |                                |  |                         STATS|
-|                       |  |        large 3D viewport       |  | POSITION AND SIZE         |
-| Skeleton provider [v] |  |                                |  | X / Y / Z (mm), Size      |
-| purpose / availability|  |        No live hand session.   |  | [Reset to defaults]       |
-| reason / idle notice  |  |                                |  |                           |
-| [Save source] [Reload]|  |        no generated hand       |  | APPEARANCE                |
-| next-launch help      |  |        no fixture targets      |  | existing PR 50 fields     |
-|                       |  |                                |  | [Reset to defaults]       |
-|                       |  |                                |  | [Apply]  delivery status  |
-+-----------------------+  +--------------------------------+  +---------------------------+
++-----------------------+  +--------------------------------+  +-----------------------+
+| Skeleton provider [v] |  | [View v] [Reset] [fullscreen]    |  | POSITION AND SIZE     |
+| availability / reason |  |                                |  | PR 50 fields / Reset  |
+| session status        |  |       shared SDK 3D hand view  |  |                       |
+| [Start/Stop mount]    |  |       honest idle until live   |  | APPEARANCE            |
+| [Save source] [Reload]|  |                                |  | PR 50 fields / Reset  |
+| Post-processing [mount]| |       no generated fixture     |  | [Apply]               |
+|                       |  |                                |  |                       |
+| CALIBRATION | RECORD  |  | replay preserves file's space  |  | compact status only   |
+| selected tool content |  | and is labelled as replay      |  |                       |
++-----------------------+  +--------------------------------+  +-----------------------+
 ```
 
-Source and Adjustments are selected on every initial opening; tab changes do not destroy dirty forms. Post-processing is a full tab caption (it may wrap as an existing responsive tab layout allows), not an invented Pipeline editor. The two adjustment sections remain together, as required by PR 50. Output and Stats preserve the diagnostic's useful generic readouts, not camera/fusion/source selectors. There is **no Capture or Record tab** in the new page.
+Only two small tool tabs; no Capture, Setup, Output, Points or Stats tab. Camera controls exist only inside the calibration dialog because it genuinely needs them. Recorder holds existing file list/import/playback; old media can display its saved images in recorder content rather than reinstating a laboratory view. Global adjustments remain together in a persistent right-side root. Reuse existing panel visual language and View/Reset/fullscreen; fps chips report actual current context, with tracking unavailable when idle. No fixture Pause/Restart; ordinary playback Play/Pause remains.
 
-Post-processing initially says exactly: **“No post-processing plugins are installed.”** No invented registry, stage toggle, example plugin, installer, asset fetch or new profile field. A future registry change replaces that empty state; this PR only provides its location.
+## Kept / removed / needs live provider
 
-Use existing `xrb-app-bar`, product menu, `xrb-tabs`/`xrb-tab`, sidebar content/section, cards, media stage/empty state, key/value lists, chip, field grids and button rows. Use the diagnostic's existing three-column responsive topology and existing shared spacing/theme rules, not copied palettes, custom controls or an iframe. At narrow widths use existing panel stacking; keep the viewport usable and forms internally scrollable. All tabs are keyboard accessible and use existing focus/indicator behavior. View/Reset/fullscreen are scene controls, independent of profile reset and fixture Restart (which is removed).
-
-### 3. Source, viewport and metrics are separate truths
-
-The provider picker is the **first control** in Source. Continue owner-qualified IDs, saved missing choices, availability reasons, unique-real initial default, revision/registry checks, source Save/Reload and next-launch-only behavior from PR 48. No installed/device-ready equivalence. Saving source must preserve unknown/adjustment fields and adjustment drafts. Explicit Synthetic selection is identical to any other installed provider choice; there is no local synthetic transport in this page.
-
-Before standalone sessions land, next to source status show: **“Live view is idle. The selected provider runs when an app is launched; live viewing here is not available yet.”** The viewport says **“No live hand session.”** No nonfunctional Start/Stop button, promise that opening an app populates this view, hardware check or silent synthetic fallback. With no source: “Choose a provider. No live hand session.” A historical app result is labelled **Previous app session**, not Running in the Hands viewport.
-
-Keep both header chips. Render fps is actual viewport animation/render frequency. Hand tracking fps is `—` with an idle/unavailable description until frames arrive from a Hands session; never count requestAnimationFrame as tracking fps. Output shows selected/saved source and view idle status. Stats uses only real page metrics; hand count/frame age/capture rate are `—` without a session, not fabricated zeros or a green 60-Hz chip. No capture/performance claim from software tests.
-
-Without the optional input plugin: the entire core shell, viewport, profile controls and tabs still open. List other installed providers normally, preserve an unavailable saved choice, or show “No providers available” with its reason. There are no install/retry walls and no diagnostic compiled-output dependency. Valid profile adjustments remain editable even when the source is missing. Invalid profile state is an actionable error and is not replaced by defaults; no frames are admitted without a validated profile.
-
-### 4. One SDK renderer seam, no raw diagnostic path
-
-Create a small core view module owning renderer/scene, camera/orbit tools, resize/fullscreen, scene disposal and one source-neutral frame/status adapter. Extract only neutral camera/view/layout behavior from the public sample, retaining necessary notices. Do not import its boot module, fixture generator, rawOptions, bridge, recording panels or source-specific visuals.
-
-Use SDK `HandFrameIngress` and `HandInput` with app-default smoothing/prediction/grace, the PR 50 validated profile/one-time adjustment stage, shared scene-hand mapping and standard `HandVisual`. Match the existing managed SDK pipeline order and use regression comparisons against that same pipeline, not newly authored hand math. The view starts with no frames and the applied saved snapshot. Do not apply profile geometry again to a visual group. Geometry Apply uses PR 50's release/reset semantics, appearance-only Apply does not reset interactions, and unsaved edits are not rendered as an alternative profile.
-
-Extend the existing core read-only SDK module serving with an explicit minimal transitive module allowlist, browser-safe import rewriting and import-map resolution for the SDK's installed three.js dependency and the required orbit addon. No arbitrary path-based source serving, client transpiler, optional plugin build, npm install or compilation on page navigation. Test unsupported paths and dependency closure so missing modules fail visibly rather than fall back to diagnostic assets. If existing SDK lifecycle helpers are extracted for reuse, both app and Hands use them without behavior changes.
-
-The transport-facing adapter accepts canonical frames plus epoch/sequence/time metadata and a validated profile/status, and exposes clear/reset/dispose. It does not know a provider name or camera API. In this first PR it has **no production frame producer**. Stop/disposal clears hands and held input. Generic adapter contract tests do not expose generated hands in the product.
-
-**Interaction targets:** omit the old generated pinch/drag targets from this first PR. The following live-session PR adds a shared SDK pinch target and drag target driven by the actual session hand; do not keep synthetic-only logic or count mouse actions as tracked hand tests. This is an explicit change from the original brief, following the correction.
-
-### 5. Mount PR 50, do not reimplement it
-
-Reserve the right Adjustments panel for the exact self-contained adjustment root from PR 50. Mount once with its load/apply callbacks; tab changes only hide/show the root and preserve drafts. Position and size and Appearance keep their own Reset to defaults and one explicit Apply for both. Keep Save source independent from Apply, including incoming-change/stale/conflict recovery and accurate saved/applied/delivery-failed states.
-
-Because PR 50 is not merged at planning time, this plan contains no alternative schema, transform, field bounds or competing form. At implementation, update from main after PR 50 merges, mount its delivered component and connect the viewport's saved-profile subscription to that same validated snapshot. Shell/source/retirement work can proceed first; the adjustment-integration outcome cannot be completed without PR 50. If PR 50 is delayed, report that dependency rather than ship duplicated or pretend-enabled controls. Reconcile its delta specs before finalizing this change so both additions survive; do not overwrite its profile requirements.
-
-### 6. Diagnostic feature disposition and data ownership
-
-Recommendation: retain only the general viewing/status affordances in Hands. All laboratory workflows leave product UI; their source code stays in the public sample for now but is **unreachable through the panel**. No advanced page, hidden link or iframe replaces the removed diagnostic.
-
-| Existing feature | Decision in this PR | Detail |
+| Area | Classification | Boundary |
 | --- | --- | --- |
-| Generated fixture delivery and scenarios | Removed from Hands UI; old implementation unreachable | No Local fixture, Fixture dropdown, animation, Pause/Restart or fixture test feature is ported |
-| Browser camera landmarks | Code retained but unreachable | No source option, capture button, media permission or automatic model request |
-| Native RGB-D capture | Code retained but unreachable | No capture service/tool registration or native bridge activation from Hands |
-| Markers and calibration | Code retained but unreachable | No marker detector or calibration workflow; stored calibration is untouched |
-| Surface reconstruction | Code retained but unreachable | No reconstruction controls, depth view or surface pipeline imported into Hands |
-| Two-view fusion | Code retained but unreachable | No multi-view source, calibration or fusion startup |
-| Benchmarks | Code retained but unreachable | No benchmark tab/action, no fabricated performance results |
-| Diagnostic recordings | Code retained but unreachable | No Record tab/start/export/import action; files remain on disk |
-| Diagnostic replay | Code retained but unreachable | No viewer replay delivery or format migration; provider-level Replay, if installed/configured, remains a normal separate provider |
-| View, orbit, Reset, fullscreen | Kept inside Hands | Scene controls only; no settings or calibration writes |
-| Output and Stats / header fps | Kept inside Hands | Generic pipeline/page readouts with honest unavailable states |
-| Generated-only pinch/drag targets | Removed in first PR | Restore only as real session-driven SDK targets in the immediately following PR |
+| Core Hands shell, provider picker and source Save/Reload | Kept | One global source, explicit revision-safe writes, no fallback |
+| Shared SDK view/profile and View/Reset/fullscreen/fps | Kept | Actual app pipeline; no raw diagnostic filtering override |
+| Post-processing selector mount | Kept | Separate component owns the first hand-mesh option and runtime; no example choices/system here |
+| Position, size and appearance | Kept, PR 50 dependency | Mount its delivered component after merge, never duplicate schema/transform |
+| Camera-to-camera calibration | Kept | Native calibration-only capture, markers/manual depth probe, fit/save/import/export; no SDK/app consumer today |
+| Native RGB-D transport, marker observation, depth point sampling | Kept only as genuine calibration dependencies | Extract minimal dependency closure; no hand model or general camera/depth laboratory UI |
+| Existing CSV and media/paired recording formats/storage/playback | Kept | Original coordinate/provenance semantics, no implicit migration or re-inference |
+| New selected-provider recording and real-hand drawing | Needs live provider | Requires actual session frames and explicit recording provenance; not today's camera recorder |
+| Generated fixture, scenarios, fixture tests/targets/counters | Removed, code included | Synthetic is only an installed ordinary provider |
+| Browser hand landmarks / inference workers and camera hand-source UI | Removed, code included | Legacy observation schema/readers survive solely to read existing files |
+| Depth hand-surface reconstruction and general inspection | Removed, code included | Retain only the calibrated point sampler genuinely used for marker/manual calibration |
+| Two-view hand fusion and clock qualification workflows | Removed, code included | Retain calibration formats and paired-file reading, not the fusion engine |
+| Benchmarks, A/B analysis, annotations, model rerun and reports | Removed, code included | Not required for basic playback or calibration |
+| Separate diagnostic page/name, old routes and navigation | Removed | `/hands-diagnostics*` and `/hand-tracking*` return normal 404, never redirects |
 
-Remove the optional tool declaration and related component/service references so ordinary discovery cannot register or start it. Reserve old page routes in core before tool dispatch, hide obsolete route entries even from stale tool navigation, and refuse retired diagnostic asset/API routes instead of activating their handlers. Preserve the plugin's ordinary native provider declaration. Update source documentation and route/navigation tests; do not delete historical archived OpenSpec records to remove a historical name. Direct developer source files are not a product route or a supported user workflow.
+This table supersedes the prior full-feature mapping and the earlier unreachable-code plan. **Removal is real source/build/test cleanup**, not hidden modules. Before deletion, compute the retained calibration/recording import closure; split mixed modules so useful helpers survive without importing removed engines. Native plugin provider registration remains independent from removed fixture UI/tests; do not delete an installed Synthetic provider simply because it is synthetic.
 
-**Data stays exactly where it is, relative to the selected writable workspace:**
+## Stable parallel-task seams
 
-- Global source/adjustments: `config/hands/profile.json` (only explicit current source/Apply operations may write it).
-- Diagnostic preferences and scalar calibration: `config/plugins/input-hands/preferences.json`.
-- Optional user-supplied models and plugin configuration: `config/plugins/input-hands/`.
-- CSV recordings: `.xrb/hand-tracking/recordings/`.
-- Explicit raw image/depth exports: wherever the person saved them; no discovery/import/move.
-- Existing caches such as `build/hand-tracking/`: retained, not cleaned as part of page retirement.
+- `#hands-session-status`: current view/session state, separate from source availability and Previous app session.
+- `#hands-session-actions`: empty initially hidden row below Source status and before Save source; live-provider mounts Start/Stop here.
+- `#hands-postprocessing-root`: left-side selector mount after source actions. Initial one-sentence state: “No post-processing plugins are installed.” No hardcoded concrete processor implementation in core.
+- `#hands-adjustments-root`: right-side persistent PR 50 mount, including both groups and one Apply.
+- `#hands-calibration-root` / `#hands-recordings-root`: the only tool roots. Optional missing plugin/build produces one concise reason in the affected tool, not a page-wide install/retry wall. Existing file access should not require opening a device.
+- `ui/hands-view.js`: `createHandsView({canvas, viewport, onMetrics, onStatus})` returns `setProfile(profile)`, `beginSession({epoch})`, `pushFrame({epoch, sequence, frame, capturePageMs})`, `clearSession()`, `resetView()`, `setViewOptions(options)`, `dispose()`. Profile validation precedes admission; epochs/sequences fence old frames, not transport authentication. Live-provider owns authentication, clocks, exclusive lease and shutdown. Calibration-specific capture must participate in that lease before real simultaneous starts are exposed.
 
-No data is relocated into core or auto-migrated to the Hands profile. Runtime Apply/source writes never touch plugin data. Unreachable data is retained deliberately; document its path rather than imply a recording browser still exists. Deleting dormant algorithms and their own regression coverage is outside this page change.
+No production provider starts on navigation. Until live sessions land, the source notice plainly says the selected provider runs with an app and live viewing here is unavailable. Calibration capture is not called provider preview. Legacy replay is not silently normalized to app input.
 
-### 7. Following real-provider PR: contract already allowed for by the page
+## Acceptance and dependencies
 
-This section specifies the proposed immediately following scope, **not implementation tasks or promised behavior in this first PR**.
+1. Sole page and exact small layout; missing optional tools leave the core usable with honest reasons; no generated mode or old routes/redirects.
+2. Source/adjustments preserve revision/conflict/unknown-field/draft semantics; PR 50 is mounted only after merge, otherwise report sequencing dependency.
+3. Minimal calibration closure exercised with fake RGB-D/marker packets; file import/save/export remain compatible, with no hand-model/fusion/benchmark import. No claim of app-provider calibration.
+4. Existing CSV/RGB/RGB-D/paired software files list/import/read/play without camera/model/runtime, retaining units/time/provenance. New Record is not advertised as working until the live-stream contract is actually delivered. Native flags/profile snapshots must not be invented for old data.
+5. Obsolete feature source/tests/entry/build dependencies are removed, not hidden; only documented shared format/geometry/packet/calibration primitives remain. User files/caches are never a deletion target.
+6. Run isolated panel/workspace/browser only, screenshots at default window size with actual dimensions, no person's panel/profile/projects, no hardware or inference. All evidence/scratch in the task folder; stop all owned processes before reporting.
 
-- Add a headless native session worker reusing provider loader/ABI create/start/stop/destroy, without display/CEF or a second full app host. Passive navigation stays passive. An explicit authenticated Start snapshots the saved selected source/provider settings and global profile; Stop releases it. Source draft edits do not hot-switch acquisition.
-- Use one exclusive acquisition lease shared with managed app launches, across relevant panels/checkouts in the same device/runtime scope. A running app blocks Hands Start with an owning-session reason; a Hands session blocks app Run. No implicit app termination, second capture open, lease stealing on heartbeat timeout or simultaneous observation. Verify worker death/callback quiescence before releasing an abandoned lease. Standalone-host participation/unsupported paths must be explicitly bounded in that plan, not assumed safe.
-- Token-bound loopback transport sends bounded latest frames, not an unbounded FIFO. Validate finite coordinates, frame size/count and clocks; carry owner, epoch, sequence and capture/delivery timing. Late frames from stopped/replaced sessions are rejected, not drawn with a new profile. Keep native hand ABI/wire payload unchanged.
-- Feed the existing core view adapter, not another renderer. Initial valid profile precedes first frame. Apply subscribes to PR 50's global validated profile with ordered session-bound acknowledgement; geometry changes clear SDK holds/filter state, appearance does not. Profile changes do not change the running source.
-- Distinguish Starting, Running/no hands, Running with hands, Stopping, Failed, source unavailable and lease occupied. **Never** insert synthetic data for no hands/error. Tracking fps derives from provider frames, render fps from rendering. UI idle guidance can then become “Start <selected provider> to see your hand.” Labels use generic provider metadata.
-- Stop acquisition and retire frame epochs on explicit Stop, owning page/session disposal, disconnect timeout and panel shutdown. Bounded cleanup covers start cancellation, crash, denied start, lost tab and repeated Stop. Do not expose credentials in URLs/logs/preferences. Unsupported browser/XR contexts remain explicit; no automatic XR session entry.
-- Add pinch/drag targets using shared SDK interaction with real provider frames only. Validate ownership/clock/lifecycle and no-data behavior using fake workers/transports; actual hardware correctness and latency require separate opt-in acceptance and are not claimed by mocks.
-
-### 8. Isolated implementation acceptance
-
-Planning creates only OpenSpec files and a draft PR; **no new-page screenshot is claimed now**. After approval, run a disposable panel on a free non-personal port, with explicitly task-owned workspace/projects/browser profile under the allowed task output folder. Never connect to, restart or modify the person's panel, home workspace, profile or projects. No camera, hardware, model download, installed tracker or real provider startup in this task.
-
-Capture screenshots of the implemented Hands page from that isolated instance at the browser's **default window size**, without widening or device-metrics emulation; record actual outer/inner dimensions. Include Source + Adjustments opening state, Post-processing, Output/Stats and missing optional plugin. Use the existing panel theme(s); narrow-width checks are supplementary, not substitutes for the default-size proof. Pictures, logs and disposable state stay in the task output folder, not project source.
-
-Targeted checks cover layout/tab persistence, saved/missing/empty providers, no generated controls/canvas hands or acquisition/writes on navigation, historical-versus-viewport status, profile Apply/source independence and conflict handling, shared-pipeline parity/one transform, accurate idle rates, default-window and responsive overflow, alias redirects before tool startup, retired routes returning no service, and byte-identical pre-seeded preferences/calibration/recordings after page operations. Assert the core page opens without optional plugin/build dependencies. Stop every owned server/browser/process before the report. Broad integration belongs to CI; no native/hardware result is inferred from a skipped lane.
+Revised size: approximately 5–8 engineer-days for the dependency extraction, compatibility playback and real code retirement plus page integration, excluding PR 50 wait and the separate live-provider/schema work. Native/physical acceptance remains explicitly outside software-only validation.
 
 ## Risks / Trade-offs
 
-- [Page-only delivery is not yet a useful live hand tester] -> explicit idle copy next to source status, no fake motion, and the bounded immediate 5–8 day follow-up; combined delivery remains the stated alternative for approval.
-- [Optional plugin silently remains a second page/service] -> remove tool declarations/references, reserve aliases before managed-tool dispatch, block old endpoints and check navigation with the plugin present and absent.
-- [SDK browser exposure grows too broad] -> explicit minimal transitive allowlist and import rewriting, no user-provided filesystem paths or arbitrary source-serving endpoint.
-- [PR 50 merges different component details] -> integrate its actual exported mount/validated snapshot after merge; preserve its independent outcomes/schema and dirty-state semantics rather than clone it.
-- [Moving forms destroys drafts or conflates Reset actions] -> mount once, hide tabs without disposal; separate scene Reset from adjustment resets and source Save.
-- [Data is mistaken for obsolete build output] -> no cleanup/migration step and byte-preservation tests at the documented plugin storage paths.
+- [“Calibration” misunderstood as app alignment] -> identify exact B-to-A camera transform and absent app consumer; keep PR 50 geometry controls distinct.
+- [Recorder claims unchanged behavior after its producers are removed] -> keep old data readable, explicitly bind new writes to live-provider delivery and agree schema before enabling them.
+- [Deleting mixed modules breaks calibration or old data] -> import-closure audit, extract primitive helpers first, then remove engines/tests/build references and run focused compatibility checks.
+- [Live task and calibration both open cameras] -> shared acquisition lease required before concurrent starts; no implicit app termination or fallback.
 
 ## Migration Plan
 
-1. Land PR 50 before completing this PR's adjustment integration; update this branch from current main and reconcile requirements additively.
-2. Replace the core page and unregister the optional browser tool. Preserve provider registrations, global profile semantics and all plugin/user data. Old page bookmarks redirect; retired tool endpoints no longer initialize services.
-3. Document the first delivery as an idle surface, not real tracking. Next PR connects the same adapter and Source status/action slot to the headless session.
-4. Rollback restores prior UI/registrations without any data conversion. Saved profiles remain compatible with the existing source/adjustment owners. No rollback deletes files or rewrites user projects.
+No data migration. Replace the UI and component wiring, preserve existing paths/format readers, remove only obsolete source/build/test paths. New provider recordings must use a deliberately versioned stream contract; never rewrite old recordings to approximate it. Rollback restores code/UI without changing user data.
