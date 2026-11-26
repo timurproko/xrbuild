@@ -1,34 +1,45 @@
-# Hand diagnostic
+# Hand tools source
 
-Plugin-owned implementation/sample for generated hands, browser RGB observations, optional native depth acquisition, calibration, reconstruction, bounded recording/replay, benchmarks and two-view fusion. The native application's `hand-tracking` provider remains synthetic: camera/model poses are not application input. Measured surfaces are not anatomical joint centres; physical accuracy/fusion improvement is not established by fixture tests.
+The product page is core **Hands**, `/hands/`. This package is no longer a standalone app or laboratory page.
+Its `hands-recordings` component contributes existing recording readers/playback to Hands without cameras or models.
+There is no generated viewer, fixture mode, benchmark, comparison dashboard or model re-run workflow.
 
-## Normal use
+## Retained code boundaries
 
-Use the normal panel → **Hands**, route `/hands/` (`/hand-tracking/` remains an alias), after explicit public dependency/build setup. The checked browser view opens independently of optional Node/native bridge startup; bridge dependencies are loaded only on authenticated explicit requests. If the browser build itself is unavailable, the normal shared shell shows inline explicit setup/recovery instead of a centered Retry wall. The default is a generated fixture. Opening/navigation never starts camera capture, inference, model downloads or native compilation. Capture and recording remain separate explicit actions. Imported samples are independent editable copies; do not modify the installed original.
+- `browser.mjs` / `src/live/recording/archive.ts`: list/import/export and basic replay of pose CSV, RGB, RGB-D and paired files. Original coordinate, timing and source metadata stay intact. Paired files expose independent streams, not fusion or A/B analysis.
+- `src/live/multiview/calibration.ts`, `automatic-calibration.ts`, `marker.ts`, `panel.ts` and source-only `viewer.ts`: manual/marker camera-to-camera measurement, validation and scalar formats. `calibration.html` is a scriptless retained fragment, not a page or a Hands asset. A following change exposes the independent Calibration module, not a Hands tab.
+- `src/live/multiview/fusion.ts` and related geometry/timing, plus browser landmark acquisition/estimators: retained **unwired** as the starting point for a future two-camera provider. No product page imports their boot path, and this change does not build that provider.
+- Native bridge/device/profile/marker code remains an explicit optional calibration prerequisite. Importing recording tools never starts it, invokes inference, downloads assets or compiles native code.
+- The ordinary native Synthetic provider remains a provider, not a local preview or fallback. Its own provider correctness tests are independent of the removed generated browser fixture feature/tests/targets.
 
-The view reuses the actual panel theme/navigation. Capture controls select runtime-reported cameras, exact supported profiles and modes. No device is silently substituted if the selected one is missing/busy. Stop/source switch/page disposal releases owned tracks/workers/processes; one authenticated tab owns each capture service. Tokens stay only in server/page memory, never URLs or preferences.
+The camera calibration output is `xrbuild-spatial-calibration` v1: B-to-A rigid mapping in camera A optical metres,
+bound to both serials and exact calibration/profile hashes. It does not modify app hand placement, qualify timing or
+establish physical accuracy. See [calibration](camera-calibration.md) and [markers](marker-calibration.md) for the
+measurement/format background; their product UI is being extracted, not mounted by Hands.
 
-For direct development select `XRB_CORE` and `XRB_HOME`, install the frozen embedded workspace, then run this package's `dev` script. No credentials/private clone are needed. Core embedded build/test orchestration runs from writable snapshots rather than installing or producing output in this source folder.
+## Writable data and compatibility
 
-## Assets and rights
+Preferences and saved scalar calibration remain `config/plugins/input-hands/preferences.json`, including
+`handtracking.fusion-calibrations.v1`. The current storage uses bounded same-origin requests, revision checks and
+exclusive writer locking. Invalid, changed, foreign or linked state is never silently reset or followed.
 
-- The exact Apache-2.0 browser runtime is pinned in package/lock metadata and `assets/vision-assets.json`; notices are retained. `assets` is an **explicit** setup command that verifies installed runtime bytes and creates a fresh asset store in core `third_party/hand-tracking`. Ordinary dev/build/tool startup does not download assets or reset an existing store.
-- Marker detector source is pinned by version/public archive SHA-256 and BSD-2-Clause notice. Only explicit optional bridge build preparation fetches it into core `third_party/hand-tracking/markers`; changed/partial existing generations are preserved and refused.
-- **No model weights are fetched or distributed.** Optional inference requires a separately licensed user-supplied `hand_landmarker.task` in selected workspace `config/plugins/input-hands/`. The format/size/hash descriptor verifies the expected model but does not establish redistribution rights. The local dev server serves it only locally; static builds never embed it.
-- Optional device acquisition needs a separately reviewed pinned SDK/source inventory in core third_party. No private prebuilt executable/library or private dependency fallback ships here. See [bridge setup](bridge/README.md).
+CSV files remain `.xrb/hand-tracking/recordings/` in the selected workspace. Explicit raw RGB/depth/paired exports
+stay wherever saved. No automatic import, migration, move or delete occurs. Models/configuration remain under
+`config/plugins/input-hands/`; native/tool caches stay in user `build/hand-tracking/` or checked generic caches.
+No user file is a public source or package payload.
 
-If optional assets are absent, generated fixtures and camera-free arithmetic/format/lifecycle tests remain available. Missing/invalid configured data is reported, not silently replaced. Real inference/device/distribution acceptance is separate from these tests.
+[RGB format](recording-format.md) and [RGB-D format](depth-recording.md) remain readable. Basic replay decodes
+saved images/observations; it does not open a camera, re-run a model, reconstruct a hand surface or fuse cameras.
+New provider-session recording is a separate raw HANDS v2 format with a frozen portable profile, wired by the
+live-session task. Until that producer exists Hands says recording needs a live session. See core `docs/hands.md`.
 
-## Writable data
+## Explicit setup and rights
 
-User preferences and scalar calibration records live in `config/plugins/input-hands/preferences.json`, bound to this plugin. Filesystem writes use same-origin loopback requests, bounded validated data, a revision and an exclusive writer lock. Invalid, foreign, linked, changed or busy state is not overwritten. Browser visual/session state is not a source default, and capture/tokens/rig confirmation are never restored as a running session.
+The public browser runtime and marker detector retain their pinned descriptors/notices. Optional vision/marker/native
+setup is explicit and user-owned. No model weights are fetched or redistributed. Existing user-supplied models
+remain private; recording playback does not load them. Native calibration needs separately provisioned reviewed device
+SDK/runtime inputs; none are downloaded or started by navigation. Physical calibration/device acceptance is separate.
 
-Explicit CSV recordings live in `.xrb/hand-tracking/recordings/` in the selected user workspace. No automatic recording/import/move occurs. Raw image/depth containers stay in tab memory until explicit user export; keep exports private and outside source/public folders. Configured native/tool/typecheck/build caches live under user `build/hand-tracking` or generic origin-qualified native caches. No recording/model/calibration is part of the public package closure.
-
-## Checks and algorithms
-
-The package `test` runs full strict TypeScript followed by Node fixtures. `build` uses Vite in the writable embedded generation. The focused plugin native build runs synthetic CTest, not cameras. Optional SDK geometry checks are opt-in and reported separately. No test downloads a model or executes inference just by loading the suite.
-
-Fixtures cover finite 21-joint generation, lifecycle/cancellation, camera-API mocks, bounded single-flight workers, observations/ID association, immutable raw data, packet framing, depth units/geometry, calibration/provenance, timing/clock uncertainty, association/fusion guards, bounded record/replay/compression, same-input comparisons, scalar exports, UI contracts and isolated user storage. These establish software behaviour, not physical calibration or sensor performance.
-
-Further guides: [recording format](recording-format.md), [depth recording](depth-recording.md), [reconstruction](reconstruction.md), [calibration](camera-calibration.md), [marker workflow](marker-calibration.md), [fusion](fusion.md), [benchmark](benchmark.md). Their workflows require explicit optional setup; previous local/private prototype evidence is not public-product or physical-device acceptance.
+The package now builds a recording **library**, not HTML. Core embedded commands install/build/test fresh writable
+snapshots rather than writing installed product sources. Tests cover formats, calibration mathematics, ownership,
+resource bounds and retained future-provider algorithms with software data; they do not run hardware or prove accuracy.

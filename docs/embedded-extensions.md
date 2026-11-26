@@ -189,25 +189,26 @@ fixtures cover normal tabs/actions, mixed sections/archive, persistent edits, fr
 legacy run-choice import, Copy and generation-pinned assets without native device execution.
 
 Managed tools may declare the neutral boolean `independentView` capability. Their missing-view state retains the shared header/navigation with inline
-explicit public setup/recovery; unrelated tools retain their existing failure behavior. The hand diagnostic's current checked viewer does not import
-optional bridge dependencies on navigation, and no page GET installs packages or starts capture. Actual executed service/runtime changes still require
+explicit public setup/recovery; unrelated tools retain their existing failure behavior. The core Hands page loads its optional checked recording contribution without
+bridge/model dependencies, and no page GET installs packages or starts capture. The `hands-recordings` component export
+is mounted inside Hands; it is not a separately registered tool page. Actual executed service/runtime changes still require
 restart; stale, foreign or unsafe activated output never falls back to old/source output. Shared scrollbars suppress CSS-hidden/pending content and closed
 output, release retired-document capture targets, and use the same viewport-edge inset in Apps and Design Main without preview framing gutters.
 
 ### Embedded package setup, build and test
 
 The core-owned `embedded/` registers **six packages**: WebXR publisher under `plugins/publisher-webxr` (local/production destinations,
-no external npm dependencies), the hand diagnostic under `plugins/input-hands/samples/hand-tracking`, the headset packager under
+no external npm dependencies), the hand recording/calibration source package under `plugins/input-hands/samples/hand-tracking`, the headset packager under
 `plugins/platform-headset/packager`, and three buildable projects. Four additional archived static diagnostics need no package installation.
 Publisher production defaults disabled/unconfigured; local TLS setup is explicit. The hand plugin owns authored native
-provider/diagnostic/tests/build descriptors; default use is synthetic and requires no private source, cameras or model.
+provider/recording/calibration/tests/build descriptors. Hands opens idle without a generated preview and requires no private source, cameras or model.
 The exact public vision runtime and marker source have reviewed pins/notices; explicit preparation places assets in core
 `third_party`. User configuration/calibration/preferences, recordings and caches remain in the selected workspace.
 Unverified device SDK inputs and model weights are optional external contracts, not shipped/fetched payloads.
 Seven standalone project groups retain core/archive membership, portable desktop/no-input defaults and no live deployment/device identity.
 The launcher has no ambient production catalog or sibling/private workspace traversal; external catalog selection is explicit. The duplicate embedded
 starter is retired; New project still uses the canonical core template with its 3D icon/theme and font license. Existing user projects and retained
-working state are not removed by this product update. The hand diagnostic remains a plugin-owned sample. Local catalog apps explicitly declare the neutral `catalog` capability: launch preparation readies
+working state are not removed by this product update. The former hand sample is now a recording library, not an importable laboratory app. Calibration is a separate following module; landmark/fusion algorithms remain unwired source for a future provider. Local catalog apps explicitly declare the neutral `catalog` capability: launch preparation readies
 active authored icon output (including typed icon sources) through managed jobs before opening the catalog, while generated template geometry needs no
 build or first destination-app run. Cards consume checked model URLs, retain image fallback and discard late loads after disposal. Ordinary settings edits
 use serialized field intent with classified stale-revision retries and inline unresolved-conflict controls rather than the routine reload modal.

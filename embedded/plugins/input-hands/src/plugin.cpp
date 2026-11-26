@@ -54,7 +54,7 @@ void produce(Input* input) noexcept {
       const double elapsed = std::chrono::duration<double>(begin - rateStart).count();
       if (tick == 1 || elapsed >= 1) {
         if (elapsed >= 1) { hz = float(rateFrames / elapsed); rateFrames = 0; rateStart = begin; }
-        const std::string text = "SYNTHETIC ONLY / " + input->config.scenario + (rejected ? " / invalid fixtures rejected" : " / panel metres; no camera");
+        const std::string text = "SYNTHETIC ONLY / " + input->config.scenario + (rejected ? " / invalid poses rejected" : " / panel metres; no camera");
         status(*input, XRB_INPUT_RUNNING, hz, text.c_str());
       }
       std::unique_lock<std::mutex> lock(input->mutex);

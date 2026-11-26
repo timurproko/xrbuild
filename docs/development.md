@@ -56,8 +56,8 @@ Related: [Confidentiality](confidentiality.md) for what must stay out of this re
   build code is trusted, not sandboxed. `setup:embedded`, `build:embedded` and `test:embedded` use explicit writable
   workspaces and fresh `build/embedded/e-<core-key>/` snapshots. Local package graphs and frozen lockfile links must
   agree; prerequisite builds precede tests/project builds. Root test and public Node CI invoke this lane explicitly.
-  Approved embedded modules include consolidated Publisher, the authored hand implementation/diagnostic with its
-  plugin-owned nested sample package (`plugins/*/samples/*`), and the explicitly configured headset packager.
+  Approved embedded modules include consolidated Publisher, the authored hand implementation/recording compatibility library with its
+  plugin-owned nested package (`plugins/*/samples/*`), and the explicitly configured headset packager.
   Seven public project groups preserve core/archive sections with desktop/no-input defaults and no deployment identity. The duplicate embedded starter is retired; New project still uses the canonical core template with its 3D icon/theme and required notices. Existing user projects and retained embedded working state are never deleted by product retirement.
   Headset tools/signing are explicitly provisioned user state, never global discovery/downloads or bundled binary payloads.
   Hand source/build descriptors use public reviewed dependencies, user-owned state and synthetic default validation;

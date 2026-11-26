@@ -4,17 +4,22 @@
 #include <stdexcept>
 #include <tuple>
 #include <nlohmann/json.hpp>
-#include "fixture.h"
 
 namespace hand_tracking {
 namespace {
 constexpr int kBones[][2] = {{0,1},{1,2},{2,3},{3,4},{0,5},{5,6},{6,7},{7,8},
   {5,9},{9,10},{10,11},{11,12},{9,13},{13,14},{14,15},{15,16},{13,17},{0,17},{17,18},{18,19},{19,20}};
 const std::array<std::array<float, 3>, 21>& pose() {
-  static const auto points = [] {
-    auto json = nlohmann::json::parse(kHandFixture);
-    return json.at("points").get<std::array<std::array<float, 3>, 21>>();
-  }();
+  // The ordinary native provider owns its authored wrist-relative metre pose.
+  // No dependency on a browser fixture, sample page or generated header.
+  static constexpr std::array<std::array<float, 3>, 21> points{{
+    {0, 0, 0},
+    {0.018f, 0.018f, 0}, {0.035f, 0.034f, 0}, {0.050f, 0.045f, 0}, {0.060f, 0.057f, 0},
+    {0.025f, 0.045f, 0}, {0.025f, 0.080f, 0}, {0.025f, 0.103f, 0}, {0.025f, 0.122f, 0},
+    {0, 0.050f, 0}, {0, 0.090f, 0}, {0, 0.115f, 0}, {0, 0.140f, 0},
+    {-0.023f, 0.044f, 0}, {-0.023f, 0.080f, 0}, {-0.023f, 0.103f, 0}, {-0.023f, 0.121f, 0},
+    {-0.043f, 0.034f, 0}, {-0.047f, 0.060f, 0}, {-0.050f, 0.078f, 0}, {-0.052f, 0.094f, 0}
+  }};
   return points;
 }
 }
@@ -67,7 +72,7 @@ Sample generate(const Config& config, double seconds) {
       hand.keypoints[k * 4] = (h == 0 ? -0.11f : 0.11f) + mirror * point[0] + dx;
       hand.keypoints[k * 4 + 1] = -0.08f + point[1] + dy;
       hand.keypoints[k * 4 + 2] = 0.07f + point[2] + dz;
-      hand.keypoints[k * 4 + 3] = 1.0f;  // Known fixture, not ML confidence.
+      hand.keypoints[k * 4 + 3] = 1.0f;  // Authored pose, not ML confidence.
     }
     if (config.scenario == "invalid" && phase >= 2) hand.keypoints[8 * 4] += 0.25f;
   }
