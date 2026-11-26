@@ -23,7 +23,7 @@ type Phase = 'not-started' | 'starting' | 'running' | 'stopping' | 'stopped' | '
 interface Running {
   id: string; epoch: string; owner: string; token: string; phase: Phase; reason: string; heartbeat: number;
   source?: Awaited<ReturnType<typeof prepareHandSession>>['source']; url?: string; child?: ChildProcessWithoutNullStreams;
-  pid?: number; ended: boolean; cancelled: boolean; preparing: boolean; live?: LiveHands; release?: () => void; stop?: Promise<void>;
+  pid?: number; ended: boolean; cancelled: boolean; preparing: boolean; drainTimedOut?: boolean; live?: LiveHands; release?: () => void; stop?: Promise<void>;
 }
 /** One process-owned session; no durable capabilities, camera auto-start or adoption by another tab. */
 export class HandSessions {
@@ -61,7 +61,9 @@ export class HandSessions {
       return sendJson(res, 200, { capability, ...this.status() });
     }
     const owner = String(req.headers.authorization ?? '').replace(/^Bearer /, '');
-    if (!this.pages.has(owner) || this.pages.get(owner)! < performance.now()) throw new HttpError(403, 'Hands page capability is missing or expired');
+    if (!this.pages.has(owner) || this.pages.get(owner)! < performance.now()) {
+      throw new HttpError(403, 'Hands page capability is missing or expired', { code: 'hands-page-capability-expired' });
+    }
     this.pages.set(owner, performance.now() + 60000);
     if (!action && req.method === 'GET') return sendJson(res, 200, this.status(owner));
     if (req.method !== 'POST') throw new HttpError(405, 'Hands operation not allowed');
@@ -110,7 +112,7 @@ export class HandSessions {
         }
         s.ended = true; s.live?.close();
         if (!s.cancelled) { s.phase = 'failed'; s.reason ||= 'Provider worker exited unexpectedly'; }
-        if (!s.preparing) { s.release?.(); s.release = undefined; }
+        this.finishDrained(s);
       })(); });
       child.stdout.setEncoding('utf8').on('data', (text: string) => {
         buffer += text;
@@ -147,7 +149,15 @@ export class HandSessions {
       await reservation?.close(); reservation = null; s.preparing = false;
       await this.stop(s, s.cancelled && !s.reason ? '' : (e as Error).message);
       throw new HttpError(409, s.reason || 'Hands Start cancelled');
-    } finally { await reservation?.close(); s.preparing = false; if (s.ended) { s.release?.(); s.release = undefined; } }
+    } finally { await reservation?.close(); s.preparing = false; this.finishDrained(s); }
+  }
+  /** A timed-out Stop may already be memoized; late preparation/death still completes ownership cleanup. */
+  private finishDrained(s: Running): void {
+    if (s.preparing || s.child && !s.ended) return;
+    s.ended = true;
+    if (s.drainTimedOut) s.reason = 'Cancelled Hands preparation has drained; Start is available again';
+    if (s.cancelled) s.phase = s.reason ? 'failed' : 'stopped';
+    s.release?.(); s.release = undefined;
   }
   private stop(s: Running, reason = ''): Promise<void> {
     if (s.stop) return s.stop;
@@ -155,7 +165,7 @@ export class HandSessions {
     return s.stop = (async () => {
       const preparingBy = performance.now() + 31000;
       while (s.preparing && !s.child && performance.now() < preparingBy) await pause(20);
-      if (s.preparing && !s.child) { s.phase = 'failed'; s.reason = 'Hands preparation has not drained; wait before reacquisition'; return; }
+      if (s.preparing && !s.child) { s.drainTimedOut = true; s.phase = 'failed'; s.reason = 'Hands preparation has not drained; wait before reacquisition'; return; }
       if (s.child && !s.ended) {
         s.child.stdin.end('{"stop":true}\n');
         const deadline = performance.now() + 6000;
@@ -166,7 +176,7 @@ export class HandSessions {
         if (!s.ended) { s.phase = 'failed'; s.reason = 'Cannot verify worker death; restart the panel before reacquisition'; return; }
       }
       // During asynchronous preparation, Start's cancellation check must drain before ownership is free.
-      if (!s.child && !s.preparing) { s.ended = true; s.release?.(); s.release = undefined; }
+      if (!s.child) this.finishDrained(s);
       s.phase = s.reason ? 'failed' : 'stopped';
     })();
   }

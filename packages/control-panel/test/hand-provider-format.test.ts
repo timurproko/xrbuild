@@ -35,9 +35,31 @@ test('real raw recorder preserves bytes/native capabilities and freezes recordin
   const parsed = decodeMessage(raw.buffer) as any; assert.equal(parsed.capabilities.pinch, true); assert.equal(parsed.hands[0].grabbing, true); assert.equal(parsed.hands[0].pinch[0], true);
   capture.dispose(); assert.equal(listeners.size + life.size, 0);
 });
+for (const owner of ['bundled:input-hands', 'workspace:input-hands']) test(`${owner} capture completes, exports and replays with original provenance and raw packet`, async () => {
+  const source = recording(); source.source = { owner, id: 'hand-tracking', version: '1' };
+  let frames: any, lifecycle: any, completed: any, reason = '', callback: any, began: any, applied: any;
+  const samples: any[] = [];
+  const capture = createProviderRecording({ format, producer: { recordingSource: () => source,
+    subscribeRawFrames(fn: any) { frames = fn; return () => {}; }, subscribeLifecycle(fn: any) { lifecycle = fn; return () => {}; } },
+    onComplete(doc: any, why: string) { completed = doc; reason = why; } });
+  try {
+    capture.start(); frames({ epoch: source.epoch, sequence: 1, captureTimeMs: 1000, publishTimeMs: 1001, packet: packet() });
+    lifecycle({ epoch: source.epoch, phase: 'retired' });
+    assert.ok(completed, reason); assert.equal(capture.active, false);
+    const exported = JSON.parse(JSON.stringify(completed)); format.validate(exported);
+    assert.deepEqual(exported.source, source.source); assert.deepEqual(Buffer.from(exported.samples[0].packet, 'base64'), Buffer.from(packet()));
+    const stop = await format.replay(exported, { now: () => 0, requestFrame: (fn: any) => { callback = fn; return 1; }, cancelFrame: () => {}, view: {
+      active: false, async setProfile(p: any) { applied = p; return true; }, beginSession(value: any) { began = value; return true; }, pushFrame(value: any) { samples.push(value); return true; }, clearSession() {},
+    } });
+    callback(); assert.equal(samples.length, 1); assert.notEqual(began.epoch, source.epoch); assert.equal(began.mode, 'replay');
+    assert.deepEqual(applied, source.profile); assert.deepEqual(samples[0].frame, decodeMessage(packet().buffer));
+    stop(); await stop.done;
+  } finally { capture.dispose(); }
+});
+
 test('format rejects wrong space, baked processing, credentials/paths, corrupt/native samples and bounded count/time/size', () => {
   assert.ok(format.validate(recording()));
-  const mutations = [ (d: any) => d.globalAdjustmentsApplied = true, (d: any) => d.frameSpace = 'camera', (d: any) => d.token = 'secret', (d: any) => d.source.path = 'private-path', (d: any) => d.profile.appearance.token = 'secret', (d: any) => d.samples[0].captureTimeMs = 1001, (d: any) => d.samples[0].packet = 'bad', (d: any) => d.samples.push(d.samples[0]), (d: any) => d.samples = Array(10001).fill(d.samples[0]), (d: any) => { const p = packet(2, 121001); d.samples.push({ sequence: 2, captureTimeMs: 121001, publishTimeMs: 121002, packet: Buffer.from(p).toString('base64') }); }, (d: any) => d.source.version = 'x'.repeat(16 * 1024 * 1024) ];
+  const mutations = [ (d: any) => d.globalAdjustmentsApplied = true, (d: any) => d.frameSpace = 'camera', (d: any) => d.token = 'secret', (d: any) => d.source.path = 'private-path', (d: any) => d.source.owner = 'embedded:input-hands', (d: any) => d.source.owner = 'bundled:../escape', (d: any) => d.profile.appearance.token = 'secret', (d: any) => d.samples[0].captureTimeMs = 1001, (d: any) => d.samples[0].packet = 'bad', (d: any) => d.samples.push(d.samples[0]), (d: any) => d.samples = Array(10001).fill(d.samples[0]), (d: any) => { const p = packet(2, 121001); d.samples.push({ sequence: 2, captureTimeMs: 121001, publishTimeMs: 121002, packet: Buffer.from(p).toString('base64') }); }, (d: any) => d.source.version = 'x'.repeat(16 * 1024 * 1024) ];
   for (const mutate of mutations) { const d = recording(); mutate(d); assert.throws(() => format.validate(d)); }
 });
 test('recorded nonidentity profile, not current live profile, is applied once through actual app-default SDK ingress', async () => {

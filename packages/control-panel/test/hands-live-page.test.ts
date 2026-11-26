@@ -69,6 +69,19 @@ test('top-level Start/Stop and SDK pinch/drag use actual native frames, preserve
       await evaluate(`document.documentElement.dataset.theme='light'`); await sleep(100);
       await fs.writeFile(path.join(proof, 'hands-live-light.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
       await evaluate(`document.documentElement.dataset.theme='dark'`);
+      // Real browser/service/native-worker recovery: expire only test-owned capabilities, never reload/adopt.
+      await evaluate('window.beforeRenewal=livePage.session.recordingSource().epoch;window.sameDocument=true');
+      const pages: Map<string, number> = (app.panel.handSessions as any).pages;
+      for (const owner of pages.keys()) pages.set(owner, -1);
+      await wait('!livePage.session.active && !livePage.session.stopping && !livePage.view.testState.drag.held && !livePage.view.testState.pinch.held');
+      for (let i = 0; app.panel.handSessions.busy && i < 250; i++) await sleep(20);
+      assert.equal(app.panel.handSessions.busy, false); assert.equal(await evaluate('livePage.view.currentHands.length'), 0);
+      await wait(`document.querySelector('#hands-start-stop').textContent==='Start' && !document.querySelector('#hands-start-stop').disabled`);
+      await evaluate(`document.querySelector('#hands-start-stop').click()`);
+      await wait('livePage.view.testState.pinch.held && livePage.view.testState.drag.held');
+      assert.equal(await evaluate('sameDocument'), true);
+      assert.equal(await evaluate('beforeRenewal!==livePage.session.recordingSource().epoch'), true);
+      await evaluate('ends=[]');
       await evaluate(`(()=>{const f=document.querySelector('[data-field="offsetMm.x"]');f.value='15';f.dispatchEvent(new Event('input',{bubbles:true}));f.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       await wait('livePage.view.profile.offsetMm.x===15');
       assert.ok((await evaluate('ends')).includes('lost')); assert.equal((await evaluate('ends')).includes('release'), false);

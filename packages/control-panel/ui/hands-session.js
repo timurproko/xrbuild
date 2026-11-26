@@ -4,9 +4,26 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
   let capability = '', bootstrapPromise = null, current = null, disposed = false, generation = 0, raf = 0;
   const raw = new Set(), lifecycle = new Set();
   const notify = value => { onStatus(value); for (const listener of lifecycle) listener(value); };
-  async function request(action = '', body) {
-    const response = await fetcher('/api/hands/session' + action, { method: body ? 'POST' : 'GET', cache: 'no-store', mode: 'same-origin', redirect: 'error', headers: { 'x-xrb-hands': '1', ...(body ? { 'content-type': 'application/json' } : {}), ...(capability ? { authorization: `Bearer ${capability}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
-    const value = await response.json(); if (!response.ok) throw new Error(value.error || 'Hands session request failed'); return value;
+  async function request(action = '', body, renew = true) {
+    const sentCapability = capability;
+    const response = await fetcher('/api/hands/session' + action, { method: body ? 'POST' : 'GET', cache: 'no-store', mode: 'same-origin', redirect: 'error', headers: { 'x-xrb-hands': '1', ...(body ? { 'content-type': 'application/json' } : {}), ...(sentCapability ? { authorization: `Bearer ${sentCapability}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const value = await response.json();
+    if (!response.ok) {
+      if (action !== '/bootstrap' && value.details?.code === 'hands-page-capability-expired') {
+        // A delayed response for an old credential cannot retire a newer session/credential.
+        if (sentCapability && sentCapability === capability) {
+          if (current) { generation++; retire(current, 'Hands page authorization expired. Press Start again.'); current = null; }
+          capability = '';
+        }
+        if (renew && !disposed) {
+          await bootstrap();
+          // Only retry a read; never replay Start/Stop/ACK/heartbeat under a different owner.
+          if (action === '/status') return request(action, body, false);
+        }
+      }
+      throw new Error(value.error || 'Hands session request failed');
+    }
+    return value;
   }
   async function bootstrap() {
     if (capability || disposed) return;
@@ -28,8 +45,8 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
         if (!s.sessionId) { const status = await request('/status', {}); if (status.owns) s.sessionId = status.sessionId; }
         const result = s.sessionId ? await request('/stop', { sessionId: s.sessionId }) : null;
         const failure = result?.reason || reason;
-        if (!disposed) notify({ phase: failure ? 'failed' : 'stopped', reason: failure, epoch: s.epoch, sessionId: s.sessionId });
-      } catch (error) { if (!disposed) onStatus({ phase: 'failed', reason: error.message }); }
+        if (!disposed && current === s) notify({ phase: failure ? 'failed' : 'stopped', reason: failure, epoch: s.epoch, sessionId: s.sessionId });
+      } catch (error) { if (!disposed && current === s) onStatus({ phase: 'failed', reason: error.message }); }
       if (current === s) current = null;
     })();
   }
@@ -58,6 +75,8 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
     if (!view || replaying() || view.replaying || view.active) throw new Error('Stop replay and wait for the 3D view before Start');
     const ownGeneration = ++generation;
     await bootstrap(); if (disposed || ownGeneration !== generation) return;
+    // Renew an idle page before allocating a Start context; renewal never starts capture by itself.
+    await request('/status', {}); if (disposed || ownGeneration !== generation) return;
     const s = { sessionId: null, epoch: null, retired: false, profileSequence: -1, clock: createSessionClock({ now }), pending: null, lastFresh: null, invalidStreak: 0, accepted: 0, dropped: 0, rejected: 0, times: [], pings: new Set() };
     current = s; notify({ phase: 'starting' });
     // Status polling also binds heartbeat during slow native create/start; the id is not known until this read.
@@ -66,10 +85,12 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
       if (s.retired || polling) return; polling = true;
       try {
         let status = await request('/status', {});
+        if (s.retired || current !== s) return;
         if (status.owns) { s.sessionId ??= status.sessionId; status = await request('/heartbeat', { sessionId: s.sessionId }); }
+        if (s.retired || current !== s) return;
         if (s.sessionId && (!status.owns || status.sessionId !== s.sessionId || ['failed', 'stopped'].includes(status.phase))) { void stop(status.reason || 'Provider session ended'); return; }
         if (status.profile && s.sessionId) { try { await applyProfile(s, status.profile); } catch { /* Persistence and actual SDK delivery remain separate; keep the last valid snapshot. */ } }
-      } catch (error) { void stop(error.message); } finally { polling = false; }
+      } catch (error) { if (!s.retired && current === s) void stop(error.message); } finally { polling = false; }
     }, 1000);
     try {
       const result = await request('', selection);
@@ -87,7 +108,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
         try { const message = sessionPacket(event.data, s.epoch, decode); if (message.type === 'clock') { if (!s.pings.delete(message.clocks[0])) throw new Error('Unsolicited clock reply'); s.clock.sample(message.clocks); } else { if (s.pending) throw new Error('Provider violated frame credit'); s.pending = message; } }
         catch (error) { s.rejected++; void stop(error.message); }
       };
-      socket.onerror = () => { void stop('Provider transport failed'); };
+      socket.onerror = () => { if (!s.retired && current === s) void stop('Provider transport failed'); };
       socket.onclose = () => { if (!s.retired) void stop('Provider transport disconnected'); };
       notify({ phase: 'waiting', source: s.source, epoch: s.epoch, sessionId: s.sessionId });
     } catch (error) { if (!s.retired) await stop(error.message); throw error; }
@@ -125,7 +146,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
   raf = frame(tick);
   return {
     start, stop,
-    async refreshProfile() { const s = current; if (!s || s.retired) return; const status = await request('/status', {}); if (status.owns && status.sessionId === s.sessionId && status.profile) await applyProfile(s, status.profile); },
+    async refreshProfile() { const s = current; if (!s || s.retired) return; const status = await request('/status', {}); if (!s.retired && current === s && status.owns && status.sessionId === s.sessionId && status.profile) await applyProfile(s, status.profile); },
     async status() { await bootstrap(); return request('/status', {}); },
     get active() { return !!current && !current.retired; },
     get stopping() { return !!current?.retired; },

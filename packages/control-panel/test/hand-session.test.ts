@@ -13,7 +13,7 @@ async function fixture(options: { prepare?: (request: any) => Promise<any>; hear
     acquire: () => { acquired++; return () => { releases++; }; },
     prepare: options.prepare ?? (async () => ({ workerExe: worker!, helperExe: helper!, runtimeName: 'simulated', revision: 'revision', profile: handProfile(), source: { owner: 'core', id: 'simulated', label: 'Synthetic', version: '1' }, config: { hands: 2, rateHz: 120 } })),
   });
-  const server = http.createServer((req, res) => { void sessions.handle(req, res).catch(e => { res.writeHead(e.status ?? 500, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: e.message })); }); });
+  const server = http.createServer((req, res) => { void sessions.handle(req, res).catch(e => { res.writeHead(e.status ?? 500, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: e.message, details: e.details })); }); });
   await new Promise<void>(r => server.listen(0, '127.0.0.1', r)); origin = `http://127.0.0.1:${(server.address() as any).port}`;
   const call = async (action = '', body?: any, capability = '', extra: Record<string, string> = {}) => {
     return new Promise<{status: number; body: any}>((resolve, reject) => {
@@ -52,6 +52,28 @@ test('Stop during preparation fences late Start and drains before another owner 
     assert.equal(f.sessions.busy, false); assert.equal(f.releases, 1);
   } finally { await f.close(); }
 });
+for (const outcome of ['resolve', 'reject']) test(`timed-out Stop releases exactly once when cancelled preparation later ${outcome}s and permits restart`, async t => {
+  let now = 0, finish!: (value: any) => void, reject!: (reason: Error) => void, preparations = 0;
+  t.mock.method(performance, 'now', () => now);
+  const f = await fixture({ prepare: () => ++preparations === 1 ? new Promise((yes, no) => { finish = yes; reject = no; }) : Promise.reject(new Error('Restart reached preparation')) });
+  try {
+    const owner = (await f.call('/bootstrap', {})).body.capability;
+    const starting = f.call('', selection, owner); while (!finish) await delay(5);
+    const state = (await f.call('', undefined, owner)).body;
+    const stopping = f.call('/stop', { sessionId: state.sessionId }, owner);
+    while (f.sessions.status(owner).phase !== 'stopping') await delay(5);
+    now = 32000;
+    assert.equal((await stopping).body.phase, 'failed'); assert.equal(f.sessions.busy, true); assert.equal(f.releases, 0);
+    assert.equal((await f.call('', selection, owner)).status, 409, 'must not acquire while preparation remains alive');
+    if (outcome === 'resolve') finish({}); else reject(new Error('Delayed preparation failed'));
+    assert.equal((await starting).status, 409);
+    assert.equal(f.sessions.preparing, false); assert.equal(f.sessions.busy, false); assert.equal(f.releases, 1);
+    await f.call('/stop', { sessionId: state.sessionId }, owner); assert.equal(f.releases, 1, 'repeated Stop cannot double-release');
+    const restarted = await f.call('', selection, owner);
+    assert.match(restarted.body.error, /Restart reached preparation/); assert.equal(f.acquired, 2); assert.equal(f.releases, 2); assert.equal(f.sessions.busy, false);
+  } finally { await f.close(); }
+});
+
 test('real reserved supervised session is owner-bound, receives native handoff, stops and releases on page loss', { skip: !worker || !helper, timeout: 20000 }, async () => {
   const f = await fixture({ heartbeatMs: 500 });
   try {
