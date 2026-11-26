@@ -25,27 +25,15 @@
     </div>
   </header>
   <main id="hands-workspace" class="xrb-workspace-layout" aria-label="Hands workspace">
-    <section class="xrb-card hands-panel" aria-label="Hand source and tools">
+    <section class="xrb-card hands-panel" aria-label="Hand source">
       <div class="xrb-stack hands-source">
+        <div id="hands-session-actions" class="xrb-button-row" hidden></div>
         <form id="hands-form" class="xrb-stack">
-          <label class="xrb-field-label" for="hands-provider">Skeleton provider<select id="hands-provider" name="provider" aria-describedby="hands-availability" aria-label="Skeleton provider"></select></label>
-          <p id="hands-availability" class="xrb-help" role="status" aria-live="polite"></p>
-          <p id="hands-session-status" class="xrb-help" role="status">Not started. Opening Hands does not start tracking.</p>
-          <div id="hands-session-actions" class="xrb-button-row" hidden></div>
-          <div class="xrb-button-row"><button id="hands-save" type="submit" disabled>Save source</button><button id="hands-reload" type="button">Reload</button></div>
-          <p class="xrb-help">Save source for the next Hands session or app launch. Changing the source does not switch an active session.</p>
+          <label class="xrb-field-label" for="hands-provider">Skeleton provider<select id="hands-provider" name="provider" aria-label="Skeleton provider" disabled></select></label>
         </form>
-        <p id="hands-message" class="xrb-help" role="status" aria-live="polite" hidden></p>
-        <p id="hands-previous-session" class="xrb-help" hidden></p>
-        <div id="hands-postprocessing-root"><h2>Post-processing</h2><p class="xrb-help">No post-processing plugins are installed.</p></div>
-      </div>
-      <div class="xrb-tabs hands-tool-tabs" role="tablist" aria-label="Hand tools">
-        <button id="hands-recordings-tab" class="xrb-tab" role="tab" aria-selected="true" aria-controls="hands-recordings-panel">Record</button>
-      </div>
-      <div id="hands-recordings-panel" class="xrb-sidebar-content" role="tabpanel" aria-labelledby="hands-recordings-tab">
-        <p id="hands-recording-status" class="xrb-help">Recording needs a live hand session.</p>
-        <div id="hands-recording-actions" class="xrb-button-row" hidden></div>
-        <div id="hands-recordings-root"><p class="xrb-help">Recording tools are unavailable.</p></div>
+        <p id="hands-message" class="field-error" role="alert" hidden></p>
+        <div class="xrb-button-row" id="hands-source-recovery" hidden><button id="hands-source-retry" class="small" type="button">Retry</button><button id="hands-source-discard" class="small" type="button" hidden>Use saved</button></div>
+        <div id="hands-postprocessing-root" hidden></div>
       </div>
     </section>
     <section id="hands-viewport" class="xrb-card hands-viewport" aria-label="3D hand view">

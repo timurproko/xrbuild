@@ -1,17 +1,19 @@
 # Hands
 
 `/hands/` is the core hand workspace: global skeleton provider, optional desktop hand-mesh selector,
-SDK hand view, grouped global adjustments and Record. It opens without optional hand tools.
-Source changes apply on the next app launch; viewing this page never starts hardware.
-Until the separate live-session component is connected, the view is idle and Record says it needs a live hand session.
+SDK hand view and grouped global adjustments. It opens without optional hand tools.
+Choosing Skeleton provider saves silently for the next app launch; a failed save retains the choice with an inline retry.
+The sidebar omits routine source status/guidance. Viewing this page never starts hardware.
+The top slot above the provider is reserved for separately delivered live controls; until connected, the view is idle.
 
 The former diagnostic and legacy hand-tracking page routes are removed (404, no redirects).
 There is no generated preview, local fixture, fixture interaction target or laboratory navigation.
-Synthetic remains an ordinary installed provider choice, never a fallback.
+Synthetic remains an ordinary installed provider choice, never a fallback. In Apps, the Input option is labelled
+Hands (or Hands (unavailable)); its saved value remains `hand`, so existing app settings stay compatible.
 
 ## Post-processing
 
-The Post-processing selector under Source offers None or an installed mesh plugin, with its settings and status underneath. Save affects the next desktop app run, not the current one; it does not save source or adjustment drafts. Selection/settings share the global Hands profile. The current desktop run's plugin/status is shown separately from the saved choice.
+Post-processing appears below Skeleton provider only when at least one mesh plugin is installed; otherwise its entire root is hidden, including its heading and empty state, without clearing stored settings. When visible, the selector offers None or an installed mesh plugin, with its settings and status underneath. Save affects the next desktop app run, not the current one; it does not save unfinished adjustment inputs. Selection/settings share the global Hands profile. The current desktop run's plugin/status is shown separately from the saved choice.
 
 A selected plugin adds only a mesh from the final processed skeleton, never changes input/gestures/interaction, and runs only for desktop apps launched from this panel. Missing, late or failed output uses the skeleton visibly. Browser previews, published web builds and offline packages remain skeleton-only. No actual mesh processor or model is bundled by this mechanism; see [plugin setup and contract](hand-mesh-plugins.md).
 
@@ -23,10 +25,15 @@ The [stable output contract](calibration.md#stable-output-contract-version-1) is
 Existing calibration code and state remain intact. Browser landmark and two-view fusion algorithms are retained,
 unwired from product pages, as source for a future provider. No such provider is implemented here.
 
-## Recording integration
+## Retained recording integration (not reachable from Hands)
+
+Hands no longer mounts Record, legacy recording tools or any recording placeholders. Recorder implementations,
+compatibility readers and API routes remain intact; stored recordings are not deleted or migrated. Their future UI
+placement is deferred. The recorder integration object uses detached nodes, preserving its API for the parallel live
+component without exposing recording actions or loading the legacy recording tool module.
 
 The page exports `handsPage` from `ui/hands.js`: `view`, `snapshot`, `request`, and `recorder`.
-`snapshot` is the editor's revision-bound base, not the running session's profile authority. While `view.active`
+`snapshot` is the latest incorporated revision-bound editor snapshot, not the running session's profile authority. While `view.active`
 the session component owns ordered SDK profile updates; saved-file polling changes only idle preview.
 `view.profile` returns a cloned validated applied profile. Start must reject `recorder.replaying` (including async
 replay setup). Never derive recording provenance from unsaved controls or acknowledge a profile merely reaching disk.
@@ -59,7 +66,7 @@ storage operations use `/api/hands/tools/`. No device/model/inference/fusion mod
 ## Data
 
 Global source, adjustments and mesh selection/settings belong to workspace `config/hands/profile.json`.
-The existing right-side component owns both groups, resets, Apply and revision/delivery handling;
+The existing right-side component owns both standard direct-panel groups, independent immediate resets, committed-edit saves and revision/delivery handling;
 see [global adjustment behaviour](hand-adjustments.md).
 Legacy pose CSV remains in `.xrb/hand-tracking/recordings/`; optional calibration/preferences remain in
 `config/plugins/input-hands/preferences.json`. Exports and models stay in their existing locations.
