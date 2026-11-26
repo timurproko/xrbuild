@@ -117,7 +117,8 @@ struct Server::Client {
   std::mutex m;
   std::condition_variable cv;
   std::map<uint8_t, std::vector<uint8_t>> pending;  // newest frame per message type
-  bool closed = false;
+  bool closed = false, authenticated = false;
+  uint32_t pendingSequence = 0, waitingSequence = 0;
   std::thread writer, reader;
 };
 
@@ -152,7 +153,7 @@ bool Server::start() {
   return true;
 }
 
-std::string Server::url() const { return "ws://127.0.0.1:" + std::to_string(port_) + "/?token=" + token_; }
+std::string Server::url() const { return "ws://127.0.0.1:" + std::to_string(port_) + (sessionToken.empty() ? "/?token=" + token_ : "/hands"); }
 
 void Server::stop() {
   if (!running_.exchange(false)) return;
@@ -181,6 +182,11 @@ void Server::acceptLoop() {
   while (running_) {
     SOCKET s = accept(listen_, nullptr, nullptr);
     if (s == INVALID_SOCKET) continue;  // stop() closes the socket and running_ ends the loop
+    if (!sessionToken.empty()) {
+      std::lock_guard<std::mutex> lock(clientsMutex_); int alive = 0;
+      for (const auto& client : clients_) { std::lock_guard<std::mutex> clientLock(client->m); if (!client->closed) ++alive; }
+      if (alive >= 4) { closesocket(s); continue; }
+    }
     auto c = std::make_shared<Client>();
     c->sock = s;
     c->reader = std::thread([this, c] { serve(c); });
@@ -207,8 +213,13 @@ void Server::acceptLoop() {
   }
 }
 
-static bool recvAll(SOCKET s, uint8_t* buf, size_t n) {
+static bool recvAll(SOCKET s, uint8_t* buf, size_t n, ULONGLONG deadline = 0) {
   while (n > 0) {
+    if (deadline) {
+      const auto now = GetTickCount64(); if (now >= deadline) return false;
+      const DWORD remaining = static_cast<DWORD>(deadline - now);
+      setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&remaining), sizeof(remaining));
+    }
     int r = recv(s, (char*)buf, (int)n, 0);
     if (r <= 0) return false;
     buf += r;
@@ -217,28 +228,54 @@ static bool recvAll(SOCKET s, uint8_t* buf, size_t n) {
   return true;
 }
 
+static bool receivePayload(SOCKET socket, size_t maximum, bool strict, uint8_t* opcode, std::vector<uint8_t>* payload, ULONGLONG deadline = 0) {
+  uint8_t h[2]; if (!recvAll(socket, h, 2, deadline)) return false;
+  if (strict && ((h[0] & 0xF0) != 0x80 || !(h[1] & 0x80))) return false;
+  *opcode = h[0] & 15; uint64_t len = h[1] & 127;
+  if (len == 126) { uint8_t bytes[2]; if (!recvAll(socket, bytes, 2, deadline)) return false; len = uint64_t(bytes[0]) << 8 | bytes[1]; }
+  else if (len == 127) { uint8_t bytes[8]; if (!recvAll(socket, bytes, 8, deadline)) return false; len = 0; for (uint8_t b : bytes) len = len << 8 | b; }
+  if (len > maximum) return false;
+  uint8_t mask[4]{}; if ((h[1] & 128) && !recvAll(socket, mask, 4, deadline)) return false;
+  payload->resize(size_t(len)); if (len && !recvAll(socket, payload->data(), size_t(len), deadline)) return false;
+  for (size_t i = 0; i < payload->size(); ++i) (*payload)[i] ^= mask[i & 3];
+  return true;
+}
+static bool sendAll(SOCKET socket, const uint8_t* bytes, size_t size) {
+  while (size) { int sent = send(socket, reinterpret_cast<const char*>(bytes), int(size), 0); if (sent <= 0) return false; bytes += sent; size -= sent; }
+  return true;
+}
 void Server::serve(std::shared_ptr<Client> c) {
   // ---- HTTP upgrade handshake
-  DWORD timeout = 3000;
+  DWORD timeout = sessionToken.empty() ? 3000 : 2000;
+  const auto handshakeDeadline = GetTickCount64() + timeout;
   setsockopt(c->sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
   std::string req;
   char buf[2048];
   while (req.find("\r\n\r\n") == std::string::npos && req.size() < 8192) {
+    if (!sessionToken.empty()) {
+      const auto now = GetTickCount64(); if (now >= handshakeDeadline) break;
+      const DWORD remaining = static_cast<DWORD>(handshakeDeadline - now);
+      setsockopt(c->sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&remaining), sizeof(remaining));
+    }
     int r = recv(c->sock, buf, sizeof(buf), 0);
     if (r <= 0) break;
     req.append(buf, r);
   }
   auto header = [&](const char* name) {
     std::string lower = req;
-    for (char& ch : lower) ch = (char)tolower(ch);
+    for (char& ch : lower) ch = (char)tolower(static_cast<unsigned char>(ch));
     std::string key = std::string("\r\n") + name + ":";
     size_t p = lower.find(key);
     if (p == std::string::npos) return std::string();
     size_t start = req.find_first_not_of(' ', p + key.size()), end = req.find("\r\n", start);
+    if (start == std::string::npos || end == std::string::npos) return std::string();
     return req.substr(start, end - start);
   };
   std::string wsKey = header("sec-websocket-key");
-  bool tokenOk = req.find("token=" + token_) != std::string::npos;
+  const bool session = !sessionToken.empty();
+  bool tokenOk = session ? req.starts_with("GET /hands HTTP/1.1\r\n") && header("origin") == sessionOrigin && header("host") == "127.0.0.1:" + std::to_string(port_)
+    : req.find("token=" + token_) != std::string::npos;
+  if (session) tokenOk = tokenOk && req.find("\r\n\r\n") != std::string::npos && header("sec-websocket-version") == "13" && wsKey.size() == 24;
   if (wsKey.empty() || !tokenOk) {
     const char* resp = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
     send(c->sock, resp, (int)strlen(resp), 0);
@@ -246,42 +283,60 @@ void Server::serve(std::shared_ptr<Client> c) {
     for (char& ch : first) if (ch == 13 || ch == 10) ch = 124;  // CR/LF -> |
     char hex[64] = "";
     for (size_t i = 0; i < req.size() && i < 8; i++) sprintf_s(hex + i * 3, 4, "%02x ", (unsigned char)req[i]);
-    LOGI("[channel] rejected a connection (%s): %zu bytes [%s] %s", wsKey.empty() ? "not a WebSocket upgrade" : "bad token", req.size(), hex, first.c_str());
-    closesocket(c->sock);
-    c->closed = true;
+    if (!session) LOGI("[channel] rejected a connection (%s): %zu bytes [%s] %s", wsKey.empty() ? "not a WebSocket upgrade" : "bad token", req.size(), hex, first.c_str());
+    { std::lock_guard<std::mutex> lock(c->m); closesocket(c->sock); c->sock = INVALID_SOCKET; c->closed = true; }
     return;
   }
   std::string resp = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " +
                      acceptKey(wsKey) + "\r\n\r\n";
   send(c->sock, resp.data(), (int)resp.size(), 0);
+  if (session) {
+    timeout = 2000; setsockopt(c->sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+    uint8_t opcode = 0; std::vector<uint8_t> auth;
+    bool accepted = receivePayload(c->sock, 64, true, &opcode, &auth, GetTickCount64() + 2000) && opcode == 2 && auth.size() == sessionToken.size();
+    unsigned char difference = 0; if (accepted) for (size_t i = 0; i < auth.size(); ++i) difference |= auth[i] ^ sessionToken[i];
+    int expected = 0;
+    accepted = accepted && difference == 0 && clientCount_.compare_exchange_strong(expected, 1);
+    if (!accepted) { shutdown(c->sock, SD_BOTH); std::lock_guard<std::mutex> lock(c->m); c->closed = true; return; }
+    { std::lock_guard<std::mutex> lock(c->m); c->authenticated = true; }
+    timeout = 5000; setsockopt(c->sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+    timeout = 2000; setsockopt(c->sock, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+  }
   BOOL noDelay = TRUE;
   setsockopt(c->sock, IPPROTO_TCP, TCP_NODELAY, (const char*)&noDelay, sizeof(noDelay));
-  timeout = 0;
-  setsockopt(c->sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+  if (!session) { timeout = 0; setsockopt(c->sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout)); }
   {
     // A page that connects late (or reloads) still gets the current state, e.g. the
     // tracking status that was sent once at start-up.
     std::lock_guard<std::mutex> g(clientsMutex_);
     std::lock_guard<std::mutex> cg(c->m);
-    for (const auto& [type, frame] : lastFrames_) c->pending[type] = frame;
+    if (!session) for (const auto& [type, frame] : lastFrames_) c->pending[type] = frame;
   }
-  clientCount_++;
+  if (!session) clientCount_++;
   LOGI("[channel] page connected (%d client%s)", clientCount_.load(), clientCount_.load() == 1 ? "" : "s");
 
   // ---- writer: sends the newest pending frame of each type
-  c->writer = std::thread([c] {
+  c->writer = std::thread([this, c, session] {
     for (;;) {
       std::map<uint8_t, std::vector<uint8_t>> out;
       {
         std::unique_lock<std::mutex> g(c->m);
-        c->cv.wait(g, [&] { return c->closed || !c->pending.empty(); });
+        c->cv.wait(g, [&] {
+          if (c->closed) return true;
+          for (const auto& entry : c->pending) if (!session || entry.first != sessionFrameType || !c->waitingSequence) return true;
+          return false;
+        });
         if (c->closed) return;
-        out.swap(c->pending);
+        for (auto it = c->pending.begin(); it != c->pending.end();) {
+          if (session && it->first == sessionFrameType && c->waitingSequence) { ++it; continue; }
+          if (session && it->first == sessionFrameType) c->waitingSequence = c->pendingSequence;
+          out.emplace(it->first, std::move(it->second)); it = c->pending.erase(it);
+        }
       }
       for (auto& [type, frame] : out)
-        if (send(c->sock, (const char*)frame.data(), (int)frame.size(), 0) <= 0) {
+        if (!sendAll(c->sock, frame.data(), frame.size())) {
           std::lock_guard<std::mutex> g(c->m);
-          c->closed = true;
+          c->closed = true; shutdown(c->sock, SD_BOTH);
           return;
         }
     }
@@ -289,26 +344,15 @@ void Server::serve(std::shared_ptr<Client> c) {
 
   // ---- reader: client frames are masked; handle binary, ping and close
   for (;;) {
-    uint8_t h[2];
-    if (!recvAll(c->sock, h, 2)) break;
-    uint8_t opcode = h[0] & 0x0F;
-    uint64_t len = h[1] & 0x7F;
-    if (len == 126) {
-      uint8_t e[2];
-      if (!recvAll(c->sock, e, 2)) break;
-      len = (uint64_t)e[0] << 8 | e[1];
-    } else if (len == 127) {
-      uint8_t e[8];
-      if (!recvAll(c->sock, e, 8)) break;
-      len = 0;
-      for (uint8_t b : e) len = len << 8 | b;
+    uint8_t opcode = 0; std::vector<uint8_t> payload;
+    if (!receivePayload(c->sock, session ? 16384 : 1 << 20, session, &opcode, &payload, session ? GetTickCount64() + 5000 : 0)) break;
+    if (session && (opcode != 2 && opcode != 8 && opcode != 9 || (opcode == 8 || opcode == 9) && payload.size() > 125)) break;
+    if (session && opcode == 2 && payload.size() == 5 && payload[0] == 110) {
+      uint32_t sequence = 0; memcpy(&sequence, payload.data() + 1, 4);
+      std::lock_guard<std::mutex> lock(c->m);
+      if (sequence == c->waitingSequence) { c->waitingSequence = 0; c->cv.notify_one(); }
+      continue;
     }
-    if (len > (1 << 20)) break;  // pages only send small control messages
-    uint8_t mask[4]{};
-    if ((h[1] & 0x80) && !recvAll(c->sock, mask, 4)) break;
-    std::vector<uint8_t> payload((size_t)len);
-    if (len && !recvAll(c->sock, payload.data(), (size_t)len)) break;
-    for (size_t i = 0; i < payload.size(); i++) payload[i] ^= mask[i & 3];
     if (opcode == 0x8) break;  // close
     if (opcode == 0x9) {       // ping -> pong
       std::vector<uint8_t> pong = encodeBinaryFrame(payload.data(), payload.size());
@@ -327,11 +371,15 @@ void Server::serve(std::shared_ptr<Client> c) {
   c->cv.notify_all();
   clientCount_--;
   LOGI("[channel] page disconnected");
+  if (session && onDisconnect) onDisconnect();
 }
 
 std::vector<uint8_t> Server::publish(MessageType type, const void* payload, size_t size) {
+  if (!sessionToken.empty() && (size > 128 * 1024 - sizeof(Header) || type != sessionFrameType && size > 16384)) return {};
+  const uint32_t sequence = ++seq_;
+  if (!sessionToken.empty() && !sequence) { if (onDisconnect) onDisconnect(); return {}; }
   std::vector<uint8_t> msg(sizeof(Header) + size);
-  Header h{type, kVersion, 0, ++seq_, hostTimeMs()};
+  Header h{type, kVersion, 0, sequence, hostTimeMs()};
   memcpy(msg.data(), &h, sizeof(h));
   if (size) memcpy(msg.data() + sizeof(h), payload, size);
   std::vector<uint8_t> frame = encodeBinaryFrame(msg.data(), msg.size());
@@ -339,7 +387,8 @@ std::vector<uint8_t> Server::publish(MessageType type, const void* payload, size
   lastFrames_[type] = frame;
   for (auto& c : clients_) {
     std::lock_guard<std::mutex> cg(c->m);
-    if (c->closed) continue;
+    if (c->closed || !sessionToken.empty() && !c->authenticated) continue;
+    if (!sessionToken.empty() && type == sessionFrameType) c->pendingSequence = h.seq;
     c->pending[type] = frame;  // replaces any older unsent message of this type
     c->cv.notify_one();
   }

@@ -30,6 +30,8 @@ const char* roleName(int role);  // "input", "display", "platform"
 class Catalog {
  public:
   ~Catalog();
+  // Explicit worker teardown before releasing acquisition ownership; handles are cleared once.
+  void unload();
   // Finds and queries every plugin under `roots`. Missing roots are skipped.
   void scan(const std::vector<std::wstring>& roots);
   const std::vector<Plugin>& all() const { return plugins_; }

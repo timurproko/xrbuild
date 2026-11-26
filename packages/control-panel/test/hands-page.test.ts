@@ -14,6 +14,10 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(html, /id="hands-postprocessing-root" hidden/);
   assert.doesNotMatch(html, /hands-diagnostics|Acquisition diagnostics|Local fixture|Motion \+ pinch|Pause|Restart|Capture|Calibration/);
   assert.equal((html.match(/role="tab"/g) ?? []).length, 0);
+  const live = await fs.readFile(path.join(ui, 'hands-live-controls.js'), 'utf8');
+  assert.match(live, /next Start or app launch/);
+  assert.match(live, /active session is not switched/);
+  assert.match(live, /Opening this page starts no capture/);
   const shell = await fs.readFile(path.join(ui, 'hands-shell.js'), 'utf8');
   assert.match(shell, /resetView\(\)/); assert.match(shell, /requestFullscreen\(\)/); assert.match(shell, /ArrowLeft/);
   assert.doesNotMatch(shell, /fetch\(|innerHTML\s*=.*tabpanel|replaceChildren/);

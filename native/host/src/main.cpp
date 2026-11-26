@@ -30,6 +30,7 @@
 #include "app_scheme.h"
 #include "args.h"
 #include "hand_recording.h"
+#include "../../provider-session/acquisition.h"
 #include "host_channel.h"
 #include "host_config.h"
 #include "hand_profile.h"
@@ -101,7 +102,8 @@ int main() {
   if (const HostArgs early = parseArgs(argc, argv); early.listPlugins) {
     plugins::Catalog catalog;
     catalog.scan(pluginRoots(exeDir(), early));
-    printf("@plugins %s\n", plugins::catalogJson(catalog, builtinProviders()).c_str());  // tagged like @channel/@status
+    const std::string inventory = plugins::catalogJson(catalog, builtinProviders());
+    printf("@plugins {\"handAcquisition\":1,%s\n", inventory.c_str() + 1);  // Only this host entry implements the early acquisition gate.
     fflush(stdout);
     LocalFree(argv);
     return 0;
@@ -128,6 +130,10 @@ int main() {
     TerminateProcess(GetCurrentProcess(), 3);
   }
 
+  // Capability marker distinguishes an updated input-free host from legacy hosts that cannot arbitrate cameras.
+  HANDLE handsLeaseCapability = CreateEventW(nullptr, TRUE, TRUE, L"Local\\XRBuildHostHandsLeaseV1");
+  (void)handsLeaseCapability;  // Intentionally held until host process exit, like the full-host singleton.
+  acquisition::Lease handAcquisition;
   const std::wstring dataDir = logx::dataDir();
   logx::open(dataDir + L"\\logs");
   SetUnhandledExceptionFilter(logCrash);
@@ -227,6 +233,18 @@ int main() {
     if (fileCfg.contains("handProfile") && !handprofile::validProfile(fileCfg["handProfile"])) throw std::runtime_error("invalid portable Hands profile");
     hostcfg::Selection sel = hostcfg::selectRoles(fileCfg, args);
     if (iconRender) sel = {"none", "desktop", "", ""};  // an icon render is a build step: no device, no station
+    if (!sel.inputs.empty()) {
+      std::string reason;
+      if (!handAcquisition.open(&reason)) throw std::runtime_error(reason);
+      wchar_t ticket[65]{};
+      const DWORD ticketSize = GetEnvironmentVariableW(L"XRB_HAND_LEASE_TICKET", ticket, 65);
+      SetEnvironmentVariableW(L"XRB_HAND_LEASE_TICKET", nullptr);
+      const std::string owner = "App " + narrow(args.title);
+      const bool acquired = ticketSize > 0 && ticketSize < 65
+        ? acquisition::acceptHandoff(handAcquisition, ticket, owner, &reason)
+        : ticketSize == 0 && handAcquisition.take(owner, &reason);
+      if (!acquired) throw std::runtime_error(reason.empty() ? "Invalid hand acquisition handoff" : reason);
+    }
     std::string inputNames;
     for (const auto& name : sel.inputs) inputNames += (inputNames.empty() ? "" : ", ") + name;
     LOGI("[host] display %s, inputs %s, platform %s", sel.display.c_str(), inputNames.empty() ? "none" : inputNames.c_str(), sel.platform.empty() ? "none" : sel.platform.c_str());

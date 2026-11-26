@@ -332,6 +332,9 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       if (await calibrationTools.handle(req, res)) return;
       throw new HttpError(404, 'not found');
     }
+    if (url.pathname === '/api/hands/session' || url.pathname.startsWith('/api/hands/session/')) {
+      await panel.handSessions.handle(req, res); return;
+    }
     if (url.pathname === '/api/hands/tools' && method === 'GET') return sendJson(res, 200, await handsTools.status());
     if (url.pathname.startsWith('/hands/tools/') || url.pathname.startsWith('/api/hands/tools/')) {
       if (await handsTools.handle(req, res)) return;
