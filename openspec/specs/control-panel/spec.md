@@ -13,12 +13,12 @@ The control panel SHALL offer an Update workspace action that brings the selecte
 #### Scenario: Workspace behind its upstream
 
 - **WHEN** the workspace branch is 3 commits behind its upstream with no local commits and the person runs Update
-- **THEN** the panel fetches, fast-forwards, pulls LFS content, rebuilds, and reports the old and new commit, 3 commits and what was rebuilt
+- **THEN** the panel fetches, downloads the LFS content of the new commits, fast-forwards, rebuilds, and reports the old and new commit, 3 commits and what was rebuilt
 
 #### Scenario: Already up to date
 
-- **WHEN** the workspace has no new upstream commits after fetching, its LFS content is present and no earlier update is unfinished
-- **THEN** the panel reports that the workspace is already up to date and does not rebuild
+- **WHEN** the workspace has no new upstream commits after fetching and no earlier update is unfinished
+- **THEN** the panel reports that the workspace is already up to date, downloads no LFS content and does not rebuild
 
 #### Scenario: Non-conflicting local changes
 
@@ -42,13 +42,18 @@ The control panel SHALL offer an Update workspace action that brings the selecte
 
 #### Scenario: LFS content fails to download
 
-- **WHEN** the pull succeeds and the LFS pull fails
-- **THEN** the panel does not rebuild and reports that LFS files are missing and Update should be run again
+- **WHEN** downloading the LFS content of the new commits fails
+- **THEN** the update stops before pulling, nothing changes, nothing is rebuilt, and the panel asks to run Update again
+
+#### Scenario: Local LFS deletions and fetch exclusions
+
+- **WHEN** the person deleted an LFS file the new commits do not touch, or the clone excludes some LFS files from fetching
+- **THEN** the update finishes, the deleted file stays deleted and the excluded files stay pointers
 
 #### Scenario: Running Update again finishes an unfinished update
 
-- **WHEN** an earlier update pulled new commits but its LFS pull or rebuild failed, and the person runs Update again
-- **THEN** the panel pulls the LFS content and rebuilds although no commit is new, and reports the update as finished
+- **WHEN** an earlier update pulled new commits but its rebuild failed, and the person runs Update again
+- **THEN** the panel rebuilds although no commit is new, and reports the update with the commits of the earlier pull
 
 #### Scenario: Status leaves the Git index alone
 

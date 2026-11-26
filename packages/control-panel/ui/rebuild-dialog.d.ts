@@ -9,7 +9,7 @@ export interface RebuildJob {
 }
 export interface RebuildPresentation {
   state:'running'|'done'|'failed';
-  step?:'check'|'fetch'|'pull'|'lfs'|'rebuild';
+  step?:'check'|'fetch'|'lfs'|'pull'|'rebuild';
   title:string;
   message:string;
   output:string;
@@ -29,6 +29,6 @@ export const REBUILD_AUTOCLOSE_KEY:string;
 export function rebuildPresentation(job:RebuildJob|null,error?:string):RebuildPresentation;
 export function rebuildProgressDialog(options?:{document?:Document;storage?:Storage|null;container?:HTMLElement;idPrefix?:string;onViewJob?:(job:RebuildJob)=>void}):RebuildProgressController;
 export interface JobInPlaceOptions {onJob?:(job:RebuildJob)=>void;onViewJob?:(job:RebuildJob)=>void;onComplete?:(job:RebuildJob)=>void}
-export const UPDATE_STEPS:readonly Readonly<{id:'check'|'fetch'|'pull'|'lfs'|'rebuild';title:string;message:string}>[];
+export const UPDATE_STEPS:readonly Readonly<{id:'check'|'fetch'|'lfs'|'pull'|'rebuild';title:string;message:string}>[];
 export function rebuildHostInPlace(origin?:string,options?:JobInPlaceOptions):Promise<RebuildJob|null>;
 export function updateWorkspaceInPlace(origin?:string,options?:JobInPlaceOptions):Promise<RebuildJob|null>;

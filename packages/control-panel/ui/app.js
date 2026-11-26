@@ -2379,7 +2379,7 @@ function renderWorkspaceUpdate() {
     chip.hidden = !behind && !unfinished;
     chip.textContent = behind ? `workspace behind ${remote} by ${status.behind}` : unfinished ? 'workspace update unfinished' : '';
     chip.title = behind ? `${checked}. Choose Update workspace to fetch, pull and rebuild.`
-      : unfinished ? 'An earlier update pulled new commits but did not finish its LFS download or rebuild. Choose Update workspace to finish it.' : '';
+      : unfinished ? 'An earlier update pulled new commits but its rebuild did not succeed. Choose Update workspace to finish it.' : '';
   }
   if (item) {
     if (status && !status.available) item.setAttribute('aria-disabled', 'true'); else item.removeAttribute('aria-disabled');

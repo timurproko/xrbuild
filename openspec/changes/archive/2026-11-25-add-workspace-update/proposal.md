@@ -7,7 +7,8 @@ pointer files instead of the real content.
 ## What Changes
 
 - A new **Update workspace** action next to **Rebuild** in the control panel. One job runs a preflight that writes
-  nothing, `git fetch`, a fast-forward check, `git pull --ff-only`, `git lfs pull`, then the existing native rebuild.
+  nothing, `git fetch`, a fast-forward check, `git lfs fetch` of the new commits, `git pull --ff-only`, then the existing
+  native rebuild.
 - It never stashes, merges, rebases, resets or discards. Git's own refusals (diverged branch, local changes that would
   be overwritten) are shown with what to do by hand. Non-conflicting local changes stay.
 - `GET workspace/update` reports whether the action is possible and how far the workspace is behind its upstream;

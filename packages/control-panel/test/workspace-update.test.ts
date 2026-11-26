@@ -14,7 +14,7 @@ const ENV = { ...process.env, GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@e
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, env: ENV, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 /** A bare remote, a publisher clone that adds commits, and the workspace clone under test. Git LFS is stubbed. */
-async function fixture(t: TestContext, lfs: { code: number; missing?: string[] } = { code: 0 }) {
+async function fixture(t: TestContext, lfs: { code: number } = { code: 0 }) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'xrb-workspace-update-'));
   t.after(() => fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const remote = path.join(root, 'remote.git'), publisher = path.join(root, 'publisher'), workspace = path.join(root, 'workspace');
@@ -33,18 +33,15 @@ async function fixture(t: TestContext, lfs: { code: number; missing?: string[] }
   const stub: GitRunner = async (args, cwd, opts) => {
     calls.push(args);
     if (args[0] === 'lfs') {
-      // `ls-files` marks missing content `-`; a successful pull downloads it.
-      if (args[1] === 'ls-files') return { code: 0, output: (lfs.missing ?? []).map((file) => `0123abcd - ${file}`).join('\n') };
-      if (args[1] !== 'pull') opts?.onLine?.('git-lfs/3.0.0 (stub)');
+      if (args[1] !== 'fetch') opts?.onLine?.('git-lfs/3.0.0 (stub)');
       else {
-        if (lfs.code === 0) lfs.missing = [];
         // Like forced Git LFS progress: one update per chunk, then 100 % repeated as the last bytes land.
         lfsEnv.push(opts?.env);
         for (let p = 0; p <= 100; p++) opts?.onLine?.(`Downloading LFS objects: ${p}% (${p === 100 ? 1 : 0}/1), ${p} MB | 10 MB/s`);
         opts?.onLine?.('Downloading LFS objects: 100% (1/1), 100 MB | 10 MB/s');
         opts?.onLine?.('Downloading LFS objects: 100% (1/1), 100 MB | 10 MB/s, done.');
       }
-      return { code: args[1] === 'pull' ? lfs.code : 0, output: '' };
+      return { code: args[1] === 'fetch' ? lfs.code : 0, output: '' };
     }
     return runGit(args, cwd, { ...opts, env: { ...ENV, ...opts?.env } });
   };
@@ -65,7 +62,7 @@ const rejectsAt = async (promise: Promise<unknown>, step: string, pattern: RegEx
   });
 };
 
-test('fast-forwards, pulls LFS content, then rebuilds plugins and reports the commits', async (t) => {
+test('downloads the LFS files of the new commits, fast-forwards, then rebuilds plugins and reports the commits', async (t) => {
   const f = await fixture(t), before = f.head();
   await f.publish('shared.txt', 'two\n'); await f.publish('other.txt', 'two\n'); await f.publish('shared.txt', 'three\n');
   const result = await updateWorkspace(f.workspace, f.ctx, f.deps);
@@ -74,7 +71,9 @@ test('fast-forwards, pulls LFS content, then rebuilds plugins and reports the co
   assert.deepEqual(result.rebuilt, ['tracker']); assert.deepEqual(f.rebuilds, [true]);
   assert.match(result.summary, new RegExp(`Updated ${before.slice(0, 7)} → ${result.to.slice(0, 7)} \\(3 commits\\)\\. Rebuilt: tracker\\.`));
   assert.equal(await fs.readFile(path.join(f.workspace, 'shared.txt'), 'utf8'), 'three\n');
-  assert.deepEqual(f.lines.filter((l) => l.startsWith('step ')), ['step check', 'step fetch', 'step pull', 'step lfs', 'step rebuild']);
+  assert.deepEqual(f.lines.filter((l) => l.startsWith('step ')), ['step check', 'step fetch', 'step lfs', 'step pull', 'step rebuild']);
+  assert.ok(f.calls.some((args) => args.join(' ') === 'lfs fetch origin refs/remotes/origin/main'), 'LFS objects of the upstream are fetched, honouring the clone settings');
+  assert.ok(!f.calls.some((args) => args[0] === 'lfs' && args[1] === 'pull'), 'no git lfs pull: it would restore LFS files deleted locally');
   assert.equal(f.lfsEnv[0]?.GIT_LFS_FORCE_PROGRESS, '1', 'LFS progress is forced although the output is not a terminal');
   const progress = f.lines.filter((l) => l.startsWith('Downloading LFS objects:'));
   assert.equal(progress.length, 21, 'one progress line per 5 % and 100 % once');
@@ -90,23 +89,14 @@ test('rebuilds the core host too when it is missing or outdated', async (t) => {
   assert.deepEqual(f.rebuilds, [false]); assert.deepEqual(result.rebuilt, ['xrb-host', 'tracker']);
 });
 
-test('up to date: checks LFS content, reports it and does not rebuild', async (t) => {
+test('up to date: reports it, runs no LFS step and does not rebuild', async (t) => {
   const f = await fixture(t);
   const result = await updateWorkspace(f.workspace, f.ctx, f.deps);
   assert.equal(result.state, 'up-to-date'); assert.equal(result.commits, 0);
-  assert.match(result.summary, /Already up to date \(\w{7}\), LFS files present\. Nothing was rebuilt\./);
+  assert.match(result.summary, /^Already up to date \(\w{7}\)\. Nothing was rebuilt\.$/);
   assert.deepEqual(f.rebuilds, []);
-  assert.ok(!f.calls.some((args) => args[0] === 'pull'));
-  assert.ok(f.calls.some((args) => args[0] === 'lfs' && args[1] === 'pull'), 'the LFS pull runs even when no commit is new');
+  assert.ok(!f.calls.some((args) => args[0] === 'pull' || (args[0] === 'lfs' && args[1] !== 'version')), 'no pull and no LFS download');
 });
-
-test('up to date with LFS content missing: downloads it and rebuilds', async (t) => {
-  const f = await fixture(t, { code: 0, missing: ['assets/model.bin'] });
-  const result = await updateWorkspace(f.workspace, f.ctx, f.deps);
-  assert.equal(result.state, 'updated'); assert.equal(result.commits, 0); assert.deepEqual(f.rebuilds, [true]);
-  assert.match(result.summary, /Finished the update at \w{7}, 1 LFS file downloaded\. Rebuilt: tracker\./);
-});
-
 test('non-conflicting local changes stay', async (t) => {
   const f = await fixture(t);
   await fs.writeFile(path.join(f.workspace, 'other.txt'), 'local edit\n');
@@ -149,14 +139,15 @@ test('a fetch failure stops with nothing changed', async (t) => {
   assert.equal(f.head(), before); assert.deepEqual(f.rebuilds, []);
 });
 
-test('an LFS failure after the pull skips the rebuild and asks to run Update again', async (t) => {
-  const f = await fixture(t, { code: 2 });
+test('an LFS failure stops before the pull: nothing changes and no rebuild', async (t) => {
+  const f = await fixture(t, { code: 2 }), before = f.head();
   await f.publish('shared.txt', 'two\n');
-  await rejectsAt(updateWorkspace(f.workspace, f.ctx, f.deps), 'lfs', /LFS files are missing: run Update again\. Nothing was rebuilt\./);
-  assert.deepEqual(f.rebuilds, []);
-  assert.equal(await fs.readFile(path.join(f.workspace, 'shared.txt'), 'utf8'), 'two\n', 'the pull itself stays');
+  await rejectsAt(updateWorkspace(f.workspace, f.ctx, f.deps), 'lfs', /^LFS: Could not download the LFS files of the new commits: run Update again\. Nothing changed\./);
+  assert.equal(f.head(), before); assert.deepEqual(f.rebuilds, []);
+  assert.ok(!f.calls.some((args) => args[0] === 'pull'));
+  assert.equal(await fs.readFile(path.join(f.workspace, 'shared.txt'), 'utf8'), 'one\n');
+  assert.equal((await workspaceUpdateStatus(f.workspace, f.deps.git)).unfinished, false);
 });
-
 test('a rebuild failure names the step and keeps the update', async (t) => {
   const f = await fixture(t);
   await f.publish('shared.txt', 'two\n');
@@ -285,7 +276,7 @@ test('POST workspace/update refuses a workspace that is not a clone, with the re
 test('a long LFS or build step keeps its step in the dialog although /api/jobs sends only the last lines', async () => {
   const jobs = new JobRunner(); let release!: () => void;
   const job = jobs.start('workspace-update', null, 'update workspace', (ctx) => {
-    for (const step of ['check', 'fetch', 'pull', 'lfs', 'rebuild']) ctx.line(`step ${step}`);
+    for (const step of ['check', 'fetch', 'lfs', 'pull', 'rebuild']) ctx.line(`step ${step}`);
     ctx.line('plugin tracker');
     for (let i = 0; i < 250; i++) ctx.line(`cmake output ${i}`);
     return new Promise<void>((resolve) => { release = resolve; });
@@ -311,42 +302,36 @@ test('LFS progress keeps other lines and restarts its throttle for a new meter',
   assert.deepEqual(out, ['Downloading LFS objects: 0% (0/2)', 'Downloading LFS objects: 5% (0/2)', 'error: smudge failed', 'Checking out LFS objects: 1% (0/2)']);
 });
 
-test('running Update again after an LFS failure resumes the LFS pull and the rebuild', async (t) => {
-  const lfs = { code: 2, missing: ['assets/model.bin'] };
+test('running Update again after an LFS failure pulls and rebuilds', async (t) => {
+  const lfs = { code: 2 };
   const f = await fixture(t, lfs), before = f.head();
   await f.publish('shared.txt', 'two\n');
-  await rejectsAt(updateWorkspace(f.workspace, f.ctx, f.deps), 'lfs', /but LFS files are missing \(1 missing, such as assets\/model\.bin\): run Update again\. Nothing was rebuilt\./);
-  const after = f.head();
-  assert.notEqual(after, before); assert.deepEqual(f.rebuilds, []);
+  await rejectsAt(updateWorkspace(f.workspace, f.ctx, f.deps), 'lfs', /run Update again\. Nothing changed\./);
   const status = await workspaceUpdateStatus(f.workspace, f.deps.git);
-  assert.equal(status.behind, 0); assert.equal(status.unfinished, true, 'the panel knows the update is unfinished');
+  assert.equal(status.behind, 1, 'still behind, so the hint still offers the update'); assert.equal(status.unfinished, false);
   lfs.code = 0;
   const result = await updateWorkspace(f.workspace, f.ctx, f.deps);
   assert.equal(result.state, 'updated'); assert.deepEqual(f.rebuilds, [true]);
-  assert.equal(result.from, before); assert.equal(result.to, after); assert.equal(result.commits, 1);
-  assert.match(result.summary, /^Updated \w{7} → \w{7} \(1 commit\), 1 LFS file downloaded\. Rebuilt: tracker\.$/);
-  assert.equal((await workspaceUpdateStatus(f.workspace, f.deps.git)).unfinished, false);
-  const third = await updateWorkspace(f.workspace, f.ctx, f.deps);
-  assert.equal(third.state, 'up-to-date'); assert.deepEqual(f.rebuilds, [true]);
+  assert.equal(result.from, before); assert.equal(result.commits, 1);
+  assert.match(result.summary, /^Updated \w{7} → \w{7} \(1 commit\)\. Rebuilt: tracker\.$/);
+  assert.equal((await updateWorkspace(f.workspace, f.ctx, f.deps)).state, 'up-to-date');
 });
-
-test('LFS content still missing after a successful LFS pull is reported, not called up to date', async (t) => {
-  const f = await fixture(t, { code: 0, missing: ['assets/model.bin'] });
-  const stuck: GitRunner = async (args, cwd, opts) => args[0] === 'lfs' && args[1] === 'ls-files' ? { code: 0, output: '0123abcd - assets/model.bin' } : f.deps.git(args, cwd, opts);
-  await rejectsAt(updateWorkspace(f.workspace, f.ctx, { ...f.deps, git: stuck }), 'lfs', /^LFS: LFS files are missing \(1 missing, such as assets\/model\.bin\): run Update again/);
-  assert.deepEqual(f.rebuilds, []);
-});
-
 test('running Update again after a rebuild failure rebuilds although nothing is behind', async (t) => {
   const f = await fixture(t);
   await f.publish('shared.txt', 'two\n');
   let fail = true;
   const deps = { ...f.deps, rebuild: async (pluginsOnly: boolean) => { f.rebuilds.push(pluginsOnly); if (fail) throw new Error('cmake exited with 1'); return ['tracker']; } };
   await rejectsAt(updateWorkspace(f.workspace, f.ctx, deps), 'rebuild', /rebuild failed: cmake exited with 1\. Fix it and run Update again\./);
+  const unfinished = await workspaceUpdateStatus(f.workspace, f.deps.git);
+  assert.equal(unfinished.behind, 0); assert.equal(unfinished.unfinished, true, 'the panel knows the update is unfinished');
   fail = false;
+  const lfsFetches = () => f.calls.filter((args) => args[0] === 'lfs' && args[1] === 'fetch').length, fetchesBefore = lfsFetches();
   const result = await updateWorkspace(f.workspace, f.ctx, deps);
   assert.equal(result.state, 'updated'); assert.equal(result.commits, 1); assert.equal(f.rebuilds.length, 2);
+  assert.match(result.summary, /^Updated \w{7} → \w{7} \(1 commit\)\. Rebuilt: tracker\.$/);
+  assert.equal(lfsFetches(), fetchesBefore, 'finishing the rebuild runs no LFS step');
   assert.equal((await workspaceUpdateStatus(f.workspace, f.deps.git)).unfinished, false);
+  assert.equal((await updateWorkspace(f.workspace, f.ctx, deps)).state, 'up-to-date');
 });
 
 test('the status check does not rewrite the Git index', async (t) => {
@@ -363,15 +348,54 @@ test('the status check does not rewrite the Git index', async (t) => {
   assert.notEqual((await fs.stat(index)).mtimeMs, before, 'a plain git status would have rewritten it');
 });
 
-test('a rebuild that fails after only LFS content was downloaded is retried by the next Update', async (t) => {
-  const f = await fixture(t, { code: 0, missing: ['assets/model.bin'] });
-  let fail = true;
-  const deps = { ...f.deps, rebuild: async (pluginsOnly: boolean) => { f.rebuilds.push(pluginsOnly); if (fail) throw new Error('cmake exited with 1'); return ['tracker']; } };
-  await rejectsAt(updateWorkspace(f.workspace, f.ctx, deps), 'rebuild', /^Rebuild: The rebuild failed: cmake exited with 1/);
-  assert.equal((await workspaceUpdateStatus(f.workspace, f.deps.git)).unfinished, true);
-  fail = false;
-  const result = await updateWorkspace(f.workspace, f.ctx, deps);
-  assert.equal(result.state, 'updated'); assert.equal(f.rebuilds.length, 2);
-  assert.match(result.summary, /^Finished the update at \w{7}\. Rebuilt: tracker\.$/);
-  assert.equal((await updateWorkspace(f.workspace, f.ctx, deps)).state, 'up-to-date');
+
+// Real Git LFS: a stub cannot show which files `git lfs` writes. Skipped, with a note, when git-lfs is not installed.
+const LFS_INSTALLED = (() => { try { execFileSync('git', ['lfs', 'version'], { stdio: 'ignore' }); return true; } catch { return false; } })();
+const LFS_SKIP = LFS_INSTALLED ? false : 'git-lfs is not installed: the real-LFS behaviour is not checked here';
+
+/** A remote with two LFS files (a.bin, b.bin) and a workspace clone with their content, using real git-lfs. */
+async function lfsFixture(t: TestContext, setup: (workspace: string) => void = () => {}) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'xrb-workspace-lfs-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
+  const remote = path.join(root, 'remote.git'), publisher = path.join(root, 'publisher'), workspace = path.join(root, 'workspace');
+  git(root, 'init', '--bare', '-q', remote);
+  git(root, 'clone', '-q', remote, publisher);
+  git(publisher, 'lfs', 'install', '--local'); git(publisher, 'lfs', 'track', '*.bin');
+  await fs.writeFile(path.join(publisher, 'a.bin'), 'first a\n'); await fs.writeFile(path.join(publisher, 'b.bin'), 'first b\n');
+  await fs.writeFile(path.join(publisher, 'note.txt'), 'one\n');
+  git(publisher, 'add', '.'); git(publisher, 'commit', '-qm', 'first'); git(publisher, 'push', '-q', 'origin', 'HEAD:main');
+  git(root, 'clone', '-q', remote, workspace);
+  git(workspace, 'config', 'core.autocrlf', 'false'); git(workspace, 'lfs', 'install', '--local');
+  setup(workspace);
+  const publish = async (file: string, text: string) => {
+    await fs.writeFile(path.join(publisher, file), text);
+    git(publisher, 'commit', '-qam', `change ${file}`); git(publisher, 'push', '-q', 'origin', 'HEAD:main');
+  };
+  const realGit: GitRunner = (args, cwd, opts) => runGit(args, cwd, { ...opts, env: { ...ENV, ...opts?.env } });
+  const rebuilds: boolean[] = [], lines: string[] = [];
+  const ctx: JobContext = { line: (text) => lines.push(text), async run() { assert.fail('the update runs no other process'); } };
+  const deps = { git: realGit, coreHostCurrent: async () => true, rebuild: async (pluginsOnly: boolean) => { rebuilds.push(pluginsOnly); return ['tracker']; } };
+  return { workspace, publish, rebuilds, ctx, deps };
+}
+
+test('real LFS: a locally deleted LFS file survives an update that does not touch it', { skip: LFS_SKIP }, async (t) => {
+  const f = await lfsFixture(t);
+  await fs.rm(path.join(f.workspace, 'a.bin'));
+  await f.publish('b.bin', 'second b\n'); await f.publish('note.txt', 'two\n');
+  const result = await updateWorkspace(f.workspace, f.ctx, f.deps);
+  assert.equal(result.state, 'updated'); assert.equal(result.commits, 2); assert.deepEqual(f.rebuilds, [true]);
+  assert.equal(await fs.stat(path.join(f.workspace, 'a.bin')).then(() => true, () => false), false, 'the local deletion stays');
+  assert.equal(git(f.workspace, 'status', '--porcelain'), 'D a.bin');
+  assert.equal(await fs.readFile(path.join(f.workspace, 'b.bin'), 'utf8'), 'second b\n', 'the changed LFS file has its content');
+});
+
+test('real LFS: a clone that excludes LFS files from fetching finishes its update', { skip: LFS_SKIP }, async (t) => {
+  const f = await lfsFixture(t, (workspace) => git(workspace, 'config', 'lfs.fetchexclude', 'b.bin'));
+  await f.publish('b.bin', 'second b\n'); await f.publish('a.bin', 'second a\n');
+  const result = await updateWorkspace(f.workspace, f.ctx, f.deps);
+  assert.equal(result.state, 'updated'); assert.deepEqual(f.rebuilds, [true]);
+  assert.equal(await fs.readFile(path.join(f.workspace, 'a.bin'), 'utf8'), 'second a\n');
+  assert.match(await fs.readFile(path.join(f.workspace, 'b.bin'), 'utf8'), /^version https:\/\/git-lfs\.github\.com\/spec\/v1/, 'the excluded file stays a pointer');
+  assert.equal((await workspaceUpdateStatus(f.workspace, f.deps.git)).unfinished, false, 'no marker is left behind');
+  assert.equal((await updateWorkspace(f.workspace, f.ctx, f.deps)).state, 'up-to-date');
 });

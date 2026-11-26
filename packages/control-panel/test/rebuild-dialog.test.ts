@@ -23,14 +23,14 @@ test('rebuild presentation has stable running, success and failure states',()=>{
 });
 
 test('workspace update presentation follows its steps and reports Git refusals and the result',()=>{
-  assert.deepEqual(UPDATE_STEPS.map(step=>step.title),['Check','Fetch','Pull','LFS','Rebuild']);
+  assert.deepEqual(UPDATE_STEPS.map(step=>step.title),['Check','Fetch','LFS','Pull','Rebuild']);
   const start=rebuildPresentation({kind:'workspace-update',state:'running',lines:[]});
   assert.equal(start.title,'Updating workspace');assert.equal(start.step,'check');assert.equal(start.message,'Step 1 of 5, Check: Checking the workspace…');assert.equal(start.viewJobDisabled,true);
-  const lfs=rebuildPresentation({id:7,kind:'workspace-update',state:'running',lines:['step check','step fetch','step pull','step lfs','Downloading LFS objects: 40% (2/5)']});
-  assert.equal(lfs.step,'lfs');assert.equal(lfs.message,'Step 4 of 5, LFS: Downloading LFS files…');assert.match(lfs.output,/40% \(2\/5\)/);
+  const lfs=rebuildPresentation({id:7,kind:'workspace-update',state:'running',lines:['step check','step fetch','step lfs','Downloading LFS objects: 40% (2/5)']});
+  assert.equal(lfs.step,'lfs');assert.equal(lfs.message,'Step 3 of 5, LFS: Downloading LFS files…');assert.match(lfs.output,/40% \(2\/5\)/);
   const plugin=rebuildPresentation({id:7,kind:'workspace-update',state:'running',lines:['step rebuild','plugin tracker']});
   assert.equal(plugin.message,'Step 5 of 5, Rebuild: Rebuilding tracker…');
-  const refused=rebuildPresentation({id:7,kind:'workspace-update',state:'failed',error:'Pull: Local changes would be overwritten by the update: a.txt. Commit or stash them first, then run Update again. Nothing changed.',lines:['step check','step fetch','step pull','error: Your local changes would be overwritten']});
+  const refused=rebuildPresentation({id:7,kind:'workspace-update',state:'failed',error:'Pull: Local changes would be overwritten by the update: a.txt. Commit or stash them first, then run Update again. Nothing changed.',lines:['step check','step fetch','step lfs','step pull','error: Your local changes would be overwritten']});
   assert.equal(refused.title,'Update failed');assert.equal(refused.step,'pull');assert.match(refused.message,/a\.txt\. Commit or stash them first/);assert.match(refused.output,/would be overwritten/);assert.equal(refused.succeeded,false);
   const done=rebuildPresentation({id:7,kind:'workspace-update',state:'done',lines:['step rebuild'],result:{state:'updated',summary:'Updated 1111111 → 2222222 (2 commits). Rebuilt: tracker.'}});
   assert.equal(done.title,'Workspace updated');assert.equal(done.message,'Updated 1111111 → 2222222 (2 commits). Rebuilt: tracker.');assert.equal(done.succeeded,true);

@@ -23,8 +23,8 @@ function safePanelOrigin(value) {
 export const UPDATE_STEPS = Object.freeze([
   Object.freeze({id: 'check', title: 'Check', message: 'Checking the workspace'}),
   Object.freeze({id: 'fetch', title: 'Fetch', message: 'Fetching from the remote'}),
-  Object.freeze({id: 'pull', title: 'Pull', message: 'Pulling new commits'}),
   Object.freeze({id: 'lfs', title: 'LFS', message: 'Downloading LFS files'}),
+  Object.freeze({id: 'pull', title: 'Pull', message: 'Pulling new commits'}),
   Object.freeze({id: 'rebuild', title: 'Rebuild', message: 'Rebuilding'}),
 ]);
 

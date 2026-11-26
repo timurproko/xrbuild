@@ -20,15 +20,21 @@ can use a real temporary Git remote and clone and a stubbed `git lfs`.
    rebase by hand"); behind zero ends with "Already up to date" and no rebuild.
 4. `git pull --ff-only`. When Git refuses because local changes would be overwritten, the job fails at this step with
    Git's file list and the advice to commit or stash first. Nothing is stashed or discarded.
-5. `git lfs pull`, its progress lines streamed into the job log. On failure the pull has already happened, so the
-   job ends with "LFS files missing, run Update again" and does not rebuild.
+5. Before the pull, `git lfs fetch <remote> <upstream ref>` downloads the LFS objects of the new commits, honouring
+   the clone's `lfs.fetchinclude`/`lfs.fetchexclude`, with forced and throttled progress. The fast-forward's own
+   checkout then writes LFS content only for files the update changes, so a locally deleted or edited LFS file the
+   update does not touch stays, and excluded files stay pointers. (`git lfs pull` after the pull would restore
+   locally deleted LFS files.) On failure nothing has changed: the job asks to run Update again. A successful pull
+   leaves a marker under the Git folder that only a successful rebuild removes, so running Update again after a
+   failed rebuild finishes it although the branch is no longer behind; "Already up to date" means nothing new and
+   no marker. The LFS step is judged by its exit code only.
 6. `rebuildHost` with the same tool discovery as Rebuild. The update changes only the workspace, never the core
    checkout, so when the core host is built and current (its freshness check, without the plugins, says so) only
    plugins are rebuilt (`pluginsOnly`); when the core host is missing or outdated the full rebuild runs, as Rebuild.
 7. Result line: old and new commit, number of commits, and what was rebuilt. A failure names its step and keeps the
    last lines of output.
 
-The dialog reuses `rebuild-dialog.js` with step titles (Check, Fetch, Pull, LFS, Rebuild). The CLI
+The dialog reuses `rebuild-dialog.js` with step titles (Check, Fetch, LFS, Pull, Rebuild). The CLI
 `workspace-update-cli.ts` mirrors `rebuild-host.ts` and accepts `--workspace=`.
 
 ## Alternatives
