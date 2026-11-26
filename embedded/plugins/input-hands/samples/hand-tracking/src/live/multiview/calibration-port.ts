@@ -14,6 +14,7 @@ export class CalibrationCamera {
   private pingId = 0;
   private stopId = 0;
   private sequence = 0;
+  private runEpoch = 0;
   private processing = false;
   private runId = '';
   private choice: { serial: string; profile: string } | null = null;
@@ -37,7 +38,7 @@ export class CalibrationCamera {
     const generation = ++this.generation, socket = new this.Socket(url.href, [RGBD.protocol, `auth.${endpoint.token}`]);
     this.socket = socket; this.phase = 'connecting'; socket.binaryType = 'arraybuffer';
     const wait = this.wait(6000); this.pending = wait.pending;
-    socket.onopen = () => { if (generation !== this.generation) return; this.send({ type: 'list' }); this.ping(); this.pingTimer = setInterval(() => this.ping(), 2000); };
+    socket.onopen = () => { if (generation !== this.generation) return; try { this.send({ type: 'list' }); this.pingTimer = setInterval(() => this.ping(), 2000); this.ping(); } catch (error) { this.fail(error); } };
     socket.onmessage = event => { if (generation !== this.generation) return; try { this.message(event.data); } catch (error) { this.fail(error); } };
     socket.onerror = () => { if (generation === this.generation) this.fail(new Error('Native bridge connection failed.')); };
     socket.onclose = () => { if (generation === this.generation && this.socket) this.fail(new Error('Native bridge disconnected.')); };
@@ -55,16 +56,16 @@ export class CalibrationCamera {
       if (packet.meta.runId !== this.runId || this.phase !== 'running') { this.send({ type: 'ack', runId: packet.meta.runId, sequence: packet.meta.sequence }); return; }
       requireValue(!this.processing && packet.meta.sequence > this.sequence && !!this.calibration && !!this.choice, 'Out-of-order calibration frame');
       validateFramePlanes(packet, this.choice!.profile); this.sequence = packet.meta.sequence;
-      const generation = this.generation, runId = this.runId; this.processing = true;
+      const generation = this.generation, runId = this.runId, epoch = this.runEpoch; this.processing = true;
       void this.callbacks.frame({ packet, calibration: this.calibration!, receivedPageMs: this.now(), pageOriginMs: performance.timeOrigin }).then(() => {
-        if (generation === this.generation && this.phase === 'running' && this.runId === runId) this.send({ type: 'ack', runId, sequence: packet.meta.sequence });
-      }).catch(error => { if (generation === this.generation) this.fail(error); }).finally(() => { if (generation === this.generation) this.processing = false; });
+        if (generation === this.generation && epoch === this.runEpoch && this.phase === 'running' && this.runId === runId) this.send({ type: 'ack', runId, sequence: packet.meta.sequence });
+      }).catch(error => { if (generation === this.generation && epoch === this.runEpoch) this.fail(error); }).finally(() => { if (generation === this.generation && epoch === this.runEpoch) this.processing = false; });
       return;
     }
     requireValue(typeof data === 'string' && data.length <= 524288, 'Native control size/type');
     const message = record(JSON.parse(data));
     if (message.type === 'connected') { requireValue(message.version === 1, 'Native protocol version'); return; }
-    if (message.type === 'devices') { validateDevices(message); this.inventory = message.devices; this.phase = 'connected'; this.pending?.resolve(); return; }
+    if (message.type === 'devices') { requireValue(this.phase === 'connecting', 'Unexpected device inventory'); validateDevices(message); this.inventory = message.devices; this.phase = 'connected'; this.pending?.resolve(); return; }
     if (message.type === 'started') {
       requireValue(this.phase === 'starting' && !!this.choice, 'Unexpected native start'); validateCalibration(message.calibration);
       requireValue(message.calibration.serial === this.choice!.serial && profileKey(message.calibration.color) === this.choice!.profile && typeof message.runId === 'string' && message.runId.length > 0 && message.runId.length <= 128, 'Native source/profile changed');
@@ -85,22 +86,24 @@ export class CalibrationCamera {
     if (this.phase !== 'connected') throw new Error('Connect two cameras first.');
     captureProfile(choice.profile);
     if (!matchingProfiles(this.inventory.find(device => device.serial === choice.serial)).includes(choice.profile)) throw new Error('Select an available camera and exact profile.');
+    ++this.runEpoch; this.processing = false;
     this.choice = { serial: choice.serial, profile: choice.profile }; this.sequence = 0; this.runId = ''; this.calibration = null; this.phase = 'starting';
     const wait = this.wait(16000); this.pending = wait.pending;
-    try { this.send({ type: 'start', serial: choice.serial, profile: choice.profile, markerCalibration: choice.markers }); await wait.work; }
+    try { try { this.send({ type: 'start', serial: choice.serial, profile: choice.profile, markerCalibration: choice.markers }); } catch (error) { wait.pending.reject(error as Error); } await wait.work; }
     finally { if (this.pending === wait.pending) this.pending = null; }
   }
   async stop(): Promise<void> {
     if (this.stopPending) return;
     if (!this.socket || !['starting', 'running'].includes(this.phase)) return;
+    ++this.runEpoch; this.processing = false;
     this.pending?.reject(new Error('Calibration start cancelled.')); this.phase = 'stopping'; this.runId = ''; this.calibration = null;
     const wait = this.wait(5000); this.stopPending = wait.pending;
-    try { this.send({ type: 'stop', id: ++this.stopId }); await wait.work; }
+    try { try { this.send({ type: 'stop', id: ++this.stopId }); } catch (error) { wait.pending.reject(error as Error); } await wait.work; }
     catch (error) { this.disconnect(); throw error; }
     finally { this.stopPending = null; }
   }
   disconnect() {
-    ++this.generation; if (this.pingTimer) clearInterval(this.pingTimer); this.pingTimer = null; this.pings.clear();
+    ++this.generation; ++this.runEpoch; if (this.pingTimer) clearInterval(this.pingTimer); this.pingTimer = null; this.pings.clear();
     this.pending?.reject(new Error('Calibration disconnected.')); this.pending = null;
     this.stopPending?.reject(new Error('Calibration disconnected.')); this.stopPending = null;
     const socket = this.socket; this.socket = null; if (socket) { socket.onclose = null; socket.onerror = null; socket.onmessage = null; socket.close(); }

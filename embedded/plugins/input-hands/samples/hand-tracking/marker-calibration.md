@@ -1,9 +1,8 @@
 # Marker camera calibration
 
-Retained for the following independent Calibration module; no camera or fusion workflow is mounted in Hands.
-The scriptless `calibration.html` fragment preserves the two-preview Close/Cancel/Done shape and manual fallback fields.
-The source-only `CameraCalibration` coordinator has injected, explicitly started native ports, no hand-model workers,
-and no dependency on a benchmark or fusion UI. The following module supplies its menu, route and capture lease.
+Available in the independent [Calibration module](../../../../../docs/calibration.md) at `/calibration/`; no camera or fusion workflow is mounted in Hands.
+The legacy scriptless `calibration.html` fragment is not served. The module uses the panel's components and two native previews,
+with the injected `CameraCalibration` coordinator, shared capture exclusion and no hand-model workers or fusion UI.
 
 ## Measurement
 

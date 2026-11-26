@@ -19,7 +19,7 @@ export function recordingStorePlugin(options={}){
     if(prefs){
       if(req.method==='GET')return json(res,200,await preferences());
       if(req.method!=='PUT')return json(res,405,{error:'Method not allowed'});
-      const incoming=await body(req,MAX_PREFS),lock=userPath(options,'configRoot','preferences.lock',true);let owner;
+      const incoming=await body(req,MAX_PREFS);if(options.validatePreference)await options.validatePreference(incoming.key,incoming.value);const lock=userPath(options,'configRoot','preferences.lock',true);let owner;
       try{owner=await fs.open(lock,'wx',0o600);}catch(error){if(error.code==='EEXIST')return json(res,409,{error:'Hands preferences writer is busy'});throw error;}
       try{const before=await preferences();if(incoming.revision!==before.revision)return json(res,409,{error:'Hands preferences changed; reload before saving'});if(!PREF.test(incoming.key)||typeof incoming.value!=='string'||incoming.value.length>524288)throw new Error('Invalid Hands preference');if(incoming.key.includes('.tab.')){if(!/^[a-z][a-z-]{1,64}$/.test(incoming.value))throw new Error('Invalid saved tab');}else JSON.parse(incoming.value);const values={...before.values,[incoming.key]:incoming.value},target=userPath(options,'configRoot','preferences.json',true),temporary=userPath(options,'configRoot',`preferences-${randomUUID()}.tmp`);await fs.writeFile(temporary,JSON.stringify({version:1,owner:'input-hands',values}),{flag:'wx',mode:0o600});plainPath(target);await fs.rename(temporary,target);return json(res,200,await preferences());}finally{const before=await owner.stat(),after=await fs.lstat(lock);await owner.close();if(before.ino===after.ino&&before.dev===after.dev)await fs.unlink(lock);}
     }

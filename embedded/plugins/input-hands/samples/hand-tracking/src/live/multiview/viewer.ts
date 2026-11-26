@@ -1,5 +1,5 @@
-// Source-only calibration controller for the following independent Calibration module.
-// No product document imports this file. Fusion and browser hand acquisition are separate retained algorithms.
+// Injected calibration coordinator for the independent Calibration module.
+// Fusion and browser hand acquisition remain separate, unwired algorithms.
 import { AutomaticMarkerCalibration, automaticMarkerObservation } from './automatic-calibration.ts';
 import { calibrationMetadata, fitSpatialCalibration, importSpatialCalibration, exportSpatialCalibration, FIT_LIMITS, type SpatialCalibration, type TargetSample, type TargetPair } from './calibration.ts';
 import { prepareGeometry, type Pixel } from '../rgbd/geometry.ts';
@@ -7,6 +7,7 @@ import { samplePoint, pairing, DEPTH_DEFAULTS } from '../rgbd/point-sampling.ts'
 import { captureProfile, profileKey } from '../rgbd/profiles.ts';
 import { validSerial, type Calibration, type Packet, type WireFrame } from '../rgbd/protocol.ts';
 import { metadataHash } from '../recording/format.ts';
+import { importCalibrationDocument } from './calibration-document.ts';
 export const CALIBRATION_STORAGE = 'handtracking.fusion-calibrations.v1';
 type Side = 'a' | 'b';
 interface CameraChoice { serial: string; profile: string }
@@ -114,7 +115,7 @@ export class CameraCalibration {
     const result = await fitSpatialCalibration({ sources: { a: this.sources.a, b: this.sources.b }, targets: [...this.targets.values()] as TargetPair[], limits: { ...FIT_LIMITS }, evidence });
     if (generation !== this.generation || revision !== this.revision) throw new Error('Calibration session changed.'); this.result = result; return result;
   }
-  async import(file: Blob): Promise<SpatialCalibration> { if (this.targets.size) throw new Error('Clear the manual draft before importing another calibration.'); const generation = this.generation, revision = this.revision; const result = await importSpatialCalibration(file); if (generation !== this.generation || revision !== this.revision) throw new Error('Calibration session changed.'); this.revision++; this.result = result; return result; }
+  async import(file: Blob): Promise<SpatialCalibration> { if (this.targets.size) throw new Error('Clear the manual draft before importing another calibration.'); const generation = this.generation, revision = this.revision; const result = await importCalibrationDocument(file); if (generation !== this.generation || revision !== this.revision) throw new Error('Calibration session changed.'); this.revision++; this.result = result; return result; }
   export(): Blob { if (!this.result) throw new Error('No calibration result.'); return exportSpatialCalibration(this.result); }
   async saved(): Promise<SpatialCalibration[]> {
     const raw = this.storage.getItem(CALIBRATION_STORAGE); if (!raw) return [];

@@ -33,6 +33,13 @@ test('source changes, malformed frames and disconnected transports fail closed',
     assert.equal(camera.snapshot().phase, 'failed'); assert.equal(errors.length, 1); camera.disconnect();
   }
 });
+test('an old asynchronous frame cannot acknowledge or fail a replacement run', async () => {
+  let rejectFrame!: (error:Error)=>void;const errors:Error[]=[];
+  const camera=new CalibrationCamera({frame:()=>new Promise<void>((_resolve,reject)=>{rejectFrame=reject;}),failed:error=>errors.push(error)},Socket as any);
+  await camera.connect(endpoint);await camera.start(choice);Socket.latest.onmessage({data:packet().buffer});await camera.stop();await camera.start(choice);
+  rejectFrame(new Error('old frame failed'));await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(camera.snapshot().phase,'running');assert.deepEqual(errors,[]);assert.equal(Socket.latest.sent.filter(v=>v.type==='ack').length,0);camera.disconnect();
+});
 test('manual controller uses current static native probes and invalidates edits without hand engines', async () => {
   const calls: any[] = [], port = { async start(value: any) { calls.push(value); }, async stop() {} }, storage = { getItem: () => null, setItem: () => assert.fail('no implicit writes') };
   let now = 1000; const controller = new CameraCalibration({ a: port, b: port }, storage, () => now);

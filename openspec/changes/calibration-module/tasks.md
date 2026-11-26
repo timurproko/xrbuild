@@ -21,10 +21,10 @@
 
 ## 4. Compatible saved results and stable provider contract
 
-- [ ] 4.1 Connect Saved/Save/Import/Export through the revision-safe preferences adapter, retaining the existing path/key/version/eight-record bounds and supported scalar/setup readers; test legacy round trips, qualified manual/marker saves and provisional export-only behavior.
-- [ ] 4.2 Cover stale revision, unrelated preference preservation, corrupt/linked/busy storage, invalid/forged import and offline inventory/export with disposable-state tests; show errors without reset or false success.
-- [ ] 4.3 Publish the exact stable file/identity/units/integrity/validity contract and consumer obligations in calibration docs, update Hands' pending-module wording and provide a short two-camera operator checklist; check the documented examples against the actual validator.
-- [ ] 4.4 Exercise both fake-port workflows through the isolated page and capture default-window proof, recording precisely which hardware behaviors remain unverified; stop every owned process before handoff.
+- [x] 4.1 Connect Saved/Save/Import/Export through the revision-safe preferences adapter, retaining the existing path/key/version/eight-record bounds and supported scalar/setup readers; test legacy round trips, qualified manual/marker saves and provisional export-only behavior.
+- [x] 4.2 Cover stale revision, unrelated preference preservation, corrupt/linked/busy storage, invalid/forged import and offline inventory/export with disposable-state tests; show errors without reset or false success.
+- [x] 4.3 Publish the exact stable file/identity/units/integrity/validity contract and consumer obligations in calibration docs, update Hands' pending-module wording and provide a short two-camera operator checklist; check the documented examples against the actual validator.
+- [x] 4.4 Exercise both fake-port workflows through the isolated page and capture default-window proof, recording precisely which hardware behaviors remain unverified; stop every owned process before handoff.
 
 ## Workflow follow-up
 

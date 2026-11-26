@@ -452,6 +452,7 @@ export class Panel {
   }
 
   private startJob(...args: Parameters<JobRunner['start']>): Job {
+    this.refuseCaptureConflict();
     if (this.restartPending) throw new HttpError(409, 'The panel is restarting');
     const [kind, projectId, , work] = args;
     // Git recovery does not consume the loaded plugin services; stale/unavailable services must not veto it.

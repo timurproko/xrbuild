@@ -17,8 +17,8 @@ reader dependency closure, with same-origin data operations and no inference/nat
 Existing CSV, RGB, RGB-D and paired data keep their original coordinate/time provenance. New selected-provider
 recording uses the separately delivered live session and raw versioned format, not the old camera-derived CSV producer.
 
-Camera calibration is extracted as the independent **Calibration** module in the following PR, with a documented
-serial/profile-bound B-to-A camera transform. Its measurement/format/storage code is preserved here, not a Hands tab.
+The contained `camera-calibration` export mounts measurement in the independent [Calibration module](../../../docs/calibration.md)
+at `/calibration/`, with explicit owned capture and a stable serial/profile-bound B-to-A camera transform. It is not a Hands tab.
 Browser hand landmarks and two-view fusion algorithms remain unwired source for a future provider. No such provider
 or active acquisition laboratory ships in this change. Generated browser fixtures/tests/targets and benchmark/comparison
 workflows are removed from UI and code. Pure format/calibration/provider unit data is not a product fixture mode.
