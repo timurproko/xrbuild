@@ -13,7 +13,7 @@ Synthetic remains an ordinary installed provider choice, never a fallback.
 
 Camera calibration is **not** part of Hands. A following change extracts it as the separate Calibration module.
 Its output is a B-to-A camera-space rigid transform, bound to both cameras' serials and exact profiles, not an app-hand offset.
-See the output contract in `openspec/changes/hands-module-page/design.md` while that extraction is pending.
+See the retained [camera calibration contract](../embedded/plugins/input-hands/samples/hand-tracking/camera-calibration.md) while that extraction is pending.
 Existing calibration code and state remain intact. Browser landmark and two-view fusion algorithms are retained,
 unwired from product pages, as source for a future provider. No such provider is implemented here.
 
