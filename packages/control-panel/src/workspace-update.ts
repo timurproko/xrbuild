@@ -1,5 +1,7 @@
-// Update workspace: bring the selected workspace's Git clone up to date with its upstream by fast-forward only,
-// fetch its Git LFS content, then rebuild the native plugins (and the core host only when it is missing or outdated).
+// Update: the status of the core checkout the panel runs from and of the selected workspace, and the update of the
+// workspace's Git clone with its upstream by fast-forward only, its Git LFS content, then a rebuild of the native
+// plugins (and the core host only when it is missing or outdated). The status and fast-forward helpers serve both
+// repositories; this version reports the core read-only and does not update it.
 // It never stashes, merges, rebases, resets or discards: Git's own refusals are reported with what to do by hand.
 // It fast-forwards to exactly the upstream commit it fetched, never fetching a second time.
 import { spawn } from 'node:child_process';
@@ -28,17 +30,21 @@ export const runGit: GitRunner = (args, cwd, opts = {}) => new Promise((resolve)
   child.on('close', (code) => { out.flush(); err.flush(); resolve({ code: code ?? 127, output: lines.join('\n') }); });
 });
 
-export interface WorkspaceUpdateStatus {
-  workspace: string;
-  /** Update can start: the workspace is a Git clone of its own, on a branch with an upstream, and Git LFS is present. */
+/** Which of the two repositories of an update a folder is. */
+export type RepoRole = 'core' | 'workspace';
+
+export interface RepoStatus {
+  dir: string;
+  role: RepoRole;
+  /** The repository can be fast-forwarded: a Git clone of its own, on a branch with an upstream, and Git LFS when required. */
   available: boolean;
-  /** Why Update is unavailable, or null. */
+  /** Why the repository cannot be updated, or null. */
   reason: string | null;
   branch: string | null;
   upstream: string | null;
   /** Local commits not on the upstream, as of the last fetch. */
   ahead: number;
-  /** Upstream commits not in the workspace, as of the last fetch. */
+  /** Upstream commits not in the repository, as of the last fetch. */
   behind: number;
   /** Uncommitted or untracked paths. */
   dirty: number;
@@ -48,10 +54,23 @@ export interface WorkspaceUpdateStatus {
   unfinished: boolean;
   /** The workspace is the core checkout the panel runs from: one repository, updated as the core, never twice. */
   sameAsCore?: boolean;
+  /** Update reports this repository but does not update it in this version (the core). */
+  readOnly?: boolean;
+}
+/** The workspace's status. */
+export type WorkspaceUpdateStatus = RepoStatus;
+
+export interface RepoStatusOptions {
+  role: RepoRole;
+  /** Git LFS is required to update the workspace; the core uses none, so it is optional there. */
+  lfs: 'required' | 'optional';
+  git?: GitRunner;
+  /** The resume marker under the Git folder, when this repository has one. */
+  marker?: string;
 }
 
-const unavailable = (workspace: string, reason: string, extra: Partial<WorkspaceUpdateStatus> = {}): WorkspaceUpdateStatus =>
-  ({ workspace, available: false, reason, branch: null, upstream: null, ahead: 0, behind: 0, dirty: 0, checkedMs: null, unfinished: false, ...extra });
+const unavailable = (dir: string, role: RepoRole, reason: string, extra: Partial<RepoStatus> = {}): RepoStatus =>
+  ({ dir, role, available: false, reason, branch: null, upstream: null, ahead: 0, behind: 0, dirty: 0, checkedMs: null, unfinished: false, ...extra });
 
 async function samePath(a: string, b: string): Promise<boolean> {
   const real = async (p: string) => path.resolve(await fs.realpath(p).catch(() => p));
@@ -64,11 +83,16 @@ const firstLine = (text: string) => text.split('\n').map((l) => l.trim()).find(B
 /** Read-only Git: no optional locks, so `git status` does not refresh and rewrite the index while others use it. */
 const readOnly = (git: GitRunner): GitRunner => (args, cwd, opts = {}) => git(args, cwd, { ...opts, env: { ...opts.env, GIT_OPTIONAL_LOCKS: '0' } });
 
-/** The marker an update leaves under the Git folder after pulling, until its rebuild succeeds. */
-const MARKER = 'xrb-workspace-update';
-async function markerPath(workspace: string, git: GitRunner): Promise<string | null> {
-  const found = await git(['rev-parse', '--git-path', MARKER], workspace);
-  return found.code === 0 ? path.resolve(workspace, firstLine(found.output)) : null;
+/** Credentials in a remote URL (`https://user:token@host`, `https://token@host`) never reach the job output. */
+export function redactRemote(line: string): string {
+  return line.replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, '$1[redacted]@');
+}
+
+/** The marker an update leaves under the workspace's Git folder after pulling, until its rebuild succeeds. */
+export const WORKSPACE_MARKER = 'xrb-workspace-update';
+async function markerPath(dir: string, git: GitRunner, marker: string): Promise<string | null> {
+  const found = await git(['rev-parse', '--git-path', marker], dir);
+  return found.code === 0 ? path.resolve(dir, firstLine(found.output)) : null;
 }
 async function readMarker(file: string | null): Promise<{ from: string } | null> {
   if (!file) return null;
@@ -80,6 +104,42 @@ async function readMarker(file: string | null): Promise<{ from: string } | null>
   }
 }
 
+const CORE_NOT_A_CHECKOUT = 'The core is not a Git checkout: it updates with a new package.';
+const REASONS: Record<RepoRole, { missing: string; notClone: string; detached: string }> = {
+  workspace: { missing: 'The workspace folder does not exist.', notClone: 'The workspace is not a Git clone.', detached: 'The workspace is not on a branch (detached HEAD).' },
+  core: { missing: CORE_NOT_A_CHECKOUT, notClone: CORE_NOT_A_CHECKOUT, detached: 'The core is not on a branch (detached HEAD).' },
+};
+
+/** Whether a repository can be fast-forwarded and how far it is from its upstream as of the last fetch. Writes nothing. */
+export async function repoUpdateStatus(dir: string, options: RepoStatusOptions): Promise<RepoStatus> {
+  const { role } = options, git = readOnly(options.git ?? runGit), why = REASONS[role];
+  if (!await fs.stat(dir).then((s) => s.isDirectory(), () => false)) return unavailable(dir, role, why.missing);
+  const top = await git(['rev-parse', '--show-toplevel'], dir);
+  if (top.code === 127) return unavailable(dir, role, 'Git is not installed.');
+  // A folder inside another clone (such as a workspace inside the core checkout) is not a clone of its own: never update that one.
+  if (top.code !== 0 || !await samePath(firstLine(top.output), dir)) return unavailable(dir, role, why.notClone);
+  const branch = await git(['symbolic-ref', '-q', '--short', 'HEAD'], dir);
+  if (branch.code !== 0) return unavailable(dir, role, why.detached);
+  const name = firstLine(branch.output);
+  const upstream = await git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], dir);
+  if (upstream.code !== 0) return unavailable(dir, role, `The branch ${name} has no upstream to update from.`, { branch: name });
+  const counts = await git(['rev-list', '--left-right', '--count', 'HEAD...@{u}'], dir);
+  const [ahead, behind] = firstLine(counts.output).split(/\s+/).map((n) => Number.parseInt(n, 10) || 0);
+  const status = await git(['status', '--porcelain'], dir);
+  const fetchHead = await git(['rev-parse', '--git-path', 'FETCH_HEAD'], dir);
+  const fetchFile = path.resolve(dir, firstLine(fetchHead.output));
+  const checkedMs = fetchHead.code === 0 ? (await fs.stat(fetchFile).catch(() => null))?.mtimeMs ?? null : null;
+  const unfinished = options.marker ? !!await readMarker(await markerPath(dir, git, options.marker)) : false;
+  const base = { branch: name, upstream: firstLine(upstream.output), ahead: ahead ?? 0, behind: behind ?? 0, dirty: status.output.split('\n').filter((l) => l.trim()).length, checkedMs, unfinished };
+  if (options.lfs === 'required' && (await git(['lfs', 'version'], dir)).code !== 0) return unavailable(dir, role, 'Git LFS is not installed.', base);
+  return { dir, role, available: true, reason: null, ...base };
+}
+
+/** The core checkout the panel runs from, reported read-only: this version does not update it. */
+export async function coreUpdateStatus(core: string, runner: GitRunner = runGit): Promise<RepoStatus> {
+  return { ...await repoUpdateStatus(core, { role: 'core', lfs: 'optional', git: runner }), readOnly: true };
+}
+
 /** Why the workspace part skips a workspace that is the core checkout: that repository belongs to the core part. */
 export const SAME_AS_CORE = 'The workspace is the core checkout: it is updated as the core, which this version does not do yet. Pull it by hand.';
 
@@ -88,29 +148,8 @@ export const SAME_AS_CORE = 'The workspace is the core checkout: it is updated a
  * `core` is the core checkout the panel runs from: a workspace at the same path is that one repository.
  */
 export async function workspaceUpdateStatus(workspace: string, runner: GitRunner = runGit, core?: string): Promise<WorkspaceUpdateStatus> {
-  const git = readOnly(runner);
-  if (!await fs.stat(workspace).then((s) => s.isDirectory(), () => false)) return unavailable(workspace, 'The workspace folder does not exist.');
-  if (core && await samePath(workspace, core)) return unavailable(workspace, SAME_AS_CORE, { sameAsCore: true });
-  const top = await git(['rev-parse', '--show-toplevel'], workspace);
-  if (top.code === 127) return unavailable(workspace, 'Git is not installed.');
-  // A workspace folder inside another clone (such as the core checkout) is not a clone of its own: never update that one.
-  if (top.code !== 0 || !await samePath(firstLine(top.output), workspace)) return unavailable(workspace, 'The workspace is not a Git clone.');
-  const branch = await git(['symbolic-ref', '-q', '--short', 'HEAD'], workspace);
-  if (branch.code !== 0) return unavailable(workspace, 'The workspace is not on a branch (detached HEAD).');
-  const name = firstLine(branch.output);
-  const upstream = await git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], workspace);
-  if (upstream.code !== 0) return unavailable(workspace, `The branch ${name} has no upstream to update from.`, { branch: name });
-  const counts = await git(['rev-list', '--left-right', '--count', 'HEAD...@{u}'], workspace);
-  const [ahead, behind] = firstLine(counts.output).split(/\s+/).map((n) => Number.parseInt(n, 10) || 0);
-  const status = await git(['status', '--porcelain'], workspace);
-  const fetchHead = await git(['rev-parse', '--git-path', 'FETCH_HEAD'], workspace);
-  const fetchFile = path.resolve(workspace, firstLine(fetchHead.output));
-  const checkedMs = fetchHead.code === 0 ? (await fs.stat(fetchFile).catch(() => null))?.mtimeMs ?? null : null;
-  const unfinished = !!await readMarker(await markerPath(workspace, git));
-  const base = { branch: name, upstream: firstLine(upstream.output), ahead: ahead ?? 0, behind: behind ?? 0, dirty: status.output.split('\n').filter((l) => l.trim()).length, checkedMs, unfinished };
-  const lfs = await git(['lfs', 'version'], workspace);
-  if (lfs.code !== 0) return unavailable(workspace, 'Git LFS is not installed.', base);
-  return { workspace, available: true, reason: null, ...base };
+  if (core && await fs.stat(workspace).then(() => true, () => false) && await samePath(workspace, core)) return unavailable(workspace, 'workspace', SAME_AS_CORE, { sameAsCore: true });
+  return repoUpdateStatus(workspace, { role: 'workspace', lfs: 'required', git: runner, marker: WORKSPACE_MARKER });
 }
 
 export type WorkspaceUpdateStep = 'check' | 'fetch' | 'lfs' | 'pull' | 'rebuild';
@@ -181,82 +220,125 @@ export function overwrittenFiles(output: string): string[] {
   return [...new Set(files)];
 }
 
-/**
- * Steps 1-6 of Update workspace. Each step is announced as a `step <id>` line for the progress dialog.
- * LFS objects of the new commits are downloaded first (`git lfs fetch`, which honours the clone's
- * lfs.fetchinclude/fetchexclude), so the fast-forward's own checkout writes LFS content only for files the update
- * changes: a local deletion or edit of another LFS file stays, and an LFS failure changes nothing.
- * A successful pull leaves a marker under the Git folder until the rebuild succeeds, so running Update again after
- * a failed rebuild finishes it although the branch is no longer behind.
- */
-export async function updateWorkspace(workspace: string, ctx: JobContext, deps: WorkspaceUpdateDeps): Promise<WorkspaceUpdateResult> {
-  const git = deps.git ?? runGit;
-  const step = (id: WorkspaceUpdateStep) => ctx.line(`step ${id}`);
-  const quiet = (args: string[]) => readOnly(git)(args, workspace);
-  const loud = (args: string[], env?: NodeJS.ProcessEnv, onLine: (line: string) => void = ctx.line) => { ctx.line(`> git ${args.join(' ')}`); return git(args, workspace, { onLine, env }); };
-  const head = async () => firstLine((await quiet(['rev-parse', 'HEAD'])).output);
+export interface FastForwardOptions {
+  git?: GitRunner;
+  role: RepoRole;
+  lfs: 'required' | 'optional';
+  /** The branch whose upstream is fetched; its remote is used for the LFS download. */
+  branch: string;
+  /** The resume marker written after the fast-forward, until the caller's update finishes. */
+  marker: string;
+}
 
-  step('check');
-  const status = await workspaceUpdateStatus(workspace, git, deps.core);
-  if (!status.available) throw new WorkspaceUpdateError('check', `${status.reason} Nothing changed.`);
-  ctx.line(`workspace ${workspace} on ${status.branch}, tracking ${status.upstream}`);
-  const marker = await markerPath(workspace, readOnly(git));
+export interface FastForwardResult {
+  /** Where the repository was before this update, or before the unfinished update it resumes. */
+  from: string;
+  to: string;
+  commits: number;
+  /** Local commits not on the upstream, when nothing was behind. */
+  ahead: number;
+  /** An earlier update moved this repository but did not finish. */
+  pending: boolean;
+  /** The marker file to remove once the update finishes, or null. */
+  marker: string | null;
+}
+
+/**
+ * Fetch, then fast-forward to exactly the fetched upstream commit, for either repository. Each step is announced as
+ * a `step <id>` line. LFS objects of the new commits are downloaded first (`git lfs fetch`, which honours the
+ * clone's lfs.fetchinclude/fetchexclude), so the fast-forward's own checkout writes LFS content only for files the
+ * update changes: a local deletion or edit of another LFS file stays, and an LFS failure changes nothing. With
+ * optional LFS the download runs only when Git LFS is present and the fetched commit tracks LFS files.
+ * A successful fast-forward leaves a marker under the Git folder until the caller removes it, so running Update
+ * again after a later failure finishes it although the branch is no longer behind.
+ */
+export async function fastForward(dir: string, ctx: JobContext, options: FastForwardOptions): Promise<FastForwardResult> {
+  const git = options.git ?? runGit;
+  const prefix = options.role === 'core' ? 'Core: ' : '';
+  const fail = (at: WorkspaceUpdateStep, message: string) => new WorkspaceUpdateError(at, `${prefix}${message}`);
+  const step = (id: WorkspaceUpdateStep) => ctx.line(`step ${id}`);
+  const quiet = (args: string[]) => readOnly(git)(args, dir);
+  const out = (line: string) => ctx.line(redactRemote(line));
+  const loud = (args: string[], env?: NodeJS.ProcessEnv, onLine: (line: string) => void = out) => { ctx.line(`> git ${args.join(' ')}`); return git(args, dir, { onLine, env }); };
+  const head = async () => firstLine((await quiet(['rev-parse', 'HEAD'])).output);
+  const marker = await markerPath(dir, readOnly(git), options.marker);
   const pending = await readMarker(marker);
   if (pending) ctx.line('an earlier update did not finish its rebuild: finishing it');
 
   step('fetch');
   const fetched = await loud(['fetch']);
-  if (fetched.code !== 0) throw new WorkspaceUpdateError('fetch', `Could not reach the remote. Nothing changed.\n${tail(fetched.output)}`);
+  if (fetched.code !== 0) throw fail('fetch', `Could not reach the remote. Nothing changed.\n${redactRemote(tail(fetched.output))}`);
 
   // The commit this update goes to: read once after the fetch and used for the count, the LFS download and the
   // fast-forward, so the update never moves past what was fetched and checked, even if the remote moves meanwhile.
   const target = firstLine((await quiet(['rev-parse', '--verify', '@{u}^{commit}'])).output);
-  if (!/^[0-9a-f]{40,64}$/.test(target)) throw new WorkspaceUpdateError('fetch', 'Could not read the upstream commit after fetching. Nothing changed.');
+  if (!/^[0-9a-f]{40,64}$/.test(target)) throw fail('fetch', 'Could not read the upstream commit after fetching. Nothing changed.');
   const counts = await quiet(['rev-list', '--left-right', '--count', `HEAD...${target}`]);
   const [ahead = 0, behind = 0] = firstLine(counts.output).split(/\s+/).map((n) => Number.parseInt(n, 10) || 0);
   const before = await head();
-  if (ahead > 0 && behind > 0) throw new WorkspaceUpdateError('fetch', `The branch has ${ahead} local commit(s) and ${behind} new remote commit(s). Merge or rebase by hand, then run Update again. Nothing changed.`);
-  if (behind === 0 && !pending) {
-    const summary = `Already up to date (${short(before)}).${ahead ? ` ${ahead} local commit(s) not on the remote.` : ''} Nothing was rebuilt.`;
-    ctx.line(summary);
-    return { state: 'up-to-date', from: before, to: before, commits: 0, rebuilt: [], summary };
-  }
+  if (ahead > 0 && behind > 0) throw fail('fetch', `The branch has ${ahead} local commit(s) and ${behind} new remote commit(s). Merge or rebase by hand, then run Update again. Nothing changed.`);
 
   if (behind > 0) {
-    step('lfs');
-    const remote = firstLine((await quiet(['config', '--get', `branch.${status.branch}.remote`])).output) || 'origin';
-    // Git LFS shows no progress when its output is not a terminal unless forced.
-    const lfs = await loud(['lfs', 'fetch', remote, target], { GIT_LFS_FORCE_PROGRESS: '1' }, lfsProgressFilter(ctx.line));
-    if (lfs.code !== 0) throw new WorkspaceUpdateError('lfs', `Could not download the LFS files of the new commits: run Update again. Nothing changed.\n${tail(lfs.output)}`);
+    const remote = firstLine((await quiet(['config', '--get', `branch.${options.branch}.remote`])).output) || 'origin';
+    const lfsNeeded = options.lfs === 'required'
+      || ((await quiet(['lfs', 'version'])).code === 0 && !!firstLine((await quiet(['lfs', 'ls-files', '--name-only', target])).output));
+    if (lfsNeeded) {
+      step('lfs');
+      // Git LFS shows no progress when its output is not a terminal unless forced.
+      const lfs = await loud(['lfs', 'fetch', remote, target], { GIT_LFS_FORCE_PROGRESS: '1' }, lfsProgressFilter(out));
+      if (lfs.code !== 0) throw fail('lfs', `Could not download the LFS files of the new commits: run Update again. Nothing changed.\n${redactRemote(tail(lfs.output))}`);
+    }
 
     step('pull');
     // A fast-forward to the fetched commit, not `git pull`: that would fetch again and could move past `target`.
     const pulled = await loud(['merge', '--ff-only', '--no-edit', target]);
     if (pulled.code !== 0) {
       const files = overwrittenFiles(pulled.output);
-      if (files.length) throw new WorkspaceUpdateError('pull', `Local changes would be overwritten by the update: ${files.join(', ')}. Commit or stash them first, then run Update again. Nothing changed.`);
-      throw new WorkspaceUpdateError('pull', `Git could not fast-forward. Check git status in the workspace, then run Update again.\n${tail(pulled.output)}`);
+      if (files.length) throw fail('pull', `Local changes would be overwritten by the update: ${files.join(', ')}. Commit or stash them first, then run Update again. Nothing changed.`);
+      throw fail('pull', `Git could not fast-forward. Check git status in the ${options.role}, then run Update again.\n${redactRemote(tail(pulled.output))}`);
     }
-    // Until the rebuild succeeds, the next Update must finish it even though nothing is behind any more.
+    // Until the caller's update finishes, the next Update must finish it even though nothing is behind any more.
     if (marker && !pending?.from) await fs.writeFile(marker, `${JSON.stringify({ from: before })}\n`);
   }
   const to = await head();
   const from = pending?.from || before;
   const commits = from === to ? 0 : Number.parseInt(firstLine((await quiet(['rev-list', '--count', `${from}..${to}`])).output), 10) || 0;
-  const moved = commits ? `${short(from)} → ${short(to)} (${commits} commit${commits === 1 ? '' : 's'})` : short(to);
-  if (commits) ctx.line(`updated ${moved}`);
+  return { from, to, commits, ahead: behind > 0 ? 0 : ahead, pending: !!pending, marker };
+}
 
-  step('rebuild');
+/**
+ * The workspace part of Update. The marker from `fastForward` stays until the rebuild succeeds, so running Update
+ * again after a failed rebuild finishes it.
+ */
+export async function updateWorkspace(workspace: string, ctx: JobContext, deps: WorkspaceUpdateDeps): Promise<WorkspaceUpdateResult> {
+  const git = deps.git ?? runGit;
+
+  ctx.line('step check');
+  const status = await workspaceUpdateStatus(workspace, git, deps.core);
+  if (!status.available) throw new WorkspaceUpdateError('check', `${status.reason} Nothing changed.`);
+  ctx.line(`workspace ${workspace} on ${status.branch}, tracking ${status.upstream}`);
+
+  const moved = await fastForward(workspace, ctx, { git, role: 'workspace', lfs: 'required', branch: status.branch!, marker: WORKSPACE_MARKER });
+  const { from, to, commits } = moved;
+  if (!commits && !moved.pending) {
+    const summary = `Already up to date (${short(to)}).${moved.ahead ? ` ${moved.ahead} local commit(s) not on the remote.` : ''} Nothing was rebuilt.`;
+    ctx.line(summary);
+    return { state: 'up-to-date', from: to, to, commits: 0, rebuilt: [], summary };
+  }
+  const range = commits ? `${short(from)} → ${short(to)} (${commits} commit${commits === 1 ? '' : 's'})` : short(to);
+  if (commits) ctx.line(`updated ${range}`);
+
+  ctx.line('step rebuild');
   const pluginsOnly = await deps.coreHostCurrent();
   let plugins: string[];
   try {
     plugins = await deps.rebuild(pluginsOnly, ctx);
   } catch (e) {
-    throw new WorkspaceUpdateError('rebuild', `${commits ? `Updated ${moved}, but the` : 'The'} rebuild failed: ${(e as Error).message}. Fix it and run Update again.`);
+    throw new WorkspaceUpdateError('rebuild', `${commits ? `Updated ${range}, but the` : 'The'} rebuild failed: ${(e as Error).message}. Fix it and run Update again.`);
   }
-  if (marker) await fs.rm(marker, { force: true });
+  if (moved.marker) await fs.rm(moved.marker, { force: true });
   const rebuilt = [...(pluginsOnly ? [] : ['xrb-host']), ...plugins];
-  const summary = `${commits ? `Updated ${moved}` : `Finished the update at ${moved}`}. Rebuilt: ${rebuilt.length ? rebuilt.join(', ') : 'nothing'}.`;
+  const summary = `${commits ? `Updated ${range}` : `Finished the update at ${range}`}. Rebuilt: ${rebuilt.length ? rebuilt.join(', ') : 'nothing'}.`;
   ctx.line(summary);
   return { state: 'updated', from, to, commits, rebuilt, summary };
 }

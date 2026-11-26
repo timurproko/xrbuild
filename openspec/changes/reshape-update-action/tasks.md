@@ -12,9 +12,9 @@
 
 ## 3. Shared helpers and core status
 
-- [ ] 3.1 `repoUpdateStatus(dir, { lfs })` and `fastForward(dir, ctx)` extracted and used by the workspace job
-- [ ] 3.2 Core status reported read-only: not a Git checkout, detached HEAD and no upstream each give a reason; LFS optional
-- [ ] 3.3 Tests for the core status cases
+- [x] 3.1 `repoUpdateStatus(dir, { lfs })` and `fastForward(dir, ctx)` extracted and used by the workspace job
+- [x] 3.2 Core status reported read-only: not a Git checkout, detached HEAD and no upstream each give a reason; LFS optional
+- [x] 3.3 Tests for the core status cases
 
 ## 4. One Update action: names and wording
 

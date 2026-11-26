@@ -8,7 +8,7 @@ import { JobRunner, type JobContext } from '../src/jobs.ts';
 import { rebuildPresentation } from '../ui/rebuild-dialog.js';
 import { freePort } from '../src/host-runner.ts';
 import { createServer } from '../src/server.ts';
-import { lfsProgressFilter, overwrittenFiles, rebuiltPluginNames, runGit, SAME_AS_CORE, updateWorkspace, workspaceUpdateStatus, WorkspaceUpdateError, type GitRunner } from '../src/workspace-update.ts';
+import { coreUpdateStatus, fastForward, lfsProgressFilter, overwrittenFiles, rebuiltPluginNames, runGit, redactRemote, SAME_AS_CORE, updateWorkspace, workspaceUpdateStatus, WorkspaceUpdateError, type GitRunner } from '../src/workspace-update.ts';
 
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.invalid', GIT_TERMINAL_PROMPT: '0' };
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, env: ENV, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -220,6 +220,55 @@ test('a workspace that is the core checkout is one repository: reported as the c
   await rejectsAt(updateWorkspace(f.workspace, f.ctx, { ...f.deps, core: f.workspace }), 'check', /The workspace is the core checkout: it is updated as the core.*Nothing changed\./);
   assert.equal(f.head(), before); assert.deepEqual(f.rebuilds, []);
   assert.ok(!f.calls.some((args) => ['fetch', 'merge'].includes(args[0]!) || (args[0] === 'lfs' && args[1] === 'fetch')), 'nothing is fetched or fast-forwarded');
+});
+
+test('the core status is read-only, needs no Git LFS, and names why a core cannot be updated', async (t) => {
+  const f = await fixture(t);
+  const noLfs: GitRunner = async (args, cwd, opts) => args[0] === 'lfs' ? { code: 1, output: "git: 'lfs' is not a git command" } : f.deps.git(args, cwd, opts);
+  const core = await coreUpdateStatus(f.workspace, noLfs);
+  assert.equal(core.role, 'core'); assert.equal(core.readOnly, true);
+  assert.equal(core.available, true, 'Git LFS is optional for the core'); assert.equal(core.reason, null);
+  assert.equal(core.branch, 'main'); assert.equal(core.upstream, 'origin/main'); assert.equal(core.unfinished, false);
+  const packaged = path.join(f.root, 'packaged'); await fs.mkdir(packaged);
+  assert.equal((await coreUpdateStatus(packaged, noLfs)).reason, 'The core is not a Git checkout: it updates with a new package.');
+  const nested = path.join(f.workspace, 'nested'); await fs.mkdir(nested);
+  assert.equal((await coreUpdateStatus(nested, noLfs)).reason, 'The core is not a Git checkout: it updates with a new package.', 'a folder inside another clone is not the core checkout');
+  git(f.workspace, 'checkout', '-q', '--detach');
+  const detached = await coreUpdateStatus(f.workspace, noLfs);
+  assert.equal(detached.available, false); assert.equal(detached.reason, 'The core is not on a branch (detached HEAD).');
+  git(f.workspace, 'checkout', '-qb', 'topic');
+  assert.equal((await coreUpdateStatus(f.workspace, noLfs)).reason, 'The branch topic has no upstream to update from.');
+  assert.ok(!f.calls.some((args) => args[0] === 'fetch'), 'the core status never fetches');
+});
+
+test('fastForward serves the core too: optional LFS is skipped when the commit tracks no LFS files, and refusals name the core', async (t) => {
+  const f = await fixture(t), ctx = f.ctx;
+  await f.publish('shared.txt', 'two\n');
+  const moved = await fastForward(f.workspace, ctx, { git: f.deps.git, role: 'core', lfs: 'optional', branch: 'main', marker: 'xrb-test-update' });
+  assert.equal(moved.commits, 1); assert.equal(moved.to, f.head()); assert.equal(moved.pending, false);
+  assert.ok(moved.marker && await fs.stat(moved.marker).then(() => true), 'the marker stays until the caller finishes');
+  assert.ok(f.calls.some((args) => args.join(' ').startsWith('lfs ls-files')), 'optional LFS asks whether the commit tracks LFS files');
+  assert.ok(!f.calls.some((args) => args[0] === 'lfs' && args[1] === 'fetch'), 'no LFS download for a commit without LFS files');
+  assert.deepEqual(f.lines.filter((l) => l.startsWith('step ')), ['step fetch', 'step pull']);
+  await fs.writeFile(path.join(f.workspace, 'other.txt'), 'local commit\n');
+  git(f.workspace, 'commit', '-qam', 'local');
+  await f.publish('other.txt', 'remote\n');
+  await rejectsAt(fastForward(f.workspace, ctx, { git: f.deps.git, role: 'core', lfs: 'optional', branch: 'main', marker: 'xrb-test-update' }), 'fetch', /^Fetch: Core: The branch has 1 local commit\(s\) and 1 new remote commit\(s\)/);
+});
+
+test('credentials in remote URLs never reach the job output', async (t) => {
+  assert.equal(redactRemote('From https://user:secret@example.invalid/core'), 'From https://[redacted]@example.invalid/core');
+  assert.equal(redactRemote('fatal: unable to access https://token123@example.invalid/x/'), 'fatal: unable to access https://[redacted]@example.invalid/x/');
+  assert.equal(redactRemote('From ../remote.git'), 'From ../remote.git');
+  const f = await fixture(t);
+  await f.publish('shared.txt', 'two\n');
+  const leaky: GitRunner = async (args, cwd, opts) => {
+    if (args[0] === 'fetch') opts?.onLine?.('From https://user:secret@example.invalid/workspace');
+    return f.deps.git(args, cwd, opts);
+  };
+  await updateWorkspace(f.workspace, f.ctx, { ...f.deps, git: leaky });
+  assert.ok(f.lines.includes('From https://[redacted]@example.invalid/workspace'));
+  assert.ok(!f.lines.some((l) => l.includes('secret')));
 });
 
 test('overwritten file lists are read from Git output', () => {
