@@ -12,6 +12,7 @@
 .hands-view-tools > button, .hands-view-tools > .dropdown { pointer-events: auto; }
 .hands-view-tools > .dropdown { width: auto; }
 .hands-viewport .xrb-media-empty { pointer-events: none; }
+.hands-test-feedback { position: absolute; bottom: var(--xrb-space-stack); left: var(--xrb-space-stack); right: var(--xrb-space-stack); margin: 0; pointer-events: none; }
 .hands-view-error { position: absolute; bottom: var(--xrb-space-stack); left: var(--xrb-space-stack); right: var(--xrb-space-stack); }
 .hands-viewport:fullscreen { width: 100vw; height: 100dvh; max-width: none; border: 0; border-radius: 0; }
 @media (min-width: 1001px) {

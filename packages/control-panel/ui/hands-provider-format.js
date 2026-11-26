@@ -11,14 +11,17 @@ export function createProviderFormat({ decode, normalize }) {
   function validate(document) {
     if (!keys(document, ['kind', 'version', 'source', 'sessionId', 'epoch', 'profile', 'frameSpace', 'processing', 'globalAdjustmentsApplied', 'clockDomain', 'axes', 'samples']) ||
       document.kind !== 'xrbuild-hand-session' || document.version !== 1 || document.frameSpace !== 'panel-metres' || document.processing !== 'provider-published' || document.globalAdjustmentsApplied !== false || document.clockDomain !== 'windows-qpc-ms' || document.axes !== 'x-right,y-up,z-viewer' ||
-      !/^[0-9a-f-]{36}$/.test(document.sessionId) || !/^[0-9a-f]{64}$/.test(document.epoch) || !keys(document.source, ['owner', 'id', 'version']) || !/^(core|(?:workspace|embedded):[A-Za-z0-9][A-Za-z0-9._-]{0,127})$/.test(document.source.owner) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(document.source.id) || document.source.version !== undefined && (typeof document.source.version !== 'string' || !/^[A-Za-z0-9._+ -]{1,128}$/.test(document.source.version))) fail();
+      !/^[0-9a-f-]{36}$/.test(document.sessionId) || !/^[0-9a-f]{64}$/.test(document.epoch) || !keys(document.source, ['owner', 'id', 'version']) || typeof document.source.owner !== 'string' || typeof document.source.id !== 'string' || !/^(core|(?:workspace|embedded):[A-Za-z0-9][A-Za-z0-9._-]{0,127})$/.test(document.source.owner) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(document.source.id) || document.source.version !== undefined && (typeof document.source.version !== 'string' || !/^[A-Za-z0-9._+ -]{1,128}$/.test(document.source.version))) fail();
     const p = document.profile;
-    if (!keys(p, ['version', 'offsetMm', 'sizeFactor', 'appearance']) || p.version !== 1 || !keys(p.offsetMm, ['x', 'y', 'z']) || !keys(p.appearance, Object.keys(normalize(p).appearance))) fail();
+    if (!keys(p, ['version', 'offsetMm', 'sizeFactor', 'appearance']) || Object.keys(p).length !== 4 || p.version !== 1 || !keys(p.offsetMm, ['x', 'y', 'z']) || Object.keys(p.offsetMm).length !== 3 || !keys(p.appearance, Object.keys(normalize(p).appearance))) fail();
     normalize(p);
-    if (!Array.isArray(document.samples) || !document.samples.length || document.samples.length > LIMIT.samples || new TextEncoder().encode(JSON.stringify(document)).length > LIMIT.bytes) fail();
+    if (!Array.isArray(document.samples) || !document.samples.length || document.samples.length > LIMIT.samples) fail();
+    let used = new TextEncoder().encode(JSON.stringify({ ...document, samples: [] })).length;
     let sequence = -1, capture = -Infinity, first;
     for (const s of document.samples) {
       if (!keys(s, ['sequence', 'captureTimeMs', 'publishTimeMs', 'packet']) || !Number.isSafeInteger(s.sequence) || s.sequence <= sequence || s.sequence < 1 || s.sequence >= 0xffffffff || !Number.isFinite(s.captureTimeMs) || s.captureTimeMs < 0 || s.captureTimeMs < capture || !Number.isFinite(s.publishTimeMs) || s.publishTimeMs < s.captureTimeMs) fail();
+      if (typeof s.packet !== 'string' || s.packet.length > 180000) fail();
+      used += new TextEncoder().encode(JSON.stringify(s)).length + (sequence === -1 ? 0 : 1); if (used > LIMIT.bytes) fail();
       const packet = decode64(s.packet), frame = providerPacket(packet, decode);
       if (frame.seq !== s.sequence || frame.captureTimeMs !== s.captureTimeMs || frame.hostTimeMs !== s.publishTimeMs) fail();
       first ??= s.captureTimeMs; if (s.captureTimeMs - first > LIMIT.duration) fail();

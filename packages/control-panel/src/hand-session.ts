@@ -42,7 +42,7 @@ export class HandSessions {
   get live() { return this.current && this.busy ? this.current.live ?? null : null; }
   status(owner = '') {
     const s = this.current, owns = !!s && s.owner === owner;
-    return { phase: s?.phase ?? 'not-started', reason: s?.reason ?? '', source: s?.source ?? null, busy: this.busy, owns,
+    return { supported: (this.deps.platform ?? process.platform) === 'win32', phase: s?.phase ?? 'not-started', reason: s?.reason ?? '', source: s?.source ?? null, busy: this.busy, owns,
       sessionId: s?.id ?? null, ...(owns && this.busy ? { profile: s?.live?.envelope } : {}),
       delivery: s?.live?.delivery, deliveryState: s?.live?.deliveryState };
   }
@@ -91,7 +91,7 @@ export class HandSessions {
     try {
       const prepared = await this.deps.prepare(request);
       if (s.cancelled || this.closed) throw new Error('Hands Start cancelled');
-      s.source = prepared.source; s.live = new LiveHands(prepared.profile, prepared.revision, s.id);
+      s.source = prepared.source; s.live = new LiveHands(prepared.profile, prepared.revision, s.id, 'Hands session');
       // Reserve before DLL create, reject legacy hosts, then transfer under the native transition gate.
       reservation = await (this.deps.reserve ?? reserveHandAcquisition)(prepared.helperExe, 'Hands provider session', { checkLegacyHost: true, ...(this.deps.testScope ? { testScope: this.deps.testScope } : {}) });
       if (s.cancelled || this.closed) throw new Error('Hands Start cancelled');

@@ -85,12 +85,10 @@ try {
   const { createHandsView } = await import('./hands-view.js');
   view = createHandsView({ canvas: $('hands-canvas'), viewport: $('hands-viewport'),
     onMetrics: metrics => {
-      const render = metrics.renderFps.toFixed(1), tracking = metrics.trackingFps === null ? '—' : metrics.trackingFps.toFixed(1);
+      const render = metrics.renderFps.toFixed(1);
       if ($('hands-render-fps').textContent !== render) $('hands-render-fps').textContent = render;
-      if ($('hands-tracking-fps').textContent !== tracking) $('hands-tracking-fps').textContent = tracking;
-      const chip = $('hands-tracking-fps').parentElement, tooltip = metrics.trackingFps === null ? 'No live hand session' : 'Delivered tracking results per second';
-      if (chip.dataset.tooltip !== tooltip) chip.dataset.tooltip = tooltip;
     },
+    onTestFeedback: status => { const node = $('hands-test-feedback'); if (node) { const text = `Pinch: ${status.pinch.phase} · Drag: ${status.drag.phase}`; if (node.textContent !== text) node.textContent = text; } },
     onStatus: status => {
       const hidden = status.phase === 'replay' || status.phase === 'running' && status.hands > 0;
       if ($('hands-view-empty').hidden !== hidden) $('hands-view-empty').hidden = hidden;
@@ -109,6 +107,8 @@ const { decodeMessage } = await import('/sdk/protocol.js');
 const { handProfile } = await import('/sdk/hand-profile.js');
 const session = createHandsSession({ view, replaying: () => recorder.replaying, decode: decodeMessage });
 const recordingFormat = createProviderFormat({ decode: decodeMessage, normalize: handProfile });
+const { mountHandsLiveControls } = await import('./hands-live-controls.js');
+const liveControls = mountHandsLiveControls({ session, view, load: () => request('GET') });
 // Raw recording hooks only. The simplified page deliberately has no recorder UI.
 export const handsPage = { get view() { return view; }, get snapshot() { return snapshot; }, recorder, session, recordingFormat, request };
 async function mountRecordingTools() {
@@ -128,6 +128,7 @@ const events = new EventSource('/api/events');
 let noticeRead = 0;
 events.addEventListener('hands-changed', async event => {
   profileGeneration++;
+  void session.refreshProfile().catch(() => {});
   let revision; try { revision = JSON.parse(event.data).revision; } catch { /* Unversioned notices require review. */ }
   if (typeof revision === 'string' && revision === snapshot?.revision && revision === adjustments?.revision) return;
   const read = ++noticeRead;
@@ -152,5 +153,5 @@ const deliveryTimer = setInterval(() => {
   const generation = profileGeneration, read = ++deliveryRead, epoch = adjustments?.deliveryEpoch;
   void request('GET').then(data => { if (!disposed && !writes && read === deliveryRead && generation === profileGeneration) { adjustments?.updateDelivery(data.delivery, data.deliveryState, data.revision, epoch); void applyViewProfile(data, generation); } }).catch(() => {});
 }, 1000);
-addEventListener('pagehide', () => { disposed = true; clearInterval(deliveryTimer); events.close(); session.dispose(); recorder.dispose(); tools?.dispose(); adjustments?.dispose(); postprocessing.dispose(); navigation?.(); disposeShell(); view?.dispose(); }, { once: true });
+addEventListener('pagehide', () => { disposed = true; clearInterval(deliveryTimer); events.close(); liveControls.dispose(); session.dispose(); recorder.dispose(); tools?.dispose(); adjustments?.dispose(); postprocessing.dispose(); navigation?.(); disposeShell(); view?.dispose(); }, { once: true });
 await load();

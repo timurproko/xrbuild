@@ -9,6 +9,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <windows.h>
 
 #ifndef TP_ABI_MAJOR
@@ -19,7 +20,9 @@ typedef struct TestPlugin {
   const XrbHost* host;
   int fail_start;
   int stereo;
-  int empty, malformed, hang_start, hang_stop, hang_destroy;
+  int empty, malformed, hang_start, hang_stop, hang_destroy, test_hold;
+  volatile LONG running;
+  HANDLE thread;
 } TestPlugin;
 
 XRB_EXPORT int32_t XRB_CALL xrb_plugin_query(XrbPluginInfo* info) {
@@ -45,18 +48,43 @@ static TestPlugin* make(const XrbHost* host, const char* config) {
   p->hang_start = config && strstr(config, "\"hangStart\":true") != NULL;
   p->hang_stop = config && strstr(config, "\"hangStop\":true") != NULL;
   p->hang_destroy = config && strstr(config, "\"hangDestroy\":true") != NULL;
+  p->test_hold = config && strstr(config, "\"testHold\":true") != NULL;
   return p;
 }
 
 static const char* XRB_CALL last_error(void* self) { return ((TestPlugin*)self)->fail_start ? "test failure on request" : ""; }
-static void XRB_CALL destroy(void* self) { if (((TestPlugin*)self)->hang_destroy) Sleep(INFINITE); free(self); }
-static void XRB_CALL stop(void* self) { if (((TestPlugin*)self)->hang_stop) Sleep(INFINITE); }
+static void XRB_CALL stop(void* self) {
+  TestPlugin* p = (TestPlugin*)self;
+  if (p->hang_stop) Sleep(INFINITE);
+  InterlockedExchange(&p->running, 0);
+  if (p->thread) { WaitForSingleObject(p->thread, INFINITE); CloseHandle(p->thread); p->thread = NULL; }
+}
+static void XRB_CALL destroy(void* self) { if (((TestPlugin*)self)->hang_destroy) Sleep(INFINITE); stop(self); free(self); }
 
 #if TP_ROLE == XRB_ROLE_INPUT
+/* Explicit test-only continuous SDK gesture fixture, never a product source or automatic fallback. */
+static DWORD WINAPI input_hold(void* self) {
+  TestPlugin* p = (TestPlugin*)self;
+  unsigned tick = 0;
+  while (InterlockedCompareExchange(&p->running, 1, 1)) {
+    XrbHand hands[2]; XrbHandFrame frame; int h, k;
+    memset(hands, 0, sizeof(hands)); memset(&frame, 0, sizeof(frame));
+    for (h = 0; h < 2; h++) {
+      const float x = h ? .11f + .01f * sinf((float)tick * .05f) : -.11f;
+      hands[h].id = 7 + h; hands[h].handedness = (int8_t)h; hands[h].flags = XRB_HAND_GRABBING;
+      for (k = 0; k < XRB_NUM_KEYPOINTS; k++) { hands[h].keypoints[k * 4] = x; hands[h].keypoints[k * 4 + 1] = .085f; hands[h].keypoints[k * 4 + 2] = .15f; hands[h].keypoints[k * 4 + 3] = .9f; }
+    }
+    frame.size = sizeof(frame); frame.capabilities = XRB_CAP_GRAB; frame.capture_time_ms = p->host->now_ms(p->host->ctx); frame.tracking_hz = 60;
+    frame.count = p->empty ? 0 : 2; frame.hands = p->empty ? NULL : hands;
+    p->host->publish_hands(p->host->ctx, &frame); tick++; Sleep(16);
+  }
+  return 0;
+}
 static int32_t XRB_CALL input_start(void* self) {
   TestPlugin* p = (TestPlugin*)self;
   if (p->hang_start) Sleep(INFINITE);
   if (p->fail_start) return 1;
+  if (p->test_hold) { InterlockedExchange(&p->running, 1); p->thread = CreateThread(NULL, 0, input_hold, p, 0, NULL); return p->thread ? 0 : 1; }
   XrbHand hand;
   XrbHandFrame frame;
   memset(&hand, 0, sizeof(hand));

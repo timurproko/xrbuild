@@ -1,14 +1,18 @@
 import { createSessionClock, sessionPacket, SESSION_BOUNDS } from './hands-session-wire.js';
 /** One owning page. Socket credit is returned only at the actual consumer frame boundary. */
 export function createHandsSession({ view, replaying = () => false, onStatus = () => {}, fetcher = fetch, Socket = WebSocket, now = () => performance.now(), decode, frame = requestAnimationFrame, cancel = cancelAnimationFrame }) {
-  let capability = '', current = null, disposed = false, generation = 0, raf = 0;
+  let capability = '', bootstrapPromise = null, current = null, disposed = false, generation = 0, raf = 0;
   const raw = new Set(), lifecycle = new Set();
   const notify = value => { onStatus(value); for (const listener of lifecycle) listener(value); };
   async function request(action = '', body) {
     const response = await fetcher('/api/hands/session' + action, { method: body ? 'POST' : 'GET', cache: 'no-store', mode: 'same-origin', redirect: 'error', headers: { 'x-xrb-hands': '1', ...(body ? { 'content-type': 'application/json' } : {}), ...(capability ? { authorization: `Bearer ${capability}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const value = await response.json(); if (!response.ok) throw new Error(value.error || 'Hands session request failed'); return value;
   }
-  async function bootstrap() { if (!capability) { const b = await request('/bootstrap', {}); if (disposed) return; capability = b.capability; } }
+  async function bootstrap() {
+    if (capability || disposed) return;
+    const work = bootstrapPromise ??= (async () => { const b = await request('/bootstrap', {}); if (!disposed) capability = b.capability; })();
+    try { await work; } finally { if (bootstrapPromise === work) bootstrapPromise = null; }
+  }
   function retire(s, reason = '') {
     if (!s || current !== s || s.retired) return;
     s.retired = true; s.pending = null; clearInterval(s.heartbeat); clearInterval(s.pingTimer); clearTimeout(s.syncTimer); clearTimeout(s.freshness); s.socket?.close(); view.clearSession();
@@ -30,14 +34,24 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
     })();
   }
   async function applyProfile(s, envelope) {
-    if (!envelope || s.retired || current !== s || envelope.runId !== s.sessionId || envelope.sequence <= s.profileSequence) return;
-    const sequence = envelope.sequence;
-    if (await view.setProfile(envelope.profile, { isCurrent: () => !s.retired && current === s && sequence > s.profileSequence })) {
-      if (s.retired || current !== s) return;
-      // setProfile resolves after the shared ingress/visual snapshot has changed, never on receipt alone.
-      s.profileSequence = sequence;
-      await request('/ack', { sessionId: s.sessionId, profile: envelope });
-    }
+    if (!envelope || s.retired || current !== s || envelope.runId !== s.sessionId || !Number.isSafeInteger(envelope.sequence)) return false;
+    if (envelope.sequence < s.profileSequence) return true;
+    // One applying snapshot plus one newest replacement, never an autosave FIFO.
+    if (!s.nextProfile || envelope.sequence >= s.nextProfile.sequence) s.nextProfile = envelope;
+    if (!s.profileWork) s.profileWork = (async () => {
+      while (s.nextProfile && !s.retired && current === s) {
+        const expected = s.nextProfile; s.nextProfile = null;
+        if (expected.sequence > s.profileSequence) {
+          const applied = await view.setProfile(expected.profile, { isCurrent: () => !s.retired && current === s && (!s.nextProfile || s.nextProfile.sequence <= expected.sequence) });
+          if (s.retired || current !== s) return false;
+          if (!applied) { if (s.nextProfile) continue; return false; }
+          s.profileSequence = expected.sequence;
+        }
+        if (expected.sequence === s.profileSequence) await request('/ack', { sessionId: s.sessionId, profile: expected });
+      }
+      return !s.retired && s.profileSequence >= 0;
+    })().finally(() => { s.profileWork = null; });
+    return s.profileWork;
   }
   async function start(selection) {
     if (disposed || current) throw new Error('Stop the active Hands session first');
@@ -54,15 +68,16 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
         let status = await request('/status', {});
         if (status.owns) { s.sessionId ??= status.sessionId; status = await request('/heartbeat', { sessionId: s.sessionId }); }
         if (s.sessionId && (!status.owns || status.sessionId !== s.sessionId || ['failed', 'stopped'].includes(status.phase))) { void stop(status.reason || 'Provider session ended'); return; }
-        if (status.profile && s.sessionId) await applyProfile(s, status.profile);
+        if (status.profile && s.sessionId) { try { await applyProfile(s, status.profile); } catch { /* Persistence and actual SDK delivery remain separate; keep the last valid snapshot. */ } }
       } catch (error) { void stop(error.message); } finally { polling = false; }
     }, 1000);
     try {
       const result = await request('', selection);
       if (s.retired || disposed || ownGeneration !== generation) { if (result.sessionId) { s.sessionId = result.sessionId; await request('/stop', { sessionId: result.sessionId }); } return; }
       Object.assign(s, { sessionId: result.sessionId, epoch: result.epoch, source: result.source });
-      await applyProfile(s, result.profile);
-      if (s.retired || !view.beginSession({ epoch: s.epoch })) throw new Error('Hand viewport did not accept its session');
+      if (!await applyProfile(s, result.profile) && !s.retired) throw new Error('Initial hand profile was not applied');
+      if (s.retired || disposed) return;
+      if (!view.beginSession({ epoch: s.epoch })) throw new Error('Hand viewport did not accept its session');
       const socket = new Socket(result.url); s.socket = socket; s.consumerStarted = now(); socket.binaryType = 'arraybuffer';
       const ping = () => { if (!s.retired && socket.readyState === 1) { const p0 = now(); s.pings.add(p0); if (s.pings.size > 8) s.pings.delete(s.pings.values().next().value); const data = new ArrayBuffer(9), v = new DataView(data); v.setUint8(0, 111); v.setFloat64(1, p0, true); socket.send(data); } };
       socket.onopen = () => { if (s.retired) { socket.close(); return; } socket.send(new TextEncoder().encode(result.observer)); result.observer = ''; ping(); s.pingTimer = setInterval(ping, 2000); };
@@ -110,8 +125,10 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
   raf = frame(tick);
   return {
     start, stop,
+    async refreshProfile() { const s = current; if (!s || s.retired) return; const status = await request('/status', {}); if (status.owns && status.sessionId === s.sessionId && status.profile) await applyProfile(s, status.profile); },
     async status() { await bootstrap(); return request('/status', {}); },
     get active() { return !!current && !current.retired; },
+    get stopping() { return !!current?.retired; },
     recordingSource() { const s = current; return s && !s.retired && s.accepted && view.profile ? { kind: 'xrbuild-hand-session', version: 1, source: { owner: s.source.owner, id: s.source.id, ...(s.source.version ? { version: s.source.version } : {}) }, sessionId: s.sessionId, epoch: s.epoch, profile: view.profile, frameSpace: 'panel-metres', processing: 'provider-published', globalAdjustmentsApplied: false, clockDomain: 'windows-qpc-ms', axes: 'x-right,y-up,z-viewer' } : null; },
     subscribeRawFrames(listener) { raw.add(listener); return () => raw.delete(listener); },
     subscribeLifecycle(listener) { lifecycle.add(listener); return () => lifecycle.delete(listener); },

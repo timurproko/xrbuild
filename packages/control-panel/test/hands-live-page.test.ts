@@ -1,0 +1,74 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { createServer } from '../src/server.ts';
+import { freePort } from '../src/host-runner.ts';
+import { REPO } from '../src/env.ts';
+import { readHandsState, saveHandsState } from '../src/hands-state.ts';
+import { discoverHandProviders } from '../src/hand-providers.ts';
+import { withBrowser, sleep } from './browser-fixture.ts';
+const worker = process.env.XRB_TEST_PROVIDER_WORKER, helper = process.env.XRB_TEST_ACQUISITION_HELPER, dll = process.env.XRB_TEST_PROVIDER_DLL;
+test('top-level Start/Stop and SDK pinch/drag use actual native frames, preserve appearance holds, clear geometry/Stop, and report empty frames honestly', { skip: !worker || !helper || !dll || !process.env.XRB_TEST_BROWSER, timeout: 90000 }, async () => {
+  const root = process.env.XRB_TEST_ROOT!; await fs.mkdir(root, { recursive: true });
+  const workspace = await fs.mkdtemp(path.join(root, 'hands-live-page-')), port = await freePort(), plugin = path.join(workspace, 'plugins/fixture');
+  await fs.mkdir(path.join(plugin, 'bin'), { recursive: true }); const binary = path.join(plugin, 'bin/xrb_session_test.dll'); await fs.copyFile(dll!, binary);
+  await fs.writeFile(path.join(plugin, 'xrb-plugin.json'), JSON.stringify({ title: 'Fixture input', type: 'input', version: '1.0.0', handProviders: [{ version: 1, id: 'fixture', runtimeName: 'session-test', transport: 'native', purpose: 'tracked' }] }));
+  await fs.writeFile(path.join(workspace, 'xrb-plugins.json'), JSON.stringify({ disabled: ['input-hands'], settings: {} }));
+  let state = await readHandsState(REPO, workspace); await saveHandsState(REPO, workspace, { owner: 'workspace:fixture', id: 'fixture' }, state.revision);
+  const untouched = path.join(workspace, 'unrelated-recording.bin'); await fs.writeFile(untouched, 'keep exact bytes');
+  const app = createServer({ repo: REPO, workspace, port }); let empty = false;
+  const inventory = async () => ({ providers: [{ role: 'input' as const, name: 'session-test', builtin: false, version: '0.0.1', description: 'test-built ABI fixture', path: binary }], rejected: [], error: null });
+  app.panel.nativeProviders = inventory;
+  const deps = (app.panel.handSessions as any).deps; deps.testScope = randomBytes(32).toString('hex');
+  deps.prepare = async (request: any) => {
+    const state = await readHandsState(REPO, workspace), registry = await discoverHandProviders(REPO, workspace, inventory);
+    assert.equal(request.provider.id, 'fixture'); assert.equal(request.revision, state.revision); assert.equal(request.registryRevision, registry.revision);
+    return { workerExe: worker, helperExe: helper, runtimeName: 'session-test', pluginPath: binary, config: { testHold: true, empty }, source: { owner: 'workspace:fixture', id: 'fixture', label: 'Fixture input', version: '0.0.1' }, profile: state.profile, revision: state.revision };
+  };
+  await new Promise<void>(r => app.server.listen(port, '127.0.0.1', r));
+  try {
+    const registry = await discoverHandProviders(REPO, workspace, inventory); assert.ok(registry.providers.some(p => p.id === 'fixture'), JSON.stringify(registry));
+    await withBrowser(async ({ navigate, evaluate, send }) => {
+      const wait = async (expression: string) => { for (let i = 0; i < 120; i++) { if (await evaluate(expression)) return; await sleep(50); } assert.fail(expression); };
+      await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.scriptErrors=[];addEventListener('error',e=>scriptErrors.push(e.message));addEventListener('unhandledrejection',e=>scriptErrors.push(String(e.reason)));` });
+      await navigate(app.url + 'hands/', `document.querySelector('#hands-start-stop')`);
+      await wait(`!document.querySelector('#hands-start-stop').disabled`).catch(async error => { throw new Error(error.message + ' ' + JSON.stringify(await evaluate(`({errors:window.scriptErrors, button:document.querySelector('#hands-start-stop').outerHTML, state:document.querySelector('#hands-live-state').outerHTML, title:document.querySelector('#hands-start-stop').title, message:document.querySelector('#hands-message').textContent, error:document.querySelector('#hands-view-error').textContent, provider:document.querySelector('#hands-provider').value})`))); });
+      await evaluate(`(async()=>{window.livePage=(await import('/hands.js')).handsPage;window.captureCalls=0;if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw Error('forbidden camera')};})()`);
+      assert.equal(app.panel.handSessions.busy, false);
+      assert.equal(await evaluate(`document.querySelector('#hands-start-stop').getBoundingClientRect().top < document.querySelector('#hands-provider').getBoundingClientRect().top`), true);
+      await evaluate(`document.querySelector('#hands-start-stop').click()`);
+      await wait(`livePage.view.testState.pinch.held && livePage.view.testState.drag.held`);
+      await wait(`Number(document.querySelector('#hands-tracking-fps').textContent)>0`);
+      assert.ok(await evaluate('livePage.view.testState.drag.moves') > 0);
+      await evaluate(`window.ends=[];livePage.view.testTargets.forEach(t=>t.on(e=>{if(e.type==='end')ends.push(e.reason)}))`);
+      // Actual ordered service delivery, not direct view edits; appearance must not end either hold.
+      await evaluate(`(async()=>{const d=await livePage.request('GET');d.profile.appearance.opacity=.7;await livePage.request('POST',{profile:d.profile,revision:d.revision},'/api/hands/apply')})()`);
+      await wait('livePage.view.profile.appearance.opacity===.7');
+      assert.deepEqual(await evaluate('ends'), []); assert.equal(await evaluate('livePage.view.testState.drag.held'), true);
+      const proof = path.join(root, 'proof'); await fs.mkdir(proof, { recursive: true });
+      const dimensions = await evaluate('({outerWidth,outerHeight,innerWidth,innerHeight,devicePixelRatio})');
+      await fs.writeFile(path.join(proof, 'hands-live-default-dimensions.json'), JSON.stringify(dimensions, null, 2));
+      await fs.writeFile(path.join(proof, 'hands-live-default.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+      await evaluate(`(async()=>{const d=await livePage.request('GET');d.profile.offsetMm.x=15;await livePage.request('POST',{profile:d.profile,revision:d.revision},'/api/hands/apply')})()`);
+      await wait('livePage.view.profile.offsetMm.x===15');
+      assert.ok((await evaluate('ends')).includes('lost')); assert.equal((await evaluate('ends')).includes('release'), false);
+      await wait('livePage.view.testState.pinch.held && livePage.view.testState.drag.held');
+      await evaluate(`document.querySelector('#hands-start-stop').click()`);
+      await wait(`document.querySelector('#hands-start-stop').textContent==='Start'`);
+      assert.equal(await evaluate('livePage.view.currentHands.length'), 0); assert.equal(await evaluate('livePage.view.testState.drag.held'), false); assert.equal(await evaluate('livePage.view.testState.pinch.held'), false);
+      assert.equal(await evaluate(`document.querySelector('#hands-tracking-fps').textContent`), '—'); assert.equal(app.panel.handSessions.busy, false);
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', x: 300, y: 220, clickCount: 1 }); await send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', x: 300, y: 220, clickCount: 1 });
+      assert.equal(await evaluate('livePage.view.testState.pinch.starts + livePage.view.testState.drag.starts'), 0, 'mouse cannot count as a tracked-hand check');
+      empty = true; await evaluate(`document.querySelector('#hands-start-stop').click()`);
+      await wait(`document.querySelector('#hands-live-state').textContent==='No hands' && Number(document.querySelector('#hands-tracking-fps').textContent)>0`);
+      assert.equal(await evaluate('livePage.view.currentHands.length'), 0); assert.equal(await evaluate('captureCalls'), 0);
+      await send('Emulation.setDeviceMetricsOverride', { width: 380, height: 800, deviceScaleFactor: 1, mobile: false });
+      assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
+      await fs.writeFile(path.join(proof, 'hands-live-responsive.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+      await evaluate(`document.querySelector('#hands-start-stop').click()`); await wait('!livePage.session.active && !livePage.session.stopping');
+    });
+    assert.equal(await fs.readFile(untouched, 'utf8'), 'keep exact bytes');
+  } finally { await app.close(); await fs.rm(workspace, { recursive: true, force: true }); }
+});

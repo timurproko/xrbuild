@@ -2098,8 +2098,9 @@ export class Panel {
           const saved = await saveHandAdjustments(this.repo, this.workspace, body.profile, body.revision, initial);
           this.handSessions.live?.update(saved.profile, saved.revision);
           const live = this.liveHands;
+          if (live && this.runner.busy) live.update(saved.profile, saved.revision);
+          this.hub.send('hands-changed', { revision: saved.revision });
           if (live && this.runner.busy) {
-            live.update(saved.profile, saved.revision);
             if (this.nativeHandPolicy !== null) {
               try {
                 const channel = this.runner.state().channelUrl;
@@ -2109,7 +2110,6 @@ export class Panel {
               } catch (error) { live.fail((error as Error).message); }
             }
           }
-          this.hub.send('hands-changed', { revision: saved.revision });
           sendJson(res, 200, { revision: saved.revision, profile: saved.profile, ...this.handsDelivery() });
         } finally { this.savingHands = false; }
         return true;

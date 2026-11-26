@@ -121,12 +121,13 @@ int main(int argc, char** argv) {
   if (!quit) event({{"phase", "running"}, {"url", transport.url()}, {"pid", GetCurrentProcessId()}});
   starting = false;
   const auto connectedBy = GetTickCount64() + 5000;
+  const auto streamBegan = channel::hostTimeMs();
   uint64_t last = 0, sent = 0; double reported = 0;
   while (!quit) {
     const auto snapshot = frames.newest();
     if (snapshot.sequence >= 0xffffffffu) { fail("Provider frame sequence exhausted; start a new session"); break; }
     if (!transport.clientCount() && GetTickCount64() > connectedBy) { fail("Hands page did not connect before the session deadline"); break; }
-    if (channel::hostTimeMs() - (snapshot.sequence ? snapshot.publicationMs : channel::hostTimeMs() - double(GetTickCount64() - begun)) > 10000) { fail("Provider stopped delivering valid frames"); break; }
+    if (channel::hostTimeMs() - (snapshot.sequence ? snapshot.publicationMs : streamBegan) > 10000) { fail("Provider stopped delivering valid frames"); break; }
     if (snapshot.sequence != sent && transport.clientCount()) {
       std::vector<uint8_t> payload(72 + snapshot.packet.size());
       memcpy(payload.data(), epoch.data(), 64); memcpy(payload.data() + 64, &snapshot.sequence, 8);

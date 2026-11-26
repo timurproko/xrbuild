@@ -15,7 +15,7 @@ test('Apply tracks module and Hand-off app acknowledgements independently, ignor
   let state = await readHandsState(REPO, root); state = await saveHandsState(REPO, root, null, state.revision);
   const a = new LiveHands(state.profile, state.revision), b = new LiveHands(state.profile, state.revision);
   panel.liveHands = a; panel.runner.s.phase = 'running';
-  panel.handSessions.current = { id: b.envelope.runId, owner: 'owning-page', token: '', epoch: 'a'.repeat(64), phase: 'running', heartbeat: Date.now(), ended: false, cancelled: false, preparing: false, live: b };
+  panel.handSessions.current = { id: b.envelope.runId, owner: 'owning-page', token: '', epoch: 'a'.repeat(64), phase: 'running', heartbeat: performance.now(), ended: false, cancelled: false, preparing: false, live: b };
   await new Promise<void>(r => app.server.listen(port, '127.0.0.1', r));
   try {
     const result = await fetch(app.url + 'api/hands/apply', { method: 'POST', headers: { origin: new URL(app.url).origin, 'content-type': 'application/json' }, body: JSON.stringify({ profile: { ...state.profile, offsetMm: { x: 10, y: 0, z: 0 } }, revision: state.revision }) });
