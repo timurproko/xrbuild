@@ -18,7 +18,7 @@ export const handProviderKey = (key: HandProviderKey) => `${key.owner}/${key.id}
 export const sameHandProvider = (a: HandProviderKey | null, b: HandProviderKey | null) => a === null || b === null ? a === b : a.owner === b.owner && a.id === b.id;
 
 /** Pure catalog adaptation. Probes query metadata only; no input_create/start is called. */
-export function handRegistry(catalog: PluginCatalog, native: ProviderList): HandRegistry {
+export function handRegistry(catalog: PluginCatalog, native: ProviderList, presentation: ProviderList = native): HandRegistry {
   const providers: HandProvider[] = [];
   for (const [id, label, purpose] of [['simulated', 'Synthetic (core)', 'synthetic'], ['replay', 'Replay (core)', 'replay']] as const) {
     const installed = !native.unsafe && native.providers.some(p => p.builtin && p.role === 'input' && p.name === id);
@@ -30,7 +30,9 @@ export function handRegistry(catalog: PluginCatalog, native: ProviderList): Hand
   for (const plugin of catalog.plugins) {
     const selected = catalog.selected.some(p => p.key === plugin.key), enabled = pluginEnabled(plugin, catalog.prefs);
     const owned = native.providers.filter(p => !p.builtin && p.path && pluginOwnsPath(plugin, p.path));
-    const declarations: HandProviderDeclaration[] = plugin.meta.handProviders ?? owned.filter(p => p.role === 'input').map(p => ({ version: 1 as const, id: p.name, transport: 'native' as const, runtimeName: p.name, purpose: 'tracked' as const }));
+    // Disabled probes can describe rows, but must never decide active ownership/conflicts.
+    const described = enabled ? owned : presentation.providers.filter(p => !p.builtin && p.path && pluginOwnsPath(plugin, p.path));
+    const declarations: HandProviderDeclaration[] = plugin.meta.handProviders ?? described.filter(p => p.role === 'input').map(p => ({ version: 1 as const, id: p.name, transport: 'native' as const, runtimeName: p.name, purpose: 'tracked' as const }));
     for (const declaration of declarations) {
       const matches = owned.filter(p => p.name === declaration.runtimeName && p.role === 'input');
       const available = selected && enabled && !plugin.nativeProblem && !native.unsafe && matches.length === 1;
@@ -45,6 +47,7 @@ export function handRegistry(catalog: PluginCatalog, native: ProviderList): Hand
   return { providers, problems, revision: createHash('sha256').update(JSON.stringify([providers, problems])).digest('hex') };
 }
 export async function discoverHandProviders(core: string, workspace: string, probe = listProviders): Promise<HandRegistry> {
-  const [catalog, native] = await Promise.all([resolvePluginCatalog(workspace, core, true), probe(core, workspace, true)]);
-  return handRegistry(catalog, native);
+  const [catalog, native] = await Promise.all([resolvePluginCatalog(workspace, core, true), probe(core, workspace, false)]);
+  const presentation = catalog.plugins.some(p => !pluginEnabled(p, catalog.prefs)) ? await probe(core, workspace, true) : native;
+  return handRegistry(catalog, native, presentation);
 }

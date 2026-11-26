@@ -4,7 +4,7 @@ import { HandInput } from '../src/hands.ts';
 import { HandFrameIngress, handSourcePolicy, prepareHandFrame } from '../src/hand-source.ts';
 import { decodeMessage, type HandsMessage } from '../src/protocol.ts';
 import { handsMessage } from './fixtures.ts';
-import { appLaunchUrl, appLaunchContext } from '../src/launch-context.ts';
+import { appLaunchUrl, appLaunchContext, appResumeUrl, isNativeLauncherDocument } from '../src/launch-context.ts';
 
 const frame = (time: number): HandsMessage => decodeMessage(handsMessage([{ id: 1, grabbing: true, pinch: true }], time)) as HandsMessage;
 test('one identity ingress preserves capability/gesture fields and current native gesture traces', () => {
@@ -53,6 +53,25 @@ test('native, synthetic-style skeleton-only and WebXR data expose the same app A
     }
   }
   for (const keys of apiKeys) assert.deepEqual(keys, apiKeys[0]);
+});
+
+test('native execution metadata survives nested launch/resume and its marker stays local to the owning panel', () => {
+  const panel = 'http://127.0.0.1:5180';
+  const root = `https://app.local/index.html?xrb-panel=${encodeURIComponent(panel + '/')}&xrb-hand=native`;
+  const first = appLaunchUrl(panel + '/preview/first/', { returnUrl: root });
+  assert.equal(isNativeLauncherDocument(first, panel), true);
+  const second = appLaunchUrl(panel + '/preview/second/', { returnUrl: first });
+  assert.equal(isNativeLauncherDocument(second, panel), true);
+  assert.equal(isNativeLauncherDocument(appResumeUrl(first, 'perspective'), panel), true);
+  assert.equal(isNativeLauncherDocument(first, 'http://127.0.0.1:1'), false);
+  assert.equal(isNativeLauncherDocument(panel + '/preview/first/?xrb-hand=native', panel), false);
+  const foreign = appLaunchUrl('https://published.example/preview/app/', { returnUrl: root });
+  assert.equal(new URL(foreign).searchParams.has('xrb-native-root'), false);
+  const dev = appLaunchUrl(panel + '/preview/app/', { returnUrl: `http://localhost:5173/?xrb-panel=${encodeURIComponent(panel + '/')}&xrb-hand=native` });
+  assert.equal(isNativeLauncherDocument(dev, panel), false);
+  assert.equal(isNativeLauncherDocument(dev, panel, true), true);
+  const browser = appLaunchUrl(panel + '/preview/app/', { returnUrl: `${panel}/preview/launcher/?xrb-panel=${encodeURIComponent(panel + '/')}&xrb-hand=off&xrb-preview-token=browser-token-12345` });
+  assert.equal(isNativeLauncherDocument(browser, panel, true), false);
 });
 
 test('managed and packaged source policy is bounded and survives trusted launcher navigation', () => {

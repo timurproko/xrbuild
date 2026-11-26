@@ -434,7 +434,9 @@ preserved exactly (including capitals, underscores and dots, up to the native qu
 profiles and package selections; new authored declaration IDs retain their stricter lowercase metadata schema. Core WebXR, simulated and
 replay sources use the same registry. Source identity is owner-qualified, never a label or discovery order.
 Discovery is metadata-only and never calls input creation/start. A declaration without a valid owned binary
-remains unavailable rather than borrowing another plugin's provider.
+remains unavailable rather than borrowing another plugin's provider. Availability and native-name conflicts use
+only enabled selected plugins; optional all-plugin probes describe disabled rows but cannot invalidate an enabled
+source. The Hands picker, Input dropdown, plugin manager and runtime settings use that same usable set.
 
 ### Global Hands selection
 
@@ -449,7 +451,10 @@ a missing/failed source stays selected and unavailable, never replaced. Installe
 connected: idle providers are not started, and replay still requires a configured recording. The picker is not
 a live viewer; offsets, skeleton size/appearance and the live laboratory are subsequent changes. Browser preview
 documents use effective personal run inputs and a token/session/project-bound policy snapshot for an active run;
-later source/settings changes do not rewrite that launch decision. Publication always resolves in the browser
+later source/settings changes do not rewrite that launch decision. Local Launcher hand-offs validate native
+context against this panel, retain the running host's captured policy through nested launch/return and dev
+navigation, and still suppress input for destinations without Hand. A bare native query hint does not change
+ordinary browser resolution. Publication always resolves in the browser
 context, independently of the app's selected desktop/headset package target. New combined
 workspace templates ignore `config/hands/`; existing workspace ignore files are not rewritten automatically.
 

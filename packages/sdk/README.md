@@ -161,7 +161,10 @@ Native/dev launch context and checked package/publication snapshots supply bound
 WebXR frames cannot bypass managed Hand-off policy or add a second source to native input. Browser preview with
 a native-only selected source reports incompatibility; this release builds no native-to-browser bridge. Standalone
 SDK use without managed context keeps its normal host/WebXR defaults. Launcher context carries source policy
-without changing return-URL trust. Normal SDK-consuming rebuilds are needed to acquire this SDK logic.
+without changing return-URL trust. Local native Launcher destinations (including nested returns and dev runs)
+retain the active host's captured source, while destinations without Hand still suppress frames. The native
+execution marker is limited to the owning panel's local previews; published output keeps its checked browser
+policy. Normal SDK-consuming rebuilds are needed to acquire this SDK logic.
 
 Both ingress paths pass canonical frames through `hand-source.ts`'s identity `prepareHandFrame` stage before
 `HandInput` filtering/gestures. Future Hands layers attach there: position/size must affect interaction as well as
