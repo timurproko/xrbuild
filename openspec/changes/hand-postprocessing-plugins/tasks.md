@@ -10,9 +10,9 @@ Implementation approved for the reduced scope. PR #50 is merged; the page mount 
 
 ## 2. Optional desktop sidecar supervision
 
-- [ ] 2.1 Start only the selected contained sidecar for managed desktop Hand runs and deliver separate authenticated run-only metadata; use one fake sidecar to test ready/start failure, foreign tokens, consumer epochs and skeleton-only old-client fallback without input gating.
-- [ ] 2.2 Implement bounded frame/result transport, one in-flight/newest pending, freshness/size/finite/index checks and pinned launch settings; fake-sidecar tests cover delayed, malformed, wrong-epoch and missing-plugin fallback.
-- [ ] 2.3 Own stop/crash/host-exit/panel-exit cleanup with bounded waits and pipe/watchdog owner loss; actual isolated child tests assert termination and retired credentials, and document the minimal protocol without runtime/model setup.
+- [x] 2.1 Start only the selected contained sidecar for managed desktop Hand runs and deliver separate authenticated run-only metadata; use one fake sidecar to test ready/start failure, foreign tokens, consumer epochs and skeleton-only old-client fallback without input gating.
+- [x] 2.2 Implement bounded frame/result transport, one in-flight/newest pending, freshness/size/finite/index checks and pinned launch settings; fake-sidecar tests cover delayed, malformed, wrong-epoch and missing-plugin fallback.
+- [x] 2.3 Own stop/crash/host-exit/panel-exit cleanup with bounded waits and pipe/watchdog owner loss; actual isolated child tests assert termination and retired credentials, and document the minimal protocol without runtime/model setup.
 
 ## 3. Final-pose dispatch and standard mesh drawing
 
