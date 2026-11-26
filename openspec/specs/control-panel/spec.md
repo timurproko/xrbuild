@@ -8,37 +8,32 @@ Describes control-panel actions that maintain the selected workspace and its nat
 
 ### Requirement: Update a Git workspace
 
-The control panel SHALL freshly discover and fetch origin's default branch, download required LFS content before checkout, and fast-forward only to the fetched commit while preserving local work. Dirty state alone SHALL NOT prevent Update. Detached, local-ahead, diverged and unsuitable-upstream checkouts SHALL remain refused. Update SHALL never stash, reset, force, rebase or create merge commits. Rebuild SHALL remain independent of Git advancement.
+The control panel SHALL offer Update for the selected workspace's independent Git clone, freshly discover and fetch origin's default branch, download required LFS content first, and fast-forward only to the fetched commit. It SHALL refuse dirty, detached, local-ahead, diverged or unsuitable-upstream checkouts without altering their work. It SHALL never stash, reset, force, rebase or create merge commits. Rebuild SHALL stay build-only.
 
 #### Scenario: Workspace behind its upstream
 
-- **WHEN** the workspace is on origin's default branch with no local-only commits and the person runs Update
-- **THEN** the panel freshly fetches that branch, downloads the required LFS content, safely fast-forwards and reports the old and new commits and completed follow-up
+- **WHEN** the workspace is clean on origin's default branch with no local-only commits and the person runs Update
+- **THEN** the panel freshly fetches that branch, downloads the required LFS content, fast-forwards, rebuilds and reports the old and new commits and what was rebuilt
 
 #### Scenario: Remote moves during the update
 
 - **WHEN** the default branch gets another commit after the panel fetched and before it fast-forwards
-- **THEN** the workspace ends at the captured fetched commit without a second fetch, and the next Update can bring the newer commit
+- **THEN** the workspace ends at the fetched and checked commit, without a second fetch, and the next Update can bring the newer commit
 
 #### Scenario: Already up to date
 
-- **WHEN** a fresh successful fetch proves HEAD equals the remote default branch and no preparation or rebuild is unfinished
-- **THEN** the panel succeeds and reports already up to date regardless of modified, staged, deleted or untracked local files, without unnecessary LFS downloads or native builds
-
-#### Scenario: Ordinary panel-written workspace state
-
-- **WHEN** local state contains modified pnpm-lock.yaml and xrb-plugins.json, and untracked projects/.gitkeep and projects/Unsorted/, and the remote matches HEAD or advances unrelated source paths
-- **THEN** Update succeeds, preserves that local state and every project, and completes any required safe follow-up
+- **WHEN** a fresh successful fetch proves HEAD equals the remote default branch and no setup or rebuild is unfinished
+- **THEN** the panel reports already up to date with the unchanged commit and does not unnecessarily download LFS content or rebuild
 
 #### Scenario: Non-conflicting local changes
 
-- **WHEN** the repository has an uncommitted or staged source edit or an untracked source file that Git can preserve during the incoming fast-forward
-- **THEN** Update advances to the fetched commit without changing that edit, its staging or the untracked file
+- **WHEN** the workspace has an uncommitted edit to a file the new commits do not touch
+- **THEN** Update refuses to move its HEAD or modify its files and gives one sentence asking the person to commit or move the changes before retrying
 
 #### Scenario: Conflicting local changes
 
-- **WHEN** incoming source changes conflict with a locally modified or staged tracked source file, or would overwrite an untracked source file outside protected user data
-- **THEN** Update refuses that repository, preserves its HEAD, index and files, and names the first few blocking files in one actionable sentence
+- **WHEN** the workspace has an uncommitted edit, staged change or untracked path that the new commits would change
+- **THEN** Update refuses before checkout, leaves the commit, index and files unchanged and gives one actionable sentence about preserving the local changes first
 
 #### Scenario: Diverged branch
 
@@ -67,20 +62,20 @@ The control panel SHALL freshly discover and fetch origin's default branch, down
 
 #### Scenario: LFS content fails to download
 
-- **WHEN** downloading required incoming LFS content fails
+- **WHEN** downloading the LFS content of the new commits fails
 - **THEN** Update leaves HEAD unchanged, does not rebuild that repository and asks the person to retry the download
 
 #### Scenario: Local LFS deletions and fetch exclusions
 
-- **WHEN** an incoming source change conflicts with a locally deleted LFS source file
-- **THEN** Update refuses that source collision and preserves the deletion, while an unrelated deletion alone does not block Update
-- **WHEN** a clone excludes some LFS files from fetching
-- **THEN** Update honors those exclusions and leaves excluded content as pointers
+- **WHEN** the person deleted an LFS file locally
+- **THEN** Update refuses as for other uncommitted changes and preserves the deletion
+- **WHEN** a clean clone instead excludes some LFS files from fetching
+- **THEN** Update honors those exclusions and leaves the excluded content as pointers
 
 #### Scenario: Running Update again finishes an unfinished update
 
-- **WHEN** an earlier Update advanced the workspace but its preparation or rebuild failed
-- **THEN** the next Update retries only unfinished work despite an unchanged commit and reports the commits already advanced
+- **WHEN** an earlier Update advanced the workspace but its setup or rebuild failed
+- **THEN** the next Update retries unfinished work despite an unchanged commit and reports the commits already advanced
 
 #### Scenario: Status leaves the Git index alone
 
@@ -90,11 +85,11 @@ The control panel SHALL freshly discover and fetch origin's default branch, down
 #### Scenario: Behind hint without fetching
 
 - **WHEN** the last fetch found new commits that the workspace does not have
-- **THEN** the panel qualifies the behind hint with that repository's last check time, never fetches on its own and does not describe local changes alone as blocking Update
+- **THEN** the panel qualifies the behind hint with that repository's last check time and never fetches on its own
 
 #### Scenario: Workspace cannot be updated
 
-- **WHEN** the workspace is not an independent clone, lacks a suitable upstream or lacks required Git LFS for incoming content
+- **WHEN** the workspace is not an independent clone, lacks a suitable upstream or lacks required Git LFS
 - **THEN** its reason is shown without preventing Update from attempting an eligible core checkout
 
 ### Requirement: Update does not overlap a run or a rebuild
@@ -113,7 +108,7 @@ The control panel SHALL refuse to start Update while a host is running or starti
 
 ### Requirement: Update reports the core checkout
 
-The control panel SHALL independently update the running core checkout and selected workspace to freshly fetched origin default-branch commits, report each outcome and update an identical repository only once. A refusal SHALL NOT prevent the other repository's attempt or independent follow-up. The overall job SHALL fail when either repository needs attention without hiding partial success.
+The control panel SHALL update the running core checkout and selected workspace independently to their freshly fetched origin default-branch commits, report before/after commits for each, and update an identical repository only once. A refusal or failure SHALL not prevent the other repository's attempt. The overall job SHALL fail when either repository needs attention; successful workspace work alone SHALL NOT imply core success.
 
 #### Scenario: One Update action for both repositories
 
@@ -142,47 +137,47 @@ The control panel SHALL independently update the running core checkout and selec
 
 #### Scenario: Core failure and workspace success
 
-- **WHEN** the core has a conflicting source edit, detached HEAD, local-only history, an unsuitable upstream or cannot fetch, but the workspace can update
-- **THEN** the workspace still updates and the job fails with actual workspace success and one actionable core failure sentence
+- **WHEN** the core is dirty, detached, local-ahead, diverged, has a deleted upstream or cannot fetch, but the workspace can update
+- **THEN** the workspace still updates and the job fails with its actual success and one actionable core failure sentence
 
 #### Scenario: Workspace failure and core success
 
 - **WHEN** the workspace cannot update but the core can
-- **THEN** the core still updates and its independent dependency preparation, bundled-component preparation and required core builds run; only source-dependent workspace or cross-repository work is deferred and named
+- **THEN** the core still updates and the job fails with its actual success and one actionable workspace failure sentence
 
 ### Requirement: Update completes setup and reports activation requirements
 
-Update SHALL prepare changed public core dependencies through the pinned frozen hook-disabled setup, prepare required changed bundled services and rebuild required native output. Each follow-up SHALL depend only on sources it actually consumes. Failures SHALL preserve fetched commits and retain only unfinished work for retry. Results SHALL distinguish disk changes from loaded code and state pending work and required restart; Update SHALL NOT silently restart.
+Update SHALL prepare changed public core app dependencies through the existing pinned frozen hook-disabled setup, prepare required changed bundled services, and rebuild native plugins, plus the host when missing or outdated. Setup/build failures SHALL preserve fetched commits and remain retryable. The final result SHALL distinguish files on disk from code loaded by the running panel and state pending service setup and any restart required; Update SHALL NOT silently restart the panel.
 
 #### Scenario: Public core dependencies changed
 
 - **WHEN** an accepted core fast-forward changes required public app dependency inputs
-- **THEN** Update runs the pinned frozen-lockfile install with lifecycle hooks disabled, streams its output and reports failure if dependencies cannot be prepared, even if workspace source update was refused
+- **THEN** Update runs the pinned frozen-lockfile install with lifecycle hooks disabled, streams its output and reports failure if the dependencies cannot be prepared
 
 #### Scenario: Native rebuild required
 
 - **WHEN** either repository advanced or has unfinished build work
-- **THEN** Update rebuilds safe native plugins and the host when missing or outdated, without automatically installing native prerequisites or private JS packages; work requiring a refused source alone is deferred and named
+- **THEN** Update reports and runs native plugin rebuilds and rebuilds the core host only when missing or outdated, without automatically installing native prerequisites or private JS packages
 
 #### Scenario: Panel activation
 
 - **WHEN** core code or loaded workspace plugin code changed during Update
-- **THEN** the result preserves the Restart requirement even after partial failure and offers the existing in-place Restart control without automatically restarting
+- **THEN** the final job output, including partial-failure output, explicitly says to restart the panel to load the new code and states that Update did not restart it
 
 #### Scenario: Post-pull failure
 
-- **WHEN** preparation or rebuild fails after one or both repositories advanced
-- **THEN** Update reports the actual before/after commits, fails rather than claiming completion and retains resumable unfinished work without rerunning completed independent work unnecessarily
+- **WHEN** setup or rebuild fails after one or both repositories advanced
+- **THEN** Update reports the actual before/after commits, fails rather than claiming completion and retains resumable setup/build work for the next Update
 
 #### Scenario: Public service inputs changed
 
 - **WHEN** Update pulls changed embedded service inputs
-- **THEN** it prepares current public services before reporting that preparation complete, and names any remaining preparation or activation needed
+- **THEN** it prepares and activates current public services before reporting success, and its final line names any remaining service setup or restart needed
 
 #### Scenario: Retry at an unchanged commit
 
-- **WHEN** service preparation failed after a successful pull and Update is retried at the same commit
-- **THEN** it retries unfinished preparation and reports actual readiness instead of falsely claiming completion
+- **WHEN** service setup failed after a successful pull and Update is retried at the same commit
+- **THEN** it retries the unfinished setup and reports the actual service readiness instead of claiming already up to date
 
 ### Requirement: Explicit actions recover stale public services
 
@@ -221,51 +216,3 @@ Update's native rebuild SHALL select a supported CMake executable and generator 
 
 - **WHEN** PATH contains an unsupported CMake before an installed supported executable and Update needs a native rebuild
 - **THEN** Update configures and builds with the supported executable and its validated generator, for host and selected plugins
-
-### Requirement: Update preserves workspace user data
-
-Update SHALL leave workspace plugin settings, panel layout/settings and user projects exactly local, whether tracked or untracked and even when upstream changes those paths. Such data SHALL NOT block advancement. A locally present panel-generated workspace lock SHALL also be preserved, not silently regenerated. Skipped incoming defaults SHALL be identified with a way to inspect and explicitly adopt them; source-repository dependency locks remain source inputs.
-
-#### Scenario: Upstream plugin or panel settings changed
-
-- **WHEN** upstream changes xrb-plugins.json or xrb-panel.json while local settings exist or were deliberately removed
-- **THEN** Update succeeds, preserves the local version or deletion without preference merging, and reports in one line that upstream defaults were not applied and can be inspected from the fetched revision before explicit adoption
-
-#### Scenario: Incoming project path collision
-
-- **WHEN** an incoming commit adds, edits or removes paths under the selected workspace's user-project tree, including paths occupied by untracked projects
-- **THEN** Update preserves existing local project contents and deliberate deletions, advances safe source paths and never asks the person to commit or move their projects to unblock Update
-
-#### Scenario: Incoming workspace lock changed
-
-- **WHEN** incoming pnpm-lock.yaml differs from the locally present workspace lock generated during ordinary use
-- **THEN** Update preserves that lock, succeeds with an upstream-lock-skipped notice and provides inspection/adoption guidance without regenerating dependencies or changing projects
-
-#### Scenario: Fresh workspace template
-
-- **WHEN** a person initializes a workspace from the core template
-- **THEN** installation-local plugin and panel settings and their transient write files are ignored by Git, while authored project sources and curated dependency locks are not indiscriminately hidden
-
-### Requirement: Update results are concise and detailed output is not repeated
-
-A completed Update dialog SHALL show an overall outcome title, one short line per repository with seven-character before/after commits or already up to date and a refusal reason if any, and at most one next-action line. It SHALL expose Restart when required. Full revisions and step details SHALL remain in job output, with one terminal summary rather than copies appended by failure handling.
-
-#### Scenario: Complete success
-
-- **WHEN** all repository updates and required follow-up succeed
-- **THEN** the title says Updated, or Updated, restart needed when applicable, and the compact repository lines omit full hashes and command output
-
-#### Scenario: Partial success
-
-- **WHEN** core updated but a genuine workspace source conflict remains
-- **THEN** the title says Core updated; workspace needs attention, names the conflicting paths on the workspace line and combines remaining recovery/restart guidance into at most one next-action line
-
-#### Scenario: Local defaults retained
-
-- **WHEN** upstream settings or a generated workspace lock were skipped to preserve local user data
-- **THEN** the workspace line concisely names the skipped defaults, and at most one next-action line explains inspection/adoption together with any restart or deferred work
-
-#### Scenario: Job and CLI failure output
-
-- **WHEN** an Update fails through the panel job runner or terminal command
-- **THEN** output contains one full per-repository revision record and one terminal result, with a short failure envelope instead of replaying the summary or restart sentence multiple times
