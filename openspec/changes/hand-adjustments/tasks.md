@@ -11,10 +11,10 @@ Each numbered group corresponds, in order, to one PR Implementation outcome. All
 
 ## 2. One wrist-relative transform before shared hand processing
 
-- [ ] 2.1 Implement non-mutating geometry adjustment in the existing native/WebXR ingress seam with a literal identity fast path; fixtures assert bit/object identity including negative zero, per-hand wrists, mm axes, scale-before-offset and no double application.
-- [ ] 2.2 Transform capability-present pinch/grab/palm origins while preserving vectors, unsupported representations, flags, scores, IDs and clocks; binary native V1/V2 and skeleton-only fake WebXR fixtures assert the exact field behaviour.
-- [ ] 2.3 Feed adjusted frames through existing filtering, derived/native gesture policy, interaction and pointer without changing thresholds or defaults; fake-provider traces assert adjusted contact/pointer points and identity gesture parity.
-- [ ] 2.4 Document transform order and native classifier/rig-correction boundaries in the SDK README; confirm examples match numeric transform fixtures and require no plugin/app code.
+- [x] 2.1 Implement non-mutating geometry adjustment in the existing native/WebXR ingress seam with a literal identity fast path; fixtures assert bit/object identity including negative zero, per-hand wrists, mm axes, scale-before-offset and no double application.
+- [x] 2.2 Transform capability-present pinch/grab/palm origins while preserving vectors, unsupported representations, flags, scores, IDs and clocks; binary native V1/V2 and skeleton-only fake WebXR fixtures assert the exact field behaviour.
+- [x] 2.3 Feed adjusted frames through existing filtering, derived/native gesture policy, interaction and pointer without changing thresholds or defaults; fake-provider traces assert adjusted contact/pointer points and identity gesture parity.
+- [x] 2.4 Document transform order and native classifier/rig-correction boundaries in the SDK README; confirm examples match numeric transform fixtures and require no plugin/app code.
 
 ## 3. Drawing-only skeleton appearance
 
