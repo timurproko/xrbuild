@@ -9,6 +9,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <windows.h>
 
 #ifndef TP_ABI_MAJOR
 #define TP_ABI_MAJOR XRB_ABI_MAJOR
@@ -18,6 +19,7 @@ typedef struct TestPlugin {
   const XrbHost* host;
   int fail_start;
   int stereo;
+  int empty, malformed, hang_start, hang_stop, hang_destroy;
 } TestPlugin;
 
 XRB_EXPORT int32_t XRB_CALL xrb_plugin_query(XrbPluginInfo* info) {
@@ -38,16 +40,22 @@ static TestPlugin* make(const XrbHost* host, const char* config) {
   TestPlugin* p = (TestPlugin*)calloc(1, sizeof(TestPlugin));
   p->host = host;
   p->fail_start = config && strstr(config, "\"failStart\":true") != NULL;
+  p->empty = config && strstr(config, "\"empty\":true") != NULL;
+  p->malformed = config && strstr(config, "\"malformed\":true") != NULL;
+  p->hang_start = config && strstr(config, "\"hangStart\":true") != NULL;
+  p->hang_stop = config && strstr(config, "\"hangStop\":true") != NULL;
+  p->hang_destroy = config && strstr(config, "\"hangDestroy\":true") != NULL;
   return p;
 }
 
 static const char* XRB_CALL last_error(void* self) { return ((TestPlugin*)self)->fail_start ? "test failure on request" : ""; }
-static void XRB_CALL destroy(void* self) { free(self); }
-static void XRB_CALL stop(void* self) { (void)self; }
+static void XRB_CALL destroy(void* self) { if (((TestPlugin*)self)->hang_destroy) Sleep(INFINITE); free(self); }
+static void XRB_CALL stop(void* self) { if (((TestPlugin*)self)->hang_stop) Sleep(INFINITE); }
 
 #if TP_ROLE == XRB_ROLE_INPUT
 static int32_t XRB_CALL input_start(void* self) {
   TestPlugin* p = (TestPlugin*)self;
+  if (p->hang_start) Sleep(INFINITE);
   if (p->fail_start) return 1;
   XrbHand hand;
   XrbHandFrame frame;
@@ -60,10 +68,11 @@ static int32_t XRB_CALL input_start(void* self) {
   frame.capabilities = XRB_CAP_PINCH;
   frame.capture_time_ms = p->host->now_ms(p->host->ctx);
   frame.tracking_hz = 60.0f;
-  frame.count = 1;
-  frame.hands = &hand;
+  frame.count = p->malformed ? 256 : p->empty ? 0 : 1;
+  frame.hands = p->empty ? NULL : &hand;
   p->host->set_input_status(p->host->ctx, XRB_INPUT_RUNNING, 60.0f, "test running");
   p->host->publish_hands(p->host->ctx, &frame);
+  if (p->malformed) { p->host->publish_hands(p->host->ctx, &frame); p->host->publish_hands(p->host->ctx, &frame); }
   return 0;
 }
 static const XrbInputApi kInput = {sizeof(XrbInputApi), last_error, input_start, stop, destroy};

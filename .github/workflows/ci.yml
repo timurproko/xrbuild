@@ -159,6 +159,11 @@ jobs:
       - run: cmake -S native/provider-session -B .artifacts/provider-session -A x64
       - run: cmake --build .artifacts/provider-session --config Release
       - run: .artifacts/provider-session/Release/acquisition-tests.exe
+      - run: .artifacts/provider-session/Release/provider-frame-tests.exe
+      - run: node --test packages/control-panel/test/hand-provider-worker.test.ts packages/control-panel/test/hand-session-selection.test.ts
+        env:
+          XRB_TEST_PROVIDER_WORKER: ${{ github.workspace }}/.artifacts/provider-session/Release/xrb-provider-session-test.exe
+          XRB_TEST_PROVIDER_DLL: ${{ github.workspace }}/.artifacts/provider-session/Release/xrb_session_test.dll
       - run: node --test packages/control-panel/test/hand-acquisition.test.ts
         env:
           XRB_TEST_ACQUISITION_HELPER: ${{ github.workspace }}/.artifacts/provider-session/Release/xrb-acquisition-test.exe

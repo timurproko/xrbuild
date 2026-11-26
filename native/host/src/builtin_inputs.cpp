@@ -20,6 +20,13 @@
 
 namespace providers {
 namespace {
+const char* XRB_CALL noneError(void*) { return ""; }
+int32_t XRB_CALL noneStart(void*) { return 0; }
+void XRB_CALL noneStop(void*) {}
+void XRB_CALL noneDestroy(void*) {}
+const XrbInputApi kNone = {sizeof(XrbInputApi), noneError, noneStart, noneStop, noneDestroy};
+int noneHandle;
+void* XRB_CALL createNone(const XrbHost*, const char*, const XrbInputApi** api) { *api = &kNone; return &noneHandle; }
 
 // Sleeps until host time `dueMs` or until `running` drops. False when stopped.
 bool waitUntil(double dueMs, const std::atomic<bool>& running) {
@@ -208,6 +215,7 @@ void* XRB_CALL createSimulated(const XrbHost* host, const char* config, const Xr
 
 std::vector<BuiltinEntry> builtinInputs() {
   return {
+      {XRB_ROLE_INPUT, "none", "no hands", (void*)&createNone},
       {XRB_ROLE_INPUT, "replay", "plays a .hands recording at its recorded timing", (void*)&createReplay},
       {XRB_ROLE_INPUT, "simulated", "scripted hands, no device", (void*)&createSimulated},
   };

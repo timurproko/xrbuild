@@ -12,11 +12,11 @@ Each numbered group corresponds to one PR Implementation outcome, in the same or
 
 ## 2. Headless provider worker with unchanged input ABI
 
-- [ ] 2.1 Add the standalone native/provider-session CMake entry and extract only reusable loader/input bridge, clock/serialization/socket and input-built-in dependencies; build and link checks prove the worker/tests require no CEF, display or platform runtime.
-- [ ] 2.2 Resolve and snapshot the selected owner-qualified source and workspace settings through existing panel resolvers, with revision checks and existing inferred-choice pinning; resolver tests cover missing/ambiguous/dirty/unsupported sources and no fallback.
-- [ ] 2.3 Load/create/start/stop/destroy through the existing input ABI, validate function tables and bounded borrowed frames before copying, disable debug images and preserve provider reasons; test-built fake DLL checks lifecycle, callback quiescence and byte/layout compatibility.
-- [ ] 2.4 Add bounded stdin bootstrap/commands and structured secret-free lifecycle events plus runtime rebuild/cache inventories; worker tests cover bad bootstrap, create/start failure, no hands, concurrent callbacks, malformed frames, hung stop/destroy and crash.
-- [ ] 2.5 Exercise the existing explicitly selected synthetic provider through the same worker with isolated paths and document worker build/configuration commands; no private provider or device/runtime is started.
+- [x] 2.1 Add the standalone native/provider-session CMake entry and extract only reusable loader/input bridge, clock/serialization/socket and input-built-in dependencies; build and link checks prove the worker/tests require no CEF, display or platform runtime.
+- [x] 2.2 Resolve and snapshot the selected owner-qualified source and workspace settings through existing panel resolvers, with revision checks and existing inferred-choice pinning; resolver tests cover missing/ambiguous/dirty/unsupported sources and no fallback.
+- [x] 2.3 Load/create/start/stop/destroy through the existing input ABI, validate function tables and bounded borrowed frames before copying, disable debug images and preserve provider reasons; test-built fake DLL checks lifecycle, callback quiescence and byte/layout compatibility.
+- [x] 2.4 Add bounded stdin bootstrap/commands and structured secret-free lifecycle events plus runtime rebuild/cache inventories; worker tests cover bad bootstrap, create/start failure, no hands, concurrent callbacks, malformed frames, hung stop/destroy and crash.
+- [x] 2.5 Exercise the existing explicitly selected synthetic provider through the same worker with isolated paths and document worker build/configuration commands; no private provider or device/runtime is started.
 
 ## 3. Authenticated bounded session service and complete supervision
 

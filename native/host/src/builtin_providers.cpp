@@ -86,23 +86,12 @@ void* XRB_CALL createDesktop(const XrbHost* host, const char* config, const XrbD
   return new Desktop{host, cfg.is_object() ? cfg : nlohmann::json::object()};
 }
 
-int32_t XRB_CALL noneStart(void*) { return 0; }
-void XRB_CALL noneStop(void*) {}
-void XRB_CALL noneDestroy(void*) {}
-const XrbInputApi kNone = {sizeof(XrbInputApi), noError, noneStart, noneStop, noneDestroy};
-int gNoneHandle;
-void* XRB_CALL createNone(const XrbHost*, const char*, const XrbInputApi** api) {
-  *api = &kNone;
-  return &gNoneHandle;
-}
-
 }  // namespace
 
 const std::vector<BuiltinEntry>& builtinRegistry() {
   static const std::vector<BuiltinEntry> all = [] {
     std::vector<BuiltinEntry> r = {
         {XRB_ROLE_DISPLAY, "desktop", "a window or a full-screen monitor, mono, fixed viewer", (void*)&createDesktop},
-        {XRB_ROLE_INPUT, "none", "no hands", (void*)&createNone},
     };
     for (const BuiltinEntry& e : builtinInputs()) r.push_back(e);
     return r;
