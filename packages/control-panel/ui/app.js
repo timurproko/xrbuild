@@ -2373,8 +2373,8 @@ function renderUpdate() {
       : unfinished ? 'An earlier update pulled new workspace commits but its rebuild did not succeed. Choose Update to finish it.' : '';
   }
   if (item) {
-    // This version updates the workspace: the item is available when the workspace can be updated.
-    if (workspace && !workspace.available) item.setAttribute('aria-disabled', 'true'); else item.removeAttribute('aria-disabled');
+    // Always allow the explicit attempt: an unsafe workspace must not prevent a safe core update (or vice versa).
+    if (status?.updating) item.setAttribute('aria-disabled', 'true'); else item.removeAttribute('aria-disabled');
     item.title = updateTooltip(status);
   }
 }

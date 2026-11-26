@@ -1,6 +1,7 @@
 // Hand rendering: translucent blue joint spheres (15 mm) and bone cylinders (15 mm thick),
 // alpha 0.33; plus a white 30 mm sphere at the pinch centre while pinching or grabbing.
 import * as THREE from 'three';
+import { HAND_APPEARANCE_DEFAULTS, type HandAppearance } from './hand-profile.ts';
 import type { Hand } from './hands.ts';
 import type { PanelFrame } from './stereo.ts';
 
@@ -41,11 +42,16 @@ export class HandVisual extends THREE.Group {
   private readonly q = new THREE.Quaternion();
   private readonly s = new THREE.Vector3();
   private readonly boneUp = new THREE.Vector3(0, 1, 0);
+  private readonly baseStyle: HandVisualStyle;
+  private showJoints = true;
+  private showBones = true;
+  private showIndicator = true;
 
   constructor(style: Partial<HandVisualStyle> = {}) {
     super();
     this.name = 'xrb-hands';
     this.style = { ...DEFAULT_HAND_STYLE, ...style };
+    this.baseStyle = { ...this.style, jointColor: new THREE.Color(this.style.jointColor), boneColor: new THREE.Color(this.style.boneColor) };
     const mat = (color: THREE.ColorRepresentation, roughness: number) =>
       new THREE.MeshStandardMaterial({ color, transparent: true, opacity: this.style.opacity, roughness, metalness: 0, depthWrite: false });
     this.joints = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 16, 12), mat(this.style.jointColor, 0.5), MAX_HANDS * 21);
@@ -61,6 +67,29 @@ export class HandVisual extends THREE.Group {
       this.pinchSpheres.push(p);
     }
     this.add(this.joints, this.bones, ...this.pinchSpheres);
+  }
+
+  /** Drawing only: never changes input, gestures, panel mapping or interaction radii. */
+  applyAppearance(overrides: Partial<HandAppearance> = {}): void {
+    const a = { ...HAND_APPEARANCE_DEFAULTS, ...overrides };
+    Object.assign(this.style, this.baseStyle);
+    if (overrides.jointDiameterMm !== undefined) this.style.jointDiameterM = a.jointDiameterMm / 1000;
+    if (overrides.boneDiameterMm !== undefined) this.style.boneDiameterM = a.boneDiameterMm / 1000;
+    if (overrides.indicatorDiameterMm !== undefined) this.style.pinchDiameterM = a.indicatorDiameterMm / 1000;
+    this.style.opacity = overrides.opacity ?? this.baseStyle.opacity;
+    this.style.jointColor = overrides.jointColorLinear ? new THREE.Color(...a.jointColorLinear) : this.baseStyle.jointColor;
+    this.style.boneColor = overrides.boneColorLinear ? new THREE.Color(...a.boneColorLinear) : this.baseStyle.boneColor;
+    for (const [mesh, color] of [[this.joints, this.style.jointColor], [this.bones, this.style.boneColor]] as const) {
+      const material = mesh.material as THREE.MeshStandardMaterial;
+      material.color.set(color); material.opacity = this.style.opacity;
+    }
+    this.showJoints = a.showJoints; this.showBones = a.showBones; this.showIndicator = a.showPinchGrabIndicator;
+    this.joints.visible = this.showJoints; this.bones.visible = this.showBones;
+    for (const pin of this.pinchSpheres) {
+      const material = pin.material as THREE.MeshBasicMaterial;
+      material.color.setRGB(...a.indicatorColorLinear); material.opacity = a.indicatorOpacity;
+      if (!this.showIndicator) pin.visible = false;
+    }
   }
 
   update(hands: Hand[], panel: PanelFrame): void {
@@ -80,7 +109,7 @@ export class HandVisual extends THREE.Group {
         this.bones.setMatrixAt(b++, this.m.compose(mid, this.q, this.s.set(bd, len, bd)));
       }
       const pin = this.pinchSpheres[h];
-      pin.visible = this.style.pinchDiameterM > 0 && (hand.pinching || hand.grabbing);
+      pin.visible = this.showIndicator && this.style.pinchDiameterM > 0 && (hand.pinching || hand.grabbing);
       if (pin.visible) {
         pin.position.copy(world[4]).add(world[8]).multiplyScalar(0.5);
         pin.scale.setScalar(this.style.pinchDiameterM * k);

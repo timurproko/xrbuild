@@ -1,8 +1,10 @@
 import { mountToolNavigation } from './navigation.js';
 import { mountHandsShell } from './hands-shell.js';
 import { mountProviderRecorder } from './hands-recorder.js';
+import { handsEditorRevisions } from './hands-editor-revisions.js';
 const $ = id => document.getElementById(id), key = p => p ? `${p.owner}/${p.id}` : '';
 let snapshot = null, view = null, adjustments = null, tools = null, disposed = false, profileKey = '', profileGeneration = 0, writes = 0;
+const pickerRevisions = handsEditorRevisions(), changedMessage = 'Hands settings changed. Reload to review them.';
 const beginWrite = () => { writes++; profileGeneration++; };
 const endWrite = () => { writes--; profileGeneration++; };
 function message(text = '') { $('hands-message').textContent = text; $('hands-message').hidden = !text; }
@@ -34,17 +36,21 @@ async function mountAdjustments(data) {
       beginWrite();
       try {
         const result = await request('POST', body, '/api/hands/apply');
-        if (snapshot) snapshot = { ...snapshot, ...result }; // Do not touch the source picker draft.
+        // Only rebase a source editor which reviewed this exact Apply base.
+        if (snapshot?.revision === body.revision) {
+          snapshot.revision = result.revision; snapshot.profile = result.profile; pickerRevisions.incorporate(result.revision);
+          if (!pickerRevisions.stale && $('hands-message').textContent === changedMessage) message();
+        } else message('Source settings changed. Reload to review the current selection.');
         await applyViewProfile(result); return result;
       } finally { endWrite(); }
     },
   });
 }
 async function load(discard = false) {
-  const generation = profileGeneration;
+  const generation = profileGeneration, pickerReview = pickerRevisions.reviewToken(), adjustmentReview = adjustments?.reviewToken();
   $('hands-save').disabled = true;
   try {
-    const data = await request('GET'); if (disposed) return; snapshot = data;
+    const data = await request('GET'); if (disposed) return; snapshot = data; pickerRevisions.incorporate(data.revision, pickerReview);
     const select = $('hands-provider'); select.replaceChildren();
     const missing = snapshot.selected && !snapshot.providers.some(p => key(p) === key(snapshot.selected));
     for (const p of [null, ...snapshot.providers, ...(missing ? [{ ...snapshot.selected, label: `${key(snapshot.selected)} (missing)`, available: false }] : [])]) {
@@ -52,8 +58,10 @@ async function load(discard = false) {
       option.textContent = p ? `${p.label}${p.available ? '' : ' (unavailable)'}` : 'Choose a provider';
       option.disabled = !!p && !p.available && key(p) !== key(snapshot.selected); select.append(option);
     }
-    select.value = key(snapshot.selected); availability(); message();
-    await mountAdjustments(data); adjustments?.refresh(data, { discard }); await applyViewProfile(data, generation);
+    select.value = key(snapshot.selected); availability(); message(pickerRevisions.stale ? changedMessage : '');
+    await mountAdjustments(data); adjustments?.refresh(data, { discard, review: adjustmentReview });
+    if (pickerRevisions.stale) adjustments?.markStale();
+    await applyViewProfile(data, generation);
   } catch (error) { snapshot = null; message(error.message); }
 }
 $('hands-provider').addEventListener('change', availability);
@@ -108,12 +116,32 @@ async function mountRecordingTools() {
 }
 void mountRecordingTools();
 const events = new EventSource('/api/events');
-events.addEventListener('hands-changed', () => { profileGeneration++; message('Hands settings changed. Reload to review.'); adjustments?.markStale(); });
+let noticeRead = 0;
+events.addEventListener('hands-changed', async event => {
+  profileGeneration++;
+  let revision; try { revision = JSON.parse(event.data).revision; } catch { /* Unversioned notices require review. */ }
+  if (typeof revision === 'string' && revision === snapshot?.revision && revision === adjustments?.revision) return;
+  const read = ++noticeRead;
+  try {
+    let stable = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const epoch = adjustments?.deliveryEpoch, current = await request('GET');
+      if (disposed || read !== noticeRead) return;
+      if (epoch !== adjustments?.deliveryEpoch) continue;
+      revision = current.revision; stable = true; break;
+    }
+    if (!stable) revision = undefined;
+  } catch { revision = undefined; }
+  if (disposed || read !== noticeRead) return;
+  if (pickerRevisions.changed(revision)) message(changedMessage);
+  adjustments?.markStale(undefined, revision);
+});
 events.addEventListener('plugins-changed', () => { message('Provider availability changed. Reload before saving.'); });
+let deliveryRead = 0;
 const deliveryTimer = setInterval(() => {
   if (!snapshot || writes) return;
-  const generation = profileGeneration;
-  void request('GET').then(data => { if (!disposed && !writes && generation === profileGeneration) { adjustments?.updateDelivery(data.delivery); void applyViewProfile(data, generation); } }).catch(() => {});
+  const generation = profileGeneration, read = ++deliveryRead, epoch = adjustments?.deliveryEpoch;
+  void request('GET').then(data => { if (!disposed && !writes && read === deliveryRead && generation === profileGeneration) { adjustments?.updateDelivery(data.delivery, data.deliveryState, data.revision, epoch); void applyViewProfile(data, generation); } }).catch(() => {});
 }, 1000);
 addEventListener('pagehide', () => { disposed = true; clearInterval(deliveryTimer); events.close(); recorder.dispose(); tools?.dispose(); adjustments?.dispose(); navigation?.(); disposeShell(); view?.dispose(); }, { once: true });
 await load();

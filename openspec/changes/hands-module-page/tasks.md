@@ -12,7 +12,7 @@ Approved scope: Hands with Record only; Calibration extraction is the immediatel
 
 - [x] 2.1 Preserve global source availability/missing-choice/revision-safe Save/Reload/next-launch behavior; verify no fallback, capture on navigation or historical/current status conflation.
 - [x] 2.2 Implement/document the stable SDK frame/profile adapter and Source Start/Stop slot; verify profile readiness, epoch/sequence fencing, default processing and reset/dispose with fake transports.
-- [ ] 2.3 Mount PR 50's delivered Position and size / Appearance component after merge, preserving resets, Apply and independent source drafts; verify conflict/delivery semantics or report an unmerged sequencing dependency without duplication.
+- [x] 2.3 Mount PR 50's delivered Position and size / Appearance component after merge, preserving resets, Apply and independent source drafts; verify conflict/delivery semantics or report an unmerged sequencing dependency without duplication.
 - [x] 2.4 Provide the separate post-processing selector mount and one-sentence empty state; verify no new loader, fake option or concrete processor implementation here.
 
 ## 3. Independent Calibration boundary
@@ -37,5 +37,5 @@ Approved scope: Hands with Record only; Calibration extraction is the immediatel
 ## Workflow follow-up
 
 - Extract the separate Calibration module immediately afterward; retain measurement/save/import/export and camera identity binding, not a Hands tab. No native/hardware acceptance is claimed here.
-- PR 50 and live recording remain explicit sequencing dependencies until delivered; never claim fake recording or duplicate adjustment controls.
+- PR 50 is merged and its real component is mounted without duplication; new live recording still requires the separately delivered producer/validator. No fake recording is claimed.
 - Keep this PR draft and never merge/mark ready from this task.

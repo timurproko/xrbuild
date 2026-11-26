@@ -1,13 +1,11 @@
-// Update: the status of the core checkout the panel runs from and of the selected workspace, and the update of the
-// workspace's Git clone with its upstream by fast-forward only, its Git LFS content, then a rebuild of the native
-// plugins (and the core host only when it is missing or outdated). The status and fast-forward helpers serve both
-// repositories; this version reports the core read-only and does not update it.
-// It never stashes, merges, rebases, resets or discards: Git's own refusals are reported with what to do by hand.
-// It fast-forwards to exactly the upstream commit it fetched, never fetching a second time.
+// Update both independent checkouts to freshly fetched origin default-branch commits, without discarding work.
+// One repository's refusal never prevents the other's attempt; partial success is a failed job, not all-green.
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { LineSplitter, type JobContext } from './jobs.ts';
+import { JobFailure, LineSplitter, type JobContext } from './jobs.ts';
+import { rebuildUpdatedSources, setupUpdatedCore } from './update-runtime.ts';
 
 export interface GitResult { code: number; output: string }
 /** Runs `git <args>` in a folder; streamed lines go to onLine. Injectable so tests can stub `git lfs`. */
@@ -54,8 +52,6 @@ export interface RepoStatus {
   unfinished: boolean;
   /** The workspace is the core checkout the panel runs from: one repository, updated as the core, never twice. */
   sameAsCore?: boolean;
-  /** Update reports this repository but does not update it in this version (the core). */
-  readOnly?: boolean;
 }
 /** The workspace's status. */
 export type WorkspaceUpdateStatus = RepoStatus;
@@ -72,11 +68,18 @@ export interface RepoStatusOptions {
 const unavailable = (dir: string, role: RepoRole, reason: string, extra: Partial<RepoStatus> = {}): RepoStatus =>
   ({ dir, role, available: false, reason, branch: null, upstream: null, ahead: 0, behind: 0, dirty: 0, checkedMs: null, unfinished: false, ...extra });
 
-async function samePath(a: string, b: string): Promise<boolean> {
-  const real = async (p: string) => path.resolve(await fs.realpath(p).catch(() => p));
-  const [x, y] = await Promise.all([real(a), real(b)]);
-  return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
+async function canonicalPath(p: string): Promise<string> {
+  const real = path.resolve(await fs.realpath(p).catch(() => p));
+  return process.platform === 'win32' ? real.toLowerCase() : real;
 }
+async function samePath(a: string, b: string): Promise<boolean> {
+  const [x, y] = await Promise.all([canonicalPath(a), canonicalPath(b)]);
+  return x === y;
+}
+
+// Process-local activation state, deliberately independent of resumable build markers.
+// Only a new panel process clears this latch; another Update is not a restart.
+const restartNeeded = new Set<string>();
 
 const firstLine = (text: string) => text.split('\n').map((l) => l.trim()).find(Boolean) ?? '';
 
@@ -90,6 +93,9 @@ export function redactRemote(line: string): string {
 
 /** The marker an update leaves under the workspace's Git folder after pulling, until its rebuild succeeds. */
 export const WORKSPACE_MARKER = 'xrb-workspace-update';
+export const CORE_MARKER = 'xrb-core-update';
+/** Last dependency inputs successfully prepared, not the original commit of a pending update. */
+export const CORE_DEPENDENCIES_MARKER = 'xrb-core-dependencies';
 async function markerPath(dir: string, git: GitRunner, marker: string): Promise<string | null> {
   const found = await git(['rev-parse', '--git-path', marker], dir);
   return found.code === 0 ? path.resolve(dir, firstLine(found.output)) : null;
@@ -124,8 +130,10 @@ export async function repoUpdateStatus(dir: string, options: RepoStatusOptions):
   const upstream = await git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], dir);
   if (upstream.code !== 0) return unavailable(dir, role, `The branch ${name} has no upstream to update from.`, { branch: name });
   const counts = await git(['rev-list', '--left-right', '--count', 'HEAD...@{u}'], dir);
-  const [ahead, behind] = firstLine(counts.output).split(/\s+/).map((n) => Number.parseInt(n, 10) || 0);
-  const status = await git(['status', '--porcelain'], dir);
+  if (counts.code !== 0 || !/^\d+\s+\d+$/.test(counts.output.trim())) return unavailable(dir, role, 'Cannot compare Git history; inspect the checkout before updating.', { branch: name });
+  const [ahead, behind] = counts.output.trim().split(/\s+/).map(Number);
+  const status = await git(['status', '--porcelain', '--untracked-files=all'], dir);
+  if (status.code !== 0) return unavailable(dir, role, 'Cannot read Git status; inspect the checkout before updating.', { branch: name });
   const fetchHead = await git(['rev-parse', '--git-path', 'FETCH_HEAD'], dir);
   const fetchFile = path.resolve(dir, firstLine(fetchHead.output));
   const checkedMs = fetchHead.code === 0 ? (await fs.stat(fetchFile).catch(() => null))?.mtimeMs ?? null : null;
@@ -135,28 +143,27 @@ export async function repoUpdateStatus(dir: string, options: RepoStatusOptions):
   return { dir, role, available: true, reason: null, ...base };
 }
 
-/** The core checkout the panel runs from, reported read-only: this version does not update it. */
+/** Status never fetches; both repositories are eligible for an explicit Update. */
 export async function coreUpdateStatus(core: string, runner: GitRunner = runGit): Promise<RepoStatus> {
-  return { ...await repoUpdateStatus(core, { role: 'core', lfs: 'optional', git: runner }), readOnly: true };
+  return repoUpdateStatus(core, { role: 'core', lfs: 'optional', git: runner, marker: CORE_MARKER });
 }
-
-/** Why the workspace part skips a workspace that is the core checkout: that repository belongs to the core part. */
-export const SAME_AS_CORE = 'The workspace is the core checkout: it is updated as the core, which this version does not do yet. Pull it by hand.';
 
 /**
  * Whether Update can run and how far the workspace is from its upstream as of the last fetch. Writes nothing.
  * `core` is the core checkout the panel runs from: a workspace at the same path is that one repository.
  */
 export async function workspaceUpdateStatus(workspace: string, runner: GitRunner = runGit, core?: string): Promise<WorkspaceUpdateStatus> {
-  if (core && await fs.stat(workspace).then(() => true, () => false) && await samePath(workspace, core)) return unavailable(workspace, 'workspace', SAME_AS_CORE, { sameAsCore: true });
+  if (core && await samePath(workspace, core)) return { ...await coreUpdateStatus(core, runner), role: 'workspace', sameAsCore: true };
   return repoUpdateStatus(workspace, { role: 'workspace', lfs: 'required', git: runner, marker: WORKSPACE_MARKER });
 }
 
-export type UpdateStep = 'check' | 'fetch' | 'lfs' | 'pull' | 'rebuild';
-export const STEP_TITLES: Record<UpdateStep, string> = { check: 'Check', fetch: 'Fetch', lfs: 'LFS', pull: 'Pull', rebuild: 'Rebuild' };
+export type UpdateStep = 'check' | 'fetch' | 'lfs' | 'pull' | 'setup' | 'rebuild';
+export const STEP_TITLES: Record<UpdateStep, string> = { check: 'Check', fetch: 'Fetch', lfs: 'LFS', pull: 'Pull', setup: 'Dependencies', rebuild: 'Rebuild' };
 
 /** A refusal or failure at one step; the message says what happened and what to do. */
 export class UpdateError extends Error {
+  fetched = false;
+  defaultBranch: string | null = null;
   readonly step: UpdateStep;
   constructor(step: UpdateStep, message: string) {
     super(`${STEP_TITLES[step]}: ${message}`);
@@ -164,29 +171,50 @@ export class UpdateError extends Error {
   }
 }
 
-export interface UpdateResult {
-  state: 'updated' | 'up-to-date';
-  from: string;
-  to: string;
+export interface RepoOutcome {
+  role: RepoRole;
+  roles: RepoRole[];
+  dir: string;
+  state: 'updated' | 'up-to-date' | 'failed';
+  from: string | null;
+  to: string | null;
+  /** Original commit of a pending update, if setup/build is being resumed. */
+  updateFrom: string | null;
   commits: number;
-  /** What was rebuilt: `xrb-host` when the core host was, then the plugin folders. */
+  fetched: boolean;
+  defaultBranch: string | null;
+  error: string | null;
+  step: UpdateStep | null;
+  pending: boolean;
+  marker: string | null;
+}
+
+export interface UpdateResult {
+  state: 'updated' | 'up-to-date' | 'failed';
+  repositories: RepoOutcome[];
+  coreDependencies: 'unchanged' | 'prepared' | 'failed' | 'deferred';
   rebuilt: string[];
-  /** What the run says about the core: behind or not updatable here. This version never updates the core. */
-  coreNote: string | null;
+  restartRequired: boolean;
+  lastLine: string;
   summary: string;
+}
+
+export class UpdateFailure extends JobFailure {
+  declare readonly result: UpdateResult;
+  constructor(result: UpdateResult) { super(result.summary, result, result.lastLine); }
 }
 
 export interface UpdateDeps {
   git?: GitRunner;
-  /** The core checkout the panel runs from: reported read-only, and a workspace at the same path is that one repository. */
+  /** The core checkout the panel runs from; an identical workspace is updated only once. */
   core?: string;
   /** True when the core host is built and current, so only plugins need a rebuild. */
-  coreHostCurrent: () => Promise<boolean>;
-  /** The existing native rebuild, with the same tool discovery as Rebuild; returns the rebuilt plugin folders. */
-  rebuild: (pluginsOnly: boolean, ctx: JobContext) => Promise<string[]>;
+  coreHostCurrent?: () => Promise<boolean>;
+  /** Injectable build boundary; production invokes the fetched recipe in a fresh Node process. */
+  rebuild?: (pluginsOnly: boolean, ctx: JobContext) => Promise<string[]>;
+  /** Injectable installer boundary; production uses the existing frozen public-core installer in a fresh process. */
+  setupCore?: (core: string, ctx: JobContext) => Promise<void>;
 }
-
-const TAIL = 12;
 
 /** Plugin ids from rebuilt native projects: a plugin's `<id>/runtime` subproject is the same plugin. */
 export function rebuiltPluginNames(plugins: ReadonlyArray<{ dir: string }>): string[] {
@@ -207,8 +235,6 @@ export function lfsProgressFilter(onLine: (line: string) => void): (line: string
     if ((percent === 100 && last !== 100) || last < 0 || percent >= last + 5) { last = percent; onLine(line); }
   };
 }
-const tail = (output: string) => output.split('\n').filter((l) => l.trim()).slice(-TAIL).join('\n');
-const short = (sha: string) => sha.slice(0, 7);
 
 /** Paths Git lists under "... would be overwritten by merge/checkout:" (tab-indented lines). */
 export function overwrittenFiles(output: string): string[] {
@@ -226,13 +252,15 @@ export interface FastForwardOptions {
   git?: GitRunner;
   role: RepoRole;
   lfs: 'required' | 'optional';
-  /** The branch whose upstream is fetched; its remote is used for the LFS download. */
-  branch: string;
   /** The resume marker written after the fast-forward, until the caller's update finishes. */
   marker: string;
 }
 
 export interface FastForwardResult {
+  /** HEAD at the start of this attempt, distinct from the original pending update. */
+  before: string;
+  defaultBranch: string;
+  fetched: true;
   /** Where the repository was before this update, or before the unfinished update it resumes. */
   from: string;
   to: string;
@@ -245,67 +273,114 @@ export interface FastForwardResult {
   marker: string | null;
 }
 
-/**
- * Fetch, then fast-forward to exactly the fetched upstream commit, for either repository. Each step is announced as
- * a `step <id>` line. LFS objects of the new commits are downloaded first (`git lfs fetch`, which honours the
- * clone's lfs.fetchinclude/fetchexclude), so the fast-forward's own checkout writes LFS content only for files the
- * update changes: a local deletion or edit of another LFS file stays, and an LFS failure changes nothing. With
- * optional LFS the download runs only when Git LFS is present and the fetched commit tracks LFS files.
- * A successful fast-forward leaves a marker under the Git folder until the caller removes it, so running Update
- * again after a later failure finishes it although the branch is no longer behind.
+/** Freshly discover/fetch origin's default branch, refuse unsafe local state, and fast-forward to that exact target.
+ * LFS downloads precede checkout; an update marker keeps post-pull work retryable. No stash, reset or forced refs.
  */
 export async function fastForward(dir: string, ctx: JobContext, options: FastForwardOptions): Promise<FastForwardResult> {
   const git = options.git ?? runGit;
-  const prefix = options.role === 'core' ? 'Core: ' : '';
-  const fail = (at: UpdateStep, message: string) => new UpdateError(at, `${prefix}${message}`);
+  const prefix = options.role === 'core' ? 'Core: ' : 'Workspace: ';
+  let defaultBranch: string | null = null, fresh = false;
+  const fail = (at: UpdateStep, message: string) => Object.assign(new UpdateError(at, `${prefix}${message}`), { fetched: fresh, defaultBranch });
   const step = (id: UpdateStep) => ctx.line(`step ${id}`);
   const quiet = (args: string[]) => readOnly(git)(args, dir);
   const out = (line: string) => ctx.line(redactRemote(line));
   const loud = (args: string[], env?: NodeJS.ProcessEnv, onLine: (line: string) => void = out) => { ctx.line(`> git ${args.join(' ')}`); return git(args, dir, { onLine, env }); };
-  const head = async () => firstLine((await quiet(['rev-parse', 'HEAD'])).output);
+  const checked = async (args: string[], at: UpdateStep = 'check') => {
+    const result = await quiet(args);
+    if (result.code !== 0) throw fail(at, `Git could not inspect ${args[0]}; check git status and retry Update.`);
+    return result.output.trim();
+  };
+  const head = async () => {
+    const sha = await checked(['rev-parse', '--verify', 'HEAD^{commit}']);
+    if (!/^[0-9a-f]{40,64}$/.test(sha)) throw fail('check', 'Cannot read HEAD; repair the checkout before retrying Update.');
+    return sha;
+  };
+  const top = await quiet(['rev-parse', '--show-toplevel']);
+  if (top.code === 127) throw fail('check', 'Git is unavailable; install Git before retrying Update.');
+  if (top.code !== 0) throw fail('check', options.role === 'core'
+    ? 'The core is not a Git checkout; install a newer package instead of using Update.'
+    : 'The workspace is not a Git clone; select an independent clone before retrying Update.');
+  if (!await samePath(top.output.trim(), dir)) throw fail('check', 'This is not an independent clone; select its checkout root before retrying Update.');
+  const before = await head();
   const marker = await markerPath(dir, readOnly(git), options.marker);
+  if (!marker) throw fail('check', 'Cannot locate the update marker; check Git permissions and retry Update.');
   const pending = await readMarker(marker);
-  if (pending) ctx.line('an earlier update did not finish its rebuild: finishing it');
+  if (pending) ctx.line(`${prefix}finishing the earlier update's setup and rebuild`);
 
   step('fetch');
-  const fetched = await loud(['fetch']);
-  if (fetched.code !== 0) throw fail('fetch', `Could not reach the remote. Nothing changed.\n${redactRemote(tail(fetched.output))}`);
+  const advertised = await loud(['ls-remote', '--symref', 'origin', 'HEAD', 'refs/heads/*']);
+  if (advertised.code !== 0) throw fail('fetch', 'Cannot discover origin default branch; check remote access and retry Update.');
+  const defaults = [...advertised.output.matchAll(/^ref: refs\/heads\/(.+)\tHEAD\r?$/gm)].map(match => match[1]!);
+  if (defaults.length !== 1) throw fail('fetch', 'Origin has no unambiguous default branch; repair its HEAD setting and retry Update.');
+  defaultBranch = defaults[0]!;
+  if ((await quiet(['check-ref-format', `refs/heads/${defaultBranch}`])).code !== 0
+    || !advertised.output.split(/\r?\n/).some(line => new RegExp(`^[0-9a-f]{40,64}\\t`).test(line) && line.endsWith(`\trefs/heads/${defaultBranch}`)))
+    throw fail('fetch', 'Origin default branch is invalid or missing; repair its HEAD setting and retry Update.');
 
-  // The commit this update goes to: read once after the fetch and used for the count, the LFS download and the
-  // fast-forward, so the update never moves past what was fetched and checked, even if the remote moves meanwhile.
-  const target = firstLine((await quiet(['rev-parse', '--verify', '@{u}^{commit}'])).output);
-  if (!/^[0-9a-f]{40,64}$/.test(target)) throw fail('fetch', 'Could not read the upstream commit after fetching. Nothing changed.');
-  const counts = await quiet(['rev-list', '--left-right', '--count', `HEAD...${target}`]);
-  const [ahead = 0, behind = 0] = firstLine(counts.output).split(/\s+/).map((n) => Number.parseInt(n, 10) || 0);
-  const before = await head();
-  if (ahead > 0 && behind > 0) throw fail('fetch', `The branch has ${ahead} local commit(s) and ${behind} new remote commit(s). Merge or rebase by hand, then run Update again. Nothing changed.`);
+  // Explicit refspec: neither a stale upstream nor a narrow configured fetch refspec can choose the target.
+  // No '+' or force: a rewritten remote-tracking branch is an attention case, not permission to discard history.
+  const fetched = await loud(['fetch', '--no-tags', '--no-recurse-submodules', 'origin', `refs/heads/${defaultBranch}:refs/remotes/origin/${defaultBranch}`]);
+  if (fetched.code !== 0) throw fail('fetch', 'Could not fetch origin default branch; check remote access and history, then retry Update.');
+  const target = await checked(['rev-parse', '--verify', 'FETCH_HEAD^{commit}'], 'fetch');
+  if (!/^[0-9a-f]{40,64}$/.test(target)) throw fail('fetch', 'Cannot read the fetched commit; inspect the checkout and retry Update.');
+  fresh = true;
 
+  const branch = firstLine((await quiet(['symbolic-ref', '-q', '--short', 'HEAD'])).output);
+  const recovery = `preserve local work, switch safely to ${defaultBranch} tracking origin/${defaultBranch}, then retry Update.`;
+  if (!branch) throw fail('check', `Detached HEAD; ${recovery}`);
+  const remote = firstLine((await quiet(['config', '--get', `branch.${branch}.remote`])).output);
+  const merge = firstLine((await quiet(['config', '--get', `branch.${branch}.merge`])).output);
+  if (branch !== defaultBranch || remote !== 'origin' || merge !== `refs/heads/${defaultBranch}`)
+    throw fail('check', `Branch ${branch} has a missing, removed or non-default upstream; ${recovery}`);
+  const ensureUnchanged = async () => {
+    const currentBranch = await quiet(['symbolic-ref', '-q', '--short', 'HEAD']);
+    if (currentBranch.code !== 0 || currentBranch.output.trim() !== branch || await head() !== before)
+      throw fail('check', 'HEAD changed during Update; finish other Git work and retry Update.');
+    const status = await checked(['status', '--porcelain', '--untracked-files=all']);
+    if (status) throw fail('check', 'Uncommitted or untracked changes exist; commit or move them to safety before retrying Update.');
+    for (const state of ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply']) {
+      const file = await checked(['rev-parse', '--git-path', state]);
+      if (await fs.stat(path.resolve(dir, file)).then(() => true, () => false))
+        throw fail('check', 'A merge, rebase or cherry-pick is in progress; finish or abort it yourself before retrying Update.');
+    }
+  };
+  await ensureUnchanged();
+  const counts = await checked(['rev-list', '--left-right', '--count', `${before}...${target}`], 'fetch');
+  if (!/^\d+\s+\d+$/.test(counts)) throw fail('fetch', 'Cannot compare local and fetched history; inspect Git history before retrying Update.');
+  const [ahead = 0, behind = 0] = counts.split(/\s+/).map(Number);
+  if (ahead > 0) throw fail('fetch', `${ahead} local commit(s) are absent from origin/${defaultBranch}${behind ? ` and ${behind} remote commit(s) are missing locally` : ''}; reconcile local history by hand before retrying Update.`);
+
+  const lfsInstalled = (await quiet(['lfs', 'version'])).code === 0;
+  if (options.lfs === 'required' && !lfsInstalled) throw fail('lfs', 'Git LFS is required; install it and retry Update.');
   if (behind > 0) {
-    const remote = firstLine((await quiet(['config', '--get', `branch.${options.branch}.remote`])).output) || 'origin';
-    const lfsNeeded = options.lfs === 'required'
-      || ((await quiet(['lfs', 'version'])).code === 0 && !!firstLine((await quiet(['lfs', 'ls-files', '--name-only', target])).output));
+    // Optional LFS still must not silently check out pointers when the fetched core tracks LFS files.
+    const attributes = await quiet(['grep', '-l', 'filter=lfs', target, '--', '.gitattributes', '**/.gitattributes']);
+    if (attributes.code !== 0 && attributes.code !== 1) throw fail('lfs', 'Cannot inspect LFS attributes; check the fetched tree and retry Update.');
+    const lfsNeeded = options.lfs === 'required' || !!attributes.output.trim();
+    if (lfsNeeded && !lfsInstalled) throw fail('lfs', 'Git LFS is required; install it and retry Update.');
     if (lfsNeeded) {
       step('lfs');
       // Git LFS shows no progress when its output is not a terminal unless forced.
-      const lfs = await loud(['lfs', 'fetch', remote, target], { GIT_LFS_FORCE_PROGRESS: '1' }, lfsProgressFilter(out));
-      if (lfs.code !== 0) throw fail('lfs', `Could not download the LFS files of the new commits: run Update again. Nothing changed.\n${redactRemote(tail(lfs.output))}`);
+      const lfs = await loud(['lfs', 'fetch', 'origin', target], { GIT_LFS_FORCE_PROGRESS: '1' }, lfsProgressFilter(out));
+      if (lfs.code !== 0) throw fail('lfs', 'Could not download LFS files; check LFS remote access and retry Update.');
     }
 
+    await ensureUnchanged();
     step('pull');
-    // A fast-forward to the fetched commit, not `git pull`: that would fetch again and could move past `target`.
-    const pulled = await loud(['merge', '--ff-only', '--no-edit', target]);
+    // Write before checkout so a crash after advancing HEAD still leaves retryable build work.
+    if (!pending) await fs.writeFile(marker, `${JSON.stringify({ from: before })}\n`);
+    const pulled = await loud(['-c', 'merge.autostash=false', 'merge', '--ff-only', '--no-edit', target]);
     if (pulled.code !== 0) {
-      const files = overwrittenFiles(pulled.output);
-      if (files.length) throw fail('pull', `Local changes would be overwritten by the update: ${files.join(', ')}. Commit or stash them first, then run Update again. Nothing changed.`);
-      throw fail('pull', `Git could not fast-forward. Check git status in the ${options.role}, then run Update again.\n${redactRemote(tail(pulled.output))}`);
+      if (!pending && await head() === before) await fs.rm(marker, { force: true });
+      throw fail('pull', 'Git could not fast-forward; check git status and reconcile by hand before retrying Update.');
     }
-    // Until the caller's update finishes, the next Update must finish it even though nothing is behind any more.
-    if (marker && !pending?.from) await fs.writeFile(marker, `${JSON.stringify({ from: before })}\n`);
   }
   const to = await head();
+  if (to !== target) throw fail('pull', 'HEAD does not match the fetched target; inspect other Git activity before retrying Update.');
   const from = pending?.from || before;
-  const commits = from === to ? 0 : Number.parseInt(firstLine((await quiet(['rev-list', '--count', `${from}..${to}`])).output), 10) || 0;
-  return { from, to, commits, ahead: behind > 0 ? 0 : ahead, pending: !!pending, marker };
+  const count = await checked(['rev-list', '--count', `${from}..${to}`]);
+  if (!/^\d+$/.test(count)) throw fail('check', 'Cannot read the update range; inspect Git history before retrying Update.');
+  return { before, from, to, commits: Number(count), ahead: 0, defaultBranch, fetched: true, pending: !!pending, marker };
 }
 
 export interface UpdateStatus { core: RepoStatus; workspace: RepoStatus }
@@ -316,60 +391,142 @@ export async function updateStatus(core: string, workspace: string, runner: GitR
   return { core: coreStatus, workspace: workspaceStatus };
 }
 
-/**
- * What an update says about the core while this version only reports it: that it is behind or cannot be updated
- * here, and to pull it by hand. Never that it was updated. Null when the core was up to date at its last fetch.
- */
-export function coreNote(core: RepoStatus): string | null {
-  if (!core.available) return `Core: not updated here. ${core.reason}`;
-  if (core.readOnly && core.behind > 0) return `Core: ${core.behind} commit${core.behind === 1 ? '' : 's'} behind ${core.upstream}, not updated by this version yet; pull it by hand.`;
-  return null;
+/** Independent, index-safe HEAD inspection: a workspace folder inside core must not borrow core's HEAD. */
+async function checkoutHead(dir: string, git: GitRunner): Promise<string | null> {
+  const top = await readOnly(git)(['rev-parse', '--show-toplevel'], dir);
+  if (top.code !== 0 || !await samePath(firstLine(top.output), dir)) return null;
+  const head = await readOnly(git)(['rev-parse', '--verify', 'HEAD^{commit}'], dir);
+  return head.code === 0 && /^[0-9a-f]{40,64}$/.test(head.output.trim()) ? head.output.trim() : null;
 }
 
-/**
- * Update. This version reports the core and updates the workspace: check, fetch, LFS, fast-forward, rebuild. The
- * marker from `fastForward` stays until the rebuild succeeds, so running Update again after a failed rebuild
- * finishes it. The summary and every failure say what holds for the core; neither ever reports the core as updated.
- */
+/** Fingerprint dependency inputs in the fetched tree independently of the pending update's original commit. */
+async function coreDependencyFingerprint(core: RepoOutcome, git: GitRunner): Promise<string | null> {
+  const tree = await readOnly(git)(['ls-tree', '-rz', '--full-tree', core.to!, '--',
+    'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'packages', 'tools'], core.dir);
+  if (tree.code !== 0) throw new Error('Cannot inspect public core dependency inputs');
+  const entries = tree.output.split('\0').filter(entry => {
+    const file = entry.slice(entry.indexOf('\t') + 1);
+    return /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|(?:packages|tools)\/[^/]+\/(?:package\.json|\.npmrc))$/.test(file);
+  });
+  return entries.length ? createHash('sha256').update(entries.join('\0')).digest('hex') : null;
+}
+
+/** Both attempts finish before the aggregate result fails; nothing rolls back an already advanced repository. */
 export async function runUpdate(workspace: string, ctx: JobContext, deps: UpdateDeps): Promise<UpdateResult> {
   const git = deps.git ?? runGit;
-
-  ctx.line('step check');
-  const status = await workspaceUpdateStatus(workspace, git, deps.core);
-  const core = deps.core ? await coreUpdateStatus(deps.core, git) : null;
-  // A workspace that is the core checkout already says so, and to pull it by hand.
-  const note = core && !status.sameAsCore ? coreNote(core) : null;
-  if (core) ctx.line(`core ${deps.core}: ${note ?? `on ${core.branch}, tracking ${core.upstream}; this version does not update the core`}`);
-  const withNote = (text: string) => note ? `${text} ${note}` : text;
-  try {
-    if (!status.available) throw new UpdateError('check', `${status.reason} Nothing changed.`);
-    ctx.line(`workspace ${workspace} on ${status.branch}, tracking ${status.upstream}`);
-
-    const moved = await fastForward(workspace, ctx, { git, role: 'workspace', lfs: 'required', branch: status.branch!, marker: WORKSPACE_MARKER });
-    const { from, to, commits } = moved;
-    if (!commits && !moved.pending) {
-      const summary = withNote(`Workspace already up to date (${short(to)}).${moved.ahead ? ` ${moved.ahead} local commit(s) not on the remote.` : ''} Nothing was rebuilt.`);
-      ctx.line(summary);
-      return { state: 'up-to-date', from: to, to, commits: 0, rebuilt: [], coreNote: note, summary };
-    }
-    const range = commits ? `${short(from)} → ${short(to)} (${commits} commit${commits === 1 ? '' : 's'})` : short(to);
-    if (commits) ctx.line(`workspace updated ${range}`);
-
-    ctx.line('step rebuild');
-    const pluginsOnly = await deps.coreHostCurrent();
-    let plugins: string[];
+  const repositories: RepoOutcome[] = [];
+  const targets: Array<{ role: RepoRole; roles: RepoRole[]; dir: string }> = [];
+  const identical = !!deps.core && await samePath(workspace, deps.core);
+  if (deps.core) targets.push({ role: 'core', roles: identical ? ['core', 'workspace'] : ['core'], dir: deps.core });
+  if (!identical) targets.push({ role: 'workspace', roles: ['workspace'], dir: workspace });
+  for (const target of targets) {
+    ctx.line('step check');
+    ctx.line(`${target.roles.join('/')} checkout: ${target.dir}`);
+    const outcome: RepoOutcome = { ...target, state: 'failed', from: await checkoutHead(target.dir, git).catch(() => null), to: null,
+      updateFrom: null, commits: 0, fetched: false, defaultBranch: null, error: null, step: null, pending: false, marker: null };
+    repositories.push(outcome);
     try {
-      plugins = await deps.rebuild(pluginsOnly, ctx);
+      const moved = await fastForward(target.dir, ctx, { git, role: target.role, lfs: target.role === 'core' ? 'optional' : 'required',
+        marker: target.role === 'core' ? CORE_MARKER : WORKSPACE_MARKER });
+      Object.assign(outcome, { state: moved.commits || moved.pending ? 'updated' : 'up-to-date', from: moved.before, to: moved.to,
+        updateFrom: moved.from, commits: moved.commits, fetched: true, defaultBranch: moved.defaultBranch,
+        pending: moved.pending || moved.before !== moved.to, marker: moved.marker });
     } catch (e) {
-      throw new UpdateError('rebuild', `${commits ? `Workspace updated ${range}, but the` : 'The'} rebuild failed: ${(e as Error).message}. Fix it and run Update again.`);
+      outcome.to = await checkoutHead(target.dir, git).catch(() => null);
+      outcome.error = redactRemote((e as Error).message);
+      outcome.step = e instanceof UpdateError ? e.step : 'check';
+      if (e instanceof UpdateError) { outcome.fetched = e.fetched; outcome.defaultBranch = e.defaultBranch; }
+      ctx.line(outcome.error);
     }
-    if (moved.marker) await fs.rm(moved.marker, { force: true });
-    const rebuilt = [...(pluginsOnly ? [] : ['xrb-host']), ...plugins];
-    const summary = withNote(`${commits ? `Workspace updated ${range}` : `Workspace update finished at ${range}`}. Rebuilt: ${rebuilt.length ? rebuilt.join(', ') : 'nothing'}.`);
-    ctx.line(summary);
-    return { state: 'updated', from, to, commits, rebuilt, coreNote: note, summary };
-  } catch (e) {
-    if (e instanceof UpdateError) e.message = withNote(e.message);
-    throw e;
+  }
+
+  const work = repositories.filter(repo => repo.pending);
+  let coreDependencies: UpdateResult['coreDependencies'] = 'unchanged';
+  let rebuilt: string[] = [], buildError: string | null = null;
+  if (work.length) {
+    if (repositories.some(repo => repo.state === 'failed')) {
+      coreDependencies = 'deferred';
+      buildError = 'Setup/build deferred because a repository needs attention; resolve its problem and retry Update.';
+      ctx.line(buildError);
+    } else {
+      let stage: 'setup' | 'rebuild' = 'setup';
+      try {
+        const core = work.find(repo => repo.role === 'core');
+        if (core) {
+          const fingerprint = await coreDependencyFingerprint(core, git);
+          const receipt = await markerPath(core.dir, readOnly(git), CORE_DEPENDENCIES_MARKER);
+          if (!receipt) throw new Error('Cannot locate the core dependency receipt');
+          let installed: unknown = null;
+          try {
+            const value: unknown = JSON.parse(await fs.readFile(receipt, 'utf8'));
+            if (value && typeof value === 'object' && 'fingerprint' in value) installed = value.fingerprint;
+          } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error; }
+          if (fingerprint && installed !== fingerprint) {
+            ctx.line('step setup');
+            // Installation can partially change node_modules even if it fails: invalidate the old proof first.
+            await fs.writeFile(receipt, '{}\n');
+            await (deps.setupCore ?? setupUpdatedCore)(core.dir, ctx);
+            await fs.writeFile(receipt, `${JSON.stringify({ fingerprint })}\n`);
+            coreDependencies = 'prepared';
+          } else ctx.line(fingerprint ? 'Core dependency inputs match the last successful preparation; no package install needed.'
+            : 'No public core dependency inputs; no package install needed.');
+        }
+        stage = 'rebuild';
+        ctx.line('step rebuild');
+        if (deps.rebuild) {
+          const pluginsOnly = await deps.coreHostCurrent?.() ?? false;
+          ctx.line(`Native rebuild: ${pluginsOnly ? 'plugins only (host current)' : 'host and plugins'}.`);
+          rebuilt = [...(pluginsOnly ? [] : ['xrb-host']), ...await deps.rebuild(pluginsOnly, ctx)];
+        } else {
+          if (!deps.core) throw new Error('Core checkout required for native rebuild');
+          rebuilt = await rebuildUpdatedSources(deps.core, workspace, ctx);
+        }
+        for (const repo of work) {
+          if (repo.marker) await fs.rm(repo.marker, { force: true });
+          repo.pending = false;
+        }
+      } catch (e) {
+        if (stage === 'setup') coreDependencies = 'failed';
+        buildError = `${stage === 'setup' ? 'Core dependency setup' : 'Rebuild'} failed: ${redactRemote((e as Error).message)}; fix it and retry Update.`;
+        ctx.line(buildError);
+      }
+    }
+  }
+  for (const repo of repositories) {
+    if ((repo.from && repo.to && repo.from !== repo.to) || (repo.updateFrom && repo.updateFrom !== repo.to))
+      restartNeeded.add(await canonicalPath(repo.dir));
+  }
+  const restartRequired = (await Promise.all(targets.map(target => canonicalPath(target.dir))))
+    .some(dir => restartNeeded.has(dir));
+  const lastLine = restartRequired
+    ? 'Restart required: restart the panel to load the updated code; Update did not restart the panel.'
+    : 'Update did not restart the panel; no repository code changed in this run.';
+  const descriptions = repositories.map(repo => {
+    const label = repo.roles.map(role => role === 'core' ? 'Core' : 'Workspace').join('/');
+    const range = `${repo.from ?? 'unknown'} → ${repo.to ?? 'unknown'}`;
+    return `${label}: ${range}; ${repo.state === 'failed' ? repo.error?.replace(/\.$/, '') : repo.state === 'up-to-date'
+      ? `already up to date after fresh fetch of origin/${repo.defaultBranch}` : `fetched origin/${repo.defaultBranch}, ${repo.commits} commit(s) in update${repo.pending ? ', setup/build pending' : ''}`}.`;
+  });
+  const failed = !!buildError || repositories.some(repo => repo.state === 'failed');
+  const setupSummary = `Core dependencies: ${coreDependencies}.`;
+  const buildSummary = buildError ?? `Rebuilt: ${rebuilt.length ? rebuilt.join(', ') : 'nothing'}.`;
+  const summary = [...descriptions, setupSummary, buildSummary, lastLine].join(' ');
+  const result: UpdateResult = { state: failed ? 'failed' : repositories.some(repo => repo.state === 'updated') ? 'updated' : 'up-to-date',
+    repositories, coreDependencies, rebuilt, restartRequired, lastLine, summary };
+  for (const description of descriptions) ctx.line(description);
+  ctx.line(setupSummary);
+  ctx.line(buildSummary);
+  ctx.line(lastLine);
+  if (failed) throw new UpdateFailure(result);
+  return result;
+}
+
+/** CLI boundary retains partial results and the required last-line restart instruction after a failure. */
+export async function runUpdateCommand(workspace: string, ctx: JobContext, deps: UpdateDeps): Promise<number> {
+  try { await runUpdate(workspace, ctx, deps); return 0; }
+  catch (error) {
+    ctx.line(`Update failed: ${redactRemote((error as Error).message)}`);
+    if (error instanceof UpdateFailure) ctx.line(error.result.lastLine);
+    return 1;
   }
 }

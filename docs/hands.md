@@ -53,6 +53,8 @@ storage operations use `/api/hands/tools/`. No device/model/inference/fusion mod
 ## Data
 
 Global source and adjustments belong to workspace `config/hands/profile.json`.
+The existing right-side component owns both groups, resets, Apply and revision/delivery handling;
+see [global adjustment behaviour](hand-adjustments.md).
 Legacy pose CSV remains in `.xrb/hand-tracking/recordings/`; optional calibration/preferences remain in
 `config/plugins/input-hands/preferences.json`. Exports and models stay in their existing locations.
 The page redesign does not migrate, delete or rewrite user data. Replay preserves a recording's coordinate space

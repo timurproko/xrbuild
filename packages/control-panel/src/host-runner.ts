@@ -83,6 +83,7 @@ export interface RunRequest {
   /** Mouse input selection forwarded to the SDK in dev previews. */
   mouseEnabled?: boolean;
   handPolicy?: 'off' | 'native' | 'webxr';
+  handProfileRunId?: string;
   cursor?: CursorStyle;
   /** dev mode: panel address exposed to apps that need the active workspace catalog */
   panelUrl?: string;
@@ -381,6 +382,7 @@ export class HostRunner extends EventEmitter {
         if (req.mouseEnabled !== undefined) devUrl.searchParams.set('xrb-mouse', req.mouseEnabled ? '1' : '0');
         if (req.cursor) devUrl.searchParams.set('xrb-cursor', req.cursor);
         if (req.handPolicy) devUrl.searchParams.set('xrb-hand', req.handPolicy);
+        if (req.handProfileRunId) devUrl.searchParams.set('xrb-hand-profile-run', req.handProfileRunId);
         args.push(`--url=${devUrl.href}`);
       } else {
         await fs.access(path.join(req.entryDir, 'index.html')).catch(() => {
