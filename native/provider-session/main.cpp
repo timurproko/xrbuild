@@ -39,6 +39,8 @@ int main(int argc, char** argv) {
   const auto test = bootstrap["testScope"].get<std::string>();
   if (test.size() != 64 || test.find_first_not_of("0123456789abcdef") != std::string::npos) return 2;
   scope = L"-test-" + std::wstring(test.begin(), test.end());
+#else
+  if (bootstrap.contains("testScope")) { CloseHandle(parent); return 2; }
 #endif
   if (!lease.open(&why, scope) || !lease.take("Hands provider session", &why)) { event({{"phase", "failed"}, {"reason", why}}); CloseHandle(parent); return 3; }
   std::atomic<bool> quit{false}, done{false}, starting{true}; std::atomic<int> invalid{0};
@@ -100,10 +102,10 @@ int main(int argc, char** argv) {
   transport.onMessage = [&](const uint8_t* data, size_t size) {
     if (size == 9 && data[0] == 111) {
       double p0 = 0; memcpy(&p0, data + 1, 8);
-      if (!std::isfinite(p0) || p0 < 0) { quit = true; return; }
+      if (!std::isfinite(p0) || p0 < 0) { fail("Invalid hand session clock sample"); return; }
       const double clocks[3] = {p0, channel::hostTimeMs(), channel::hostTimeMs()};
       transport.publish(static_cast<channel::MessageType>(22), clocks, sizeof(clocks));
-    } else quit = true; // Frames-only peers cannot control acquisition or arbitrary channel messages.
+    } else fail("Invalid hand session control message"); // Frames-only peers cannot control acquisition or arbitrary channel messages.
   };
   if (!quit && !transport.start()) fail("Cannot start authenticated loopback hand transport");
   if (!quit) event({{"phase", "running"}, {"url", transport.url()}, {"pid", GetCurrentProcessId()}});

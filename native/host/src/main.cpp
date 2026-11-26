@@ -132,6 +132,7 @@ int main() {
 
   // Capability marker distinguishes an updated input-free host from legacy hosts that cannot arbitrate cameras.
   HANDLE handsLeaseCapability = CreateEventW(nullptr, TRUE, TRUE, L"Local\\XRBuildHostHandsLeaseV1");
+  (void)handsLeaseCapability;  // Intentionally held until host process exit, like the full-host singleton.
   acquisition::Lease handAcquisition;
   const std::wstring dataDir = logx::dataDir();
   logx::open(dataDir + L"\\logs");

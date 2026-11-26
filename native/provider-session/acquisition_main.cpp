@@ -30,6 +30,8 @@ int main(int argc, char** argv) {
   const auto scope = bootstrap["testScope"].get<std::string>();
   if (scope.size() != 64 || scope.find_first_not_of("0123456789abcdef") != std::string::npos) return 2;
   testScope = L"-test-" + std::wstring(scope.begin(), scope.end());
+#else
+  if (bootstrap.contains("testScope")) return 2; // Misconfigured tests must never acquire the person's normal slot.
 #endif
   if (!lease.open(&why, testScope) || !lease.take(bootstrap["label"].get<std::string>(), &why, true)) { event({{"phase", "busy"}, {"reason", why}}); return 3; }
   // Only the Hands worker checks for a legacy display host. New input-free hosts are allowed.
