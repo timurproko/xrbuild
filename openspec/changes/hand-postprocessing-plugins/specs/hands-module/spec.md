@@ -2,32 +2,24 @@
 
 ## ADDED Requirements
 
-### Requirement: Installed post-processing section
-Hands SHALL provide a self-contained Post-processing section listing installed stages by fixed slot with enable switches, saved order, schema-rendered settings and truthful readiness/runtime status. Missing saved stages SHALL remain visible with recovery reasons. An empty registry SHALL show one sentence explaining the absence. Navigation SHALL remain passive and SHALL not claim stage execution without runtime evidence.
+### Requirement: Simple post-processing selector
+Hands SHALL provide one independently mounted selector offering None or an installed mesh plugin, with its few schema-rendered settings and readiness/runtime status beneath it. A missing saved selection SHALL remain visible. No plugins SHALL show a one-sentence empty state. Opening the section SHALL not start capture, processing or installation.
 
-#### Scenario: No installed stages
-- **WHEN** Hands opens with no installed or saved stages
-- **THEN** the section says "No post-processing plugins installed; plugins can add skeleton refinement and hand meshes." and does not offer a fabricated processor
+#### Scenario: Empty installation
+- **WHEN** no mesh plugins are installed or selected
+- **THEN** the section offers None and says "No post-processing plugins installed."
 
-#### Scenario: Installed but not started
-- **WHEN** an installed stage is enabled but no consuming session has started
-- **THEN** the section distinguishes readiness from running and does not start a process or download assets
+#### Scenario: Selected plugin unavailable
+- **WHEN** the saved plugin is missing, disabled or failed
+- **THEN** its identity and skeleton-fallback reason remain visible without automatic replacement
 
-#### Scenario: Incompatible saved settings
-- **WHEN** an installed declaration changes the settings schema or content identity bound by saved choices
-- **THEN** the row explains the mismatch and blocks use until explicit review rather than silently migrating or discarding settings
+### Requirement: Next-run selection and context notice
+The selector SHALL save only post-processing selection/settings under the common profile revision discipline, independently of source and adjustment drafts. It SHALL label changes as applying on the next desktop run and disclose that browser previews, published web builds and offline packages do not use post-processing. It SHALL offer no multiple-stage ordering or bypass controls.
 
-### Requirement: Independent next-session pipeline editing
-Pipeline Save SHALL persist only the Post-processing draft under the common Hands revision discipline. Source Save and adjustment Apply SHALL not implicitly save or discard it. The section SHALL identify pipeline edits as next-session changes, restrict ordering to each fixed slot, and make skeleton bypass an explicit informed choice rather than a default. Dirty drafts SHALL survive unrelated refreshes and require review on conflicts.
+#### Scenario: Save independently
+- **WHEN** the person saves the mesh selection while source or adjustment drafts are dirty
+- **THEN** those drafts remain unsaved and the running app retains its current mesh selection
 
-#### Scenario: Save versus Apply
-- **WHEN** an adjustment Apply occurs while the pipeline draft is dirty
-- **THEN** the active run retains its pinned pipeline and the unsaved stage draft remains unchanged
-
-#### Scenario: Move between slots
-- **WHEN** a person reorders installed stages
-- **THEN** order changes only within the declared slot and invalid dependency or channel conflicts are shown before Save
-
-#### Scenario: Runtime failure
-- **WHEN** a running stage fails or exceeds its deadline
-- **THEN** its row shows failed, over-budget or explicitly bypassed status independently of source status and offers an explicit recovery action
+#### Scenario: Context limitation
+- **WHEN** the section is displayed
+- **THEN** it says "Post-processing is used only in desktop apps run from this panel, not browser previews, published web builds or offline packages."
