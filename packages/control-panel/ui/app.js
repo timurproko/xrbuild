@@ -411,6 +411,8 @@ const loadPlugins = async () => {
 };
 // Update workspace status. It never fetches: "behind" is as of the last fetch, which only Update itself runs.
 const loadWorkspaceUpdate = async () => {
+  // While an update runs its own Git commands, the panel leaves the clone alone; the job's end refreshes the status.
+  if ([...state.jobs.values()].some((job) => job.kind === 'workspace-update' && (job.state === 'running' || job.state === 'queued'))) return;
   state.workspaceUpdate = await api('GET', '/api/workspace/update').catch(() => null);
   renderWorkspaceUpdate();
 };
@@ -2372,16 +2374,18 @@ function renderWorkspaceUpdate() {
   const status = state.workspaceUpdate, chip = $('#workspace-chip'), item = $('#workspace-update');
   const remote = status?.upstream?.split('/')[0] || 'origin';
   const checked = status?.checkedMs ? `Remote last checked ${ago(status.checkedMs)}` : 'Remote not checked yet';
-  const behind = !!status?.available && status.behind > 0;
+  const behind = !!status?.available && status.behind > 0, unfinished = !!status?.available && !!status.unfinished;
   if (chip) {
-    chip.hidden = !behind;
-    chip.textContent = behind ? `workspace behind ${remote} by ${status.behind}` : '';
-    chip.title = behind ? `${checked}. Choose Update workspace to fetch, pull and rebuild.` : '';
+    chip.hidden = !behind && !unfinished;
+    chip.textContent = behind ? `workspace behind ${remote} by ${status.behind}` : unfinished ? 'workspace update unfinished' : '';
+    chip.title = behind ? `${checked}. Choose Update workspace to fetch, pull and rebuild.`
+      : unfinished ? 'An earlier update pulled new commits but did not finish its LFS download or rebuild. Choose Update workspace to finish it.' : '';
   }
   if (item) {
     if (status && !status.available) item.setAttribute('aria-disabled', 'true'); else item.removeAttribute('aria-disabled');
     item.title = !status ? '' : !status.available ? status.reason ?? ''
-      : status.behind ? `Behind ${remote} by ${status.behind}. ${checked}.` : `Up to date with ${remote} at the last check. ${checked}.`;
+      : status.behind ? `Behind ${remote} by ${status.behind}. ${checked}.` : status.unfinished ? 'The last update did not finish: run it again.'
+      : `Up to date with ${remote} at the last check. ${checked}.`;
   }
 }
 

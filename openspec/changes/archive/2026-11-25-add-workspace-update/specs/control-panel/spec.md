@@ -15,7 +15,7 @@ The control panel SHALL offer an Update workspace action that brings the selecte
 
 #### Scenario: Already up to date
 
-- **WHEN** the workspace has no new upstream commits after fetching
+- **WHEN** the workspace has no new upstream commits after fetching, its LFS content is present and no earlier update is unfinished
 - **THEN** the panel reports that the workspace is already up to date and does not rebuild
 
 #### Scenario: Non-conflicting local changes
@@ -42,6 +42,16 @@ The control panel SHALL offer an Update workspace action that brings the selecte
 
 - **WHEN** the pull succeeds and the LFS pull fails
 - **THEN** the panel does not rebuild and reports that LFS files are missing and Update should be run again
+
+#### Scenario: Running Update again finishes an unfinished update
+
+- **WHEN** an earlier update pulled new commits but its LFS pull or rebuild failed, and the person runs Update again
+- **THEN** the panel pulls the LFS content and rebuilds although no commit is new, and reports the update as finished
+
+#### Scenario: Status leaves the Git index alone
+
+- **WHEN** the panel reads the workspace status for the menu item and the behind hint
+- **THEN** it takes no Git lock and does not rewrite the index, and it runs no Git in the workspace while an update is active
 
 #### Scenario: Behind hint without fetching
 

@@ -33,7 +33,7 @@ import { PluginConfigConflict, PluginConfigInvalid, readUserPluginConfigState, w
 import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, discoverProjectCatalog, containedPath, type PluginCatalog } from './extension-catalog.ts';
 import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
 import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
-import { rebuiltPluginNames, updateWorkspace, workspaceUpdateStatus, type WorkspaceUpdateDeps } from './workspace-update.ts';
+import { rebuiltPluginNames, updateWorkspace, workspaceUpdateStatus, type WorkspaceUpdateDeps, type WorkspaceUpdateStatus } from './workspace-update.ts';
 import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatus, type BuildTarget, type IdentityField, type PackagerDiscovery, type PackagerSetupStatus, type RoleSelection } from './packagers.ts';
 import { PackageList } from './packages.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
@@ -227,6 +227,7 @@ export class Panel {
   desktopSetup: DesktopSetup;
   /** Test seams for Update workspace (a stubbed Git runner or rebuild); production uses Git and rebuildHost. */
   workspaceUpdateDeps: Partial<WorkspaceUpdateDeps> = {};
+  private workspaceUpdateLast: WorkspaceUpdateStatus | null = null;
   readonly packages: PackageList;
   readonly hub: EventHub;
   /** the core repo (host build, templates) */
@@ -1817,14 +1818,18 @@ export class Panel {
           return rebuildHost(this.repo, this.workspace, ctx, { cmake: tools.cmake ?? undefined, generator: tools.generator });
         })));
         return true;
-      case 'GET workspace/update':
-        sendJson(res, 200, await workspaceUpdateStatus(this.workspace, this.workspaceUpdateDeps.git));
+      case 'GET workspace/update': {
+        // While an update job runs Git in the clone, answer from the last status instead of running Git beside it.
+        const updating = this.jobs.active().some(job => job.kind === 'workspace-update');
+        if (!updating || !this.workspaceUpdateLast) this.workspaceUpdateLast = await workspaceUpdateStatus(this.workspace, this.workspaceUpdateDeps.git);
+        sendJson(res, 200, { ...this.workspaceUpdateLast, updating });
         return true;
+      }
       case 'POST workspace/update': {
         // The same guards as Rebuild: the update ends with one. The job runner keeps it apart from every other job.
         if (await this.desktopSetup.isBusy()) throw new HttpError(409, 'Wait for desktop setup to finish before updating the workspace');
         if (this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop the running or starting host first: its exe must not overlap a rebuild');
-        const status = await workspaceUpdateStatus(this.workspace, this.workspaceUpdateDeps.git);
+        const status = this.workspaceUpdateLast = await workspaceUpdateStatus(this.workspace, this.workspaceUpdateDeps.git);
         if (!status.available) throw new HttpError(409, status.reason ?? 'The workspace cannot be updated');
         sendJson(res, 202, jobSummary(this.startJob('workspace-update', null, 'update workspace', ctx => updateWorkspace(this.workspace, ctx, {
           coreHostCurrent: async () => {
