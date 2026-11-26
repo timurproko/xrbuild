@@ -21,6 +21,7 @@ export function mountHandsTools({ root, view }) {
   const $ = selector => root.querySelector(selector), events = new AbortController(), signal = events.signal;
   let disposed = false, archive = null, fileName = '', track = 0, index = 0, generation = 0, playing = false, raf = 0, began = 0, offset = 0, busy = false, pending = null;
   const urls = new Set();
+  let speed = Number($('[data-speed]').value);
   const error = text => { $('[data-error]').textContent = text; $('[data-error]').hidden = !text; };
   async function request(url, method = 'GET') {
     const response = await fetch(`/api/hands/tools/${url}`, { method, cache: 'no-store', signal });
@@ -82,11 +83,17 @@ export function mountHandsTools({ root, view }) {
   }
   function play(now) {
     if (!playing || disposed || !archive) return;
-    const times = archive.tracks[track].times, time = offset + (now - began) * Number($('[data-speed]').value);
+    const times = archive.tracks[track].times, time = offset + (now - began) * speed;
     let next = index; while (next + 1 < times.length && times[next + 1] <= time) next++;
     if (next !== index) void show(next);
     if (next === times.length - 1) stop(); else raf = requestAnimationFrame(play);
   }
+  $('[data-speed]').addEventListener('change', () => {
+    const now = performance.now();
+    // Preserve the position reached at the previous rate; only future elapsed time uses the new rate.
+    if (playing) { offset += (now - began) * speed; began = now; }
+    speed = Number($('[data-speed]').value);
+  }, { signal });
   $('[data-import]').addEventListener('click', () => $('[data-file]').click(), { signal });
   $('[data-file]').addEventListener('change', () => { const file = $('[data-file]').files[0]; $('[data-file]').value = ''; if (file) void adopt(file, file.name).catch(e => error(e.message)); }, { signal });
   $('[data-folder]').addEventListener('click', () => { void request('recordings/open-folder', 'POST').catch(e => error(e.message)); }, { signal });

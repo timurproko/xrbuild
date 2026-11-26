@@ -1,6 +1,6 @@
 # Tasks
 
-Each numbered group corresponds to one PR Implementation outcome, in the same order. All tasks remain pending until plan approval; PRs 50 and 51 must supply the actual shared seams before implementation.
+Each numbered group corresponds to one PR Implementation outcome, in the same order. Implementation is approved; the delivered PR 51 view/recorder and merged PR 50 controls are incorporated.
 
 ## 1. Exclusive acquisition ownership for Hands and managed native apps
 
@@ -41,3 +41,4 @@ Each numbered group corresponds to one PR Implementation outcome, in the same or
 - [ ] 5.3 Add small SDK pinch and drag targets driven only by current session hand events; fake-provider end-to-end tests cover success, no detection, geometry Apply and Stop mid-hold, with mouse orbit excluded from hand-test success.
 - [ ] 5.4 Keep unsupported-platform/WebXR guidance explicit, missing plugins nonblocking for the page and idle/error view empty; regressions assert passive navigation, no synthetic fallback and byte-identical unrelated profile fields, plugin data, recordings and project sources.
 - [ ] 5.5 Publish the short person-run device checklist and remaining unverified hardware/latency/camera-release limits in docs/hand-provider-sessions.md; capture isolated default-window and supplementary responsive/theme proof outside the checkout, record actual checks, then stop every owned disposable process before handoff.
+- [x] 5.6 Fold in PR 51 review follow-ups: source notices distinguish next Hands session/app launch from active acquisition, and legacy playback speed rebases elapsed time at the previous rate; hands-page and actual playback-control regressions cover both.

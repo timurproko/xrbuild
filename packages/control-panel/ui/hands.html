@@ -30,10 +30,10 @@
         <form id="hands-form" class="xrb-stack">
           <label class="xrb-field-label" for="hands-provider">Skeleton provider<select id="hands-provider" name="provider" aria-describedby="hands-availability" aria-label="Skeleton provider"></select></label>
           <p id="hands-availability" class="xrb-help" role="status" aria-live="polite"></p>
-          <p id="hands-session-status" class="xrb-help" role="status">Not started.</p>
+          <p id="hands-session-status" class="xrb-help" role="status">Not started. Opening Hands does not start tracking.</p>
           <div id="hands-session-actions" class="xrb-button-row" hidden></div>
           <div class="xrb-button-row"><button id="hands-save" type="submit" disabled>Save source</button><button id="hands-reload" type="button">Reload</button></div>
-          <p class="xrb-help">Source changes apply on next launch.</p>
+          <p class="xrb-help">Save source for the next Hands session or app launch. Changing the source does not switch an active session.</p>
         </form>
         <p id="hands-message" class="xrb-help" role="status" aria-live="polite" hidden></p>
         <p id="hands-previous-session" class="xrb-help" hidden></p>

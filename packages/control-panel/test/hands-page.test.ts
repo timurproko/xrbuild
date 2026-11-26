@@ -12,6 +12,9 @@ test('Hands has persistent tab panels, stable component mounts and scene-only co
   assert.match(html, /id="hands-recordings-tab"[^>]*aria-selected="true"/);
   assert.doesNotMatch(html, /hands-diagnostics|Acquisition diagnostics|Local fixture|Motion \+ pinch|Pause|Restart|Capture|Calibration/);
   assert.equal((html.match(/role="tab"/g) ?? []).length, 1);
+  assert.match(html, /Opening Hands does not start tracking/);
+  assert.match(html, /next Hands session or app launch/);
+  assert.match(html, /does not switch an active session/);
   const shell = await fs.readFile(path.join(ui, 'hands-shell.js'), 'utf8');
   assert.match(shell, /resetView\(\)/); assert.match(shell, /requestFullscreen\(\)/); assert.match(shell, /ArrowLeft/);
   assert.doesNotMatch(shell, /fetch\(|innerHTML\s*=.*tabpanel|replaceChildren/);
