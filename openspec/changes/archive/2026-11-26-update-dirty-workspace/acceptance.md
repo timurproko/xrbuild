@@ -19,7 +19,7 @@ The maintainer integration decision accepts these scenarios:
   "archive": "openspec/changes/archive/2026-11-26-update-dirty-workspace/",
   "acceptanceManifest": "openspec/changes/archive/2026-11-26-update-dirty-workspace/acceptance.md",
   "finalizedDate": "2026-11-26",
-  "specBaseSha": "48027ffa03db25ad0826452c1bc51246603a7d8b",
+  "specBaseSha": "e13221c8649942da2af6f93d5407cd611403c217",
   "acceptanceScenarios": [
     "Freshly current checkouts succeed with local work, and non-overlapping source edits survive fast-forward.",
     "Workspace settings, projects and generated locks remain local even when upstream changes them, with explicit inspection and adoption guidance.",
@@ -29,7 +29,7 @@ The maintainer integration decision accepts these scenarios:
     "Protected-path interruptions retain checked recovery state; outside index or ref changes and foreign locks are never discarded."
   ],
   "archiveDigest": "191fb2a3b0d5bcfffcec1a1338128e7957c449f4b15549f5ae6b16f7c335e13e",
-  "specDigest": "f1368ffc4438463413daa43183df7f2fc1f6b3cfb6f51458cb6ec348ed2925ee",
+  "specDigest": "bce0ca498e8852ce9f9bfc6b332b7e4f271df598ea46bbf0f8b9d1793945e5e9",
   "tasksDigest": "e5e5f85af708cc9df08c0ccb253b5dcec79c37a95935ea3a5d14d38852728e86",
   "evidenceDigest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "knownGaps": []

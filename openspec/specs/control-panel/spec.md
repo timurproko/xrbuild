@@ -222,54 +222,6 @@ Update's native rebuild SHALL select a supported CMake executable and generator 
 - **WHEN** PATH contains an unsupported CMake before an installed supported executable and Update needs a native rebuild
 - **THEN** Update configures and builds with the supported executable and its validated generator, for host and selected plugins
 
-### Requirement: Update preserves workspace user data
-
-Update SHALL leave workspace plugin settings, panel layout/settings and user projects exactly local, whether tracked or untracked and even when upstream changes those paths. Such data SHALL NOT block advancement. A locally present panel-generated workspace lock SHALL also be preserved, not silently regenerated. Skipped incoming defaults SHALL be identified with a way to inspect and explicitly adopt them; source-repository dependency locks remain source inputs.
-
-#### Scenario: Upstream plugin or panel settings changed
-
-- **WHEN** upstream changes xrb-plugins.json or xrb-panel.json while local settings exist or were deliberately removed
-- **THEN** Update succeeds, preserves the local version or deletion without preference merging, and reports in one line that upstream defaults were not applied and can be inspected from the fetched revision before explicit adoption
-
-#### Scenario: Incoming project path collision
-
-- **WHEN** an incoming commit adds, edits or removes paths under the selected workspace's user-project tree, including paths occupied by untracked projects
-- **THEN** Update preserves existing local project contents and deliberate deletions, advances safe source paths and never asks the person to commit or move their projects to unblock Update
-
-#### Scenario: Incoming workspace lock changed
-
-- **WHEN** incoming pnpm-lock.yaml differs from the locally present workspace lock generated during ordinary use
-- **THEN** Update preserves that lock, succeeds with an upstream-lock-skipped notice and provides inspection/adoption guidance without regenerating dependencies or changing projects
-
-#### Scenario: Fresh workspace template
-
-- **WHEN** a person initializes a workspace from the core template
-- **THEN** installation-local plugin and panel settings and their transient write files are ignored by Git, while authored project sources and curated dependency locks are not indiscriminately hidden
-
-### Requirement: Update results are concise and detailed output is not repeated
-
-A completed Update dialog SHALL show an overall outcome title, one short line per repository with seven-character before/after commits or already up to date and a refusal reason if any, and at most one next-action line. It SHALL expose Restart when required. Full revisions and step details SHALL remain in job output, with one terminal summary rather than copies appended by failure handling.
-
-#### Scenario: Complete success
-
-- **WHEN** all repository updates and required follow-up succeed
-- **THEN** the title says Updated, or Updated, restart needed when applicable, and the compact repository lines omit full hashes and command output
-
-#### Scenario: Partial success
-
-- **WHEN** core updated but a genuine workspace source conflict remains
-- **THEN** the title says Core updated; workspace needs attention, names the conflicting paths on the workspace line and combines remaining recovery/restart guidance into at most one next-action line
-
-#### Scenario: Local defaults retained
-
-- **WHEN** upstream settings or a generated workspace lock were skipped to preserve local user data
-- **THEN** the workspace line concisely names the skipped defaults, and at most one next-action line explains inspection/adoption together with any restart or deferred work
-
-#### Scenario: Job and CLI failure output
-
-- **WHEN** an Update fails through the panel job runner or terminal command
-- **THEN** output contains one full per-repository revision record and one terminal result, with a short failure envelope instead of replaying the summary or restart sentence multiple times
-
 ### Requirement: Hands input display label
 
 The Apps Input dropdown SHALL display Hands for the existing hand-input option, including its selected summary and unavailable label. Its stored value SHALL remain `hand`; existing app settings and provider resolution SHALL remain compatible.
@@ -352,3 +304,51 @@ Every shared log-bearing maintenance progress dialog SHALL offer the existing Jo
 
 - **WHEN** no job was created or clipboard access fails
 - **THEN** copying handles the available diagnostic text or clipboard failure without closing the dialog or hiding its failure information
+
+### Requirement: Update preserves workspace user data
+
+Update SHALL leave workspace plugin settings, panel layout/settings and user projects exactly local, whether tracked or untracked and even when upstream changes those paths. Such data SHALL NOT block advancement. A locally present panel-generated workspace lock SHALL also be preserved, not silently regenerated. Skipped incoming defaults SHALL be identified with a way to inspect and explicitly adopt them; source-repository dependency locks remain source inputs.
+
+#### Scenario: Upstream plugin or panel settings changed
+
+- **WHEN** upstream changes xrb-plugins.json or xrb-panel.json while local settings exist or were deliberately removed
+- **THEN** Update succeeds, preserves the local version or deletion without preference merging, and reports in one line that upstream defaults were not applied and can be inspected from the fetched revision before explicit adoption
+
+#### Scenario: Incoming project path collision
+
+- **WHEN** an incoming commit adds, edits or removes paths under the selected workspace's user-project tree, including paths occupied by untracked projects
+- **THEN** Update preserves existing local project contents and deliberate deletions, advances safe source paths and never asks the person to commit or move their projects to unblock Update
+
+#### Scenario: Incoming workspace lock changed
+
+- **WHEN** incoming pnpm-lock.yaml differs from the locally present workspace lock generated during ordinary use
+- **THEN** Update preserves that lock, succeeds with an upstream-lock-skipped notice and provides inspection/adoption guidance without regenerating dependencies or changing projects
+
+#### Scenario: Fresh workspace template
+
+- **WHEN** a person initializes a workspace from the core template
+- **THEN** installation-local plugin and panel settings and their transient write files are ignored by Git, while authored project sources and curated dependency locks are not indiscriminately hidden
+
+### Requirement: Update results are concise and detailed output is not repeated
+
+A completed Update dialog SHALL show an overall outcome title, one short line per repository with seven-character before/after commits or already up to date and a refusal reason if any, and at most one next-action line. It SHALL expose Restart when required. Full revisions and step details SHALL remain in job output, with one terminal summary rather than copies appended by failure handling.
+
+#### Scenario: Complete success
+
+- **WHEN** all repository updates and required follow-up succeed
+- **THEN** the title says Updated, or Updated, restart needed when applicable, and the compact repository lines omit full hashes and command output
+
+#### Scenario: Partial success
+
+- **WHEN** core updated but a genuine workspace source conflict remains
+- **THEN** the title says Core updated; workspace needs attention, names the conflicting paths on the workspace line and combines remaining recovery/restart guidance into at most one next-action line
+
+#### Scenario: Local defaults retained
+
+- **WHEN** upstream settings or a generated workspace lock were skipped to preserve local user data
+- **THEN** the workspace line concisely names the skipped defaults, and at most one next-action line explains inspection/adoption together with any restart or deferred work
+
+#### Scenario: Job and CLI failure output
+
+- **WHEN** an Update fails through the panel job runner or terminal command
+- **THEN** output contains one full per-repository revision record and one terminal result, with a short failure envelope instead of replaying the summary or restart sentence multiple times
