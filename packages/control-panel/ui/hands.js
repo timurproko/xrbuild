@@ -1,9 +1,11 @@
 import { mountToolNavigation } from './navigation.js';
+import { mountHandAdjustments } from './hands-adjustments.js';
+import { enhanceSelects, installDropdowns } from './design-system.js';
 const $ = id => document.getElementById(id);
 const key = p => p ? `${p.owner}/${p.id}` : '';
 let snapshot = null;
-async function request(method, body) {
-  const res = await fetch('/api/hands', { method, cache: 'no-store', ...(body ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
+async function request(method, body, endpoint = '/api/hands') {
+  const res = await fetch(endpoint, { method, cache: 'no-store', ...(body ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? 'Hands request failed');
   return data;
@@ -15,7 +17,16 @@ function availability() {
     : missing ? 'Selected provider is missing. It has not been replaced.' : 'Hand requires a provider choice.';
   $('hands-save').disabled = !snapshot || !!missing || !!source && !source.available;
 }
-async function load() {
+const adjustments = mountHandAdjustments($('hands-adjustments'), {
+  load: () => request('GET'),
+  apply: async body => {
+    const result = await request('POST', body, '/api/hands/apply');
+    if (snapshot) snapshot.revision = result.revision; // Apply never changes the source picker draft.
+    return result;
+  },
+});
+const disposeSelects = enhanceSelects($('hands-form')), disposeDropdowns = installDropdowns(document);
+async function load(discard = false) {
   $('hands-save').disabled = true;
   try {
     snapshot = await request('GET');
@@ -27,10 +38,11 @@ async function load() {
       select.append(option);
     }
     select.value = key(snapshot.selected); availability(); $('hands-message').textContent = '';
+    adjustments.refresh(snapshot, { discard });
   } catch (error) { snapshot = null; $('hands-message').textContent = error.message; }
 }
 $('hands-provider').addEventListener('change', availability);
-$('hands-reload').addEventListener('click', () => void load());
+$('hands-reload').addEventListener('click', () => void load(true));
 $('hands-form').addEventListener('submit', async event => {
   event.preventDefault(); if (!snapshot) return;
   const source = snapshot.providers.find(p => key(p) === $('hands-provider').value);
@@ -43,7 +55,8 @@ $('hands-form').addEventListener('submit', async event => {
 mountToolNavigation($('hands-menu-button'), $('hands-menu'), { origin: location.origin, current: 'hands' });
 void fetch('/api/navigation').then(r => r.json()).then(data => { $('hands-diagnostics').hidden = !data.tools?.some(t => t.route === '/hands-diagnostics/'); }).catch(() => {});
 const events = new EventSource('/api/events');
-events.addEventListener('hands-changed', () => { $('hands-message').textContent = 'The saved choice changed. Reload to review it.'; });
+events.addEventListener('hands-changed', () => { $('hands-message').textContent = 'Hands settings changed. Reload to review them.'; adjustments.markStale(); });
 events.addEventListener('plugins-changed', () => { $('hands-message').textContent = 'Provider availability changed. Reload before saving.'; });
-addEventListener('pagehide', () => events.close(), { once: true });
+const deliveryTimer = setInterval(() => { void request('GET').then(data => adjustments.updateDelivery(data.delivery)).catch(() => {}); }, 1000);
+addEventListener('pagehide', () => { clearInterval(deliveryTimer); events.close(); adjustments.dispose(); disposeSelects(); disposeDropdowns(); }, { once: true });
 await load();

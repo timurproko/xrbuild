@@ -383,7 +383,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
         const document = await projectFile({ ...p, dir: entry }, 'index.html');
         const policy = await panel.previewHandPolicy(p, url);
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-        res.end(handPolicyDocument(await fs.readFile(document, 'utf8'), policy)); return;
+        res.end(handPolicyDocument(await fs.readFile(document, 'utf8'), policy, await panel.previewHandProfile(url), false)); return;
       }
       return serveStatic(res, entry, file);
     }
@@ -679,7 +679,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
     if (mutation) activeMutations++;
     const localRead = req.url === '/api/projects' || /^\/api\/projects\/(?:[^/?]+\/){1,2}icon(?:\?|$)/.test(req.url ?? '')
       || /^\/preview\//.test(req.url ?? '');
-    const previewProjectionRead = /^\/api\/preview\/projection(?:\?|$)/.test(req.url ?? '');
+    const previewProjectionRead = /^\/api\/preview\/(?:projection|hands)(?:\?|$)/.test(req.url ?? '');
     let loopbackOrigin = '';
     try {
       const origin = new URL(req.headers.origin ?? '');

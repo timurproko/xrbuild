@@ -7,7 +7,7 @@ import test from 'node:test';
 import { createServer } from '../src/server.ts';
 import { freePort } from '../src/host-runner.ts';
 import { readProject } from '../src/projects.ts';
-import { readHandsState, saveHandsState } from '../src/hands-state.ts';
+import { readHandsState, saveHandsState, saveHandAdjustments } from '../src/hands-state.ts';
 import { listProviders } from '../src/host-build.ts';
 import { discoverHandProviders } from '../src/hand-providers.ts';
 import { providerRunSchemas } from '../src/project-provider-settings.ts';
@@ -40,6 +40,7 @@ test('native Launcher destinations and returns reuse native hands, not browser r
     const launcher = await project('launcher', ['hand']); await project('demo', ['hand']); await project('second', ['hand']); await project('off', []);
     f.app.panel.nativeProviders = async () => ({ providers: [simulated], rejected: [], error: null });
     await f.choose('core', 'simulated');
+    await saveHandAdjustments(f.core, f.workspace, { sizeFactor: .8 }, (await readHandsState(f.core, f.workspace)).revision);
     const root = `https://app.local/index.html?xrb-panel=${encodeURIComponent(f.base + '/')}&xrb-hand=native`;
     const document = async (url: string) => { const r = await fetch(url); assert.equal(r.status, 200, await r.clone().text()); return r.text(); };
     const link = (id: string, parent: string) => appLaunchUrl(`${f.base}/preview/${id}/`, { returnUrl: parent });
@@ -53,13 +54,19 @@ test('native Launcher destinations and returns reuse native hands, not browser r
     const runner = f.app.panel.runner;
     runner.start = async request => {
       nativeRoot = request.builtUrl!;
+      const cfg = JSON.parse(await fs.readFile(request.hostArgs.find(a => a.startsWith('--config='))!.slice(9), 'utf8'));
+      assert.equal(cfg.handProfileRun.profile.sizeFactor, cfg.handProfile.sizeFactor);
+      assert.ok(cfg.handProfileRun.runId);
       Object.defineProperty(runner, 'busy', { configurable: true, value: true });
       Object.defineProperty(runner, 'projectId', { configurable: true, value: request.projectId });
     };
     await f.app.panel.run(launcher, 'built');
     await f.choose('core', 'webxr'); // Next-run preference must not retarget the already-running host.
+    await saveHandAdjustments(f.core, f.workspace, { sizeFactor: 1.2 }, (await readHandsState(f.core, f.workspace)).revision);
     const first = link('demo', nativeRoot), second = link('second', first);
-    for (const url of [first, second, appResumeUrl(first, 'perspective')]) assert.match(await document(url), /__XRB_HAND_POLICY__="native"/);
+    for (const url of [first, second, appResumeUrl(first, 'perspective')]) {
+      const html = await document(url); assert.match(html, /__XRB_HAND_POLICY__="native"/); assert.match(html, /"sizeFactor":0.8/);
+    }
     assert.match(await document(link('off', nativeRoot)), /__XRB_HAND_POLICY__="off"/, 'destination Hand-off still gates native frames');
     const devRoot = `http://localhost:5173/?xrb-panel=${encodeURIComponent(f.base + '/')}&xrb-hand=native`;
     assert.match(await document(link('demo', devRoot)), /__XRB_HAND_POLICY__="native"/, 'active native dev runs share the same hand-off context');
