@@ -71,6 +71,19 @@ Every frame SHALL be validated before copying or SDK admission for bounded layou
 - **WHEN** clock mapping resets, uncertainty becomes unacceptable or capture time jumps backwards
 - **THEN** existing hands and holds are cleared and no frame is admitted until a fresh valid mapping/session epoch is established
 
+### Requirement: Raw provider recording provenance
+
+The session SHALL expose validated provider-published frames to the retained recorder before global geometry, filtering or scene mapping. New recordings SHALL preserve source, timing, sequence, capabilities and native signals in a bounded versioned provider-stream format without credentials or baked-in global adjustments. Replay SHALL validate provenance and feed the current shared pipeline exactly once; existing formats SHALL remain unchanged.
+
+#### Scenario: Record and replay with adjustments
+- **WHEN** a live provider stream is recorded while nonidentity global adjustments are active and later explicitly replayed
+- **THEN** the file contains the raw published positions and native signals, not adjusted or filtered output
+- **AND** replay uses a new epoch and the current applied profile once, without accumulating the recording-time adjustment
+
+#### Scenario: Recording ends or fills
+- **WHEN** the source stops, retires its epoch or reaches a recording size, duration or frame-count bound
+- **THEN** recording stops visibly with its real source provenance and no new camera session, silent drops or unbounded buffering
+
 ### Requirement: Supervised teardown and freshness
 
 Explicit Stop, cancelled Start, crash, owning-page loss, panel shutdown and bounded liveness timeout SHALL retire frame admission, clear hands and held interactions, and end acquisition. Graceful cleanup SHALL quiesce callbacks before destruction. Hung children SHALL be contained and ended within a bounded deadline; ownership SHALL not be advertised free before teardown or verified process death.

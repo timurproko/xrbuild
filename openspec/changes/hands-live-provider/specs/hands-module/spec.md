@@ -4,7 +4,7 @@
 
 ### Requirement: Minimal provider picker with availability
 
-Hands SHALL put the global provider picker first in Source, followed by purpose, availability/reason and explicit source Save/Reload. It SHALL retain missing choices, distinguish installed from running/device status and label changes as next-launch-only. Explicit Start/Stop SHALL control the saved selected provider's live session; historical app status and generated substitutes SHALL NOT populate the viewport.
+Hands SHALL put the global provider picker first, followed by purpose, availability/reason and explicit source Save/Reload. It SHALL retain missing choices, distinguish installed from running/device status and label changes as next-launch-only. Explicit Start/Stop SHALL control the saved source's live session. Session and historical app status SHALL be distinct; calibration data, replay and generated substitutes SHALL NOT impersonate the provider's live hand.
 
 #### Scenario: Saved source unavailable
 - **WHEN** the chosen provider is disabled, missing or failed
@@ -19,9 +19,9 @@ Hands SHALL put the global provider picker first in Source, followed by purpose,
 - **THEN** the viewport shows those actual hands through the shared SDK adapter
 - **AND** before Start it shows no hand, with Start guidance next to provider status and any previous app status labelled historical
 
-#### Scenario: Source Save independent of adjustments
-- **WHEN** the user saves a provider while adjustment fields have unsaved edits
-- **THEN** only the provider selection is saved and adjustment drafts are not silently committed or discarded
+#### Scenario: Source Save independent of tools
+- **WHEN** the user saves a provider with adjustment drafts or an open calibration/recording tool
+- **THEN** only source selection is saved, without committing/discarding those drafts or starting acquisition
 
 #### Scenario: Source draft differs from session
 - **WHEN** the person edits or saves another source while a session is active

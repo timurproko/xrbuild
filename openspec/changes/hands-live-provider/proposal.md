@@ -13,6 +13,7 @@ The provider-centred Hands page deliberately has no generated hand and remains i
 - Reuse the global profile, ingress, default filtering, gestures, scene mapping, visuals and explicit Apply semantics from the adjustments/page changes; clear all hands and holds on discontinuity.
 - Supervise start cancellation, Stop, crash, disconnect, page closure, panel shutdown and timeout, releasing ownership only after acquisition has ended.
 - Add small shared SDK pinch/drag targets driven by the live session, not a new fixture mode, plus fake-provider/synthetic-only software regressions and an explicit physical-machine checklist.
+- Expose validated raw-as-published provider frames and provenance to PR 51's retained recorder, before global adjustments; version new provider-stream recordings separately and replay through the common pipeline exactly once.
 
 ## Capabilities
 
@@ -30,5 +31,5 @@ The provider-centred Hands page deliberately has no generated hand and remains i
 - Panel provider/settings resolution, host runner/preparation, runtime freshness/rebuild inventory, session routes/socket supervision and shutdown. No new persistence schema or private source export.
 - The core Hands page and SDK viewport adapter delivered by PR 51, using PR 50's profile validator, controls, geometry reset and application acknowledgements. Neither pipeline nor form is duplicated.
 - Sequence: PR 48 is merged; PRs 50 and 51 are still drafts at planning time. This planning-only branch targets main; implementation waits for PR 51 including PR 50 integration, then incorporates that code in this same branch before editing it. Prefer both merged to main; if work must overlap, integrate the approved PR 51 head locally and keep this PR draft into main until its dependencies merge. Reconcile delta requirements additively.
-- Estimate: 5–8 engineer-days after those seams are available, excluding review queues and physical-device acceptance. This PR does not provide concurrent app observation, WebXR acquisition, camera images, recording, post-processors, meshes or cross-logon-session camera arbitration.
+- Estimate: 5–8 engineer-days after those seams are available, excluding review queues and physical-device acceptance. This PR does not provide concurrent app observation, WebXR acquisition, camera images, legacy recording migration, post-processors, meshes or cross-logon-session camera arbitration. PR 51 retains recorder/calibration UI; this PR supplies its new provider-stream producer, format and provenance.
 - No hardware, camera or tracking runtime is available. Only a test-built fake input DLL and the existing explicitly selected synthetic provider may run in isolated state; actual device startup, calibration, camera release and end-to-end latency remain unverified until the person's checklist is completed.
