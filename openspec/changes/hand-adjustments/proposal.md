@@ -8,7 +8,7 @@ People need to adjust hand position, size and skeleton appearance consistently a
 
 - Extend the existing workspace `config/hands/profile.json` with validated panel-space XYZ offsets, wrist-centred uniform size and drawing-only skeleton/indicator settings. Missing fields preserve today's exact geometry and look.
 - Apply geometry once in the SDK after provider conversion and before shared filtering, gestures, interaction, pointer and drawing; preserve native gesture decisions and do not repeat provider rig correction.
-- Add Position and size / Appearance groups beneath the source picker, shared panel controls, group resets and explicit Apply. Keep source Save next-launch-only; Apply persists adjustments and delivers them to a running managed app.
+- Add relocatable Position and size / Appearance sections in their own component outside the current source card, using shared panel controls, group resets and explicit Apply. A forthcoming layout can mount the same sections beside a hand view unchanged; designing that layout/live view is separate. Keep source Save next-launch-only; Apply persists adjustments and delivers them to a running managed app.
 - Carry a portable validated profile on every managed native/dev/browser launch, trusted Launcher navigation, package and publication. Running geometry Apply releases held interactions and resets filters; appearance Apply only changes drawing. Packages/publications freeze their build-time profile.
 - Keep standard managed hand drawing automatic and respect `handVisual: false`. No acquisition plugin/private repository changes, live viewer, camera, tracking runtime or hardware work.
 

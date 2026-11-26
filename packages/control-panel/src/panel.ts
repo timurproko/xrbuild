@@ -38,7 +38,8 @@ import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatu
 import { PackageList } from './packages.ts';
 import { discoverHandProviders, sameHandProvider, handRegistry, handProviderKey, type HandProviderKey } from './hand-providers.ts';
 import { isNativeLauncherDocument } from '../../sdk/src/launch-context.ts';
-import { readHandsState, saveHandsState, selectedHandProvider, validHandProviderKey, prepareHandInput, resolveHandInput, type HandContext } from './hands-state.ts';
+import { HAND_APPEARANCE_DEFAULTS } from '../../sdk/src/hand-profile.ts';
+import { readHandsState, saveHandsState, saveHandAdjustments, selectedHandProvider, validHandProviderKey, prepareHandInput, resolveHandInput, type HandContext } from './hands-state.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
 import { archiveProject, readLayout, removeEmptyProjectSection, unarchiveProject } from './layout.ts';
 import { discoverPublishers, normalizeReleaseCatalog, publicationUrl, publisherFor, publisherUnconfigured, releaseIdProblem, type PublicationCard, type PublicationIdentity, type Publisher, type PublisherDiscovery, type PublisherReleaseCatalog, type PublisherStatus } from './publishers.ts';
@@ -1797,7 +1798,27 @@ export class Panel {
         const state = await readHandsState(this.repo, this.workspace);
         const selected = selectedHandProvider(state, registry, 'native');
         sendJson(res, 200, { ...registry, providers: registry.providers.map(p => ({ ...p, runtimeState: this.handRuntimeStates.get(handProviderKey(p)) ?? null })), registryRevision: registry.revision, selected: selected.key, initial: selected.initial, revision: state.revision,
-          choiceRequired: !selected.key, applies: 'next-launch' });
+          choiceRequired: !selected.key, applies: 'next-launch', profile: state.profile, appearanceDefaults: HAND_APPEARANCE_DEFAULTS });
+        return true;
+      }
+      case 'POST hands/apply': {
+        if (this.savingHands || this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.changingPlugins || this.jobs.active().length)
+          throw new HttpError(409, 'Wait for launch, package or provider preparation before applying Hands');
+        this.savingHands = true;
+        try {
+          const body = await readJson<{ profile?: unknown; revision?: string; registryRevision?: string }>(req);
+          const state = await readHandsState(this.repo, this.workspace);
+          let initial = null;
+          if (!state.exists) {
+            const registry = await discoverHandProviders(this.repo, this.workspace, this.nativeProviders);
+            if (body.registryRevision !== registry.revision) throw new HttpError(409, 'Hand providers changed; reload before applying');
+            initial = selectedHandProvider(state, registry, 'native').key;
+          }
+          if (!body.profile) throw new HttpError(400, 'Hands adjustment profile required');
+          const saved = await saveHandAdjustments(this.repo, this.workspace, body.profile, body.revision, initial);
+          this.hub.send('hands-changed', {});
+          sendJson(res, 200, { revision: saved.revision, profile: saved.profile, delivery: 'Saved for next launch' });
+        } finally { this.savingHands = false; }
         return true;
       }
       case 'PUT hands': {

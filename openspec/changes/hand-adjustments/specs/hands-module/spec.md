@@ -48,7 +48,7 @@ Hands SHALL provide separate joint/bone visibility, diameters, colours and share
 
 ### Requirement: Grouped adjustment controls and explicit Apply
 
-Below the source picker, Hands SHALL provide Position and size and Appearance using existing panel control styles, short labels and only needed one-line hints. The size hint SHALL say it changes where the hand touches. Each group SHALL have Reset to defaults. Edits and resets SHALL remain drafts until Apply; source Save SHALL remain next-launch-only.
+Hands SHALL provide self-contained Position and size and Appearance sections independent of the source card, relocatable together into a side panel beside a future hand view without rebuilding the controls. They SHALL use existing panel styles, short labels and only needed one-line hints. The size hint SHALL say it changes where the hand touches. Each group SHALL have Reset to defaults. Edits and resets SHALL remain drafts until Apply; source Save SHALL remain next-launch-only.
 
 #### Scenario: Reset one group
 - **WHEN** the user resets Position and size

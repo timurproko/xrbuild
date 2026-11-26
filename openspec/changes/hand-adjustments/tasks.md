@@ -4,10 +4,10 @@ Each numbered group corresponds, in order, to one PR Implementation outcome. All
 
 ## 1. Revision-safe global adjustment profile
 
-- [ ] 1.1 Add the browser-safe portable profile contract, exact defaults, override-presence semantics and field-specific validation; unit fixtures cover every bound/type, missing fields and exact linear colours.
-- [ ] 1.2 Extend `hands-state.ts` reads and one transactional writer for source Save, inferred pinning and adjustment writes; isolated state tests cover legacy/no-write defaults, invalid stored values, unknown fields, size/link/scope protection and competing writers without lost source or adjustments.
-- [ ] 1.3 Add adjustment GET/Apply persistence API under the existing preparation exclusion while retaining source-only PUT semantics; API fixtures cover unavailable/unselected source, malformed requests, conflict reasons and no provider startup.
-- [ ] 1.4 Document storage, exact units/bounds, validation and source-versus-adjustment ownership in owner documentation; check examples against the profile fixtures without accessing a user workspace.
+- [x] 1.1 Add the browser-safe portable profile contract, exact defaults, override-presence semantics and field-specific validation; unit fixtures cover every bound/type, missing fields and exact linear colours.
+- [x] 1.2 Extend `hands-state.ts` reads and one transactional writer for source Save, inferred pinning and adjustment writes; isolated state tests cover legacy/no-write defaults, invalid stored values, unknown fields, size/link/scope protection and competing writers without lost source or adjustments.
+- [x] 1.3 Add adjustment GET/Apply persistence API under the existing preparation exclusion while retaining source-only PUT semantics; API fixtures cover unavailable/unselected source, malformed requests, conflict reasons and no provider startup.
+- [x] 1.4 Document storage, exact units/bounds, validation and source-versus-adjustment ownership in owner documentation; check examples against the profile fixtures without accessing a user workspace.
 
 ## 2. One wrist-relative transform before shared hand processing
 
@@ -33,7 +33,7 @@ Each numbered group corresponds, in order, to one PR Implementation outcome. All
 
 ## 5. Hands position, size and appearance controls
 
-- [ ] 5.1 Add Position and size / Appearance below the source picker using existing shared field, range/number, switch, colour and button primitives; isolated browser tests cover every setting, keyboard/label access, short hints including size changing where the hand touches, and no capture/runtime startup.
+- [ ] 5.1 Add Position and size / Appearance in a self-contained root-scoped component outside the source card, mountable unchanged in a future side panel, using existing shared field, range/number, switch, colour and button primitives; isolated browser tests cover every setting, keyboard/label access, short hints including size changing where the hand touches, and no capture/runtime startup.
 - [ ] 5.2 Keep edits and group-specific Reset as drafts until adjustment Apply, independent from source Save; browser/API tests cover source/adjustment concurrency, dirty draft retention, stale reload guidance, unavailable source and visible field/delivery errors.
 - [ ] 5.3 Preserve exact untouched linear colour arrays through sRGB picker display and unrelated Apply, including .333 default opacity; browser regression covers no-op colour round trip and each group's reset without affecting the other or source/calibration.
 - [ ] 5.4 Update Hands guidance and SDK/owner usage examples for explicit Apply, safe cancellation and build freezing; verify guidance against isolated UI/runtime fixtures and remove obsolete adjustment-follow-up copy without claiming live preview.
