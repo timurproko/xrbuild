@@ -9,10 +9,10 @@
 
 ## 2. Independent core and workspace outcomes
 
-- [ ] 2.1 Orchestrate both repositories with real-path deduplication and per-role before/after commits, fresh-fetch evidence and recovery reasons; two independent bare remotes reproduce stale core success and assert both eligible clones advance.
-- [ ] 2.2 Continue the second repository after any first-repository refusal/failure and reject with both outcomes on partial failure; matrix tests cover every unsafe state for each role while the other role advances.
-- [ ] 2.3 Replace workspace-only POST eligibility, CLI exit behavior and read-only-core UI assumptions while retaining all busy guards and index-safe cached status; HTTP/job/CLI/dialog tests assert no false done or up-to-date result and one fetch for identical repository paths.
-- [ ] 2.4 Update owner-facing Update descriptions for two-repository behavior and partial-failure semantics; targeted tests assert summaries preserve each actual before/after commit and redacted diagnostics.
+- [x] 2.1 Orchestrate both repositories with real-path deduplication and per-role before/after commits, fresh-fetch evidence and recovery reasons; two independent bare remotes reproduce stale core success and assert both eligible clones advance.
+- [x] 2.2 Continue the second repository after any first-repository refusal/failure and reject with both outcomes on partial failure; matrix tests cover every unsafe state for each role while the other role advances.
+- [x] 2.3 Replace workspace-only POST eligibility, CLI exit behavior and read-only-core UI assumptions while retaining all busy guards and index-safe cached status; HTTP/job/CLI/dialog tests assert no false done or up-to-date result and one fetch for identical repository paths.
+- [x] 2.4 Update owner-facing Update descriptions for two-repository behavior and partial-failure semantics; targeted tests assert summaries preserve each actual before/after commit and redacted diagnostics.
 
 ## 3. Resumable setup, build and activation reporting
 

@@ -13,11 +13,13 @@ never leave it.
 - Core CI runs without private assets or credentials. Private dependency/runtime/integration checks belong to the
   private repository. See `docs/workspace-split.md` for staged migration and recovery. Detachment alone does not
   remove private history; keep hosting private until an isolated history audit and separate licensing review.
-- **Update** (panel menu, next to Rebuild; `pnpm update:repo` from a terminal) fetches, fast-forwards the selected
-  workspace clone to the fetched commit after `git lfs fetch` of the new commits, and rebuilds; it never stashes,
-  merges, rebases or discards. It reports the core checkout's state but does not update it yet: when the core is
-  behind, its tooltip and result say to pull it by hand. Rebuild stays build-only.
-  The shared updater now explicitly discovers and fetches `origin`'s default branch. It refuses every uncommitted
+- **Update** (panel menu, next to Rebuild; `pnpm update:repo` from a terminal) independently updates the running
+  core checkout and the selected workspace clone to each `origin`'s freshly discovered/fetched default branch.
+  Workspace LFS content downloads before its fast-forward; native plugins then rebuild, plus the host when outdated.
+  Each repository reports full before/after commits; already up to date requires a fresh successful fetch.
+  A refusal/failure in one repository does not prevent the other attempt, but the overall job fails with both results.
+  A shared core/workspace checkout is updated once. Rebuild stays build-only; Update never stashes or discards work.
+  The updater refuses every uncommitted
   tracked/staged/untracked change (including non-conflicting edits), detached HEAD and local-only commits.
   A removed or non-default upstream is not migrated automatically: preserve local work and safely switch to the
   advertised default branch with matching origin tracking, then retry. Never discard work to satisfy Update.

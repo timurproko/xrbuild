@@ -1916,9 +1916,11 @@ export class Panel {
         // The same guards as Rebuild: the update ends with one. The job runner keeps it apart from every other job.
         if (await this.desktopSetup.isBusy()) throw new HttpError(409, 'Wait for desktop setup to finish before updating');
         if (this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop the running or starting host first: its exe must not overlap a rebuild');
-        const status = this.updateLast = await updateStatus(this.repo, this.workspace, this.updateDeps.git);
-        // This version updates the workspace only; the core is reported and the result says what holds for it.
-        if (!status.workspace.available) throw new HttpError(409, status.workspace.reason ?? 'The workspace cannot be updated');
+        // Eligibility is per repository inside the job: one refusal must not block the other checkout.
+        // Refuse conflicting jobs before running any Git beside them.
+        const conflict = this.jobs.conflict('update', null);
+        if (conflict) throw new HttpError(409, conflict);
+        this.updateLast = await updateStatus(this.repo, this.workspace, this.updateDeps.git);
         sendJson(res, 202, jobSummary(this.startJob('update', null, 'update', ctx => runUpdate(this.workspace, ctx, {
           core: this.repo,
           coreHostCurrent: async () => {

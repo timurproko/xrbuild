@@ -27,17 +27,18 @@ test('update presentation follows its steps and reports Git refusals and the res
   const start=rebuildPresentation({kind:'update',state:'running',lines:[]});
   assert.equal(start.title,'Updating');assert.equal(start.step,'check');assert.equal(start.message,'Step 1 of 5, Check: Checking the core and the workspace…');assert.equal(start.viewJobDisabled,true);
   const lfs=rebuildPresentation({id:7,kind:'update',state:'running',lines:['step check','step fetch','step lfs','Downloading LFS objects: 40% (2/5)']});
-  assert.equal(lfs.step,'lfs');assert.equal(lfs.message,'Step 3 of 5, LFS: Downloading the workspace\'s LFS files…');assert.match(lfs.output,/40% \(2\/5\)/);
+  assert.equal(lfs.step,'lfs');assert.equal(lfs.message,'Step 3 of 5, LFS: Downloading required LFS files…');assert.match(lfs.output,/40% \(2\/5\)/);
   const plugin=rebuildPresentation({id:7,kind:'update',state:'running',lines:['step rebuild','plugin tracker']});
   assert.equal(plugin.message,'Step 5 of 5, Rebuild: Rebuilding tracker…');
   const refused=rebuildPresentation({id:7,kind:'update',state:'failed',error:'Pull: Local changes would be overwritten by the update: a.txt. Commit or stash them first, then run Update again. Nothing changed.',lines:['step check','step fetch','step lfs','step pull','error: Your local changes would be overwritten']});
-  assert.equal(refused.title,'Update failed');assert.equal(refused.step,'pull');assert.match(refused.message,/a\.txt\. Commit or stash them first/);assert.match(refused.output,/would be overwritten/);assert.equal(refused.succeeded,false);
-  const done=rebuildPresentation({id:7,kind:'update',state:'done',lines:['step rebuild'],result:{state:'updated',summary:'Workspace updated 1111111 → 2222222 (2 commits). Rebuilt: tracker. Core: 3 commits behind origin/main, not updated by this version yet; pull it by hand.'}});
-  assert.equal(done.title,'Workspace updated');assert.equal(done.message,'Workspace updated 1111111 → 2222222 (2 commits). Rebuilt: tracker. Core: 3 commits behind origin/main, not updated by this version yet; pull it by hand.');assert.equal(done.succeeded,true);
+  assert.equal(refused.title,'Update needs attention');assert.equal(refused.step,'pull');assert.match(refused.message,/a\.txt\. Commit or stash them first/);assert.match(refused.output,/would be overwritten/);assert.equal(refused.succeeded,false);
+  const summary='Core: 1111111 → 2222222. Workspace: 3333333 → 4444444. Restart required; Update did not restart the panel.';
+  const done=rebuildPresentation({id:7,kind:'update',state:'done',lines:['step rebuild'],result:{state:'updated',summary}});
+  assert.equal(done.title,'Updated');assert.equal(done.message,summary);assert.equal(done.succeeded,true);
   const current=rebuildPresentation({id:7,kind:'update',state:'done',lines:['step fetch'],result:{state:'up-to-date',summary:'Workspace already up to date (1111111). Nothing was rebuilt.'}});
-  assert.equal(current.title,'Workspace already up to date','the title names the repository: the core may still be behind');
+  assert.equal(current.title,'Already up to date','success refers to both repositories after fresh fetches');
   const notStarted=rebuildPresentation({kind:'update',state:'running',lines:[]},'The workspace is not a Git clone.');
-  assert.equal(notStarted.title,'Update failed');assert.equal(notStarted.message,'The workspace is not a Git clone.');assert.equal(notStarted.output,'The job could not start.');
+  assert.equal(notStarted.title,'Update needs attention');assert.equal(notStarted.message,'The workspace is not a Git clone.');assert.equal(notStarted.output,'The job could not start.');
 });
 
 test('the behind hint and the update menu item read a status that never fetches',async()=>{
