@@ -19,6 +19,6 @@
 
 ## 4. Shared maintenance dialogs copy complete job logs
 
-- [ ] 4.1 Add the existing top-right Jobs copy control to shared log-bearing progress dialogs with complete-log and no-job diagnostic copying; focused dialog/browser tests cover Rebuild, Update, prerequisite, running, success, failure and clipboard denial.
-- [ ] 4.2 Save screenshots of changed dialog states, check PR 56 and incorporate main if it merged, then rerun only directly affected targeted tests and record results.
-- [ ] 4.3 Finish the task report with timing and screenshot references, stop every disposable server/browser instance, push the final implementation head and dispatch CI without waiting or polling; retain the draft PR for review.
+- [x] 4.1 Add the existing top-right Jobs copy control to shared log-bearing progress dialogs with complete-log and no-job diagnostic copying; focused dialog/browser tests cover Rebuild, Update, prerequisite, running, success, failure and clipboard denial.
+- [x] 4.2 Save screenshots of changed dialog states, check PR 56 and incorporate main if it merged, then rerun only directly affected targeted tests and record results.
+- [x] 4.3 Finish the task report with timing and screenshot references, stop every disposable server/browser instance, push the final implementation head and dispatch CI without waiting or polling; retain the draft PR for review.

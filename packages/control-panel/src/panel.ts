@@ -1931,6 +1931,11 @@ export class Panel {
   /** Other /api routes; true when handled. */
   async route(method: string, api: string[], req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const key = `${method} ${api.join('/')}`;
+    if (method === 'GET' && api.length === 2 && api[0] === 'jobs' && /^[1-9]\d*$/.test(api[1]!)) {
+      const job = this.jobs.get(Number(api[1]));
+      if (!job) throw new HttpError(404, 'Job is no longer available');
+      sendJson(res, 200, job); return true;
+    }
     if (api[0] === 'plugins' && api[1] === 'manage' && api.length >= 3) {
       const id = api[2];
       const catalog = await resolvePluginCatalog(this.workspace, this.repo, true), plugin = pluginByReference(catalog, id);

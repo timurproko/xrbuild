@@ -31,7 +31,7 @@ let disposeNavigation;
 // A standalone preview returns to the real panel for maintenance; never issue cross-origin mutations.
 document.querySelector('#panel-menu').addEventListener('click', event => {
   const action = event.target.closest('[data-navigation]')?.dataset.navigation;
-  if (origin !== location.origin && ['restart', 'rebuild'].includes(action)) event.stopImmediatePropagation();
+  if (origin !== location.origin && ['restart', 'rebuild', 'update'].includes(action)) event.stopImmediatePropagation();
 }, {capture:true});
 function mountNavigation(tools=[]) {
   disposeNavigation?.();

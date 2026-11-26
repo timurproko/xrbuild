@@ -1,6 +1,7 @@
 // One framework-neutral host rebuild dialog for Control Panel, Plugins Manager and registered tools.
 import {iconSvg, sentenceText} from './design-system.js';
 import {desktopSetupBeforeRebuild} from './desktop-setup.js';
+import {installJobLogCopy, readJobLog} from './job-log.js';
 
 export const REBUILD_AUTOCLOSE_KEY = 'panel.rebuildAutoclose';
 const controllers = new WeakMap();
@@ -124,7 +125,8 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
     <span class="xrb-progress-error">${iconSvg('error-circle')}</span>
   </span><div><h3 id="${idPrefix}-rebuilding-title" data-xrb-rebuild-title>Rebuilding</h3>
     <p id="${idPrefix}-rebuilding-message" class="muted" data-xrb-rebuild-message role="status">Starting update…</p></div></div>
-  <pre class="log" data-xrb-rebuild-output aria-label="Build output">Waiting for build output…</pre>
+  <div class="xrb-copy-block"><button type="button" class="xrb-icon-button xrb-copy-action" data-xrb-rebuild-copy aria-label="Copy job log">${iconSvg('copy')}</button>
+    <pre class="log" data-xrb-rebuild-output aria-label="Build output">Waiting for build output…</pre></div>
   <div class="row ask-buttons is-building" data-xrb-rebuild-actions><label class="toggle"><input type="checkbox" data-xrb-rebuild-autoclose> Autoclose on finish</label><span class="spacer"></span>
     <button type="button" class="action-button" data-xrb-rebuild-retry hidden>Retry</button>
     <button type="button" class="action-button primary" data-xrb-rebuild-restart hidden>Restart</button>
@@ -140,6 +142,8 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
   const view = dialog.querySelector('[data-xrb-rebuild-view]');
   let currentJob = null;
   let viewJob = onViewJob;
+  let logReader = (job, fallback) => job?.lines?.length ? job.lines.join('\n') : fallback;
+  const disposeCopy = installJobLogCopy(dialog.querySelector('[data-xrb-rebuild-copy]'), () => logReader(currentJob, output.textContent));
   let recovery = {};
   const retry = dialog.querySelector('[data-xrb-rebuild-retry]');
   const restart = dialog.querySelector('[data-xrb-rebuild-restart]');
@@ -160,6 +164,7 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
   const controller = {
     element: dialog,
     setViewJob(callback) { viewJob = callback; },
+    setLogReader(callback) { logReader = callback; },
     setRecovery(callbacks) { recovery = callbacks; },
     render(job, error = '') {
       currentJob = job ?? null;
@@ -181,7 +186,7 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
       if (!dialog.open) dialog.showModal();
     },
     close() { if (dialog.open) dialog.close(); },
-    dispose() { dialog.remove();controllers.delete(container); },
+    dispose() { disposeCopy();dialog.remove();controllers.delete(container); },
   };
   controllers.set(container, controller);
   return controller;
@@ -197,6 +202,7 @@ async function followJobInPlace(origin, route, placeholder, options, label, setu
     globalThis.location?.assign(destination.href);
   };
   const progress = rebuildProgressDialog({onViewJob: options.onViewJob ?? defaultViewJob});
+  progress.setLogReader((job, fallback) => readJobLog(safe, job, fallback));
   progress.setRecovery({
     retry: () => followJobInPlace(origin, route, placeholder, options, label, setupAction),
     restart: async () => (await import('./navigation.js')).restartPanelInPlace(safe),
@@ -224,6 +230,7 @@ export async function followStartedJobInPlace(origin, started, options = {}) {
   const safe = safePanelOrigin(origin);
   if (!safe) throw new Error('Invalid local panel origin');
   const progress = rebuildProgressDialog({onViewJob: options.onViewJob});
+  progress.setLogReader((job, fallback) => readJobLog(safe, job, fallback));
   if (options.onRetry) progress.setRecovery({ retry: options.onRetry, restart: async () => (await import('./navigation.js')).restartPanelInPlace(safe) });
   progress.show(started);
   const label = ['run', 'preview-run'].includes(started.kind) ? 'Run' : started.kind === 'update' ? 'Update' : 'Rebuild';

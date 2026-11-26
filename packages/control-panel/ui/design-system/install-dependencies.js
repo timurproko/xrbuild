@@ -44,6 +44,10 @@ window.fetch=async(input,options={})=>{
     if(scenario==='connection')throw new TypeError('Simulated status connection interruption');
     return json({jobs:structuredClone(jobs)});
   }
+  if(method==='GET'&&/^\/api\/jobs\/[1-9]\d*$/.test(route)){
+    const job=jobs.find(job=>job.id===Number(route.split('/').at(-1)));
+    return json(job??{error:'Simulated job is no longer available'},job?200:404);
+  }
   if(method==='POST'&&route==='/api/host/setup'){
     const body=JSON.parse(options.body??'{}');
     if(body.confirm!==true||!['toolchain','native-deps'].includes(body.action)||body.revision!==String(revision))return json({error:'Simulated action refused: refresh.'},409);

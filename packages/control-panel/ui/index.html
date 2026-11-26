@@ -147,7 +147,8 @@
         <div><h3 id="job-progress-title">Building package</h3>
           <p id="job-progress-message" class="muted" role="status">Starting build…</p></div>
       </div>
-      <pre id="job-progress-output" class="log" aria-label="Build output">Waiting for output…</pre>
+      <div class="xrb-copy-block"><button type="button" id="job-progress-copy" class="xrb-icon-button xrb-copy-action" aria-label="Copy job log"><span data-xrb-icon="copy"></span></button>
+        <pre id="job-progress-output" class="log" aria-label="Build output">Waiting for output…</pre></div>
       <div id="job-progress-actions" class="row ask-buttons is-building"><label class="toggle"><input type="checkbox" id="job-progress-autoclose"> Autoclose on finish</label><span class="spacer"></span>
         <button type="button" class="action-button" id="job-progress-retry" hidden>Retry</button>
         <button type="button" class="action-button primary" id="job-progress-restart" hidden>Restart</button>

@@ -1,6 +1,7 @@
 // XR Build control panel UI: plain ES module, no build step. Talks to the panel server
 // (same origin) over JSON and a Server-Sent Events stream.
 import { SettingsWriter } from './settings-writer.js';
+import {installJobLogCopy, readJobLog} from './job-log.js';
 import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
 import {requestedNavigation,menuKeyboard,renderNavigationMenu,renderRemoteUpdate,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
@@ -46,6 +47,7 @@ const state = {
   managedPlugins: [],
   managedId: localStorage.getItem('panel.managedPlugin'),
   appSettings: { cursor: 'system' },
+  settingsReady: false,
   settingsFilter: new URLSearchParams(location.search).get('module') || 'all',
   activityTab: localStorage.getItem('panel.activityTab') === 'jobs' ? 'jobs' : 'log',
   page: ['plugins', 'settings'].includes(initialNavigationRequest.page) ? initialNavigationRequest.page : 'projects',
@@ -2735,11 +2737,7 @@ function renderJobs() {
   state.jobsAtEnd = atEnd;
   list.querySelectorAll('details').forEach((d) => {
     d.addEventListener('toggle', () => { if (d.open) state.openJob = Number(d.dataset.job); });
-    d.querySelector('.job-copy').addEventListener('click', action(async (event) => {
-      event.preventDefault();
-      const job = state.jobs.get(Number(d.dataset.job));
-      await navigator.clipboard.writeText((job?.lines ?? []).join('\n'));
-    }));
+    installJobLogCopy(d.querySelector('.job-copy'), () => readJobLog(location.origin, state.jobs.get(Number(d.dataset.job))));
     const pre = d.querySelector('pre');
     pre.scrollTop = pre.scrollHeight;
   });
@@ -3380,6 +3378,9 @@ function pluginSettingsSection(plugin) {
 }
 
 function renderGlobalSettings() {
+  // Provider scans may finish before the requested settings module/preferences arrive.
+  // Do not expose default preferences or discard route intent from an incomplete inventory.
+  if (!state.settingsReady) return;
   const plugins = state.managedPlugins.filter((plugin) => !plugin.problem && ((plugin.settings?.length ?? 0) || (plugin.panelSettings?.length ?? 0) || (plugin.config?.length ?? 0)));
   const defaultFilter = plugins.length ? 'all' : 'control-panel';
   const filters = new Set([...(plugins.length ? ['all'] : []), 'control-panel', ...plugins.map((plugin) => plugin.id)]);
@@ -3495,6 +3496,7 @@ async function showPage(page) {
   } else if (page === 'settings') {
     await loadManagedPlugins();
     state.appSettings = await api('GET', '/api/app-settings');
+    state.settingsReady = true;
   }
   state.page = page;
   $('#dashboard').hidden = page !== 'projects';
@@ -3625,6 +3627,7 @@ function showProgressDialog(kind, job) {
   $('#job-progress').showModal();
   renderProgressDialog();
 }
+installJobLogCopy($('#job-progress-copy'), () => readJobLog(location.origin, state.jobs.get(progressJobId), $('#job-progress-output').textContent));
 $('#job-progress-autoclose').checked = localStorage.getItem('panel.progressAutoclose') === '1';
 $('#job-progress-autoclose').addEventListener('change', (e) => localStorage.setItem('panel.progressAutoclose', e.target.checked ? '1' : '0'));
 function alignJobAtTop(jobId) {

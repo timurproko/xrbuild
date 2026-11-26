@@ -43,12 +43,12 @@ test('update presentation follows its steps and reports Git refusals and the res
   assert.equal(notStarted.title,'Update needs attention');assert.equal(notStarted.message,'The workspace is not a Git clone.');assert.equal(notStarted.output,'The workspace is not a Git clone.');
 });
 
-test('the behind hint and the update menu item read a status that never fetches',async()=>{
+test('the passive update hint and local eligibility remain read-only until the explicit action',async()=>{
   const ui=path.resolve(import.meta.dirname,'../ui');
   const [app,index]=await Promise.all(['app.js','index.html'].map(file=>fs.readFile(path.join(ui,file),'utf8')));
   assert.match(index,/id="update-chip" class="chip rebuild" data-maintenance="update" hidden/);
-  assert.match(app,/workspace behind \$\{remote\} by \$\{workspace\.behind\}/);
-  assert.match(app,/Remote last checked \$\{ago\(workspace\.checkedMs\)\}/);
+  assert.match(app,/renderRemoteUpdate\(\$\('#panel-menu'\), state\.remoteUpdates/);
+  assert.match(app,/api\('GET', '\/api\/update\/available'\)/);
   assert.match(app,/item\.setAttribute\('aria-disabled', 'true'\)/);
   assert.match(app,/item\.title = updateTooltip\(status\)/);
   assert.match(app,/api\('GET', '\/api\/update'\)/);

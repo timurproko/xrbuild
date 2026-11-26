@@ -123,7 +123,7 @@ export function mountToolNavigation(button,menu,{origin,tools,current,maintenanc
   const safe=panelOrigin(origin);
   let remoteStatus = null;
   const showRemote = () => renderRemoteUpdate(menu, remoteStatus, () => { close();void updateInPlace(origin); });
-  const refreshRemote = () => { if (safe && maintenance) void fetch(new URL('/api/update/available',safe),{cache:'no-store',signal})
+  const refreshRemote = () => { if (safe === location.origin && maintenance) void fetch(new URL('/api/update/available',safe),{cache:'no-store',signal})
     .then(response => response.ok ? response.json() : null).then(status => { if (!signal.aborted) { remoteStatus=status;showRemote(); } }).catch(()=>{}); };
   const remoteTimer = maintenance ? setInterval(refreshRemote,30000) : null;
   refreshRemote();
@@ -140,7 +140,7 @@ export function mountToolNavigation(button,menu,{origin,tools,current,maintenanc
   button.addEventListener('click',()=>{if(!menu.hidden){close();return;}openFloating(menu,{anchor:button});button.setAttribute('aria-expanded','true');menu.querySelector('[aria-current="page"]')?.focus();},{signal});
   button.addEventListener('keydown',e=>{if(['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();if(menu.hidden)button.click();menu.querySelector('[role="menuitem"]')?.focus();}},{signal});
   menu.addEventListener('keydown',e=>menuKeyboard(e,menu,dismiss),{signal});
-  menu.addEventListener('click',e=>{const item=e.target.closest('[data-navigation]'),action=item?.dataset.navigation;if(action==='update'){e.preventDefault();if(item.getAttribute('aria-disabled')==='true')return;close();void updateInPlace(origin);return;}if(action==='restart'||action==='rebuild'){e.preventDefault();close();void (action==='restart'?restartPanelInPlace(origin):rebuildHostInPlace(origin));return;}if(e.target.closest('[aria-current="page"]'))e.preventDefault();close();},{signal});
+  menu.addEventListener('click',e=>{const item=e.target.closest('[data-navigation]'),action=item?.dataset.navigation;if(['restart','rebuild','update'].includes(action)&&safe!==location.origin){close();return;}if(action==='update'){e.preventDefault();if(item.getAttribute('aria-disabled')==='true')return;close();void updateInPlace(origin);return;}if(action==='restart'||action==='rebuild'){e.preventDefault();close();void (action==='restart'?restartPanelInPlace(origin):rebuildHostInPlace(origin));return;}if(e.target.closest('[aria-current="page"]'))e.preventDefault();close();},{signal});
   document.addEventListener('click',e=>{if(!button.contains(e.target)&&!menu.contains(e.target))close();},{signal});
   addEventListener('resize',close,{signal});return ()=>{events.abort();if(remoteTimer)clearInterval(remoteTimer);menu.replaceChildren();close();};
 }

@@ -17,7 +17,7 @@ test('component refresh uses the existing Rebuild concept and truthful header st
 });
 
 test('shared progress offers Retry or Restart in place, preserving failed output', { skip: !process.env.XRB_TEST_BROWSER, timeout: 30000 }, async () => {
-  const files = new Map(await Promise.all(['rebuild-dialog.js', 'design-system.js', 'scrollbars.js', 'workspace-layout.js'].map(async name => [name, await fs.readFile(path.resolve(import.meta.dirname, '../ui', name), 'utf8')] as const)));
+  const files = new Map(await Promise.all(['rebuild-dialog.js', 'job-log.js', 'design-system.js', 'scrollbars.js', 'workspace-layout.js'].map(async name => [name, await fs.readFile(path.resolve(import.meta.dirname, '../ui', name), 'utf8')] as const)));
   const server = createServer((req, res) => {
     const name = req.url!.slice(1);
     res.setHeader('content-type', name ? 'text/javascript' : 'text/html');

@@ -11,6 +11,8 @@ test('every module paints its correct shell before slow APIs and remote fonts', 
   const scratch = process.env.XRB_TEST_ROOT ?? path.join(root, '.artifacts');
   await fs.mkdir(scratch, { recursive: true });
   const workspace = await fs.mkdtemp(path.join(scratch, 'navigation-paint-'));
+  await fs.mkdir(path.join(workspace, 'plugins/settings-fixture'), {recursive:true});
+  await fs.writeFile(path.join(workspace, 'plugins/settings-fixture/xrb-plugin.json'), JSON.stringify({title:'Settings fixture',type:'input',version:'0.1.0',settings:[{key:'enabled',label:'Enabled',type:'boolean',default:false}]}));
   const reserve = http.createServer();
   await new Promise<void>(resolve => reserve.listen(0, '127.0.0.1', resolve));
   const port = (reserve.address() as {port:number}).port;
@@ -39,6 +41,11 @@ test('every module paints its correct shell before slow APIs and remote fonts', 
         assert.ok(paint.at < 2200, `${route} does not await the 2500ms APIs: ${JSON.stringify(paint)}`);
         assert.ok(paint.title.includes(title), JSON.stringify(paint));
         if (frame) assert.equal(paint.frame, frame);
+    });
+    await withBrowser(async ({send,navigate,evaluate}) => {
+      await send('Page.addScriptToEvaluateOnNewDocument', {source:`const originalFetch=fetch;window.fetch=async(input,options)=>{if(new URL(input,location.href).pathname==='/api/plugins/manage')await new Promise(resolve=>setTimeout(resolve,700));return originalFetch(input,options);};`});
+      await navigate(origin+'/settings/?module=settings-fixture', `document.querySelector('[data-settings-filter="settings-fixture"]')?.getAttribute('aria-current')==='true'`);
+      assert.equal(await evaluate(`new URLSearchParams(location.search).get('module')`),'settings-fixture','a faster provider scan cannot discard the requested module');
     });
   } finally {
     for (const timer of timers) clearTimeout(timer);
