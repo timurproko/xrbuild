@@ -43,6 +43,8 @@ export const BUILD_TARGETS: readonly BuildTarget[] = ['host', 'webxr'];
 
 /** Which provider runs each role (the project's selection). */
 export interface RoleSelection {
+  handProfile?: import('../../sdk/src/hand-profile.ts').HandProfile;
+  handProfileRun?: import('../../sdk/src/hand-profile-control.ts').HandProfileEnvelope;
   /** Legacy first host input; packaged hosts use inputs when present. */
   input: string;
   inputs?: string[];
@@ -66,6 +68,7 @@ export interface PackagerBuildOptions {
   selection: RoleSelection;
   /** Resolved SDK source policy frozen into the staged web output. */
   handPolicy?: 'off' | 'native' | 'webxr';
+  handProfile?: import('../../sdk/src/hand-profile.ts').HandProfile;
   /** Project display name, available for package metadata defaults. */
   projectName: string;
   /** the manifest's `plugins.<platform>` section: the declared identity fields, version included */

@@ -1,4 +1,5 @@
 // Operational runtime inventories. These checks are not a redistribution audit or a build-code sandbox.
+import { handProfile } from '../../sdk/src/hand-profile.ts';
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
@@ -148,7 +149,7 @@ export async function stagedContentFingerprint(root: string): Promise<string> {
 }
 
 /** Only selected provider configuration; do not ship incidental project state. */
-export function portableHostConfig(o: { plugins: string[]; selection: { input: string; inputs?: string[]; display: string; platform: string }; config?: { input: string; inputs?: string[]; display: string; platform: string; plugins: Record<string, unknown> } }) {
+export function portableHostConfig(o: { handProfile?: import('../../sdk/src/hand-profile.ts').HandProfile; plugins: string[]; selection: { input: string; inputs?: string[]; display: string; platform: string; handProfile?: import('../../sdk/src/hand-profile.ts').HandProfile }; config?: { input: string; inputs?: string[]; display: string; platform: string; plugins: Record<string, unknown> } }) {
   if (!o.config) throw new Error('the desktop package needs the effective host configuration');
   const selection = o.selection, selected = new Set([selection.input, ...(selection.inputs ?? []), selection.display, selection.platform].filter(Boolean));
   for (const id of selected) if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(id)) throw new Error('Invalid package provider identity');
@@ -171,7 +172,7 @@ export function portableHostConfig(o: { plugins: string[]; selection: { input: s
     throw new Error('Package configuration must contain portable JSON values');
   };
   const plugins = Object.fromEntries(Object.entries(o.config.plugins).filter(([key]) => selected.has(key)).map(([key, value]) => [key, inspect(value)]));
-  const config = { input: selection.input, ...(selection.inputs ? { inputs: selection.inputs } : {}), display: selection.display, platform: selection.platform, plugins };
+  const config = { ...(o.handProfile ?? o.selection.handProfile ? { handProfile: handProfile(o.handProfile ?? o.selection.handProfile) } : {}), input: selection.input, ...(selection.inputs ? { inputs: selection.inputs } : {}), display: selection.display, platform: selection.platform, plugins };
   if (Buffer.byteLength(JSON.stringify(config)) > 65536) throw new Error('Oversized package configuration');
   return config;
 }

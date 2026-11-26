@@ -153,7 +153,7 @@ export function appLaunchUrl(launchHref: string | URL, context: AppLaunchContext
     if (launch.origin === panel.origin && launch.pathname.startsWith('/preview/') && root.href.length <= 8192
       && nativeRootMatches(root, panel.origin, true)) launch.searchParams.set('xrb-native-root', root.href);
   } catch { /* Only same-panel previews receive the native execution marker. */ }
-  for (const key of ['xrb-preview-session', 'xrb-preview-fullscreen']) {
+  for (const key of ['xrb-preview-session', 'xrb-preview-fullscreen', 'xrb-hand-project']) {
     launch.searchParams.delete(key);
     if (launch.searchParams.has('xrb-preview-token') && target.searchParams.has(key)) launch.searchParams.set(key, target.searchParams.get(key)!);
   }
