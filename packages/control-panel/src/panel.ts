@@ -231,6 +231,18 @@ export class Panel {
   onPluginSourcesChanged: (restartRequired?: boolean) => Promise<void> = async () => {};
   restartPending = false;
   restartWorkPending: () => boolean = () => false;
+  private captureOwner: { label: string } | null = null;
+  /** Shared exclusion for explicit acquisition tools and app launch preparation. */
+  acquireCapture(label: string): () => void {
+    if (this.captureOwner || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.restartPending || this.changingPlugins || this.jobs.active().length)
+      throw new HttpError(409, this.captureOwner ? `${this.captureOwner.label} owns capture. Stop it first.` : 'Another app or panel operation owns acquisition. Stop it first.');
+    const owner = { label }; this.captureOwner = owner;
+    let released = false;
+    return () => { if (!released && this.captureOwner === owner) this.captureOwner = null; released = true; };
+  }
+  private refuseCaptureConflict(): void {
+    if (this.captureOwner) throw new HttpError(409, `${this.captureOwner.label} owns capture. Stop it first.`);
+  }
   private readonly settingsWrites = new Set<string>();
   readonly runner = new HostRunner();
   desktopSetup: DesktopSetup;
@@ -1402,6 +1414,7 @@ export class Panel {
     this.refuseIfLaunchBlocked(p, this.launchState(p));
     if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before running');
     if (p.readOnly) this.refuseIfBusy(p.id);
+    this.refuseCaptureConflict();
     this.preparingPreview = true;
     try {
       return await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
@@ -1483,6 +1496,7 @@ export class Panel {
     if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before running');
     if (this.jobs.active().some(job => job.kind === 'desktop-setup') || desktopSetupBusy) throw new HttpError(409, 'wait for desktop setup to finish before running');
     if (p.readOnly) this.refuseIfBusy(p.id);
+    this.refuseCaptureConflict();
     this.preparingNativeRun = true;
     try {
       await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
@@ -2099,7 +2113,7 @@ export class Panel {
         if ((confirm !== undefined && typeof confirm !== 'boolean') || (ifIdle !== undefined && typeof ifIdle !== 'boolean')) throw new HttpError(400, 'Restart flags must be boolean');
         if (ifIdle && (confirm !== false || expectedInstanceId !== this.instanceId)) throw new HttpError(409, 'Automatic restart requires the current panel instance and cannot force active work');
         const busy = [this.runner.busy ? `${this.runner.projectId} is running` : '', ...this.jobs.active().map((j) => `${j.title} is ${j.state}`),
-          this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.settingsWrites.size || this.changingPlugins || this.maintainingCache || this.restartWorkPending() ? 'Panel work is preparing or changing' : ''].filter(Boolean);
+          this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.settingsWrites.size || this.changingPlugins || this.maintainingCache || this.restartWorkPending() || this.captureOwner ? 'Panel work is preparing or changing' : ''].filter(Boolean);
         if (busy.length && !confirm) throw new HttpError(409, ifIdle ? 'Waiting for the panel to become idle' : `${busy.join('; ')}. Restart anyway? The host is stopped cleanly first.`, ifIdle ? { retryWhenIdle: true } : { needsConfirm: 'restart' });
         sendJson(res, 200, { restarting: true, pid: process.pid, instanceId: this.instanceId, repo: this.repo, workspace: this.workspace, projects: this.projects });
         if (!this.restartPending) {

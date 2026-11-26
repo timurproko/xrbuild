@@ -1,0 +1,9 @@
+.calibration-page { max-width: 1080px; margin: 24px auto; padding: 0 20px 24px; }
+.calibration-card { padding: 20px; }
+.calibration-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+.calibration-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.calibration-fields > label { flex: 1 1 180px; min-width: 0; }
+.calibration-page canvas { display: block; width: 100%; height: auto; background: var(--bg); border-radius: 6px; cursor: crosshair; }
+.calibration-page pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.calibration-page h2 { margin: 0; }
+@media (max-width: 600px) { .calibration-columns { grid-template-columns: 1fr; } }

@@ -8,8 +8,8 @@ const ID = /^[a-z][a-z0-9-]{0,47}$/;
 const MANAGED_ROUTE = /^\/(?:[a-z][a-z0-9-]*\/)+$/;
 const ENDPOINT = /^\/{1}__[a-z][a-z0-9-]*(?:\/[a-z0-9-]+)*\/?$/;
 const MODULE = /^(?:[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*\.mjs|#[a-z][a-z0-9-]{0,47})$/;
-const RESERVED_IDS = new Set(['projects', 'plugins', 'settings', 'rebuild', 'restart', 'update', 'design-system', 'hands']);
-const RESERVED_PATHS = ['/hands/', '/hand-tracking/', '/api/', '/plugins/', '/settings/', '/preview/', '/vendor/', '/sdk/', '/design-system/', '/design/'];
+const RESERVED_IDS = new Set(['projects', 'plugins', 'settings', 'rebuild', 'restart', 'update', 'design-system', 'hands', 'calibration']);
+const RESERVED_PATHS = ['/calibration/', '/hands/', '/hand-tracking/', '/api/', '/plugins/', '/settings/', '/preview/', '/vendor/', '/sdk/', '/design-system/', '/design/'];
 
 interface ToolBase { id: string; label: string }
 export interface ExternalToolLink extends ToolBase { url: string; passPanelOrigin?: boolean }

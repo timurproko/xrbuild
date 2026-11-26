@@ -2,9 +2,9 @@
 
 ## 1. Calibration module navigation, page and unavailable states
 
-- [ ] 1.1 Add shared-menu Calibration destination and core `/calibration/` shell with existing panel components, selected navigation and the one-line purpose; cover routes/menu and unchanged retired-route behavior with focused tests.
-- [ ] 1.2 Add owner-qualified optional calibration contribution resolution and exact browser asset boundary; cover absent/conflicting plugin, missing/stale bridge and passive no-write/no-start discovery with targeted tests.
-- [ ] 1.3 Mount the compact camera/method/preview/result layout and distinct unavailable reasons; check isolated browser default-window rendering and offline controls, documenting the module entry and prerequisite behavior.
+- [x] 1.1 Add shared-menu Calibration destination and core `/calibration/` shell with existing panel components, selected navigation and the one-line purpose; cover routes/menu and unchanged retired-route behavior with focused tests.
+- [x] 1.2 Add owner-qualified optional calibration contribution resolution and exact browser asset boundary; cover absent/conflicting plugin, missing/stale bridge and passive no-write/no-start discovery with targeted tests.
+- [x] 1.3 Mount the compact camera/method/preview/result layout and distinct unavailable reasons; check isolated browser default-window rendering and offline controls, documenting the module entry and prerequisite behavior.
 
 ## 2. Explicit native capture and manual static-target calibration
 
