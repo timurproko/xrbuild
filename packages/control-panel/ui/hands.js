@@ -1,4 +1,5 @@
 import { mountToolNavigation } from './navigation.js';
+import { mountHandsShell } from './hands-shell.js';
 const $ = id => document.getElementById(id);
 const key = p => p ? `${p.owner}/${p.id}` : '';
 let snapshot = null;
@@ -41,7 +42,15 @@ $('hands-form').addEventListener('submit', async event => {
   } catch (error) { $('hands-message').textContent = `${error.message} Reload to review the current selection.`; }
 });
 mountToolNavigation($('hands-menu-button'), $('hands-menu'), { origin: location.origin, current: 'hands' });
-void fetch('/api/navigation').then(r => r.json()).then(data => { $('hands-diagnostics').hidden = !data.tools?.some(t => t.route === '/hands-diagnostics/'); }).catch(() => {});
+let view = null;
+const disposeShell = mountHandsShell({ resetView: () => view?.resetView(), setViewOptions: options => view?.setViewOptions(options) });
+try {
+  const { createHandsView } = await import('./hands-view.js');
+  view = createHandsView({ canvas: $('hands-canvas'), viewport: $('hands-viewport'), onMetrics: metrics => {
+    $('hands-render-fps').textContent = metrics.renderFps.toFixed(1);
+  } });
+} catch (error) { $('hands-view-error').hidden = false; $('hands-view-error').textContent = `3D view unavailable: ${error.message}`; }
+addEventListener('pagehide', () => { disposeShell(); view?.dispose(); }, { once: true });
 const events = new EventSource('/api/events');
 events.addEventListener('hands-changed', () => { $('hands-message').textContent = 'The saved choice changed. Reload to review it.'; });
 events.addEventListener('plugins-changed', () => { $('hands-message').textContent = 'Provider availability changed. Reload before saving.'; });

@@ -4,16 +4,16 @@
 
 ### Requirement: Core-owned Hands surface
 
-Hands SHALL remain accessible independently of optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands product page, titled Hands, with a provider-centred three-column hand view, calibration and recorder sections. Old diagnostic routes and the legacy `/hand-tracking/` alias SHALL return normal not-found responses without redirects. No separate diagnostic identity/page/link SHALL remain.
+Hands SHALL remain accessible independently of optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands product page, titled Hands, with a provider-centred three-column hand view and Record as its only tool section. Old diagnostic routes and the legacy `/hand-tracking/` alias SHALL return normal not-found responses without redirects. No separate diagnostic identity/page/link SHALL remain.
 
 #### Scenario: Diagnostic plugin absent
 - **WHEN** the user opens Hands without the optional hand tools plugin or checked tool build
 - **THEN** the core layout, provider picker and available core controls still open
-- **AND** dependent calibration/recording actions show one-line unavailability reasons instead of a page-wide setup wall
+- **AND** dependent recording actions show one-line unavailability reasons instead of a page-wide setup wall
 
 #### Scenario: Diagnostic installed
-- **WHEN** the optional calibration/recording implementation is available
-- **THEN** those retained tools are reachable inside Hands without a second product page or laboratory navigation
+- **WHEN** the optional recording implementation is available
+- **THEN** recordings are reachable inside Hands without a second diagnostic page or laboratory navigation
 
 #### Scenario: Old route requested
 - **WHEN** a client requests `/hands-diagnostics`, `/hands-diagnostics/`, `/hand-tracking`, `/hand-tracking/` or their children
@@ -43,7 +43,7 @@ Hands SHALL put the global provider picker first, followed by purpose, availabil
 
 ### Requirement: No generated or laboratory modes
 
-Hands SHALL NOT expose generated fixtures, fixture controls/tests/targets, browser hand-landmark acquisition, general depth-hand surface reconstruction, two-view fusion or benchmarks. Their implementation and build/test entry points SHALL be removed except primitives required by retained calibration or existing recording compatibility. Synthetic SHALL remain only an ordinary installed provider choice, never a preview/fallback.
+Hands SHALL NOT expose fixtures, browser hand-landmark acquisition, general surface inspection, two-view fusion or benchmarks. Fixture and benchmark/comparison code and tests SHALL be removed. Browser landmark/fusion source SHALL remain unwired for a future provider, with calibration and recording dependencies preserved. Synthetic SHALL remain only an ordinary installed provider choice, never a preview/fallback.
 
 #### Scenario: Hands opened idle
 - **WHEN** Hands opens without a live provider session
@@ -53,21 +53,21 @@ Hands SHALL NOT expose generated fixtures, fixture controls/tests/targets, brows
 - **WHEN** obsolete laboratory code shares a helper with calibration or recording compatibility
 - **THEN** the required helper remains independently usable without importing the removed engine
 
-### Requirement: Camera calibration retains its true scope
+### Requirement: Independent calibration boundary
 
-Hands SHALL retain camera-to-camera spatial calibration with its required native RGB-D/marker or manual static-target measurement path, validation, compatible persistence and import/export. It SHALL identify the result as a camera transform, not global hand placement or provider calibration. Calibration-only capture SHALL require an explicit action and existing prerequisites; hand inference and fusion SHALL NOT be prerequisites.
+Hands SHALL NOT contain a Calibration tab or camera calibration action. Camera calibration source, stored results and format validators SHALL remain intact for extraction into an independent Calibration module in a following change. Its documented output SHALL identify a B-to-A camera transform bound to serials and profiles, not an app-hand adjustment; removing the old viewer SHALL NOT change its data.
 
-#### Scenario: Calibration performed
-- **WHEN** the optional native calibration dependencies and two valid camera profiles are available and the user explicitly starts calibration
-- **THEN** the existing marker/manual-target measurement and validated camera-transform save/export can run without hand-model workers or a fusion engine
+#### Scenario: Hands opened
+- **WHEN** the user opens Hands
+- **THEN** camera calibration is not offered as a Hands tab and no camera measurement is started
 
-#### Scenario: Existing result imported
-- **WHEN** an existing supported camera calibration is opened
-- **THEN** its transform, source identities, validation and original storage/format remain readable without treating it as applied to app hands
+#### Scenario: Existing calibration retained
+- **WHEN** old viewer entry points are removed
+- **THEN** persisted calibration keys and validated scalar formats remain readable and unchanged for the separate module
 
-#### Scenario: Native calibration unavailable
-- **WHEN** calibration capture prerequisites are absent
-- **THEN** its action states the concrete missing prerequisite and does not silently start an alternative source
+#### Scenario: Future consumer documented
+- **WHEN** another module consumes the documented calibration output
+- **THEN** its contract requires current serial/profile/hash validation and does not imply app profile application, temporal synchronization or physical accuracy
 
 ### Requirement: Existing recordings remain readable
 
@@ -95,7 +95,7 @@ Hands SHALL NOT claim that the former camera recorder already records the select
 
 ### Requirement: Shared profile view and minimal component slots
 
-Hands SHALL use the shared SDK pipeline and applied global profile for actual provider frames, with no diagnostic filtering override. It SHALL host a post-processing selector mount and the existing grouped Position and size / Appearance component with explicit Apply. Only calibration and recorder need tool tabs. View/Reset/fullscreen SHALL affect scene state, not source/profile/calibration persistence.
+Hands SHALL use the shared SDK pipeline and applied global profile for actual provider frames, with no diagnostic filtering override. It SHALL host a post-processing selector mount and the existing grouped Position and size / Appearance component with explicit Apply. Record SHALL be the only Hands tool tab; Calibration belongs to a separately delivered module. View/Reset/fullscreen SHALL affect scene state, not source/profile/calibration persistence.
 
 #### Scenario: Global controls applied
 - **WHEN** adjustment drafts are applied

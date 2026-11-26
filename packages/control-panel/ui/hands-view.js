@@ -1,0 +1,44 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/** Core-owned scene. No provider, device, app host or optional diagnostic module is started here. */
+export function createHandsView({ canvas, viewport, onMetrics = () => {} }) {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(40, 1, .005, 10);
+  const controls = new OrbitControls(camera, canvas); controls.enableDamping = true; controls.minDistance = .3; controls.maxDistance = 2;
+  controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+  scene.add(new THREE.HemisphereLight('#e8f4ff', '#162338', 2.8));
+  const light = new THREE.DirectionalLight('#ffffff', 3); light.position.set(.2, .4, .6); scene.add(light);
+  const grid = new THREE.GridHelper(.6, 12); grid.rotation.x = Math.PI / 2; grid.position.z = -.02; scene.add(grid);
+  const axes = new THREE.AxesHelper(.09); axes.visible = false; scene.add(axes);
+  function theme() {
+    const css = getComputedStyle(document.documentElement);
+    scene.background = new THREE.Color(css.getPropertyValue('--log-bg').trim());
+    for (const material of Array.isArray(grid.material) ? grid.material : [grid.material]) {
+      material.color.set(css.getPropertyValue('--line').trim()); material.transparent = true; material.opacity = .5;
+    }
+  }
+  theme(); const observer = new MutationObserver(theme); observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+  const system = matchMedia('(prefers-color-scheme: dark)'); system.addEventListener('change', theme);
+  const resize = new ResizeObserver(() => { const { width, height } = viewport.getBoundingClientRect(); renderer.setSize(width, height, false); camera.aspect = width / Math.max(height, 1); camera.updateProjectionMatrix(); }); resize.observe(viewport);
+  function resetView() { camera.position.set(0, .02, .72); controls.target.set(0, 0, .04); controls.update(); }
+  resetView();
+  let frameId, closed = false, ticks = 0, start = performance.now();
+  function render(now) {
+    if (closed) return;
+    controls.update(); renderer.render(scene, camera); ticks++;
+    if (now - start >= 1000) { onMetrics({ renderFps: ticks * 1000 / (now - start), trackingFps: null, handCount: null, frameAgeMs: null }); ticks = 0; start = now; }
+    frameId = requestAnimationFrame(render);
+  }
+  frameId = requestAnimationFrame(render);
+  return {
+    resetView,
+    setViewOptions(options) { grid.visible = options.includes('grid'); axes.visible = options.includes('axes'); },
+    dispose() {
+      if (closed) return; closed = true; cancelAnimationFrame(frameId); resize.disconnect(); observer.disconnect(); system.removeEventListener('change', theme); controls.dispose();
+      scene.traverse(object => { object.geometry?.dispose(); for (const material of object.material ? Array.isArray(object.material) ? object.material : [object.material] : []) material.dispose(); });
+      renderer.renderLists.dispose(); renderer.dispose();
+    },
+  };
+}

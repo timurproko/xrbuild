@@ -1,0 +1,29 @@
+/* Hands owns only the viewer topology. Surfaces, fields, tabs and colors are shared. */
+.hands-page { min-height: 100dvh; display: flex; flex-direction: column; }
+#hands-workspace { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr) minmax(var(--sidebar-w), 340px); flex: 1; min-height: 0; }
+.hands-panel { min-width: 0; min-height: 0; margin: 0; display: flex; flex-direction: column; }
+.hands-panel > .xrb-tabs { flex: none; gap: var(--xrb-space-stack); overflow-x: auto; margin-top: 0; }
+.hands-source { margin-bottom: var(--xrb-space-section); }
+.hands-source p { margin: 0; }
+.hands-panel > .xrb-sidebar-content { flex: 1; min-height: 0; overflow-y: auto; overflow-wrap: anywhere; }
+.hands-viewport { position: relative; min-height: 360px; padding: 0; margin: 0; overflow: hidden; }
+.hands-viewport canvas { display: block; width: 100%; height: 100%; position: absolute; inset: 0; }
+.hands-view-tools { position: absolute; top: var(--xrb-space-stack); left: var(--xrb-space-stack); right: var(--xrb-space-stack); z-index: 1; display: flex; gap: var(--xrb-space-stack); align-items: center; pointer-events: none; }
+.hands-view-tools > button, .hands-view-tools > .dropdown { pointer-events: auto; }
+.hands-view-tools > .dropdown { width: auto; }
+.hands-viewport .xrb-media-empty { pointer-events: none; }
+.hands-view-error { position: absolute; bottom: var(--xrb-space-stack); left: var(--xrb-space-stack); right: var(--xrb-space-stack); }
+.hands-viewport:fullscreen { width: 100vw; height: 100dvh; max-width: none; border: 0; border-radius: 0; }
+@media (min-width: 1001px) {
+  .hands-page { height: 100dvh; overflow: hidden; }
+  #hands-workspace { grid-template-columns: var(--sidebar-compact-w) minmax(0, 1fr) minmax(var(--sidebar-compact-w), 340px); }
+}
+@media (max-width: 1000px) {
+  #hands-workspace { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .hands-viewport { grid-column: 1 / -1; grid-row: 1; height: 50dvh; }
+  .hands-panel { max-height: 70dvh; }
+}
+@media (max-width: 540px) {
+  #hands-workspace { grid-template-columns: minmax(0, 1fr); }
+  .hands-view-tools { gap: var(--xrb-space-field); }
+}

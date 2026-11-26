@@ -5,26 +5,65 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>XR Build · Hands</title>
   <script src="/theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/design-system.css">
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/hands.css">
+  <script type="importmap">{"imports":{"three":"/vendor/three.module.js","three/addons/controls/OrbitControls.js":"/vendor/OrbitControls.js"}}</script>
 </head>
-<body>
-  <header class="top xrb-app-bar">
-    <h1 class="xrb-brand">XR Build <button id="hands-menu-button" class="panel-menu-button xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Hands</button></h1>
+<body class="hands-page">
+  <header class="xrb-app-bar xrb-app-bar--wrap">
+    <h1 class="xrb-brand">XR Build <button id="hands-menu-button" class="xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Hands</button></h1>
+    <span class="spacer"></span>
+    <div class="row" aria-label="Hands frame rates">
+      <span class="chip" data-tooltip="Viewport render rate"><span id="hands-render-fps">—</span><small>render fps</small></span>
+      <span class="chip" data-tooltip="No live hand session"><span id="hands-tracking-fps">—</span><small>hand tracking fps</small></span>
+    </div>
   </header>
-  <main class="xrb-workspace-layout">
-    <section class="card xrb-stack" aria-labelledby="hands-title">
-      <h2 id="hands-title">Hand source</h2>
-      <p>Choose one skeleton provider for all apps in this workspace. Changes apply on the next launch.</p>
-      <form id="hands-form" class="xrb-stack">
-        <label for="hands-provider">Skeleton provider</label>
-        <select id="hands-provider" name="provider" aria-describedby="hands-availability"></select>
-        <p id="hands-availability" role="status" aria-live="polite"></p>
-        <div class="row"><button id="hands-save" type="submit" disabled>Save</button><button id="hands-reload" type="button">Reload</button></div>
-      </form>
-      <p id="hands-message" role="status" aria-live="polite"></p>
-      <p class="xrb-help">This page configures the selected provider; it does not start it or show a live hand. Position, size, appearance and live testing are following changes.</p>
-      <a id="hands-diagnostics" href="/hands-diagnostics/" hidden>Acquisition diagnostics (separate source)</a>
+  <main id="hands-workspace" class="xrb-workspace-layout" aria-label="Hands workspace">
+    <section class="xrb-card hands-panel" aria-label="Hand source and tools">
+      <div class="xrb-stack hands-source">
+        <form id="hands-form" class="xrb-stack">
+          <label class="xrb-field-label" for="hands-provider">Skeleton provider<select id="hands-provider" name="provider" aria-describedby="hands-availability" aria-label="Skeleton provider"></select></label>
+          <p id="hands-availability" class="xrb-help" role="status" aria-live="polite"></p>
+          <p id="hands-session-status" class="xrb-help" role="status">Live view is idle. The selected provider runs when an app is launched; live viewing here is not available yet.</p>
+          <div id="hands-session-actions" class="xrb-button-row" hidden></div>
+          <div class="xrb-button-row"><button id="hands-save" type="submit" disabled>Save source</button><button id="hands-reload" type="button">Reload</button></div>
+          <p class="xrb-help">Source changes apply on next launch.</p>
+        </form>
+        <p id="hands-message" class="xrb-help" role="status" aria-live="polite" hidden></p>
+        <p id="hands-previous-session" class="xrb-help" hidden></p>
+        <div id="hands-postprocessing-root"><h2>Post-processing</h2><p class="xrb-help">No post-processing plugins are installed.</p></div>
+      </div>
+      <div class="xrb-tabs hands-tool-tabs" role="tablist" aria-label="Hand tools">
+        <button id="hands-recordings-tab" class="xrb-tab" role="tab" aria-selected="true" aria-controls="hands-recordings-panel">Record</button>
+      </div>
+      <div id="hands-recordings-panel" class="xrb-sidebar-content" role="tabpanel" aria-labelledby="hands-recordings-tab">
+        <p id="hands-recording-status" class="xrb-help">Recording needs a live hand session.</p>
+        <div id="hands-recording-actions" class="xrb-button-row" hidden></div>
+        <div id="hands-recordings-root"><p class="xrb-help">Recording tools are unavailable.</p></div>
+      </div>
+    </section>
+    <section id="hands-viewport" class="xrb-card hands-viewport" aria-label="3D hand view">
+      <canvas id="hands-canvas" aria-label="Shared SDK hand view"></canvas>
+      <div class="hands-view-tools xrb-controls-small">
+        <div class="dropdown" data-multi="true" data-summary="View" data-options="grid|axes" data-labels='{"grid":"Grid","axes":"Axes"}'>
+          <input id="hands-view-options" type="hidden" value='["grid"]'>
+          <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="View options">View</button>
+        </div>
+        <span class="spacer"></span>
+        <button id="hands-view-reset" type="button" data-tooltip="Reset view · right-drag to orbit, scroll to zoom">Reset</button>
+        <button id="hands-fullscreen" type="button" class="xrb-icon-button" data-xrb-icon="fullscreen" aria-label="Enter fullscreen"></button>
+      </div>
+      <div id="hands-view-empty" class="xrb-overlay-empty" role="status"><span>No live hand session.</span></div>
+      <p id="hands-view-error" class="field-error hands-view-error" role="alert" hidden></p>
+    </section>
+    <section class="xrb-card hands-panel" aria-label="Hand adjustments">
+      <div id="hands-adjustments-root" class="xrb-sidebar-content xrb-stack">
+        <section class="xrb-control-group"><h2>Position and size</h2><p class="xrb-help">Adjustment controls are not available in this version.</p></section>
+        <section class="xrb-control-group"><h2>Appearance</h2><p class="xrb-help">Adjustment controls are not available in this version.</p></section>
+      </div>
     </section>
   </main>
   <div id="hands-menu" class="menu xrb-menu panel-menu" role="menu" aria-label="XR Build navigation" hidden></div>

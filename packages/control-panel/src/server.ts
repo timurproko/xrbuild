@@ -43,6 +43,7 @@ import { assertEditableProject, assertUserRoot, assertWritablePath } from './pro
 import { projectRunSettingsFile, readProjectRunSettings, withRunSettings } from './project-run-settings.ts';
 import { publicationCard } from './publication.ts';
 import { ManagedTools } from './managed-tools.ts';
+import { isRetiredHandsPath } from '../ui/hands-routes.js';
 import { handPolicyDocument } from './hand-policy-document.ts';
 import { listMonitors } from './monitors.ts';
 import { applyLayout, readLayout, validateLayout, type Layout } from './layout.ts';
@@ -387,9 +388,12 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       }
       return serveStatic(res, entry, file);
     }
-    if (method === 'GET' && url.pathname === '/vendor/three.module.js') {
-      // three.js for the icon preview page (ui/icon-preview.html), from the SDK's own dependency.
-      return serveStatic(res, path.dirname(createRequire(path.join(core, 'packages', 'sdk', 'package.json')).resolve('three')), 'three.module.js');
+    if (method === 'GET' && ['/vendor/three.module.js', '/vendor/OrbitControls.js'].includes(url.pathname)) {
+      // Fixed core viewer dependencies, never a plugin build or arbitrary package path.
+      const require = createRequire(path.join(core, 'packages', 'sdk', 'package.json'));
+      return url.pathname === '/vendor/three.module.js'
+        ? serveStatic(res, path.dirname(require.resolve('three')), 'three.module.js')
+        : serveStatic(res, path.dirname(require.resolve('three/addons/controls/OrbitControls.js')), 'OrbitControls.js');
     }
     if (method === 'GET' && parts[0] === 'sdk' && parts.length === 2 && SDK_MODULES.has(parts[1])) {
       // The SDK's icon modules as browser JS (types stripped), so the preview page draws icons as apps do.
@@ -399,9 +403,9 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       return;
     }
     if (parts[0] !== 'api') {
-      if (['/hands', '/hands/', '/hand-tracking', '/hand-tracking/'].includes(url.pathname)) {
+      if (isRetiredHandsPath(url.pathname)) throw new HttpError(404, 'not found');
+      if (url.pathname === '/hands/') {
         if (!['GET', 'HEAD'].includes(method)) throw new HttpError(405, 'method not allowed');
-        if (url.pathname !== '/hands/') { res.writeHead(302, { location: `/hands/${url.search}`, 'cache-control': 'no-store' }); res.end(); return; }
         if (method === 'HEAD') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(); return; }
         return serveStatic(res, uiDir, 'hands.html');
       }
