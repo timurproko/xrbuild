@@ -64,6 +64,8 @@ export interface PackagerBuildOptions {
   /** plugin names to ship (the selected ones that are plugins, not built-ins); empty for a `webxr` packager */
   plugins: string[];
   selection: RoleSelection;
+  /** Resolved SDK source policy frozen into the staged web output. */
+  handPolicy?: 'off' | 'native' | 'webxr';
   /** Project display name, available for package metadata defaults. */
   projectName: string;
   /** the manifest's `plugins.<platform>` section: the declared identity fields, version included */

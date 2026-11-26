@@ -16,7 +16,7 @@ The public boundary is concrete:
 
 ### 2. What draws hands today
 
-Drawing is already outside native input providers. `packages/sdk/src/hand-visual.ts` owns 21 joint spheres, connecting bone cylinders, and the white sphere shown when **pinching OR grabbing**. It places that sphere at the thumb/index midpoint, not the provider's native grab position. There is no separate SDK grab-position marker. `packages/sdk/src/index.ts:120,522` constructs and updates this renderer; applications choose whether to attach `handsObject`. `scene-hands.ts` derives scene-space geometry, while pointer emulation and the separate mouse cursor are not skeletal drawing.
+Drawing is already outside native input providers. Managed apps will attach the standard skeleton by default in this delivery; callers of raw createXrb retain explicit scene ownership. `packages/sdk/src/hand-visual.ts` owns 21 joint spheres, connecting bone cylinders, and the white sphere shown when **pinching OR grabbing**. It places that sphere at the thumb/index midpoint, not the provider's native grab position. There is no separate SDK grab-position marker. `packages/sdk/src/index.ts:120,522` constructs and updates this renderer; applications choose whether to attach `handsObject`. `scene-hands.ts` derives scene-space geometry, while pointer emulation and the separate mouse cursor are not skeletal drawing.
 
 Today's exact default appearance is joint diameter 15 mm, bone diameter 15 mm, joint linear RGB (0, .541, 1), bone linear RGB (0, .482, 1), shared opacity .333, white pinch/grab indicator diameter 30 mm with opacity .9. These are **linear colour components**, not equivalent CSS RGB/hex values. Rendering is spheres/cylinders, not a skinned mesh.
 
@@ -27,6 +27,12 @@ Not all drawing uses that default: `embedded/plugins/input-hands/samples/hand-tr
 The `/hands/` route and `/hand-tracking/` alias are currently declared by the optional embedded input diagnostic, not core (`embedded/plugins/input-hands/xrb-plugin.json`). Its native provider is synthetic; observation/reconstruction modes are diagnostic, not alternate app skeleton providers. Configuration should remain available without that plugin or its compiled viewer.
 
 The single-host comment in `native/host/src/main.cpp:122-128` says machine-wide, but the actual named mutex is `Local\\XRBuildHost`: it excludes hosts across checkouts in the **same Windows logon session**, not necessarily across all Windows sessions. Native providers start in main.cpp's app startup loop; `XrbInputApi` has no hot-switch/settings method. A second full host cannot safely serve a laboratory alongside an app. This first change creates no worker, opens no device and does not weaken the lock.
+
+### 4. Fresh-project missing-hand cause and approved fix
+
+The template `templates/app/xrb-project.json` initially enables Mouse only and declares no plugin or platform overrides. Its `src/main.js` calls `createXrbApp` without manually attaching `handsObject`; UI Kit and Launcher explicitly attach it. The managed runtime currently attaches only the cursor, despite constructing the same HandInput/interaction pipeline. Unsorted versus embedded ownership does not itself remove a selected input from the shared host config path. A fake-provider regression must check that a freshly created project's saved Hand reaches the native config and that binary frames reach visible scene hands. Do not infer that a screenshot alone proves native delivery.
+
+Make `createXrbApp` attach the standard skeleton by default, with an explicit `handVisual: false` SDK opt-out. Its visibility remains data-driven, so Hand-off apps show no hand. Existing explicit scene.add is idempotent. Raw createXrb users still own scene attachment because that API receives no scene. No template boilerplate or tracker-specific drawing is added.
 
 ## Goals / Non-Goals
 

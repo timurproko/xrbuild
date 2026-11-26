@@ -11,6 +11,7 @@ Applications currently select concrete hand-input plugins, while the Hands view 
 - Store one global provider selection in the selected user workspace, initially defaulting to exactly one installed enabled real source when no choice exists; expose availability without starting capture and never replace a saved choice silently.
 - Make the core-owned Hands entry a source-configuration surface with a provider picker and availability state. Retain optional acquisition diagnostics separately; do not present synthetic fixtures as the selected real hand.
 - Resolve Hand consistently before native/dev launch, browser preview and checked packaging/publication. Read all old concrete-provider inputs as Hand, including multiple providers; launch the global source and write canonical inputs on the next settings Save, never on read.
+- Make managed SDK apps attach hands by default, including fresh Unsorted projects; test creation, resolved launch config and fake-frame visual delivery without manual template boilerplate.
 - Establish one identity-by-default shared ingress seam for future processing layers; implement no processing plugins or laboratory in this change.
 
 ## Capabilities

@@ -115,7 +115,7 @@ test('hidden implementation components do not become separate manager rows', asy
   } finally { await fs.rm(workspace, { recursive: true, force: true }); }
 });
 
-test('disabled selections fall back at runtime without rewriting the project manifest', async () => {
+test('disabled display/platform retain fallback but Hand never silently loses its source', async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'xrb-disabled-fallback-'));
   const id = `fallback-${path.basename(workspace)}`;
   const manifest = { name: 'Fallback', kind: 'app' as const, display: 'stereo-panel', platform: 'station',
@@ -123,7 +123,9 @@ test('disabled selections fall back at runtime without rewriting the project man
   try {
     await savePluginPrefs(workspace, { disabled: ['display-stereo-panel', 'input-tracker', 'platform-station'], settings: {}, panelSettings: {} });
     const panel = new Panel(workspace, workspace, { send() {} } as ConstructorParameters<typeof Panel>[2]);
-    const args = await panel.hostArgs({ id, dir: workspace, manifest } as Parameters<Panel['hostArgs']>[0], manifest,
+    await assert.rejects(panel.hostArgs({ id, dir: workspace, manifest } as Parameters<Panel['hostArgs']>[0], manifest), /Hand requires a provider choice/);
+    const browserOnly = { ...manifest, inputs: ['mouse', 'keyboard'] };
+    const args = await panel.hostArgs({ id, dir: workspace, manifest: browserOnly } as Parameters<Panel['hostArgs']>[0], browserOnly,
       { fullscreen: false, monitor: 1 });
     const config = JSON.parse(await fs.readFile(args[0].slice('--config='.length), 'utf8'));
     assert.deepEqual({ display: config.display, platform: config.platform, inputs: config.inputs, monitor: config.plugins.desktop.monitor },

@@ -11,7 +11,7 @@ async function request(method, body) {
 function availability() {
   const source = snapshot?.providers.find(p => key(p) === $('hands-provider').value);
   const missing = $('hands-provider').value && !source;
-  $('hands-availability').textContent = source ? `${source.purpose} · ${source.reason}${snapshot.initial && key(snapshot.selected) === key(source) ? ' · Initial default' : ''}`
+  $('hands-availability').textContent = source ? `${source.purpose} · ${source.reason}${source.runtimeState ? ` · Last reported: ${source.runtimeState}` : ''}${snapshot.initial && key(snapshot.selected) === key(source) ? ' · Initial default' : ''}`
     : missing ? 'Selected provider is missing. It has not been replaced.' : 'Hand requires a provider choice.';
   $('hands-save').disabled = !snapshot || !!missing || !!source && !source.available;
 }

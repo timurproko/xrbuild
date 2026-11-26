@@ -28,7 +28,13 @@ Implementation is approved with the simplified global input policy. Groups match
 
 ## 5. Shared runtime ingress and resolved package closure
 
-- [ ] 5.1 Use the resolver for native built/dev launch and checked package dependency/config staging; mocked spawn/package tests prove logical hand never reaches a native provider lookup and only the selected owner enters portable output.
-- [ ] 5.2 Deliver source policy to managed browser/dev/publication and launcher navigation; fixtures prove native/browser mismatches fail, source choice is frozen offline, trusted-return tests still pass.
-- [ ] 5.3 Route native and WebXR ingestion through one identity stage before unchanged HandInput processing, apply managed input policy and reset retired sessions; SDK fixtures preserve native capability/gesture traces and reject late retired-session delivery without altering HANDS v1/v2 or recordings.
-- [ ] 5.4 Document the shared future adjustment/layer attachment points and current limitations in SDK/owner docs; targeted integration fixtures cover old provider names launching the global source with unchanged native pinch/grab signals, without devices or the live panel.
+- [x] 5.1 Use the resolver for native built/dev launch and checked package dependency/config staging; mocked spawn/package tests prove logical hand never reaches a native provider lookup and only the selected owner enters portable output.
+- [x] 5.2 Deliver source policy to managed browser/dev/publication and launcher navigation; fixtures prove native/browser mismatches fail, source choice is frozen offline, trusted-return tests still pass.
+- [x] 5.3 Route native and WebXR ingestion through one identity stage before unchanged HandInput processing, apply managed input policy and reset retired sessions; SDK fixtures preserve native capability/gesture traces and reject late retired-session delivery without altering HANDS v1/v2 or recordings.
+- [x] 5.4 Document the shared future adjustment/layer attachment points and current limitations in SDK/owner docs; targeted integration fixtures cover old provider names launching the global source with unchanged native pinch/grab signals, without devices or the live panel.
+
+## 6. Working default hands in fresh managed apps
+
+- [ ] 6.1 Compare the new-project template and UI Kit creation/config/frame/scene paths; document the verified missing-attachment cause and regression boundaries without running the person's app.
+- [ ] 6.2 Attach SDK hands by default in the managed runtime with an explicit visual opt-out; SDK tests prove visible hands and interaction from fake frames, no duplicate attachment and disposal.
+- [ ] 6.3 Create an isolated Unsorted project, save Hand, resolve its fake provider into host config and deliver binary frames through the SDK channel; regression assertions require scene-visible hands without adding template hand boilerplate.

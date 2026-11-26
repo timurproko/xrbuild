@@ -43,6 +43,7 @@ import { assertEditableProject, assertUserRoot, assertWritablePath } from './pro
 import { projectRunSettingsFile, readProjectRunSettings, withRunSettings } from './project-run-settings.ts';
 import { publicationCard } from './publication.ts';
 import { ManagedTools } from './managed-tools.ts';
+import { handPolicyDocument } from './hand-policy-document.ts';
 import { listMonitors } from './monitors.ts';
 import { applyLayout, readLayout, validateLayout, type Layout } from './layout.ts';
 import { createProject, createProjectWorkspace, createWorkspace, isWorkspace, ProjectRefused, writeEditorConfig } from './workspace.ts';
@@ -377,6 +378,12 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
         const relative = decodeURIComponent(file || 'index.html'), owner = { ...p, dir: entry };
         const asset = await projectPath(owner, relative);
         if ((await fs.stat(asset)).isDirectory()) await projectFile(owner, `${relative}/index.html`);
+      }
+      if ((!file || file === 'index.html') && !url.searchParams.has('xrb-icon')) {
+        const document = await projectFile({ ...p, dir: entry }, 'index.html');
+        const policy = await panel.browserHandPolicy(usable(p));
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+        res.end(handPolicyDocument(await fs.readFile(document, 'utf8'), policy)); return;
       }
       return serveStatic(res, entry, file);
     }

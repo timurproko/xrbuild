@@ -139,6 +139,23 @@ For a fixed placement use `{ mode: 'world', center, scale, quaternion }`
 
 ## Hands
 
+Managed applications select logical Hand; the panel's core **Hands** page owns one workspace-wide source choice.
+Old concrete provider input names simply mean Hand. No provider acquisition/filtering/calibration code changes:
+“raw” is the provider's result as published, including any native pinch/grab/palm capabilities. Missing/failed
+sources are visible and never silently replaced. Input/source changes apply on the next launch.
+
+Native/dev launch context and checked package/publication snapshots supply bounded `off/native/webxr` source policy.
+WebXR frames cannot bypass managed Hand-off policy or add a second source to native input. Browser preview with
+a native-only selected source reports incompatibility; this release builds no native-to-browser bridge. Standalone
+SDK use without managed context keeps its normal host/WebXR defaults. Launcher context carries source policy
+without changing return-URL trust. Normal SDK-consuming rebuilds are needed to acquire this SDK logic.
+
+Both ingress paths pass canonical frames through `hand-source.ts`'s identity `prepareHandFrame` stage before
+`HandInput` filtering/gestures. Future Hands layers attach there: position/size must affect interaction as well as
+drawing, while appearance attaches to processed hands and must not change touching. No layer loader, transform,
+profile controls or live laboratory is implemented here. Source/session disposal releases retired hands and pointer
+presses without waiting through dropout grace. Binary HANDS v1/v2 and recording layouts remain unchanged.
+
 - `xrb.currentHands`: tracked hands for this frame, smoothed (One Euro filter) and predicted to
   display time. Keypoints are in panel metres, in the common 21-point hand landmark order (`KP.INDEX_TIP` = 8, ...).
   Each hand also has `tip`, `pinchPoint`, `pinching`, `pinchStrength` (0 open .. 1 pinched, for

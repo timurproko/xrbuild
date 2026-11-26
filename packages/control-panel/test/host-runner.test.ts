@@ -59,7 +59,7 @@ test('Desktop dev URL carries selected-panel and logical project context without
   (runner as any).startDev = async () => 'http://127.0.0.1:54321/?existing=1';
   const exited = new Promise(resolve => runner.once('exit', resolve));
   await runner.start({ projectId: 'bundled:launcher', mode: 'dev', hostExe: process.execPath, projectDir: '.', entryDir: '.',
-    panelUrl: 'http://127.0.0.1:5191/', mouseEnabled: true, cursor: 'system', hostArgs: [host] });
+    panelUrl: 'http://127.0.0.1:5191/', mouseEnabled: true, handPolicy: 'native', cursor: 'system', hostArgs: [host] });
   await exited;
   const output = runner.logLines().find(line => line.startsWith('--url='));
   assert.ok(output);
@@ -69,6 +69,7 @@ test('Desktop dev URL carries selected-panel and logical project context without
   assert.equal(url.searchParams.get('xrb-project'), 'bundled:launcher');
   assert.equal(url.searchParams.get('existing'), '1');
   assert.equal(url.searchParams.get('xrb-mouse'), '1');
+  assert.equal(url.searchParams.get('xrb-hand'), 'native');
   assert.equal(url.searchParams.get('xrb-cursor'), 'system');
 });
 

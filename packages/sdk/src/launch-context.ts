@@ -119,6 +119,8 @@ export function appLaunchUrl(launchHref: string | URL, context: AppLaunchContext
   }
   const cursor = target.searchParams.get('xrb-cursor');
   if (cursor === 'system' || cursor === 'ring' || cursor === 'ring-dot') launch.searchParams.set('xrb-cursor', cursor);
+  const hand = target.searchParams.get('xrb-hand');
+  if (!launch.searchParams.has('xrb-hand') && (hand === 'off' || hand === 'native' || hand === 'webxr')) launch.searchParams.set('xrb-hand', hand);
   const mouse = target.searchParams.get('xrb-mouse');
   if (mouse === '0' || mouse === '1') launch.searchParams.set('xrb-mouse', mouse);
   if (context.projection === 'perspective' || context.projection === 'orthographic') launch.searchParams.set('xrb-camera', context.projection);

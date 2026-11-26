@@ -88,8 +88,14 @@ Everything else is a plugin in the selected workspace's or product `embedded/` w
   contract in [`packages/control-panel/src/packagers.ts`](packages/control-panel/src/packagers.ts).
 - **Settings:** `--plugin.<name>.<key>=<value>`, or the project's `plugins.<name>` section.
 
-A project picks its providers in its `xrb-project.json` (`display`, `input`, `platform`); a package
-records them in `xrb-app.json` next to the exe.
+An app selects **Mouse**, **Keyboard** and **Hand** as input methods. **Hands** in the app menu chooses one
+skeleton provider globally for the selected workspace, with availability and next-launch status; opening it starts
+no capture. When no choice exists, exactly one installed enabled real source is the initial default; otherwise choose
+one explicitly. Synthetic/replay sources are testing choices, never automatic fallback. Existing provider input names
+read as Hand, and the next settings Save writes the new form without dropping `plugins.<provider>` settings.
+Position, size and skeleton appearance controls are the next change, not a live laboratory in this delivery.
+A project still picks display/platform in `xrb-project.json`; launches resolve Hand to a concrete provider, and a package
+freezes that provider in `xrb-app.json` next to the exe. See [provider contracts](docs/embedded-extensions.md#hand-skeleton-provider-declarations).
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/separator-dark.svg"><img src="docs/assets/readme/separator.svg" alt="" width="280"></picture></p>
 

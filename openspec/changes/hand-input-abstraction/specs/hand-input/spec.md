@@ -106,6 +106,18 @@ Native and WebXR hand delivery SHALL enter the shared processing pipeline withou
 - **WHEN** a managed application without Hand enters an XR session
 - **THEN** WebXR hand observations do not bypass that input policy
 
+### Requirement: Managed apps show enabled hand input by default
+
+Managed SDK apps, including newly created projects, SHALL attach standard hand visuals and enable the shared hand interaction pipeline without author-written hand attachment code. Visibility SHALL follow received hand data. An explicit SDK visual opt-out SHALL remain available without disabling interaction.
+
+#### Scenario: Fresh Unsorted project
+- **WHEN** Hand is enabled in a freshly created project and the selected fake provider delivers binary hand frames
+- **THEN** its launch config selects that provider and the managed app shows SDK hands in its scene without manual attachment code
+
+#### Scenario: Author hides the standard visual
+- **WHEN** a managed app explicitly disables the standard hand visual
+- **THEN** hand data and interaction remain available without attaching that visual
+
 ### Requirement: Development and replay sources are providers
 
 Synthetic and replay sources SHALL be labelled sources in Hands rather than application input kinds or silent fallbacks. Existing replay recordings and configuration SHALL remain readable. A historical calibrated input name SHALL normalize to Hand, not an invented built-in provider.
