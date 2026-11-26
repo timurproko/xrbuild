@@ -100,12 +100,18 @@ When incoming defaults differ, Update succeeds and names the skipped paths. Insp
 through the panel. Never replace personal settings blindly, merge JSON automatically or commit credentials to make
 Update work. Incoming project changes never replace the person's local project tree.
 
-Normally Update uses plain `git merge --ff-only` with autostash disabled and untracked/ignored-file protection.
-That command cannot preserve dirty tracked settings when upstream edits them, so only that case uses a journaled,
-index-aware source checkout: protected working paths are excluded, and the branch advances to the exact fetched
-commit without a merge commit. The journal is under Git metadata (`xrb-update-checkout`), separately from build
-resume markers. Interrupted transactions retry from checked recorded state; an outside index/ref writer or unknown
-Git lock is preserved and reported, never forced away.
+Current checkouts do not run a checkout procedure. Behind checkouts normally use plain `git merge --ff-only` with
+autostash disabled and untracked/ignored-file protection; Git decides whether staged source changes are safe,
+including source already staged exactly as incoming. Only incoming protected data that differs locally needs the
+special index-aware checkout: protected working paths are excluded and the branch advances to the exact fetched
+commit without a merge commit.
+
+That special case publishes one immutable prepared journal directory under Git metadata (`xrb-update-checkout`),
+separately from build resume markers. It has no mutable checkout/ready phase or owner-token file writes. A complete
+index snapshot and its PID-named ownership file acquire the index lock atomically; worktree progress is checked
+against the recorded old/new snapshots. Completion atomically retires the directory before cleanup. The next Update
+rolls back abandoned preparation and finishes or cleans interrupted publications automatically, including legacy
+`journal.next` files. Outside source/index/ref edits and unknown foreign locks are still preserved, never forced away.
 
 ### Repository-owner tracking cleanup
 
@@ -153,9 +159,11 @@ It is invalidated before installation and only renewed after success, so reverte
 retry are prepared again even when they match the original commit. Missing receipts are conservatively prepared.
 Follow-up records name completed, failed and deferred steps. A workspace source refusal does not defer frozen core
 setup, bundled-component preparation or core host/bundled-plugin builds. Only workspace-plugin work consuming that
-source is deferred. A core refusal can defer workspace builds that need its SDK. Completed independent native steps
-have source-keyed receipts, so fixing the other repository does not repeat those builds; component readiness is
-still rechecked on retry. No source refusal undoes the other source's successful pull.
+source is deferred. A core refusal can defer workspace builds that need its SDK. Reuse of native work checks the
+existing native receipts, input freshness and actual host/plugin outputs through the fresh post-pull recipe in the
+canonical selected workspace. Commit-only Update receipts in core Git metadata are not trusted: building workspace
+A cannot prove that workspace B has a host or plugins. Missing or stale output is rebuilt, including a missing host
+on a workspace-scoped retry. Component readiness is also rechecked; no source refusal undoes another source's pull.
 
 Update does **not** restart the running panel. Whenever core HEAD changes, its last job-output line explicitly says
 **Restart required**, including when setup, rebuild or the workspace fails afterwards. Workspace source changes also

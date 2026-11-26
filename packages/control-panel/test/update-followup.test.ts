@@ -15,15 +15,15 @@ async function setup(t: TestContext) {
     repos.push({ role, roles: [role], dir, state: 'updated', from: 'a'.repeat(40), to: 'b'.repeat(40), updateFrom: 'a'.repeat(40),
       pending: true, marker, commits: 1, fetched: true, defaultBranch: 'main', error: null, step: null });
   }
-  const calls: string[] = [], lines: string[] = [];
+  const calls: string[] = [], lines: string[] = [], built = new Set<BuildScope>();
   const ctx = { line: (line: string) => lines.push(line), async run() { assert.fail('unexpected process'); } };
   const deps: FollowupDeps = {
-    git: async args => ({ code: 0, output: `.git/${args.at(-1)}` }),
+    outputsReady: async scope => built.has('all') || built.has(scope),
     prepareCore: async () => { calls.push('dependencies'); return 'prepared'; },
     prepareComponents: async () => { calls.push('components'); },
-    build: async (scope: BuildScope) => { calls.push(scope); return [scope]; },
+    build: async (scope: BuildScope) => { calls.push(scope); built.add(scope); return [scope]; },
   };
-  return { repos, calls, lines, ctx, deps };
+  return { repos, calls, lines, ctx, deps, built };
 }
 
 test('workspace source refusal does not defer core dependencies, components or core builds', async t => {
@@ -64,6 +64,17 @@ test('component failure does not hold back independent native work, and retry re
   fail = false; f.calls.length = 0;
   await finishUpdateWork(f.repos, f.ctx, f.deps);
   assert.deepEqual(f.calls, ['dependencies', 'components']); assert.ok(f.repos.every(repo => !repo.pending));
+});
+
+test('lost workspace outputs invalidate prior completion even at identical source commits', async t => {
+  const f = await setup(t); let fail = true;
+  f.deps.prepareComponents = async () => { if (fail) throw new Error('pending component preparation'); };
+  await finishUpdateWork(f.repos, f.ctx, f.deps);
+  assert.ok(f.built.has('all')); assert.equal(f.repos[0]!.pending, true);
+  f.built.clear(); f.calls.length = 0; fail = false;
+  const result = await finishUpdateWork(f.repos, f.ctx, f.deps);
+  assert.ok(f.calls.includes('all'), 'missing outputs must be rebuilt rather than trusted by commit hash');
+  assert.equal(result.steps.find(step => step.id === 'workspace-build')!.state, 'completed');
 });
 
 test('dependency failure names actual dependents and preserves retry markers', async t => {

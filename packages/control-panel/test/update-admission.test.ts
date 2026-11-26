@@ -17,7 +17,7 @@ async function serverFixture(t: TestContext) {
   const f = await fixture(t), builds: boolean[] = [], buildScopes: string[] = [];
   const server = createServer({ repo: f.core.checkout, workspace: f.workspace.checkout, port: await freePort() });
   server.panel.desktopSetup = { isBusy: async () => false } as never;
-  server.panel.updateDeps = { core: f.core.checkout, git: f.runner, rebuild: async (pluginsOnly, _ctx, scope) => { builds.push(pluginsOnly); buildScopes.push(scope ?? 'all'); return []; } };
+  server.panel.updateDeps = { core: f.core.checkout, git: f.runner, outputsReady: async scope => buildScopes.includes('all') || buildScopes.includes(scope), rebuild: async (pluginsOnly, _ctx, scope) => { builds.push(pluginsOnly); buildScopes.push(scope ?? 'all'); return []; } };
   await new Promise<void>(resolve => server.server.listen(server.port, '127.0.0.1', resolve));
   t.after(() => server.close());
   const request = async (method: string, route = '/api/update') => {

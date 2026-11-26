@@ -5,8 +5,8 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { JobFailure, LineSplitter, type JobContext } from './jobs.ts';
-import { rebuildUpdatedSources, rebuildUpdatedServices, setupUpdatedCore } from './update-runtime.ts';
-import { checkoutFetchedCommit, resumeProtectedCheckout, CheckoutRefusal } from './update-checkout.ts';
+import { rebuildUpdatedSources, rebuildUpdatedServices, setupUpdatedCore, updatedSourceOutputsReady } from './update-runtime.ts';
+import { checkoutFetchedCommit, resumeProtectedCheckout, CheckoutRefusal, keptWorkspacePath } from './update-checkout.ts';
 import { finishUpdateWork, type BuildScope, type FollowupStep } from './update-followup.ts';
 import { compactUpdateResult } from './update-result.ts';
 
@@ -224,6 +224,8 @@ export interface UpdateDeps {
   /** Injectable installer boundary; production uses the existing frozen public-core installer in a fresh process. */
   setupCore?: (core: string, ctx: JobContext) => Promise<void>;
   setupServices?: (core: string, workspace: string, ctx: JobContext) => Promise<void>;
+  /** Test boundary; production verifies current outputs through the fresh recipe in the selected workspace. */
+  outputsReady?: (scope: BuildScope) => Promise<boolean>;
 }
 
 /** Plugin ids from rebuilt native projects: a plugin's `<id>/runtime` subproject is the same plugin. */
@@ -397,6 +399,12 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
   }
   const to = await head();
   if (to !== target) throw fail('pull', 'HEAD does not match the fetched target; inspect other Git activity before retrying Update.');
+  if (pending?.from && (options.workspaceData ?? options.role === 'workspace')) {
+    // A process can exit after retiring the checkout journal but before returning its notice.
+    const range = await readOnly(git)(['diff-tree', '--no-commit-id', '--name-only', '-r', '-z', pending.from, to], dir, { raw: true });
+    if (range.code === 0) retained = [...new Set([...retained, ...range.output.split('\0').filter(file => keptWorkspacePath(file)
+      && (options.role === 'workspace' || file.toLowerCase() !== 'pnpm-lock.yaml'))])];
+  }
   if (retained.length) out(`${prefix}Kept local user data: ${retained.map(file => JSON.stringify(file)).join(', ')}; upstream defaults were not applied. Inspect with git show ${target}:<path> (or git show ${target} -- <path> for deletions); adopt reviewed values through Settings or reconcile the workspace lock through explicit package preparation; copy wanted upstream project content into a separate project.`);
   const from = pending?.from || before;
   const count = await checked(['rev-list', '--count', `${from}..${to}`]);
@@ -462,7 +470,9 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
   }
 
   const { coreDependencies, rebuilt, steps } = await finishUpdateWork(repositories, ctx, {
-    git, sanitize: redactRemote,
+    sanitize: redactRemote,
+    outputsReady: async scope => deps.outputsReady ? deps.outputsReady(scope)
+      : deps.core && !deps.rebuild ? updatedSourceOutputsReady(deps.core, workspace, scope) : false,
     prepareCore: async core => {
       const fingerprint = await coreDependencyFingerprint(core, git);
       const receipt = await markerPath(core.dir, readOnly(git), CORE_DEPENDENCIES_MARKER);
@@ -489,7 +499,7 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
     },
     build: async scope => {
       if (deps.rebuild) {
-        const pluginsOnly = scope === 'workspace' || await deps.coreHostCurrent?.() || false;
+        const pluginsOnly = await deps.coreHostCurrent?.() ?? (scope === 'workspace' && await deps.outputsReady?.('core')) ?? false;
         ctx.line(`Native rebuild (${scope}): ${pluginsOnly ? 'plugins only (host current)' : 'host and plugins'}.`);
         return [...(pluginsOnly ? [] : ['xrb-host']), ...await deps.rebuild(pluginsOnly, ctx, scope)];
       }

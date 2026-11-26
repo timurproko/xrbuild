@@ -13,6 +13,19 @@ export async function rebuildUpdatedServices(core: string, workspace: string, ct
   await ctx.run(process.execPath, [path.join(core, 'packages/control-panel/src/update-services.ts'), `--workspace=${workspace}`], { cwd: core });
 }
 
+export async function updatedSourceOutputsReady(core: string, workspace: string, scope: BuildScope, run = runProcess): Promise<boolean> {
+  let ready: boolean | null = null, invalid = false;
+  const code = await run(process.execPath, [path.join(core, 'packages/control-panel/src/update-rebuild.ts'), `--workspace=${workspace}`, `--scope=${scope}`, '--check'], line => {
+    if (!line.startsWith('XRB_UPDATE_READY_RESULT ')) return;
+    try {
+      const value: unknown = JSON.parse(line.slice('XRB_UPDATE_READY_RESULT '.length));
+      if (ready !== null || typeof value !== 'boolean') invalid = true;
+      else ready = value;
+    } catch { invalid = true; }
+  }, { cwd: core });
+  return code === 0 && !invalid && ready === true;
+}
+
 export async function rebuildUpdatedSources(core: string, workspace: string, ctx: JobContext, run = runProcess, scope: BuildScope = 'all'): Promise<string[]> {
   const args = [path.join(core, 'packages/control-panel/src/update-rebuild.ts'), `--workspace=${workspace}`, ...(scope === 'all' ? [] : [`--scope=${scope}`])];
   ctx.line(`> ${process.execPath} ${args.join(' ')}`);

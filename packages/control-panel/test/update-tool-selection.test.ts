@@ -6,8 +6,8 @@ import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { test } from 'node:test';
 import { probeDesktopTools } from '../src/desktop-setup.ts';
-import { findCmake, nativePluginPlan } from '../src/host-build.ts';
-import { rebuildForUpdate } from '../src/update-rebuild.ts';
+import { findCmake, nativePluginPlan, resolvedHostFreshness } from '../src/host-build.ts';
+import { rebuildForUpdate, updatedOutputsReady } from '../src/update-rebuild.ts';
 import type { JobContext } from '../src/jobs.ts';
 
 test('scoped workspace builds retain the embedded-product storage boundary', async t => {
@@ -74,6 +74,15 @@ test('Update host and plugin builds reuse the checked bundled CMake despite comp
   assert.deepEqual(await rebuildForUpdate(core, workspace, ctx), ['xrb-host', 'fixture']);
   assert.ok(calls.some(call => call.args.includes(path.join(core, 'native/host'))));
   assert.ok(calls.some(call => call.args.includes(path.join(workspace, 'plugins/fixture'))));
+  assert.equal(await updatedOutputsReady(core, `${workspace}/.`, 'all'), true, 'canonical aliases select the same verified outputs');
+  const workspaceB = path.join(root, 'user-b'); await fs.mkdir(workspaceB);
+  assert.equal(await updatedOutputsReady(core, workspaceB, 'core'), false, 'A cannot prove B has a host');
+  calls.length = 0;
+  assert.deepEqual(await rebuildForUpdate(core, workspaceB, ctx, 'workspace'), ['xrb-host'], 'even a scoped retry repairs a missing host');
+  assert.ok(calls.some(call => call.args.includes(path.join(core, 'native/host'))));
+  assert.equal(await updatedOutputsReady(core, workspaceB, 'core'), true);
+  await fs.unlink((await resolvedHostFreshness(core, workspaceB, true)).exe);
+  assert.equal(await updatedOutputsReady(core, workspaceB, 'core'), false, 'a receipt cannot hide deleted native output');
   calls.length = 0;
   assert.deepEqual(await rebuildForUpdate(core, workspace, ctx), ['fixture']);
   assert.ok(calls.every(call => !call.args.includes(path.join(core, 'native/host'))), 'host-current retry still uses validated tools for plugins');

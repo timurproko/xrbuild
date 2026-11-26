@@ -1,8 +1,7 @@
 // Per-source Update work. A refused workspace is not a prerequisite of core-owned preparation.
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import type { JobContext } from './jobs.ts';
-import type { GitRunner, RepoOutcome, UpdateResult } from './update.ts';
+import type { RepoOutcome, UpdateResult } from './update.ts';
 
 export type BuildScope = 'core' | 'workspace' | 'all';
 export interface FollowupStep {
@@ -12,11 +11,12 @@ export interface FollowupStep {
   reason?: string;
 }
 export interface FollowupDeps {
-  git: GitRunner;
   sanitize?: (text: string) => string;
   prepareCore: (core: RepoOutcome) => Promise<'prepared' | 'unchanged'>;
   prepareComponents: () => Promise<void>;
   build: (scope: BuildScope) => Promise<string[]>;
+  /** Checked native receipts and outputs in the selected workspace, not Git commit receipts. */
+  outputsReady: (scope: BuildScope) => Promise<boolean>;
 }
 
 export async function finishUpdateWork(repositories: RepoOutcome[], ctx: JobContext, deps: FollowupDeps) {
@@ -26,25 +26,15 @@ export async function finishUpdateWork(repositories: RepoOutcome[], ctx: JobCont
   const work = repositories.some(repo => repo.pending);
   const steps: FollowupStep[] = [], rebuilt: string[] = [];
   let coreDependencies: UpdateResult['coreDependencies'] = 'unchanged';
-  const receiptRepo = repositories.find(repo => repo.state !== 'failed');
-  const receiptFile = async (id: string) => {
-    if (!receiptRepo) return null;
-    const result = await deps.git(['rev-parse', '--git-path', `xrb-update-step-${id}`], receiptRepo.dir, { env: { GIT_OPTIONAL_LOCKS: '0' } });
-    if (result.code) throw new Error('Cannot locate Update follow-up receipt');
-    return path.resolve(receiptRepo.dir, result.output.trim());
-  };
-  const step = async (id: FollowupStep['id'], label: string, allowed: boolean, reason: string, key: string | null, action: () => Promise<void>) => {
+  const ready = (scope: BuildScope) => deps.outputsReady(scope).catch(() => false);
+  const step = async (id: FollowupStep['id'], label: string, allowed: boolean, reason: string, scope: BuildScope | null, action: () => Promise<void>) => {
     if (!allowed) { steps.push({ id, label, state: 'deferred', reason }); ctx.line(`${label}: deferred — ${reason}.`); return false; }
     try {
-      const file = key ? await receiptFile(id) : null;
-      if (file && await fs.readFile(file, 'utf8').then(text => text === key, error => { if (error.code === 'ENOENT') return false; throw error; })) {
-        steps.push({ id, label, state: 'unchanged' }); ctx.line(`${label}: already completed for these sources.`); return true;
+      if (scope && await ready(scope)) {
+        steps.push({ id, label, state: 'unchanged' }); ctx.line(`${label}: selected-workspace outputs are verified current.`); return true;
       }
       ctx.line(`step ${id.endsWith('build') ? 'rebuild' : 'setup'}`); ctx.line(`${label}…`);
-      // Invalidate a prior proof before work can partially change installed/built state.
-      if (file) await fs.writeFile(file, '');
       await action();
-      if (file) await fs.writeFile(file, key!);
       steps.push({ id, label, state: 'completed' }); return true;
     } catch (error) {
       const reason = deps.sanitize?.((error as Error).message) ?? (error as Error).message;
@@ -65,19 +55,17 @@ export async function finishUpdateWork(repositories: RepoOutcome[], ctx: JobCont
   if (work) {
     if (!coreReady && core) coreDependencies = 'deferred';
     // For the all-good case keep one ordinary combined build boundary. Partial failures select safe roots only.
-    const coreReceipt = core ? await receiptFile('core-build').catch(() => null) : null;
-    const coreAlreadyBuilt = !!coreReceipt && await fs.readFile(coreReceipt, 'utf8').then(text => text === core?.to, () => false);
+    const coreAlreadyBuilt = coreReady && dependenciesReady && await ready('core');
     if ((!core || coreReady) && workspaceReady && dependenciesReady && !coreAlreadyBuilt) {
-      const key = `${core?.to ?? 'external-core'}:${workspace?.to ?? 'none'}`;
-      const built = await step('workspace-build', 'Native host and plugins', true, '', key, async () => { rebuilt.push(...await deps.build('all')); });
+      const built = await step('workspace-build', 'Native host and plugins', true, '', 'all', async () => { rebuilt.push(...await deps.build('all')); });
       coreBuildReady = workspaceBuildReady = built;
     } else {
       if (core) coreBuildReady = await step('core-build', 'Core host and bundled plugins', coreReady && dependenciesReady,
-        !coreReady ? 'core source needs attention' : 'core dependency setup needs attention', core?.to ?? null,
+        !coreReady ? 'core source needs attention' : 'core dependency setup needs attention', 'core',
         async () => { rebuilt.push(...await deps.build('core')); });
       workspaceBuildReady = await step('workspace-build', 'Workspace plugins', workspaceReady && (!core || coreReady) && dependenciesReady,
         !workspaceReady ? 'workspace source needs attention' : 'core source or dependencies need attention',
-        `${core?.to ?? 'external-core'}:${workspace?.to ?? 'none'}`, async () => { rebuilt.push(...await deps.build('workspace')); });
+        'workspace', async () => { rebuilt.push(...await deps.build('workspace')); });
     }
   }
   for (const repo of repositories.filter(repo => repo.pending && repo.state !== 'failed')) {

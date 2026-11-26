@@ -27,6 +27,21 @@ async function setup(t: Parameters<typeof fixture>[0]) {
   return { ...f, repo, put, before, update };
 }
 
+test('already current checkout does nothing without consulting or creating a journal', async () => {
+  assert.deepEqual(await checkoutFetchedCommit('unused', { before: 'a'.repeat(40), target: 'a'.repeat(40), branch: 'main', workspace: true,
+    git: async () => { assert.fail('no Git command needed'); }, line() {}, ensureUnchanged: async () => { assert.fail('no mutation guard needed'); } }), []);
+});
+
+test('source already staged exactly as incoming uses ordinary safe fast-forward', async t => {
+  const f = await setup(t);
+  await f.put(f.repo.checkout, 'shared.txt', 'already adopted source\n'); git(f.repo.checkout, 'add', 'shared.txt');
+  const target = await f.repo.publish('shared.txt', 'already adopted source\n');
+  await f.update(); assert.equal(f.repo.head(), target);
+  assert.equal(await fs.readFile(path.join(f.repo.checkout, 'shared.txt'), 'utf8'), 'already adopted source\n');
+  assert.ok(f.lines.some(line => line.includes('ordinary Git fast-forward')));
+  assert.ok(!(await fs.readdir(path.join(f.repo.checkout, '.git'))).some(name => name.startsWith(CHECKOUT_JOURNAL)));
+});
+
 for (const staged of [false, true]) test(`plain Git accepts unrelated ${staged ? 'staged' : 'unstaged'} source edits`, async t => {
   const f = await setup(t);
   await f.put(f.repo.checkout, 'shared.txt', 'my edit\n');
@@ -59,6 +74,29 @@ test('already adopted incoming defaults use plain fast-forward without a checkou
   await f.update(); assert.equal(f.repo.head(), target);
   assert.ok(f.lines.some(line => line.includes('ordinary Git fast-forward')));
   assert.equal(await fs.stat(path.join(f.repo.checkout, '.git', CHECKOUT_JOURNAL)).then(() => true, () => false), false);
+});
+
+test('protected defaults do not turn already-adopted staged source into a false conflict', async t => {
+  const f = await setup(t);
+  await f.put(f.repo.checkout, 'shared.txt', 'incoming source\n'); git(f.repo.checkout, 'add', 'shared.txt');
+  await f.put(f.repo.checkout, 'shared.txt', 'further local work after staging\n');
+  await f.put(f.repo.checkout, 'xrb-plugins.json', 'personal settings\n');
+  await f.put(f.repo.publisher, 'xrb-plugins.json', 'incoming defaults\n');
+  const target = await f.repo.publish('shared.txt', 'incoming source\n');
+  await f.update(); assert.equal(f.repo.head(), target);
+  assert.equal(await fs.readFile(path.join(f.repo.checkout, 'shared.txt'), 'utf8'), 'further local work after staging\n');
+  assert.equal(await fs.readFile(path.join(f.repo.checkout, 'xrb-plugins.json'), 'utf8'), 'personal settings\n');
+});
+
+test('matching incoming settings do not discard a different staged personal value', async t => {
+  const f = await setup(t);
+  await f.put(f.repo.checkout, 'xrb-plugins.json', 'staged personal settings\n'); git(f.repo.checkout, 'add', 'xrb-plugins.json');
+  await f.put(f.repo.checkout, 'xrb-plugins.json', 'incoming defaults\n');
+  await f.put(f.repo.publisher, 'xrb-plugins.json', 'incoming defaults\n');
+  const target = await f.repo.publish('shared.txt', 'incoming source\n');
+  await f.update(); assert.equal(f.repo.head(), target);
+  assert.equal(git(f.repo.checkout, 'show', ':xrb-plugins.json'), 'staged personal settings');
+  assert.equal(await fs.readFile(path.join(f.repo.checkout, 'xrb-plugins.json'), 'utf8'), 'incoming defaults\n');
 });
 
 test('native fast-forward cannot satisfy local-wins; projected transaction preserves exact ordinary-use state', async t => {
