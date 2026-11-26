@@ -1544,7 +1544,7 @@ export class Panel {
           const plugin = registry.plugins.find(p => meshKey(p) === meshKey(choice.selected!));
           const saved = choice.settings[meshKey(choice.selected)];
           if (!plugin?.available || !saved || saved.version !== plugin.declaration.settingsVersion) throw new Error('Selected mesh plugin is missing, unavailable or needs settings review');
-          const run = new HandMeshRun(() => ['https://app.local', ...(this.runner.state().devUrl ? [new URL(this.runner.state().devUrl!).origin] : [])], status => { this.meshStatus = status; });
+          const run = new HandMeshRun(() => ['https://app.local', ...(this.panelUrl ? [new URL(this.panelUrl).origin] : []), ...(this.runner.state().devUrl ? [new URL(this.runner.state().devUrl!).origin] : [])], status => { this.meshStatus = status; });
           this.meshRun = run; this.meshStatus = 'Starting';
           meshRuntime = await run.start(plugin, saved.values);
         }

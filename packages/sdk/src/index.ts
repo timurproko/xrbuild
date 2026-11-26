@@ -15,7 +15,8 @@ import { resolveCursorStyle, type CursorStyle } from './cursor-style.ts';
 import { installAppShell } from './app-shell.ts';
 export { CURSOR_STYLES, DEFAULT_CURSOR_STYLE, resolveCursorStyle, isCursorStyle, type CursorStyle } from './cursor-style.ts';
 import { HandVisual } from './hand-visual.ts';
-import { HandInput, type Hand, type HandEvent, type HandInputOptions } from './hands.ts';
+import { HandInput, isValidHand, type Hand, type HandEvent, type HandInputOptions } from './hands.ts';
+import { HandMeshClient, meshRuntime } from './hand-mesh-client.ts';
 import { Interactor, type InteractorOptions } from './interaction/core/interactor.ts';
 import { MouseCursor } from './interaction/core/cursor.ts';
 import { OneEuro } from './one-euro.ts';
@@ -175,6 +176,8 @@ export class Xrb {
   private readonly xrHands = new XrHands();
   private readonly handIngress: HandFrameIngress;
   private handProfileReceiver: HandProfileReceiver | null = null;
+  private meshClient: HandMeshClient | null = null;
+  get handMeshStatus(): string { return this.meshClient?.status ?? 'None'; }
   private handProfileTransport: ReturnType<typeof subscribeHandProfile> | null = null;
   private readonly managedHandPolicy: boolean;
   private handProblemNotice: HTMLElement | null = null;
@@ -215,8 +218,15 @@ export class Xrb {
     this.hands = new HandInput(options.hands);
     this.handIngress = new HandFrameIngress(this.hands, handSourcePolicy(!!this.host, globalThis.location?.search ?? '', (globalThis as { __XRB_HAND_POLICY__?: unknown }).__XRB_HAND_POLICY__));
     this.interaction = new Interactor(options.interaction);
+    const mesh = !this.icon && this.handIngress.policy === 'native' ? meshRuntime(this.host?.handMeshRuntimeJson) : null;
+    if (mesh) this.meshClient = new HandMeshClient(mesh);
     this.channel?.onHands((m) => {
       if (this.disposed || !this.handIngress.push('native', m, this.channel!.hostToPage(m.captureTimeMs))) return;
+      if (this.meshClient) {
+        const ids = m.hands.filter(isValidHand).map(h => h.id);
+        this.meshClient.observed(ids);
+        if (!ids.length) this.handsObject.updateMeshes([], this.view.panel);
+      }
       this.deliveryMs.push(this.host!.hostNow() - m.captureTimeMs);
       if (this.deliveryMs.length > 60) this.deliveryMs.shift();
     });
@@ -261,6 +271,7 @@ export class Xrb {
     const runId = this.host?.handProfileRunId ?? scope?.runId;
     const apply = (p: HandProfile, geometryChanged: boolean) => {
       if (geometryChanged) {
+        this.meshClient?.invalidate(); this.handsObject.updateMeshes([], this.view.panel);
         this.pointer?.reset(); this.currentHands = []; this.sceneHands = [];
         this.interaction.update([], this.metre); this.handIngress.reset();
         this.handsObject.update([], this.view.panel);
@@ -567,7 +578,8 @@ export class Xrb {
       this.currentEyes = { left: L, right: R };
     }
     // Headset joints are already predicted to the frame's display time by the headset.
-    this.currentHands = this.hands.sample(xr ? now : now + this.displayLatencyMs);
+    const handSampleMs = xr ? now : now + this.displayLatencyMs;
+    this.currentHands = this.hands.sample(handSampleMs);
     // The panel frame follows the camera, so update it before using it for hands.
     this.view.panel.update(this.view.mapping, camera);
     this.returnControl?.attach(scene, this.view.panel, this.visibleDisplay(), isOrthographicCamera(camera) ? 'orthographic' : 'perspective');
@@ -583,6 +595,7 @@ export class Xrb {
       this.cursorObject.update(this.interaction, this.view.panel, eye, now, this.lastFrameAt > 0 ? (now - this.lastFrameAt) / 1000 : 1 / 60);
     }
     this.handsObject.update(this.currentHands, this.view.panel);
+    if (this.meshClient) this.handsObject.updateMeshes(this.meshClient.update(this.currentHands, handSampleMs, this.handIngress.generation), this.view.panel);
     const l = this.currentEyes.left, r = this.currentEyes.right;
     this.pointer?.update(this.currentHands, [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2, (l[2] + r[2]) / 2], this.display);
     const t0 = performance.now();
@@ -766,6 +779,7 @@ export class Xrb {
   dispose(): void {
     this.disposed = true;
     this.handProfileReceiver?.close(); this.handProfileTransport?.close();
+    this.meshClient?.close(); this.handsObject.disposeMeshes();
     this.handIngress.close();
     this.pointer?.reset();
     this.currentHands = []; this.sceneHands = [];

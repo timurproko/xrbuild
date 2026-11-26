@@ -123,6 +123,7 @@ export class HandMeshRun {
     }
     if (req.url !== '/frame' || frame.epoch !== this.epoch || frame.sequence <= this.lastSequence) { res.writeHead(409); res.end(); return; }
     this.lastSequence = frame.sequence; this.lastRequest = performance.now();
+    if (frame.drawingStatus === 'Running' || frame.drawingStatus?.startsWith('Skeleton fallback:')) this.setStatus(frame.drawingStatus);
     if (!this.ready) { res.setHeader('x-xrb-mesh-status', this.status); res.writeHead(204); res.end(); return; }
     this.reply(this.pending); this.pending = { frame, response: res, at: performance.now() }; this.pump();
   }

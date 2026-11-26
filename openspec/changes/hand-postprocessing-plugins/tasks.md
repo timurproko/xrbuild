@@ -16,9 +16,9 @@ Implementation approved for the reduced scope. PR #50 is merged; the page mount 
 
 ## 3. Final-pose dispatch and standard mesh drawing
 
-- [ ] 3.1 Dispatch owned final sampled poses asynchronously without modifying ingress or interaction; compare skeleton bits and gesture/pointer/grab traces for None and healthy/late/crashed fake sidecar, including different provider fixtures.
-- [ ] 3.2 Draw validated mesh in standard hand visuals with existing mapping, bone color/opacity and handVisual opt-out; fake geometry tests cover no double adjustment, no-hand/hand-loss/geometry-change invalidation and buffer disposal.
-- [ ] 3.3 Keep preview/publication/offline/unmanaged paths skeleton-only without refusing them or exporting mesh metadata/credentials; targeted context fixtures and SDK documentation show no app edits and no new portable-profile protocol.
+- [x] 3.1 Dispatch owned final sampled poses asynchronously without modifying ingress or interaction; compare skeleton bits and gesture/pointer/grab traces for None and healthy/late/crashed fake sidecar, including different provider fixtures.
+- [x] 3.2 Draw validated mesh in standard hand visuals with existing mapping, bone color/opacity and handVisual opt-out; fake geometry tests cover no double adjustment, no-hand/hand-loss/geometry-change invalidation and buffer disposal.
+- [x] 3.3 Keep preview/publication/offline/unmanaged paths skeleton-only without refusing them or exporting mesh metadata/credentials; targeted context fixtures and SDK documentation show no app edits and no new portable-profile protocol.
 
 ## 4. Selector component and end-to-end proof
 

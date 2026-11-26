@@ -2,7 +2,7 @@ import type { Vec3 } from './protocol.ts';
 
 export const MESH_MAX_BYTES = 2 * 1024 * 1024, MESH_MAX_VERTICES = 16384, MESH_MAX_INDICES = 32768 * 3;
 export interface MeshPose { id: number; handedness: string; keypoints: Vec3[] }
-export interface MeshFrame { type: 'frame'; epoch: string; sequence: number; revision: number; sentMs: number; sampleMs: number; hands: MeshPose[] }
+export interface MeshFrame { type: 'frame'; epoch: string; sequence: number; revision: number; sentMs: number; sampleMs: number; hands: MeshPose[]; drawingStatus?: string }
 export interface MeshSurface { id: number; topology: string; positions: Float32Array; normals?: Float32Array; indices: Uint32Array }
 export interface MeshResult { type: 'result'; epoch: string; sequence: number; revision: number; meshes: MeshSurface[] }
 export interface MeshRuntime { version: 1; url: string; token: string }
@@ -14,7 +14,8 @@ export function meshAssociation(v: unknown): v is Record<string, unknown> & { ep
 }
 export function validMeshFrame(v: unknown): v is MeshFrame {
   return meshAssociation(v) && object(v) && v.type === 'frame' && typeof v.sentMs === 'number' && Number.isFinite(v.sentMs)
-    && typeof v.sampleMs === 'number' && Number.isFinite(v.sampleMs) && Array.isArray(v.hands) && v.hands.length <= 2
+    && typeof v.sampleMs === 'number' && Number.isFinite(v.sampleMs)
+    && (v.drawingStatus === undefined || typeof v.drawingStatus === 'string' && v.drawingStatus.length <= 128 && !/[\x00-\x1f\x7f]/.test(v.drawingStatus)) && Array.isArray(v.hands) && v.hands.length <= 2
     && new Set(v.hands.map(h => object(h) ? h.id : null)).size === v.hands.length
     && v.hands.every(h => object(h) && integer(h.id) && ['left', 'right', 'unknown'].includes(h.handedness as string)
       && Array.isArray(h.keypoints) && h.keypoints.length === 21 && h.keypoints.every(p => Array.isArray(p) && p.length === 3 && p.every(n => typeof n === 'number' && Number.isFinite(n))));
