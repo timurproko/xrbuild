@@ -88,6 +88,21 @@ for (const layout of ['file-to-directory', 'directory-to-file'] as const) {
   });
 }
 
+test('partly staged incoming directory content and unrelated staging survive recovery', async t => {
+  const f = await setup(t, 'file-to-directory');
+  await fs.unlink(path.join(f.dir, 'shared.txt')); await fs.mkdir(path.join(f.dir, 'shared.txt'));
+  await fs.writeFile(path.join(f.dir, 'shared.txt/one.txt'), 'incoming one\n');
+  git(f.dir, 'rm', '--cached', '-q', 'shared.txt'); git(f.dir, 'add', 'shared.txt/one.txt');
+  await fs.writeFile(path.join(f.dir, 'local-only.txt'), 'unrelated staged work\n'); git(f.dir, 'add', 'local-only.txt');
+  await f.exitBeforeRef();
+  for (let retry = 0; retry < 2; retry++) await resumeProtectedCheckout(f.dir, f.runner, f.ctx.line);
+  assert.equal(f.repo.head(), f.target);
+  for (const name of ['one', 'two']) assert.equal(await fs.readFile(path.join(f.dir, `shared.txt/${name}.txt`), 'utf8'), `incoming ${name}\n`);
+  assert.equal(await fs.readFile(path.join(f.dir, 'xrb-plugins.json'), 'utf8'), 'personal\n');
+  assert.equal(git(f.dir, 'diff', '--cached', '--name-only'), 'local-only.txt');
+  assert.equal(git(f.dir, 'show', ':local-only.txt'), 'unrelated staged work');
+});
+
 test('an extra non-overlapping file in an expected directory remains untouched', async t => {
   const f = await setup(t, 'file-to-directory'); await f.exitBeforeRef();
   const extra = path.join(f.dir, 'shared.txt/outside.txt'); await fs.writeFile(extra, 'outside file\n');
