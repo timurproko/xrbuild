@@ -19,6 +19,7 @@ test('Hands SDK browser graph uses the real installed SDK, has closed imports an
       const source = await response.text(); assert.doesNotMatch(source, /from\s*['"][^'"]*\.ts['"]/);
       for (const match of source.matchAll(/from\s*['"](\.[^'"]+)['"]/g)) queue.push(new URL(match[1], base + name).pathname);
     }
+    assert.ok(seen.has('/sdk/hand-mesh-visual.js'), 'standard drawing dependency is included in the exact browser closure');
     for (const name of ['/vendor/three.module.js', '/vendor/OrbitControls.js']) assert.equal((await fetch(base + name)).status, 200);
     for (const name of ['/sdk/host.js', '/sdk/index.js', '/sdk/channel.js', '/sdk/hands.ts', '/sdk/../../package.json']) assert.equal((await fetch(base + name)).status, 404, name);
     assert.equal(app.panel.jobs.list().length, 0); assert.equal(app.panel.runner.busy, false);

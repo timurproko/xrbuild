@@ -449,6 +449,11 @@ int main() {
       chan.publish(static_cast<channel::MessageType>(handprofile::kProfile), text.data(), text.size());
     } else if (fileCfg.contains("handProfile")) info->SetString("handProfileJson", fileCfg["handProfile"].dump());
     }
+    // Optional run-only mesh endpoint. Never blocks skeleton delivery; packages omit it.
+    if (fileCfg.contains("handMeshRuntime") && fileCfg["handMeshRuntime"].is_object()) {
+      const auto mesh = fileCfg["handMeshRuntime"].dump();
+      if (mesh.size() <= 512) info->SetString("handMeshRuntimeJson", mesh);
+    }
     info->SetBool("stereo", stereo);
     info->SetBool("fullscreen", fullscreen);
     info->SetBool("mouseEnabled", sel.mouse);
