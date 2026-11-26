@@ -208,6 +208,14 @@ launcher refuses to open its different workspace; set a different `XRB_PANEL_POR
 The panel lists the selected project root's projects while loading plugins and generated state from the integration workspace. It builds projects, runs them with their providers and live status, switches a 3D display between 2D
 and 3D, shows the input provider's camera view and renders app icons.
 
+**Update** freshly fetches and fast-forwards both the running core checkout and the selected workspace to each
+`origin`'s default branch, reporting their full before/after commits. Unsafe local changes/history or an old removed
+upstream leave that checkout untouched while the other is still attempted; any failure makes the job fail with both
+results. It prepares changed public core dependencies with the pinned frozen hook-disabled install, then rebuilds
+native plugins and the host when outdated. It never discards work or restarts the panel: when core advances, the
+job's last line explicitly requires **Restart** to load the new code. See [Update and recovery](docs/private-workspace.md#update-and-recovery),
+including the initial manual core update needed when upgrading from the old workspace-only action.
+
 Add the ordinary **XR Build** shortcut to the Start menu:
 
 ```text
