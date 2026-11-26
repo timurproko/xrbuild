@@ -29,4 +29,4 @@
 
 ## 5. Spec
 
-- [ ] 5.1 Replace the sentence that says the core checkout is never updated
+- [x] 5.1 Replace the sentence that says the core checkout is never updated
