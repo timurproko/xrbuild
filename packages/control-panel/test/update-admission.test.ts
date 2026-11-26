@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { test, type TestContext } from 'node:test';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createServer } from '../src/server.ts';
 import { freePort } from '../src/host-runner.ts';
 import type { UpdateResult } from '../src/update.ts';
@@ -14,23 +16,28 @@ function gate() {
 }
 
 async function serverFixture(t: TestContext) {
-  const f = await fixture(t), builds: boolean[] = [];
+  const cleanup: Array<() => unknown> = [];
+  // Test hooks run FIFO: release gates and close the server BEFORE fixture() removes its repositories.
+  t.after(async () => { for (const close of cleanup.reverse()) await close(); });
+  const f = await fixture(t), builds: boolean[] = [], buildScopes: string[] = [];
   const server = createServer({ repo: f.core.checkout, workspace: f.workspace.checkout, port: await freePort() });
+  // These tests own explicit Update/status Git. Passive discovery has separate real-Git coverage.
+  server.panel.remoteUpdates.git = async () => ({ code: 1, output: '' });
+  cleanup.push(async () => { await server.close(); await Promise.all(server.panel.jobs.active().map(job => server.panel.jobs.wait(job))); });
   server.panel.desktopSetup = { isBusy: async () => false } as never;
-  server.panel.updateDeps = { core: f.core.checkout, git: f.runner, rebuild: async pluginsOnly => { builds.push(pluginsOnly); return []; } };
+  server.panel.updateDeps = { core: f.core.checkout, git: f.runner, outputsReady: async scope => buildScopes.includes('all') || buildScopes.includes(scope), rebuild: async (pluginsOnly, _ctx, scope) => { builds.push(pluginsOnly); buildScopes.push(scope ?? 'all'); return []; } };
   await new Promise<void>(resolve => server.server.listen(server.port, '127.0.0.1', resolve));
-  t.after(() => server.close());
   const request = async (method: string, route = '/api/update') => {
     const response = await fetch(new URL(route, server.url), { method, headers: { origin: new URL(server.url).origin, 'content-type': 'application/json' } });
     return { status: response.status, data: await response.json() as any };
   };
   const finish = async (id: number) => server.panel.jobs.wait(server.panel.jobs.get(id)!);
   const project = { id: 'demo', dir: path.join(f.workspace.checkout, 'projects/demo'), manifest: { name: 'Demo' } } as never;
-  return { ...f, server, request, finish, builds, project };
+  return { ...f, server, request, finish, builds, buildScopes, project, onCleanup: (close: () => unknown) => cleanup.push(close) };
 }
 
-test('regression: stale or unavailable plugin services cannot veto independent Git recovery', async t => {
-  for (const state of ['dirty plugin code', 'unavailable runtime']) await t.test(state, async t => {
+test('regression: stale or unavailable plugin services cannot veto independent Git recovery', { timeout: 400000 }, async t => {
+  for (const state of ['dirty plugin code', 'unavailable runtime']) for (const conflict of [false, true]) await t.test(`${state}; workspace ${conflict ? 'source conflict' : 'already current'}`, { timeout: 90000 }, async t => {
     const f = await serverFixture(t), plugin = path.join(f.workspace.publisher, 'plugins/demo');
     await fs.mkdir(plugin, { recursive: true });
     await fs.writeFile(path.join(plugin, 'xrb-plugin.json'), JSON.stringify({ title: 'Demo', type: 'input', version: '1.0.0' }));
@@ -40,6 +47,7 @@ test('regression: stale or unavailable plugin services cannot veto independent G
     await f.server.panel.synchronizePluginServices(true);
     assert.equal(f.server.panel.pluginServiceStatus().pending, false);
     const target = await f.core.publish(), workspaceBefore = f.workspace.head();
+    const workspaceTarget = conflict ? await f.workspace.publish('plugins/demo/demo.js', 'export const version=3;\n') : workspaceBefore;
     const edited = path.join(f.workspace.checkout, 'plugins/demo/demo.js');
     await fs.writeFile(edited, 'export const version=2;\n');
     if (state === 'unavailable runtime') f.server.panel.onPluginSourcesChanged = async () => { throw new Error('Plugin runtime unavailable'); };
@@ -47,22 +55,40 @@ test('regression: stale or unavailable plugin services cannot veto independent G
     assert.equal(f.server.panel.pluginServiceStatus().pending, true);
     // Neither status nor Update admission should depend on another successful service-discovery pass.
     f.server.panel.synchronizePluginServices = async () => { assert.fail('Update must not require plugin discovery'); };
+    const index = path.join(f.workspace.checkout, '.git/index'), indexBefore = await fs.readFile(index);
     const started = await f.request('POST'); assert.equal(started.status, 202);
     const job = await f.finish(started.data.id), result = job.result as UpdateResult;
-    assert.equal(job.state, 'failed'); assert.equal(f.core.head(), target); assert.equal(f.workspace.head(), workspaceBefore);
-    assert.equal(result.repositories.find(repo => repo.role === 'core')!.state, 'updated');
-    assert.match(result.repositories.find(repo => repo.role === 'workspace')!.error!, /Uncommitted/);
-    assert.equal(await fs.readFile(edited, 'utf8'), 'export const version=2;\n'); assert.equal(f.builds.length, 0);
+    assert.equal(job.state, conflict ? 'failed' : 'done');
+    assert.equal(f.core.head(), target); assert.equal(f.workspace.head(), workspaceBefore);
+    const core = result.repositories.find(repo => repo.role === 'core')!, workspace = result.repositories.find(repo => repo.role === 'workspace')!;
+    assert.equal(core.state, 'updated'); assert.equal(core.pending, false, 'workspace source cannot hold back independent core follow-up');
+    assert.equal(workspace.state, conflict ? 'failed' : 'up-to-date'); assert.equal(workspace.fetched, true);
+    if (conflict) {
+      assert.match(workspace.error!, /plugins\/demo\/demo\.js/);
+      assert.equal(result.steps.find(step => step.id === 'workspace-build')!.state, 'deferred');
+    } else assert.equal(workspace.error, null);
+    assert.deepEqual(await fs.readFile(index), indexBefore);
+    assert.equal(await fs.readFile(edited, 'utf8'), 'export const version=2;\n');
+    assert.deepEqual(f.buildScopes, [conflict ? 'core' : 'all']);
     assert.match(job.lines.at(-1)!, /Restart required/);
-    // After preserving/reconciling the local edit, pending native work can finish despite stale loaded services.
-    await fs.writeFile(edited, 'export const version=1;\n');
+    const preserved = path.join(f.root, 'preserved-demo.js');
+    if (conflict) {
+      // Simulate explicit user recovery: preserve the edit, then restore the tracked base before retrying.
+      await fs.rename(edited, preserved);
+      await fs.writeFile(edited, 'export const version=1;\n');
+    }
+    // A current dirty checkout needs no cleanup; neither retry may depend on service discovery.
     const retry = await f.request('POST'); assert.equal(retry.status, 202);
-    assert.equal((await f.finish(retry.data.id)).state, 'done'); assert.equal(f.builds.length, 1);
+    const retried = await f.finish(retry.data.id); assert.equal(retried.state, 'done');
+    assert.equal(f.workspace.head(), workspaceTarget);
+    assert.equal(await fs.readFile(edited, 'utf8'), conflict ? 'export const version=3;\n' : 'export const version=2;\n');
+    assert.deepEqual(f.buildScopes, conflict ? ['core', 'workspace'] : ['all'], 'retry reuses completed core work');
+    if (conflict) assert.equal(await fs.readFile(preserved, 'utf8'), 'export const version=2;\n');
   });
 });
 
-test('regression: reserving Update before status yields excludes real launches and a second Update', async t => {
-  const f = await serverFixture(t), entered = gate(), scan = gate(); t.after(scan.release);
+test('regression: reserving Update before status yields excludes real launches and a second Update', { timeout: 90000 }, async t => {
+  const f = await serverFixture(t), entered = gate(), scan = gate(); f.onCleanup(scan.release);
   await f.core.publish();
   let blocked = false;
   f.server.panel.updateDeps.git = async (args, cwd, opts) => {
@@ -88,9 +114,9 @@ test('regression: reserving Update before status yields excludes real launches a
   assert.equal((await f.finish(started.data.id)).state, 'done');
 });
 
-for (const kind of ['native', 'preview']) test(`launch winning the final desktop-status await excludes Update (${kind})`, async t => {
+for (const kind of ['native', 'preview', 'hands']) test(`launch winning the final desktop-status await excludes Update (${kind})`, { timeout: 90000 }, async t => {
   const f = await serverFixture(t), checked = gate(), check = gate(), launchEntered = gate(), launch = gate();
-  t.after(() => { check.release(); launch.release(); });
+  f.onCleanup(() => { check.release(); launch.release(); });
   await f.core.publish(); const before = f.core.head();
   f.server.panel.synchronizePluginServices = async () => {};
   let first = true;
@@ -101,6 +127,16 @@ for (const kind of ['native', 'preview']) test(`launch winning the final desktop
   panel.runNative = async () => { launchEntered.release(); await launch.wait; };
   panel.preparePreview = async () => { launchEntered.release(); await launch.wait; return 'http://127.0.0.1/'; };
   const update = f.request('POST'); await checked.wait;
+  if (kind === 'hands') {
+    const busy = t.mock.getter(f.server.panel.handSessions, 'busy', () => true);
+    try {
+      check.release(); const response = await update;
+      assert.equal(response.status, 409); assert.match(response.data.error, /Hands owns capture/);
+      assert.equal(f.server.panel.jobs.list().length, 0); assert.equal(f.core.head(), before);
+      assert.equal(f.calls.length, 0, 'live Hands ownership must refuse Update before Git');
+    } finally { busy.mock.restore(); }
+    return;
+  }
   const starting = kind === 'native' ? f.server.panel.run(f.project, 'built')
     : f.server.panel.preview(f.project, 'built', false, 'token', { clientPort: f.server.port });
   await launchEntered.wait; check.release();
@@ -121,4 +157,31 @@ test('Update keeps active mutation, restart and setup guards despite the service
   f.server.panel.desktopSetup = { isBusy: async () => true } as never;
   assert.equal((await f.request('POST')).status, 409);
   assert.equal(f.calls.length, 0); assert.equal(f.server.panel.jobs.list().length, 0);
+});
+
+test('failed admission assertions release pending requests and queued work before fixture removal', { timeout: 90000 }, async t => {
+  if (process.env.XRB_TEST_ADMISSION_CLEANUP_CHILD === '1') {
+    const f = await serverFixture(t), entered = gate(), scan = gate();
+    await f.core.publish(); let blocked = false;
+    f.server.panel.updateDeps.git = async (args, cwd, opts) => {
+      if (!blocked && args[0] === 'rev-parse') { blocked = true; entered.release(); await scan.wait; }
+      return f.runner(args, cwd, opts);
+    };
+    const status = f.request('GET'); f.onCleanup(() => status); f.onCleanup(scan.release);
+    await entered.wait;
+    assert.equal((await f.request('POST')).status, 202);
+    throw new Error('intentional admission assertion failure');
+  }
+  const env: NodeJS.ProcessEnv = { ...process.env, XRB_TEST_ADMISSION_CLEANUP_CHILD: '1' };
+  delete env.NODE_TEST_CONTEXT; // This is an independent test runner, not a child of this runner's isolation protocol.
+  await assert.rejects(promisify(execFile)(process.execPath, ['--test', '--test-name-pattern=^failed admission assertions', import.meta.filename], {
+    env, timeout: 60000,
+  }), error => {
+    const child = error as { code: number; killed?: boolean; stdout: string };
+    assert.equal(child.code, 1); assert.ok(!child.killed);
+    assert.match(child.stdout, /intentional admission assertion failure/);
+    assert.match(child.stdout, /\[job 1\] done/);
+    assert.doesNotMatch(child.stdout, /hookFailed|event loop has already resolved/);
+    return true;
+  });
 });

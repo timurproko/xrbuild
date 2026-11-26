@@ -6,9 +6,17 @@ import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { test } from 'node:test';
 import { probeDesktopTools } from '../src/desktop-setup.ts';
-import { findCmake } from '../src/host-build.ts';
-import { rebuildForUpdate } from '../src/update-rebuild.ts';
+import { findCmake, nativePluginPlan, resolvedHostFreshness } from '../src/host-build.ts';
+import { rebuildForUpdate, updatedOutputsReady } from '../src/update-rebuild.ts';
 import type { JobContext } from '../src/jobs.ts';
+
+test('scoped workspace builds retain the embedded-product storage boundary', async t => {
+  const core = await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'update-scope-'));
+  t.after(() => fs.rm(core, { recursive: true, force: true }));
+  const workspace = path.join(core, 'embedded/user'); await fs.mkdir(workspace, { recursive: true });
+  const plan = await nativePluginPlan(core, workspace, false, 'workspace');
+  assert.deepEqual(plan.projects, []); assert.match(plan.problems.join('; '), /outside embedded/);
+});
 
 // Fake executable files and synchronous probe output; configure/build are intercepted, never executed.
 test('Update host and plugin builds reuse the checked bundled CMake despite competing PATH installations', { skip: process.platform !== 'win32' }, async t => {
@@ -66,9 +74,25 @@ test('Update host and plugin builds reuse the checked bundled CMake despite comp
   assert.deepEqual(await rebuildForUpdate(core, workspace, ctx), ['xrb-host', 'fixture']);
   assert.ok(calls.some(call => call.args.includes(path.join(core, 'native/host'))));
   assert.ok(calls.some(call => call.args.includes(path.join(workspace, 'plugins/fixture'))));
+  assert.equal(await updatedOutputsReady(core, `${workspace}/.`, 'all'), true, 'canonical aliases select the same verified outputs');
+  const workspaceB = path.join(root, 'user-b'); await fs.mkdir(workspaceB);
+  assert.equal(await updatedOutputsReady(core, workspaceB, 'core'), false, 'A cannot prove B has a host');
+  calls.length = 0;
+  assert.deepEqual(await rebuildForUpdate(core, workspaceB, ctx, 'workspace'), ['xrb-host'], 'even a scoped retry repairs a missing host');
+  assert.ok(calls.some(call => call.args.includes(path.join(core, 'native/host'))));
+  assert.equal(await updatedOutputsReady(core, workspaceB, 'core'), true);
+  await fs.unlink((await resolvedHostFreshness(core, workspaceB, true)).exe);
+  assert.equal(await updatedOutputsReady(core, workspaceB, 'core'), false, 'a receipt cannot hide deleted native output');
   calls.length = 0;
   assert.deepEqual(await rebuildForUpdate(core, workspace, ctx), ['fixture']);
   assert.ok(calls.every(call => !call.args.includes(path.join(core, 'native/host'))), 'host-current retry still uses validated tools for plugins');
+  await write('core/embedded/plugins/bundled/xrb-plugin.json', JSON.stringify({ title: 'Bundled', type: 'input', version: '1.0.0' }));
+  await write('core/embedded/plugins/bundled/CMakeLists.txt', 'project(bundled_plugin)');
+  await fs.writeFile(path.join(workspace, 'plugins/fixture/xrb-plugin.json'), '{invalid refused workspace source');
+  calls.length = 0;
+  assert.deepEqual(await rebuildForUpdate(core, workspace, ctx, 'core'), ['bundled']);
+  assert.ok(calls.some(call => call.args.includes(path.join(core, 'embedded/plugins/bundled'))));
+  assert.ok(calls.every(call => !call.args.some(arg => arg.startsWith(path.join(workspace, 'plugins')))), 'core scope never consumes refused workspace plugin source');
   compatible = false; calls.length = 0;
   await assert.rejects(rebuildForUpdate(core, workspace, ctx), /Desktop build tools are not ready/);
   assert.equal(calls.length, 0, 'no unvalidated fallback when the supported installation disappears');

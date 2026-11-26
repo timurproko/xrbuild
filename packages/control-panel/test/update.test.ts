@@ -32,8 +32,9 @@ test('regression: workspace success cannot conceal an unfetched stale core check
   const result = await runUpdate(f.workspace.checkout, f.ctx, f.deps);
   assert.equal(result.state, 'updated'); assert.equal(f.core.head(), nextCore); assert.equal(f.workspace.head(), nextWorkspace);
   assert.deepEqual(result.repositories.map(repo => [repo.from, repo.to, repo.fetched]), [[beforeCore, nextCore, true], [beforeWorkspace, nextWorkspace, true]]);
-  assert.match(result.summary, new RegExp(`${beforeCore} → ${nextCore}`));
-  assert.match(result.summary, new RegExp(`${beforeWorkspace} → ${nextWorkspace}`));
+  assert.match(result.summary, new RegExp(`${beforeCore.slice(0, 7)} → ${nextCore.slice(0, 7)}`));
+  assert.match(result.summary, new RegExp(`${beforeWorkspace.slice(0, 7)} → ${nextWorkspace.slice(0, 7)}`));
+  assert.equal(f.lines.filter(line => line.startsWith(`Core: ${beforeCore} → ${nextCore}`)).length, 1);
   assert.deepEqual(f.rebuilds, [true]); assert.equal(result.restartRequired, true);
   assert.equal(f.lines.at(-1), result.lastLine); assert.match(result.lastLine, /Restart required.*did not restart/);
   const current = await runUpdate(f.workspace.checkout, f.ctx, f.deps);
@@ -46,7 +47,7 @@ for (const role of ['core', 'workspace'] as const) for (const state of ['dirty',
   test(`partial failure: ${role} ${state} is preserved while the other repository updates`, async t => {
     const f = await setup(t), unsafe = f[role], other = role === 'core' ? f.workspace : f.core;
     const nextOther = await other.publish();
-    if (state !== 'ahead') await unsafe.publish('other.txt');
+    if (state !== 'ahead') await unsafe.publish(state === 'untracked' ? 'new.txt' : ['dirty', 'staged'].includes(state) ? 'shared.txt' : 'other.txt');
     if (['dirty', 'staged', 'ahead', 'diverged'].includes(state)) {
       await fs.writeFile(path.join(unsafe.checkout, 'shared.txt'), 'local\n');
       if (state === 'staged') git(unsafe.checkout, 'add', '.');
@@ -67,7 +68,8 @@ for (const role of ['core', 'workspace'] as const) for (const state of ['dirty',
     const bad = result.repositories.find(repo => repo.role === role)!, good = result.repositories.find(repo => repo.role !== role)!;
     assert.equal(bad.state, 'failed'); assert.equal(bad.from, before.head); assert.equal(bad.to, before.head);
     assert.match(bad.error!, /retry.*Update/); assert.equal(good.state, 'updated'); assert.equal(good.to, nextOther);
-    assert.equal(f.rebuilds.length, 0, 'do not rebuild through a refused source'); assert.equal(good.pending, true);
+    assert.equal(f.rebuilds.length, role === 'workspace' ? 1 : 0, 'only core-owned builds can continue through workspace refusal');
+    assert.equal(good.pending, role === 'core', 'completed core follow-up clears its own marker');
     if (state === 'removed-upstream') assert.match(bad.error!, /removed.*switch safely to main tracking origin\/main/);
     if (role === 'workspace') assert.match(f.lines.at(-1)!, /Restart required/);
   });
@@ -92,7 +94,7 @@ test('regression: repeated jobs retain the activation warning until a new proces
   assert.equal(second.state, 'done'); assert.equal((second.result as UpdateResult).state, 'up-to-date');
   assert.equal((second.result as UpdateResult).restartRequired, true);
   assert.match(second.lines.at(-1)!, /Restart required.*did not restart/);
-  assert.equal(rebuildPresentation(second).title, 'Restart required');
+  assert.equal(rebuildPresentation(second).title, 'Updated, restart needed');
   // A genuinely new Node process loads the current checkout and has no stale-code latch.
   const script = `import {runUpdate,runGit} from ${JSON.stringify(new URL('../src/update.ts', import.meta.url).href)};
     const result=await runUpdate(${JSON.stringify(f.workspace.checkout)}, {line(){},async run(){throw Error('unexpected build')}},
@@ -100,7 +102,8 @@ test('regression: repeated jobs retain the activation warning until a new proces
     console.log(JSON.stringify({restartRequired:result.restartRequired,state:result.state}));`;
   const fresh = await promisify(execFile)(process.execPath, ['--input-type=module', '--eval', script], { timeout: 60_000 });
   assert.deepEqual(JSON.parse(fresh.stdout), { restartRequired: false, state: 'up-to-date' });
-  await fs.writeFile(path.join(f.workspace.checkout, 'local.txt'), 'local work\n');
+  await f.workspace.publish('shared.txt', 'new remote\n');
+  await fs.writeFile(path.join(f.workspace.checkout, 'shared.txt'), 'local work\n');
   const failed = jobs.start('update', null, 'update', ctx => runUpdate(f.workspace.checkout, ctx, { ...f.deps }));
   await jobs.wait(failed); assert.equal(failed.state, 'failed');
   assert.equal((failed.result as UpdateResult).restartRequired, true); assert.match(failed.lines.at(-1)!, /Restart required/);
@@ -111,6 +114,9 @@ test('CLI boundary returns nonzero and retains final restart instruction on part
   git(f.workspace.checkout, 'checkout', '-q', '--detach');
   assert.equal(await runUpdateCommand(f.workspace.checkout, f.ctx, f.deps), 1);
   assert.match(f.lines.at(-1)!, /Restart required.*did not restart/);
+  assert.equal(f.lines.filter(line => line.startsWith('Update result:')).length, 1);
+  assert.equal(f.lines.filter(line => line.startsWith('Restart required:')).length, 1);
+  assert.ok(!f.lines.some(line => line.startsWith('Update failed: Core:')));
 });
 
 test('read-only status leaves index and remote refs alone, and tooltip never vouches for cached currentness', async t => {
@@ -148,8 +154,11 @@ test('POST still updates core when workspace is unavailable; failed job retains 
   assert.equal((job.result as UpdateResult).repositories.length, 2);
   assert.match(job.lines.at(-1)!, /Restart required/);
   const shown = rebuildPresentation(job);
-  assert.equal(shown.title, 'Update needs attention'); assert.equal(shown.succeeded, false);
-  assert.match(shown.message, /Core:.*Workspace:/);
+  assert.equal(shown.title, 'Core updated; workspace needs attention'); assert.equal(shown.succeeded, false);
+  assert.match(shown.message, /Core:[\s\S]*Workspace:/);
+  assert.equal(shown.message.split('\n').length, 3); assert.equal(shown.outputHidden, true);
+  assert.equal(job.lines.filter(line => line.startsWith('Update result:')).length, 1);
+  assert.equal(job.lines.filter(line => line.startsWith('Restart required:')).length, 1);
 });
 
 test('update, rebuild, status and native run exclusion guards remain effective', async t => {

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { installCore, installerEnvironment } from '../../../tools/panel-bootstrap/runtime.mjs';
 import { CORE_MARKER, WORKSPACE_MARKER, runUpdate, runUpdateCommand, UpdateFailure, type UpdateResult } from '../src/update.ts';
-import { rebuildUpdatedSources, setupUpdatedCore } from '../src/update-runtime.ts';
+import { rebuildUpdatedSources, setupUpdatedCore, updatedSourceOutputsReady } from '../src/update-runtime.ts';
 import { JobRunner } from '../src/jobs.ts';
 import { fixture, git } from './helpers/update-fixture.ts';
 
@@ -61,7 +61,7 @@ for (const problem of ['frozen-lock', 'network', 'local-config']) test(`post-pul
   assert.equal(job.state, 'failed'); assert.equal(result.coreDependencies, 'failed'); assert.equal(builds, 0);
   assert.equal(f.core.head(), target); assert.equal(f.workspace.head(), workspaceTarget);
   assert.ok(result.repositories.every(repo => repo.pending)); assert.match(job.lines.at(-1)!, /Restart required.*did not restart/);
-  assert.match(result.summary, problem === 'local-config' ? /manual review/ : problem === 'frozen-lock' ? /OUTDATED_LOCKFILE/ : /network unavailable/);
+  assert.match(result.steps.find(step => step.state === 'failed')!.reason!, problem === 'local-config' ? /manual review/ : problem === 'frozen-lock' ? /OUTDATED_LOCKFILE/ : /network unavailable/);
   await fs.access(path.join(f.core.checkout, '.git', CORE_MARKER)); await fs.access(path.join(f.workspace.checkout, '.git', WORKSPACE_MARKER));
   fail = false;
   // Config refusal requires a person's review, not automatic removal or a blind retry.
@@ -117,6 +117,36 @@ test('regression: reverted dependency inputs are prepared again after an interru
     const codeOnly = await runUpdate(f.workspace.checkout, f.ctx, deps);
     assert.equal(codeOnly.coreDependencies, 'unchanged'); assert.equal(installs, 2, 'matching successful preparation remains reusable');
   });
+});
+
+test('core preparation and scoped native work complete after workspace source refusal and are reused on retry', async t => {
+  const f = await fixture(t), calls: string[] = [], built = new Set<string>();
+  await fs.mkdir(path.join(f.core.publisher, 'embedded'));
+  await fs.writeFile(path.join(f.core.publisher, 'embedded/README.md'), 'fixture bundled sources');
+  await publishGraph(f.core); await f.workspace.publish('shared.txt', 'incoming source\n');
+  await fs.writeFile(path.join(f.workspace.checkout, 'shared.txt'), 'local source\n');
+  const deps = { core: f.core.checkout, git: f.runner,
+    setupCore: async () => { calls.push('dependencies'); }, setupServices: async () => { calls.push('components'); },
+    outputsReady: async (scope: string) => built.has('all') || built.has(scope),
+    rebuild: async (_: boolean, __: unknown, scope?: string) => { calls.push(scope!); built.add(scope!); return []; } };
+  const first = await rejected(runUpdate(f.workspace.checkout, f.ctx, deps));
+  assert.deepEqual(calls, ['dependencies', 'components', 'core']);
+  assert.equal(first.coreDependencies, 'prepared'); assert.equal(first.repositories[0]!.pending, false);
+  assert.equal(first.steps.find(step => step.id === 'workspace-build')!.state, 'deferred');
+  await fs.writeFile(path.join(f.workspace.checkout, 'shared.txt'), 'one\n'); calls.length = 0;
+  const retry = await runUpdate(f.workspace.checkout, f.ctx, deps);
+  assert.deepEqual(calls, ['components', 'workspace']); assert.ok(retry.repositories.every(repo => !repo.pending));
+});
+
+test('fresh output-readiness boundary checks the selected workspace and rejects missing or ambiguous proof', async () => {
+  const core = path.resolve('fixture-core'), workspace = path.resolve('fixture-user');
+  assert.equal(await updatedSourceOutputsReady(core, workspace, 'core', async (_cmd, args, line, opts) => {
+    assert.deepEqual(args, [path.join(core, 'packages/control-panel/src/update-rebuild.ts'), `--workspace=${workspace}`, '--scope=core', '--check']);
+    assert.equal(opts?.cwd, core); line('XRB_UPDATE_READY_RESULT true'); return 0;
+  }), true);
+  assert.equal(await updatedSourceOutputsReady(core, workspace, 'all', async () => 0), false);
+  assert.equal(await updatedSourceOutputsReady(core, workspace, 'all', async (_cmd, _args, line) => { line('XRB_UPDATE_READY_RESULT true'); line('XRB_UPDATE_READY_RESULT true'); return 0; }), false);
+  assert.equal(await updatedSourceOutputsReady(core, workspace, 'workspace', async (_cmd, _args, line) => { line('XRB_UPDATE_READY_RESULT true'); return 1; }), false);
 });
 
 test('fresh installer and native rebuild entry points use the fetched core paths and check child completion', async () => {

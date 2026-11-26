@@ -10,10 +10,21 @@
 #include <thread>
 using nlohmann::json;
 namespace {
-bool readControl(json* out) {
-  std::string text; char ch;
-  while (std::cin.get(ch)) { if (ch == '\n') { *out = json::parse(text, nullptr, false); return out->is_object(); } if (text.size() == 16384) return false; text += ch; }
-  return false;
+bool readControl(json* out, const std::atomic<bool>* cancelled = nullptr) {
+  std::string text; char ch; const HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+  for (;;) {
+    if (cancelled) {
+      if (*cancelled) return false;
+      DWORD available = 0;
+      if (!PeekNamedPipe(input, nullptr, 0, nullptr, &available, nullptr)) return false;
+      if (!available) { Sleep(10); continue; }
+    }
+    DWORD read = 0;
+    if (!ReadFile(input, &ch, 1, &read, nullptr) || read != 1) return false;
+    if (ch == '\n') { *out = json::parse(text, nullptr, false); return out->is_object(); }
+    if (text.size() == 16384) return false;
+    text += ch;
+  }
 }
 void event(const json& data) { std::cout << "@provider " << data.dump(-1, ' ', false, json::error_handler_t::replace) << std::endl; }
 }
@@ -68,9 +79,15 @@ int main(int argc, char** argv) {
       Sleep(20);
     }
   });
-  // EOF is an owning-process loss signal, not an unbounded detached worker. This thread is joined
-  // after CancelSynchronousIo on normal shutdown, including failures before any command arrived.
-  std::thread reader([&] { json command; while (readControl(&command)) { if (command.value("stop", false)) break; } quit = true; });
+  // Cancellation is state, not a one-shot CancelSynchronousIo call: failure can precede the
+  // reader's first pending read. Polling an owned pipe keeps join bounded even in that ordering.
+  const auto commands = [&] { json command; while (readControl(&command, &quit)) { if (command.value("stop", false)) break; } quit = true; };
+  bool deferReader = false;
+#ifdef XRB_PROVIDER_TEST
+  deferReader = bootstrap.value("deferControlReader", false);
+#endif
+  std::thread reader;
+  if (!deferReader) reader = std::thread(commands);
   plugins::Catalog catalog; providers::Input input; providers::Sink sink; session::Frames frames;
   sink.log = [&](const std::string&, int, const std::string& text) { std::lock_guard<std::mutex> lock(reasonMutex); providerLog = text.substr(0, 1024); };
   sink.hands = [&](const XrbHandFrame& frame) {
@@ -144,7 +161,8 @@ int main(int argc, char** argv) {
   if (input) { input.api->stop(input.self); input.reset(); }
   catalog.unload();
   lease.release(); // stop promised callback quiescence; destroy has completed.
-  CancelSynchronousIo(reader.native_handle()); reader.join();
+  if (deferReader) reader = std::thread(commands); // Deterministically exercise failure before the first read.
+  reader.join();
   done = true; watchdog.join(); CloseHandle(parent);
   { std::lock_guard<std::mutex> lock(reasonMutex); event({{"phase", failure.empty() ? "stopped" : "failed"}, {"reason", failure}}); }
   return failure.empty() ? 0 : 4;

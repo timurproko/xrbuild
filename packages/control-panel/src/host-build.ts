@@ -195,8 +195,8 @@ export interface NativePluginProject {
 }
 
 /** Resolve native sources once; all builds and freshness checks share this ownership plan. */
-export async function nativePluginPlan(repo: string, workspace: string, includeDisabled = false) {
-  const catalog = await resolvePluginCatalog(workspace, repo, includeDisabled), projects: NativePluginProject[] = [];
+export async function nativePluginPlan(repo: string, workspace: string, includeDisabled = false, origin?: 'bundled' | 'workspace') {
+  const catalog = await resolvePluginCatalog(workspace, repo, includeDisabled, undefined, origin ? [origin] : undefined), projects: NativePluginProject[] = [];
   const problems = [...catalog.problems];
   for (const plugin of catalog.selected) {
     const own: NativePluginProject[] = [];
@@ -226,8 +226,8 @@ export function resolvedPluginCmakeVars(repo: string, project: NativePluginProje
     `-DXRB_CORE_THIRD_PARTY=${p(coreDependencies)}`, `-DXRB_PLUGIN_BIN_DIR=${p(project.outputDir)}`];
 }
 
-export async function resolvedHostFreshness(repo: string, workspace: string, coreOnly = false): Promise<HostFreshness> {
-  const plan = coreOnly ? { projects: [], problems: [] } : await nativePluginPlan(repo, workspace), plugins: PluginFreshness[] = [];
+export async function resolvedHostFreshness(repo: string, workspace: string, coreOnly = false, origin?: 'bundled' | 'workspace'): Promise<HostFreshness> {
+  const plan = coreOnly ? { projects: [], problems: [] } : await nativePluginPlan(repo, workspace, false, origin), plugins: PluginFreshness[] = [];
   for (const project of plan.projects) {
     const plugin = project.plugin;
     try {
@@ -460,7 +460,7 @@ async function cmakeBuild(cmake: string, generator: string, sourceDir: string, b
   await ctx.run(cmake, ['--build', buildDir, '--config', 'Release']);
 }
 
-export interface RebuildOptions { coreOnly?: boolean; pluginsOnly?: boolean; includeDisabled?: boolean; cmake?: string; generator?: string }
+export interface RebuildOptions { coreOnly?: boolean; pluginsOnly?: boolean; includeDisabled?: boolean; cmake?: string; generator?: string; pluginOrigin?: 'bundled' | 'workspace' }
 
 async function plainNativeTree(dir: string): Promise<void> {
   const entries = await fs.readdir(dir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return []; throw error; });
@@ -472,8 +472,8 @@ async function plainNativeTree(dir: string): Promise<void> {
 }
 
 /** Build a selected origin as one transaction; partial binaries never become active via a success stamp. */
-export async function rebuildNativePlugins(repo: string, workspace: string, ctx: JobContext, cmake: string, generator: string, includeDisabled = false): Promise<void> {
-  const plan = await nativePluginPlan(repo, workspace, includeDisabled);
+export async function rebuildNativePlugins(repo: string, workspace: string, ctx: JobContext, cmake: string, generator: string, includeDisabled = false, origin?: 'bundled' | 'workspace'): Promise<void> {
+  const plan = await nativePluginPlan(repo, workspace, includeDisabled, origin);
   const dependencies = await nativeDependencyRoot(repo, workspace);
   if (plan.problems.length) throw new Error(plan.problems.join('; '));
   const groups = new Map<string, NativePluginProject[]>();
@@ -563,8 +563,8 @@ export async function rebuildHost(repo: string, workspace: string, ctx: JobConte
   ctx.line(`using ${generator} (${cmake})`);
   if (!options.pluginsOnly) await rebuildCoreHost(repo, workspace, ctx, cmake, generator);
   if (!options.coreOnly) {
-    await rebuildNativePlugins(repo, workspace, ctx, cmake, generator, options.includeDisabled);
-    await rebuildPluginContributions(repo, workspace, ctx, { cmake, generator }, options.includeDisabled);
+    await rebuildNativePlugins(repo, workspace, ctx, cmake, generator, options.includeDisabled, options.pluginOrigin);
+    await rebuildPluginContributions(repo, workspace, ctx, { cmake, generator }, options.includeDisabled, options.pluginOrigin);
   }
-  return resolvedHostFreshness(repo, workspace, options.coreOnly);
+  return resolvedHostFreshness(repo, workspace, options.coreOnly, options.pluginOrigin);
 }

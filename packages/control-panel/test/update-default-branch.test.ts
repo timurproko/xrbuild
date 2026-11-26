@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { test } from 'node:test';
-import { fastForward, runGit, UpdateError, type GitRunner } from '../src/update.ts';
+import { fastForward, runGit, workspaceUpdateStatus, UpdateError, type GitRunner } from '../src/update.ts';
 import { ENV, fixture, git, snapshot } from './helpers/update-fixture.ts';
 
 const options = { role: 'core' as const, lfs: 'optional' as const, marker: 'xrb-test-update' };
@@ -52,7 +52,7 @@ test('default rename is discovered despite stale origin HEAD and removed upstrea
 for (const state of ['unstaged', 'staged', 'untracked', 'deleted', 'detached', 'no-upstream', 'other-upstream', 'other-remote', 'ahead', 'diverged']) {
   test(`unsafe ${state} refuses without changing HEAD, branch, index or files`, async t => {
     const f = await fixture(t);
-    if (state !== 'ahead') await f.core.publish('other.txt');
+    if (state !== 'ahead') await f.core.publish(state === 'untracked' ? 'new.txt' : ['unstaged', 'staged'].includes(state) ? 'shared.txt' : 'other.txt');
     if (state === 'unstaged' || state === 'staged') {
       await fs.writeFile(path.join(f.core.checkout, 'shared.txt'), 'local\n');
       if (state === 'staged') git(f.core.checkout, 'add', '.');
@@ -70,7 +70,7 @@ for (const state of ['unstaged', 'staged', 'untracked', 'deleted', 'detached', '
     const before = await snapshot(f.core.checkout);
     await assert.rejects(fastForward(f.core.checkout, f.ctx, { ...options, git: f.runner }), /retry.*Update/);
     assert.deepEqual(await snapshot(f.core.checkout), before);
-    assert.ok(!f.calls.some(({ args }) => args.includes('merge') || ['reset', 'stash', 'checkout', 'switch'].includes(args[0]!)));
+    assert.ok(!f.calls.some(({ args }) => ['reset', 'stash', 'checkout', 'switch'].includes(args[0]!)));
   });
 }
 
@@ -100,21 +100,23 @@ test('LFS download uses the captured target even if remote advances afterwards',
   await fastForward(f.workspace.checkout, f.ctx, { ...options, role: 'workspace', lfs: 'required', git: runner });
   assert.equal(f.workspace.head(), target); assert.notEqual(target, next);
   assert.equal(f.calls.filter(call => call.args[0] === 'fetch').length, 1);
-  assert.ok(f.calls.some(call => call.args.join(' ') === `-c merge.autostash=false merge --ff-only --no-edit ${target}`));
+  assert.ok(f.calls.some(call => call.args.join(' ') === `-c merge.autostash=false merge --ff-only --no-edit --no-overwrite-ignore ${target}`));
 });
 
 test('Git fast-forward refusal leaves HEAD and files unchanged and removes only its new pending marker', async t => {
   const f = await fixture(t), before = await snapshot(f.core.checkout); await f.core.publish();
   const runner: GitRunner = (args, cwd, opts) => args.includes('merge') ? Promise.resolve({ code: 1, output: 'not possible to fast-forward' }) : f.runner(args, cwd, opts);
-  await assert.rejects(fastForward(f.core.checkout, f.ctx, { ...options, git: runner }), /could not fast-forward.*by hand/);
+  await assert.rejects(fastForward(f.core.checkout, f.ctx, { ...options, git: runner }), /could not fast-forward safely/);
   assert.deepEqual(await snapshot(f.core.checkout), before);
   assert.equal(await fs.stat(path.join(f.core.checkout, '.git', options.marker)).then(() => true, () => false), false);
 });
 
-test('required workspace LFS absence fails even at a freshly current HEAD', async t => {
+test('a freshly current workspace succeeds without LFS materialization even when LFS is missing', async t => {
   const f = await fixture(t), before = await snapshot(f.workspace.checkout);
   const runner: GitRunner = (args, cwd, opts) => args[0] === 'lfs' ? Promise.resolve({ code: 127, output: 'missing' }) : f.runner(args, cwd, opts);
-  await assert.rejects(fastForward(f.workspace.checkout, f.ctx, { ...options, role: 'workspace', lfs: 'required', git: runner }), /Git LFS is required.*install/);
+  assert.equal((await workspaceUpdateStatus(f.workspace.checkout, runner)).available, true, 'cached currentness must not disable the explicit Update action solely for missing LFS');
+  const result = await fastForward(f.workspace.checkout, f.ctx, { ...options, role: 'workspace', lfs: 'required', git: runner });
+  assert.equal(result.commits, 0);
   assert.deepEqual(await snapshot(f.workspace.checkout), before);
 });
 

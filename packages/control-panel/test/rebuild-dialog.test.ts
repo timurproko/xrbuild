@@ -30,13 +30,13 @@ test('update presentation follows its steps and reports Git refusals and the res
   assert.equal(lfs.step,'lfs');assert.equal(lfs.message,'Step 3 of 6, LFS: Downloading required LFS files…');assert.match(lfs.output,/40% \(2\/5\)/);
   const plugin=rebuildPresentation({id:7,kind:'update',state:'running',lines:['step rebuild','plugin tracker']});
   assert.equal(plugin.message,'Step 6 of 6, Rebuild: Rebuilding tracker…');
-  const refused=rebuildPresentation({id:7,kind:'update',state:'failed',error:'Pull: Local changes would be overwritten by the update: a.txt. Commit or stash them first, then run Update again. Nothing changed.',lines:['step check','step fetch','step lfs','step pull','error: Your local changes would be overwritten']});
-  assert.equal(refused.title,'Update needs attention');assert.equal(refused.step,'pull');assert.match(refused.message,/a\.txt\. Commit or stash them first/);assert.match(refused.output,/would be overwritten/);assert.equal(refused.succeeded,false);
+  const refused=rebuildPresentation({id:7,kind:'update',state:'failed',error:'Pull: Incoming source changes would overwrite local work in a.txt; preserve or reconcile that file and retry Update.',lines:['step check','step fetch','step lfs','step pull','error: Your local changes would be overwritten']});
+  assert.equal(refused.title,'Update needs attention');assert.equal(refused.step,'pull');assert.match(refused.message,/a\.txt; preserve or reconcile/);assert.match(refused.output,/would be overwritten/);assert.equal(refused.succeeded,false);
   const summary='Core: 1111111 → 2222222. Workspace: 3333333 → 4444444. Restart required; Update did not restart the panel.';
   const done=rebuildPresentation({id:7,kind:'update',state:'done',lines:['step rebuild'],result:{state:'updated',summary}});
   assert.equal(done.title,'Updated');assert.equal(done.message,summary);assert.equal(done.succeeded,true);
   const needsRestart=rebuildPresentation({id:7,kind:'update',state:'done',result:{restartRequired:true,summary},lines:[]});
-  assert.equal(needsRestart.title,'Restart required');assert.equal(needsRestart.succeeded,false,'autoclose must not hide the Restart control');
+  assert.equal(needsRestart.title,'Updated, restart needed');assert.equal(needsRestart.succeeded,false,'autoclose must not hide the Restart control');
   const current=rebuildPresentation({id:7,kind:'update',state:'done',lines:['step fetch'],result:{state:'up-to-date',summary:'Workspace already up to date (1111111). Nothing was rebuilt.'}});
   assert.equal(current.title,'Already up to date','success refers to both repositories after fresh fetches');
   const notStarted=rebuildPresentation({kind:'update',state:'running',lines:[]},'The workspace is not a Git clone.');

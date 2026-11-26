@@ -16,24 +16,40 @@ export const remoteGit = (args:string[], cwd:string, signal:AbortSignal, timeout
     env:{...process.env,GIT_OPTIONAL_LOCKS:'0',GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never',
       GIT_SSH_COMMAND:process.env.GIT_SSH_COMMAND ?? 'ssh -oBatchMode=yes -oConnectTimeout=5'},
   });
-  let output='', failed=false;
+  let output='', failed=false, exited=false, settled=false;
   let cleanup:Promise<void>=Promise.resolve();
+  const finish = (code:number) => {
+    if(settled)return;settled=true;clearTimeout(timer);signal.removeEventListener('abort',abort);
+    resolve({code:failed?1:code,output});
+  };
+  const drainCancelled = async () => {
+    await cleanup;
+    if(!failed||!exited)return;
+    // Windows helpers/siblings can retain inherited pipe handles after Git exits. They must not
+    // keep admission queued forever: tree cleanup and the owned process exit are the fence, not EOF.
+    child.stdout.destroy();child.stderr.destroy();finish(1);
+  };
   const abort = () => {
     if(failed)return;failed=true;
     // Git may own an SSH/HTTP helper: cancellation must stop that tree, not orphan a network request.
-    if(process.platform==='win32'&&child.pid) {
-      cleanup=new Promise<void>(done=>{
-        const killer=spawn('taskkill',['/PID',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});
-        killer.on('error',()=>{child.kill();done();});killer.on('close',()=>done());
-      });
-    } else { try { process.kill(-child.pid!, 'SIGKILL'); } catch { child.kill(); } }
+    if(!exited) {
+      if(process.platform==='win32'&&child.pid) {
+        cleanup=new Promise<void>(done=>{
+          const killer=spawn('taskkill',['/PID',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});
+          killer.on('error',()=>{if(!exited)child.kill();done();});
+          killer.on('close',code=>{if(code&&!exited)child.kill();done();});
+        });
+      } else { try { process.kill(-child.pid!, 'SIGKILL'); } catch { child.kill(); } }
+    }
+    void drainCancelled();
   };
   const timer=setTimeout(abort,timeoutMs);
   signal.addEventListener('abort',abort,{once:true});
   child.stdout.setEncoding('utf8').on('data',(chunk:string)=>{ if(output.length<65536)output+=chunk;else abort(); });
   child.stderr.resume();
-  child.on('error',()=>{failed=true;});
-  child.on('close',async code=>{clearTimeout(timer);signal.removeEventListener('abort',abort);await cleanup;resolve({code:failed?1:code??1,output});});
+  child.on('error',()=>{failed=true;if(!child.pid){exited=true;void drainCancelled();}});
+  child.on('exit',()=>{exited=true;if(failed)void drainCancelled();});
+  child.on('close',async code=>{await cleanup;finish(code??1);});
 });
 const canonical = async (dir:string) => {
   const value=path.resolve(await fs.realpath(dir).catch(()=>dir));

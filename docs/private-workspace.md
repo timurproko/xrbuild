@@ -19,8 +19,9 @@ never leave it.
   Each repository reports full before/after commits; already up to date requires a fresh successful fetch.
   A refusal/failure in one repository does not prevent the other attempt, but the overall job fails with both results.
   A shared core/workspace checkout is updated once. Rebuild stays build-only; Update never stashes or discards work.
-  Setup and recovery details are below. The updater refuses every uncommitted
-  tracked/staged/untracked change (including non-conflicting edits), detached HEAD and local-only commits.
+  Setup and recovery details are below. Dirty state alone never blocks Update: current repositories succeed,
+  non-overlapping source edits survive, and workspace user data stays local even when upstream changes it.
+  Genuine source collisions, detached HEAD and local-only commits still require attention.
   A removed or non-default upstream is not migrated automatically: preserve local work and safely switch to the
   advertised default branch with matching origin tracking, then retry. Never discard work to satisfy Update.
 - `pnpm panel:repo`, `start-repo.vbs` and `pnpm fetch-deps:repo` explicitly select the current checkout's
@@ -82,8 +83,55 @@ currentness: only a successful fresh fetch can produce the job's already-up-to-d
 The checked-out branch must be the advertised default and track its matching origin branch. A stale local branch
 tracking a deleted upstream is an attention result, not success. Preserve local/unpublished work, safely select the
 reported default branch and configure its matching tracking branch, then retry. Update never switches branches,
-stashes changes, resets, forces refs or reconciles divergence on your behalf. Dirty tracked, staged, untracked and
-locally deleted files all block that repository, including non-conflicting edits.
+stashes changes, resets, forces refs or reconciles divergence on your behalf. Non-overlapping tracked, staged,
+untracked and deleted source files survive a safe fast-forward; actual source collisions name the first few paths.
+A fresh match with the remote succeeds regardless of local work.
+
+### Personal files are not source conflicts
+
+Workspace-root `xrb-plugins.json`, `xrb-panel.json`, panel-owned `config/` and user `projects/` are local user data.
+Update leaves their working copies and deliberate deletions exactly as they are, even if incoming commits edit,
+add or remove the same paths. Existing staged user-data entries are preserved too. The locally present generated
+workspace `pnpm-lock.yaml` is kept rather than silently regenerated; explicit package preparation owns reconciling
+the workspace dependency graph. Core's curated dependency lock remains source and uses frozen installation.
+
+When incoming defaults differ, Update succeeds and names the skipped paths. Inspect them with
+`git show <captured-commit>:<path>` (the job output supplies the commit/path), then explicitly adopt wanted settings
+through the panel. Never replace personal settings blindly, merge JSON automatically or commit credentials to make
+Update work. Incoming project changes never replace the person's local project tree.
+
+Current checkouts do not run a checkout procedure. Behind checkouts normally use plain `git merge --ff-only` with
+autostash disabled and untracked/ignored-file protection; Git decides whether staged source changes are safe,
+including source already staged exactly as incoming. Only incoming protected data that differs locally needs the
+special index-aware checkout: protected working paths are excluded and the branch advances to the exact fetched
+commit without a merge commit.
+
+That special case publishes one immutable prepared journal directory under Git metadata (`xrb-update-checkout`),
+separately from build resume markers. It has no mutable checkout/ready phase or owner-token file writes. A complete
+index snapshot and its ownership file acquire the index lock atomically. New Windows/Linux records bind the PID to
+its OS process creation identity, so a reused PID does not strand a dead writer's lock or preparation. Unknown
+identities and legacy PID-only records conservatively preserve an apparently live owner. Worktree progress is checked
+against the recorded old/new snapshots. Completion atomically retires the directory before cleanup. The next Update
+rolls back abandoned preparation and finishes or cleans interrupted publications automatically, including legacy
+`journal.next` files. Outside source/index/ref edits and unknown foreign locks are still preserved, never forced away.
+
+### Repository-owner tracking cleanup
+
+The shared workspace template ignores personal panel/plugin settings and transient write files, but deliberately
+keeps authored project sources and curated dependency locks versionable. Ignore status is not the updater's safety
+mechanism and does not untrack an existing file. In a separately approved private-repository task, the owner should:
+
+- Stop tracking personal `xrb-plugins.json` and `xrb-panel.json`; add anchored ignores and their write lock/temp patterns.
+  Keep any reviewed shared defaults in manifests or a separate example file, not personal settings.
+- Ignore `/projects/Unsorted/`, `/projects/unsorted/` and `/projects/.gitkeep` when these are installation-only paths;
+  retain deliberately authored/versioned projects and opt local projects into version control explicitly.
+- For a dynamic panel-managed dependency graph, keep a regenerable root lock local, optionally with a separate
+  versioned seed and documented explicit regeneration. For a curated graph, keep its lock versioned and isolate
+  user-project package preparation. Neither choice changes core's frozen-lock policy.
+- Back up and verify affected local files/projects before any tracking-removal migration, then preserve/restore
+  and verify the personal copies. A deletion commit alone is not a safe migration for older clients. Work only
+  in the owner's assigned task clone, not the person's live checkout. New Update already protects these paths
+  through such a removal, so tracking cleanup is not a prerequisite for safe Update.
 
 Loaded plugin services are not a prerequisite for Git recovery: stale JS, missing runtimes and restart-required
 service discovery do not veto either repository's attempt. Active plugin mutation/consumption, settings writes,
@@ -111,15 +159,26 @@ at an unchanged HEAD; markers clear only after that work succeeds. A separate de
 fingerprint of public inputs last successfully installed, independently of the pending update's original commit.
 It is invalidated before installation and only renewed after success, so reverted dependency inputs on a later
 retry are prepared again even when they match the original commit. Missing receipts are conservatively prepared.
-A refusal in either source defers builds that would consume unsafe local work, without undoing the other source's
-successful pull.
+Follow-up records name completed, failed and deferred steps. A workspace source refusal does not defer frozen core
+setup, bundled-component preparation or core host/bundled-plugin builds. Only workspace-plugin work consuming that
+source is deferred. A core refusal can defer workspace builds that need its SDK. Reuse of native work checks the
+existing native receipts, input freshness and actual host/plugin outputs through the fresh post-pull recipe in the
+canonical selected workspace. Commit-only Update receipts in core Git metadata are not trusted: building workspace
+A cannot prove that workspace B has a host or plugins. Missing or stale output is rebuilt, including a missing host
+on a workspace-scoped retry. Component readiness is also rechecked; no source refusal undoes another source's pull.
 
 Update does **not** restart the running panel. Whenever core HEAD changes, its last job-output line explicitly says
 **Restart required**, including when setup, rebuild or the workspace fails afterwards. Workspace source changes also
 conservatively require Restart so loaded plugin code is replaced. The warning remains latched in that process
 across subsequent Update jobs, even when disk commits are already current and build markers have cleared; only
-starting a new panel process clears it. Choose the existing panel **Restart** action after resolving failures;
-browser reload alone does not reload the running server's modules.
+starting a new panel process clears it. The result offers the existing in-place **Restart** control even after a
+partial failure and stays open when Restart is needed, including with Autoclose selected. Browser reload alone
+does not reload the running server's modules.
+
+The completed dialog has one overall title, one short line per repository (seven-character revisions or already
+up to date, plus any refusal/defaults notice) and at most one next-action line naming deferred work and activation.
+It does not repeat the full-hash job tail. **View job** retains full before/after revisions, step output, skipped
+upstream-default inspection guidance and one terminal result; CLI and failed-job handling do not replay that record.
 
 Older panels with the workspace-only Update implementation cannot install this fix by pressing their Update button:
 they never fetch core. For the first upgrade only, inspect and preserve core local work, manually fetch its remote

@@ -515,6 +515,7 @@ button.xrb-dialog-close:hover:not(:disabled), button.xrb-dialog-close:focus-visi
 dialog.xrb-rebuild-dialog, dialog.xrb-job-progress-dialog { width: min(660px, calc(100vw - 32px)); }
 .xrb-rebuild-dialog .xrb-progress-status, .xrb-job-progress-dialog .xrb-progress-status { min-height: 64px; }
 .xrb-rebuild-dialog > .log, .xrb-job-progress-dialog > .log { margin-top: 20px; height: min(33vh, 280px); max-height: none; }
+.xrb-rebuild-dialog > .xrb-copy-block:has(> .log[hidden]) { min-height: 36px; }
 .xrb-progress-status-icon { display: grid; place-items: center; width: 28px; height: 28px; flex: none; }
 .xrb-progress-status-icon > * { grid-area: 1 / 1; }
 .xrb-progress-status-icon > svg { width: 28px; height: 28px; color: var(--accent); }

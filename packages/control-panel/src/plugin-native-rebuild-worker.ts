@@ -4,9 +4,10 @@ import { containedModule, resolvePluginCatalog } from './extension-catalog.ts';
 import { pluginServiceContext } from './plugin-service.ts';
 import { runProcess, type JobContext } from './jobs.ts';
 
-const [core, workspace, key, cmake, generator, includeDisabled] = process.argv.slice(2);
+const [core, workspace, key, cmake, generator, includeDisabled, origin] = process.argv.slice(2);
 try {
-  const catalog = await resolvePluginCatalog(workspace, core, includeDisabled === 'true');
+  if (origin !== undefined && origin !== 'bundled' && origin !== 'workspace') throw new Error('Invalid native rebuild origin');
+  const catalog = await resolvePluginCatalog(workspace, core, includeDisabled === 'true', undefined, origin ? [origin] : undefined);
   if (catalog.problems.length) throw new Error(catalog.problems.join('; '));
   const plugin = catalog.selected.find(candidate => candidate.key === key);
   const declaration = plugin?.meta.exports?.['native-rebuild'];

@@ -2,7 +2,7 @@ export interface RebuildJob {
   id?:number;
   kind?:string;
   step?:string|null;
-  result?:{state?:string;summary?:string;restartRequired?:boolean;restart?:boolean}|null;
+  result?:{state?:string;summary?:string;restartRequired?:boolean;restart?:boolean;title?:string;repositoryLines?:string[];nextAction?:string;repositories?:Array<{role:string;roles?:string[];state:string;from?:string|null;to?:string|null;error?:string|null}>}|null;
   state:'running'|'done'|'failed';
   error?:string|null;
   lines?:string[];
@@ -13,6 +13,7 @@ export interface RebuildPresentation {
   title:string;
   message:string;
   output:string;
+  outputHidden?:boolean;
   running:boolean;
   succeeded:boolean;
   viewJobDisabled:boolean;

@@ -39,7 +39,6 @@ export function updateTooltip(status, now = Date.now()) {
     if (!repo) return '';
     if (repo.sameAsCore) return 'Workspace: same checkout as core; updated once.';
     if (!repo.available) return `${label}: ${repo.reason ?? 'needs attention.'}`;
-    if (repo.dirty) return `${label}: local changes need attention before Update.`;
     if (repo.unfinished) return `${label}: the last update did not finish; run Update again.`;
     if (repo.ahead) return `${label}: ${commitCount(repo.ahead)} not on the cached upstream; reconcile local history first.`;
     const checked = repo.checkedMs ? `, checked ${agoText(repo.checkedMs, now)}` : ', not fetched yet';
@@ -62,13 +61,25 @@ function updatePresentation(job, error, running, failed, phase) {
   // The job carries its current step: /api/jobs sends only the last lines, which long LFS or build output fills.
   const latest = job?.step ?? [...(job?.lines ?? [])].reverse().find((line) => line.startsWith('step '))?.slice('step '.length);
   const at = Math.max(0, UPDATE_STEPS.findIndex((step) => step.id === latest)), step = UPDATE_STEPS[at];
-  const upToDate = job?.result?.state === 'up-to-date';
+  const result = job?.result, upToDate = result?.state === 'up-to-date';
   const doing = step.id === 'rebuild' ? `Rebuilding ${phase ? phase.slice('plugin '.length) : 'plugins'}` : step.message;
+  // Also handle an older server process that has just pulled this UI: never replay its full-hash summary.
+  const repositoryLines = result?.repositoryLines ?? result?.repositories?.map(repo => {
+    const label = (repo.roles ?? [repo.role]).map(role => role === 'core' ? 'Core' : 'Workspace').join('/');
+    const revision = repo.state === 'up-to-date' ? 'already up to date' : `${repo.from?.slice(0, 7) ?? 'unknown'} → ${repo.to?.slice(0, 7) ?? 'unknown'}`;
+    const reason = repo.state === 'failed' ? `; ${(repo.error || 'needs attention').replace(/^(Check|Fetch|LFS|Pull): (Core|Workspace): /, '').split(';')[0].slice(0, 220)}` : '';
+    return `${label}: ${revision}${reason}.`;
+  });
+  const nextAction = result?.nextAction ?? (result?.restartRequired ? 'Restart to load updated code.' : failed ? 'View job for recovery details.' : '');
+  const advanced = result?.repositories?.find(repo => repo.state === 'updated'), refused = result?.repositories?.filter(repo => repo.state === 'failed') ?? [];
+  const legacyTitle = failed && advanced && refused.length === 1
+    ? `${advanced.role === 'core' ? 'Core' : 'Workspace'} updated; ${refused[0].role} needs attention` : '';
   return {
     step: step.id,
-    title: running ? 'Updating' : failed ? 'Update needs attention' : job?.result?.restartRequired ? 'Restart required' : upToDate ? 'Already up to date' : 'Updated',
+    title: running ? 'Updating' : error ? 'Update needs attention' : result?.title || legacyTitle || (failed ? 'Update needs attention' : result?.restartRequired ? 'Updated, restart needed' : upToDate ? 'Already up to date' : 'Updated'),
     message: error || (running ? `Step ${at + 1} of ${UPDATE_STEPS.length}, ${step.title}: ${doing}…`
-      : failed ? job?.result?.summary || job?.error || `${step.title} failed: see the output below.` : job?.result?.summary || 'Update completed.'),
+      : repositoryLines?.length ? [...repositoryLines, ...(nextAction ? [nextAction] : [])].join('\n')
+      : result?.summary || job?.error || (failed ? `${step.title} failed: see the output below.` : 'Update completed.')),
   };
 }
 
@@ -81,7 +92,8 @@ export function rebuildPresentation(job, error = '') {
     return {
       state: running ? 'running' : failed ? 'failed' : 'done',
       ...updatePresentation(job, error, running, failed, phase),
-      output: job.lines?.length ? job.lines.slice(-20).join('\n') : error ? error : 'Waiting for output…',
+      output: !running && job.result?.repositories ? '' : job.lines?.length ? job.lines.slice(-20).join('\n') : error ? error : 'Waiting for output…',
+      outputHidden: !running && !!job.result?.repositories,
       running,
       succeeded: !running && !failed && !job?.result?.restartRequired,
       viewJobDisabled: job.id == null,
@@ -172,6 +184,8 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
       status.dataset.state = presentation.state;
       title.textContent = presentation.title;
       message.textContent = presentation.message;
+      message.style.whiteSpace = job?.kind === 'update' ? 'pre-line' : '';
+      output.hidden = !!presentation.outputHidden;
       output.textContent = presentation.output;
       output.scrollTop = output.scrollHeight;
       actions.classList.toggle('is-building', presentation.running);

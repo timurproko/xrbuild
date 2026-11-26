@@ -6,7 +6,12 @@ builds/
 # Durable local embedded edits, deployment state and cooperating-writer scratch are user-owned.
 .xrb/
 .xrb-layout.lock
-xrb-panel.json.*.tmp
+/xrb-panel.json
+/xrb-plugins.json
+/xrb-panel.json.lock
+/xrb-plugins.json.lock
+/xrb-panel.json.*.tmp
+/xrb-plugins.json.*.tmp
 .xrb-manifest-*.tmp
 plugins/*/bin/
 third_party/

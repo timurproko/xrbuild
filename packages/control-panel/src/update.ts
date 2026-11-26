@@ -5,27 +5,31 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { JobFailure, LineSplitter, type JobContext } from './jobs.ts';
-import { rebuildUpdatedSources, rebuildUpdatedServices, setupUpdatedCore } from './update-runtime.ts';
+import { rebuildUpdatedSources, rebuildUpdatedServices, setupUpdatedCore, updatedSourceOutputsReady } from './update-runtime.ts';
+import { checkoutFetchedCommit, resumeProtectedCheckout, CheckoutRefusal, keptWorkspacePath } from './update-checkout.ts';
+import { finishUpdateWork, type BuildScope, type FollowupStep } from './update-followup.ts';
+import { compactUpdateResult } from './update-result.ts';
 
 export interface GitResult { code: number; output: string }
 /** Runs `git <args>` in a folder; streamed lines go to onLine. Injectable so tests can stub `git lfs`. */
-export type GitRunner = (args: string[], cwd: string, opts?: { onLine?: (line: string) => void; env?: NodeJS.ProcessEnv }) => Promise<GitResult>;
+export type GitRunner = (args: string[], cwd: string, opts?: { onLine?: (line: string) => void; env?: NodeJS.ProcessEnv; raw?: boolean; input?: string }) => Promise<GitResult>;
 
 export const runGit: GitRunner = (args, cwd, opts = {}) => new Promise((resolve) => {
-  const lines: string[] = [];
+  const lines: string[] = [], stdout: string[] = [];
   const onLine = (line: string) => { lines.push(line); opts.onLine?.(line); };
   let child;
   try {
-    child = spawn('git', args, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...opts.env } });
+    child = spawn('git', args, { cwd, windowsHide: true, stdio: [opts.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'], env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...opts.env } });
   } catch (e) {
     resolve({ code: 127, output: (e as Error).message });
     return;
   }
+  if (opts.input !== undefined) { child.stdin!.on('error', () => {}); child.stdin!.end(opts.input); }
   const out = new LineSplitter(onLine), err = new LineSplitter(onLine);
-  child.stdout!.setEncoding('utf8').on('data', (d: string) => out.push(d));
+  child.stdout!.setEncoding('utf8').on('data', (d: string) => { stdout.push(d); out.push(d); });
   child.stderr!.setEncoding('utf8').on('data', (d: string) => err.push(d));
   child.on('error', (e) => { lines.push(e.message); });
-  child.on('close', (code) => { out.flush(); err.flush(); resolve({ code: code ?? 127, output: lines.join('\n') }); });
+  child.on('close', (code) => { out.flush(); err.flush(); resolve({ code: code ?? 127, output: opts.raw && code === 0 ? stdout.join('') : lines.join('\n') }); });
 });
 
 /** Which of the two repositories of an update a folder is. */
@@ -139,7 +143,7 @@ export async function repoUpdateStatus(dir: string, options: RepoStatusOptions):
   const checkedMs = fetchHead.code === 0 ? (await fs.stat(fetchFile).catch(() => null))?.mtimeMs ?? null : null;
   const unfinished = options.marker ? !!await readMarker(await markerPath(dir, git, options.marker)) : false;
   const base = { branch: name, upstream: firstLine(upstream.output), ahead: ahead ?? 0, behind: behind ?? 0, dirty: status.output.split('\n').filter((l) => l.trim()).length, checkedMs, unfinished };
-  if (options.lfs === 'required' && (await git(['lfs', 'version'], dir)).code !== 0) return unavailable(dir, role, 'Git LFS is not installed.', base);
+  if (options.lfs === 'required' && behind > 0 && (await git(['lfs', 'version'], dir)).code !== 0) return unavailable(dir, role, 'Git LFS is not installed.', base);
   return { dir, role, available: true, reason: null, ...base };
 }
 
@@ -187,6 +191,7 @@ export interface RepoOutcome {
   step: UpdateStep | null;
   pending: boolean;
   marker: string | null;
+  retained?: string[];
 }
 
 export interface UpdateResult {
@@ -194,14 +199,18 @@ export interface UpdateResult {
   repositories: RepoOutcome[];
   coreDependencies: 'unchanged' | 'prepared' | 'failed' | 'deferred';
   rebuilt: string[];
+  steps: FollowupStep[];
   restartRequired: boolean;
   lastLine: string;
   summary: string;
+  title: string;
+  repositoryLines: string[];
+  nextAction: string;
 }
 
 export class UpdateFailure extends JobFailure {
   declare readonly result: UpdateResult;
-  constructor(result: UpdateResult) { super(result.summary, result, result.lastLine); }
+  constructor(result: UpdateResult) { super(result.title, result, undefined, true); }
 }
 
 export interface UpdateDeps {
@@ -211,10 +220,12 @@ export interface UpdateDeps {
   /** True when the core host is built and current, so only plugins need a rebuild. */
   coreHostCurrent?: () => Promise<boolean>;
   /** Injectable build boundary; production invokes the fetched recipe in a fresh Node process. */
-  rebuild?: (pluginsOnly: boolean, ctx: JobContext) => Promise<string[]>;
+  rebuild?: (pluginsOnly: boolean, ctx: JobContext, scope?: BuildScope) => Promise<string[]>;
   /** Injectable installer boundary; production uses the existing frozen public-core installer in a fresh process. */
   setupCore?: (core: string, ctx: JobContext) => Promise<void>;
   setupServices?: (core: string, workspace: string, ctx: JobContext) => Promise<void>;
+  /** Test boundary; production verifies current outputs through the fresh recipe in the selected workspace. */
+  outputsReady?: (scope: BuildScope) => Promise<boolean>;
 }
 
 /** Plugin ids from rebuilt native projects: a plugin's `<id>/runtime` subproject is the same plugin. */
@@ -255,6 +266,8 @@ export interface FastForwardOptions {
   lfs: 'required' | 'optional';
   /** The resume marker written after the fast-forward, until the caller's update finishes. */
   marker: string;
+  /** The core can also be the selected user workspace; protect data for either workspace role. */
+  workspaceData?: boolean;
 }
 
 export interface FastForwardResult {
@@ -272,6 +285,7 @@ export interface FastForwardResult {
   pending: boolean;
   /** The marker file to remove once the update finishes, or null. */
   marker: string | null;
+  retained: string[];
 }
 
 /** Freshly discover/fetch origin's default branch, refuse unsafe local state, and fast-forward to that exact target.
@@ -302,6 +316,8 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
     ? 'The core is not a Git checkout; install a newer package instead of using Update.'
     : 'The workspace is not a Git clone; select an independent clone before retrying Update.');
   if (!await samePath(top.output.trim(), dir)) throw fail('check', 'This is not an independent clone; select its checkout root before retrying Update.');
+  const attemptBefore = await head();
+  let retained = await resumeProtectedCheckout(dir, git, out);
   const before = await head();
   const marker = await markerPath(dir, readOnly(git), options.marker);
   if (!marker) throw fail('check', 'Cannot locate the update marker; check Git permissions and retry Update.');
@@ -337,8 +353,6 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
     const currentBranch = await quiet(['symbolic-ref', '-q', '--short', 'HEAD']);
     if (currentBranch.code !== 0 || currentBranch.output.trim() !== branch || await head() !== before)
       throw fail('check', 'HEAD changed during Update; finish other Git work and retry Update.');
-    const status = await checked(['status', '--porcelain', '--untracked-files=all']);
-    if (status) throw fail('check', 'Uncommitted or untracked changes exist; commit or move them to safety before retrying Update.');
     for (const state of ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply']) {
       const file = await checked(['rev-parse', '--git-path', state]);
       if (await fs.stat(path.resolve(dir, file)).then(() => true, () => false))
@@ -352,7 +366,6 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
   if (ahead > 0) throw fail('fetch', `${ahead} local commit(s) are absent from origin/${defaultBranch}${behind ? ` and ${behind} remote commit(s) are missing locally` : ''}; reconcile local history by hand before retrying Update.`);
 
   const lfsInstalled = (await quiet(['lfs', 'version'])).code === 0;
-  if (options.lfs === 'required' && !lfsInstalled) throw fail('lfs', 'Git LFS is required; install it and retry Update.');
   if (behind > 0) {
     // Optional LFS still must not silently check out pointers when the fetched core tracks LFS files.
     const attributes = await quiet(['grep', '-l', 'filter=lfs', target, '--', '.gitattributes', '**/.gitattributes']);
@@ -370,18 +383,33 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
     step('pull');
     // Write before checkout so a crash after advancing HEAD still leaves retryable build work.
     if (!pending) await fs.writeFile(marker, `${JSON.stringify({ from: before })}\n`);
-    const pulled = await loud(['-c', 'merge.autostash=false', 'merge', '--ff-only', '--no-edit', target]);
-    if (pulled.code !== 0) {
-      if (!pending && await head() === before) await fs.rm(marker, { force: true });
-      throw fail('pull', 'Git could not fast-forward; check git status and reconcile by hand before retrying Update.');
+    try {
+      const kept = await checkoutFetchedCommit(dir, { git, before, target, branch,
+        workspace: options.workspaceData ?? options.role === 'workspace', workspaceLock: options.role === 'workspace', ensureUnchanged, line: out });
+      retained = [...new Set([...retained, ...kept])];
+    } catch (error) {
+      if (!pending && await head() === before) {
+        // A checkout journal is independent of the retryable build marker and must remain recoverable.
+        const journal = await markerPath(dir, readOnly(git), 'xrb-update-checkout');
+        if (!journal || !await fs.stat(journal).then(() => true, () => false)) await fs.rm(marker, { force: true });
+      }
+      if (error instanceof CheckoutRefusal) { if (!error.outputLogged) out(error.output); throw fail('pull', error.message); }
+      throw fail('pull', (error as Error).message);
     }
   }
   const to = await head();
   if (to !== target) throw fail('pull', 'HEAD does not match the fetched target; inspect other Git activity before retrying Update.');
+  if (pending?.from && (options.workspaceData ?? options.role === 'workspace')) {
+    // A process can exit after retiring the checkout journal but before returning its notice.
+    const range = await readOnly(git)(['diff-tree', '--no-renames', '--no-commit-id', '--name-only', '-r', '-z', pending.from, to], dir, { raw: true });
+    if (range.code === 0) retained = [...new Set([...retained, ...range.output.split('\0').filter(file => keptWorkspacePath(file)
+      && (options.role === 'workspace' || file.toLowerCase() !== 'pnpm-lock.yaml'))])];
+  }
+  if (retained.length) out(`${prefix}Kept local user data: ${retained.map(file => JSON.stringify(file)).join(', ')}; upstream defaults were not applied. Inspect with git show ${target}:<path> (or git show ${target} -- <path> for deletions); adopt reviewed values through Settings or reconcile the workspace lock through explicit package preparation; copy wanted upstream project content into a separate project.`);
   const from = pending?.from || before;
   const count = await checked(['rev-list', '--count', `${from}..${to}`]);
   if (!/^\d+$/.test(count)) throw fail('check', 'Cannot read the update range; inspect Git history before retrying Update.');
-  return { before, from, to, commits: Number(count), ahead: 0, defaultBranch, fetched: true, pending: !!pending, marker };
+  return { before: attemptBefore, from, to, commits: Number(count), ahead: 0, defaultBranch, fetched: true, pending: !!pending, marker, retained };
 }
 
 export interface UpdateStatus { core: RepoStatus; workspace: RepoStatus }
@@ -428,10 +456,10 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
     repositories.push(outcome);
     try {
       const moved = await fastForward(target.dir, ctx, { git, role: target.role, lfs: target.role === 'core' ? 'optional' : 'required',
-        marker: target.role === 'core' ? CORE_MARKER : WORKSPACE_MARKER });
+        marker: target.role === 'core' ? CORE_MARKER : WORKSPACE_MARKER, workspaceData: target.roles.includes('workspace') });
       Object.assign(outcome, { state: moved.commits || moved.pending ? 'updated' : 'up-to-date', from: moved.before, to: moved.to,
         updateFrom: moved.from, commits: moved.commits, fetched: true, defaultBranch: moved.defaultBranch,
-        pending: moved.pending || moved.before !== moved.to, marker: moved.marker });
+        pending: moved.pending || moved.before !== moved.to, marker: moved.marker, retained: moved.retained });
     } catch (e) {
       outcome.to = await checkoutHead(target.dir, git).catch(() => null);
       outcome.error = redactRemote((e as Error).message);
@@ -441,72 +469,47 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
     }
   }
 
-  const work = repositories.filter(repo => repo.pending);
-  let coreDependencies: UpdateResult['coreDependencies'] = 'unchanged';
-  let rebuilt: string[] = [], buildError: string | null = null;
-  let componentsPending = false;
-  const prepareServices = async () => {
-    if (!deps.core || !await fs.access(path.join(deps.core, 'embedded')).then(() => true, () => false)) return;
-    ctx.line('step setup');
-    ctx.line('Rebuild: checking application components…');
-    componentsPending = true;
-    await (deps.setupServices ?? rebuildUpdatedServices)(deps.core, workspace, ctx);
-    componentsPending = false;
-  };
-  if (work.length) {
-    if (repositories.some(repo => repo.state === 'failed')) {
-      coreDependencies = 'deferred';
-      buildError = 'Setup/build deferred because a repository needs attention; resolve its problem and retry Update.';
-      ctx.line(buildError);
-    } else {
-      let stage: 'setup' | 'rebuild' = 'setup';
+  const { coreDependencies, rebuilt, steps } = await finishUpdateWork(repositories, ctx, {
+    sanitize: redactRemote,
+    outputsReady: async scope => deps.outputsReady ? deps.outputsReady(scope)
+      : deps.core && !deps.rebuild ? updatedSourceOutputsReady(deps.core, workspace, scope) : false,
+    prepareCore: async core => {
+      const fingerprint = await coreDependencyFingerprint(core, git);
+      const receipt = await markerPath(core.dir, readOnly(git), CORE_DEPENDENCIES_MARKER);
+      if (!receipt) throw new Error('Cannot locate the core dependency receipt');
+      let installed: unknown = null;
       try {
-        const core = work.find(repo => repo.role === 'core');
-        if (core) {
-          const fingerprint = await coreDependencyFingerprint(core, git);
-          const receipt = await markerPath(core.dir, readOnly(git), CORE_DEPENDENCIES_MARKER);
-          if (!receipt) throw new Error('Cannot locate the core dependency receipt');
-          let installed: unknown = null;
-          try {
-            const value: unknown = JSON.parse(await fs.readFile(receipt, 'utf8'));
-            if (value && typeof value === 'object' && 'fingerprint' in value) installed = value.fingerprint;
-          } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error; }
-          if (fingerprint && installed !== fingerprint) {
-            ctx.line('step setup');
-            // Installation can partially change node_modules even if it fails: invalidate the old proof first.
-            await fs.writeFile(receipt, '{}\n');
-            await (deps.setupCore ?? setupUpdatedCore)(core.dir, ctx);
-            await fs.writeFile(receipt, `${JSON.stringify({ fingerprint })}\n`);
-            coreDependencies = 'prepared';
-          } else ctx.line(fingerprint ? 'Core dependency inputs match the last successful preparation; no package install needed.'
-            : 'No public core dependency inputs; no package install needed.');
-        }
-        await prepareServices();
-        stage = 'rebuild';
-        ctx.line('step rebuild');
-        if (deps.rebuild) {
-          const pluginsOnly = await deps.coreHostCurrent?.() ?? false;
-          ctx.line(`Native rebuild: ${pluginsOnly ? 'plugins only (host current)' : 'host and plugins'}.`);
-          rebuilt = [...(pluginsOnly ? [] : ['xrb-host']), ...await deps.rebuild(pluginsOnly, ctx)];
-        } else {
-          if (!deps.core) throw new Error('Core checkout required for native rebuild');
-          rebuilt = await rebuildUpdatedSources(deps.core, workspace, ctx);
-        }
-        for (const repo of work) {
-          if (repo.marker) await fs.rm(repo.marker, { force: true });
-          repo.pending = false;
-        }
-      } catch (e) {
-        if (stage === 'setup') coreDependencies = 'failed';
-        buildError = `${stage === 'setup' ? 'Core dependency setup' : 'Rebuild'} failed: ${redactRemote((e as Error).message)}; fix it and retry Update.`;
-        ctx.line(buildError);
+        const value: unknown = JSON.parse(await fs.readFile(receipt, 'utf8'));
+        if (value && typeof value === 'object' && 'fingerprint' in value) installed = value.fingerprint;
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error; }
+      if (fingerprint && installed !== fingerprint) {
+        await fs.writeFile(receipt, '{}\n');
+        await (deps.setupCore ?? setupUpdatedCore)(core.dir, ctx);
+        await fs.writeFile(receipt, `${JSON.stringify({ fingerprint })}\n`);
+        return 'prepared';
       }
-    }
-  } else if (!repositories.some(repo => repo.state === 'failed')) {
-    // A manual pull or interrupted preparation can leave components stale even at an unchanged Git head.
-    try { await prepareServices(); }
-    catch (error) { buildError = `Application component rebuild failed: ${redactRemote((error as Error).message)}; retry Update.`; ctx.line(buildError); }
-  }
+      ctx.line(fingerprint ? 'Core dependency inputs match the last successful preparation; no package install needed.'
+        : 'No public core dependency inputs; no package install needed.');
+      return 'unchanged';
+    },
+    prepareComponents: async () => {
+      if (!deps.core || !await fs.access(path.join(deps.core, 'embedded')).then(() => true, () => false)) return;
+      ctx.line('Rebuild: checking application components…');
+      await (deps.setupServices ?? rebuildUpdatedServices)(deps.core, workspace, ctx);
+    },
+    build: async scope => {
+      if (deps.rebuild) {
+        const pluginsOnly = await deps.coreHostCurrent?.() ?? (scope === 'workspace' && await deps.outputsReady?.('core')) ?? false;
+        ctx.line(`Native rebuild (${scope}): ${pluginsOnly ? 'plugins only (host current)' : 'host and plugins'}.`);
+        return [...(pluginsOnly ? [] : ['xrb-host']), ...await deps.rebuild(pluginsOnly, ctx, scope)];
+      }
+      if (!deps.core) throw new Error('Core checkout required for native rebuild');
+      return rebuildUpdatedSources(deps.core, workspace, ctx, undefined, scope);
+    },
+  });
+  const componentsPending = steps.some(step => step.id === 'components' && ['failed', 'deferred'].includes(step.state));
+  const buildError = steps.filter(step => ['failed', 'deferred'].includes(step.state))
+    .map(step => `${step.label}: ${step.state} — ${redactRemote(step.reason ?? 'retry Update')}`).join('; ') || null;
   for (const repo of repositories) {
     if ((repo.from && repo.to && repo.from !== repo.to) || (repo.updateFrom && repo.updateFrom !== repo.to))
       restartNeeded.add(await canonicalPath(repo.dir));
@@ -525,10 +528,12 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
   });
   const failed = !!buildError || repositories.some(repo => repo.state === 'failed');
   const setupSummary = `Core dependencies: ${coreDependencies}.`;
-  const buildSummary = buildError ?? `Rebuilt: ${rebuilt.length ? rebuilt.join(', ') : 'nothing'}.`;
-  const summary = [...descriptions, setupSummary, buildSummary, lastLine].join(' ');
+  const buildSummary = buildError ? `Follow-up: ${steps.map(step => `${step.label} ${step.state}`).join('; ')}.`
+    : `Rebuilt: ${rebuilt.length ? rebuilt.join(', ') : 'nothing'}.`;
+  const presentation = compactUpdateResult(repositories, steps, restartRequired);
   const result: UpdateResult = { state: failed ? 'failed' : repositories.some(repo => repo.state === 'updated') ? 'updated' : 'up-to-date',
-    repositories, coreDependencies, rebuilt, restartRequired, lastLine, summary };
+    repositories, coreDependencies, rebuilt, steps, restartRequired, lastLine, ...presentation };
+  ctx.line(`Update result: ${presentation.title}.`);
   for (const description of descriptions) ctx.line(description);
   ctx.line(setupSummary);
   ctx.line(buildSummary);
@@ -541,8 +546,7 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
 export async function runUpdateCommand(workspace: string, ctx: JobContext, deps: UpdateDeps): Promise<number> {
   try { await runUpdate(workspace, ctx, deps); return 0; }
   catch (error) {
-    ctx.line(`Update failed: ${redactRemote((error as Error).message)}`);
-    if (error instanceof UpdateFailure) ctx.line(error.result.lastLine);
+    if (!(error instanceof UpdateFailure)) ctx.line(`Update failed: ${redactRemote((error as Error).message)}`);
     return 1;
   }
 }
