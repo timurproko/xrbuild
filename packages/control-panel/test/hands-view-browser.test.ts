@@ -17,14 +17,14 @@ test('core Hands opens the real SDK scene without optional tools, generated data
   const mutations: string[] = []; panel.server.on('request', req => { if (!['GET', 'HEAD'].includes(req.method!)) mutations.push(req.method + ' ' + req.url); });
   await withBrowser(async ({ send, navigate, evaluate }) => {
     await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.captureCalls=0;if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw Error('Camera forbidden')};` });
-    await navigate(`${panel.url}hands/`, `document.querySelector('#hands-render-fps')?.textContent!=='—' && document.querySelector('#hands-recordings-root')?.textContent.includes('not installed')`);
+    await navigate(`${panel.url}hands/`, `document.querySelector('#hands-render-fps')?.textContent!=='—' && !!document.querySelector('[data-field="sizeFactor"]')`);
     assert.equal(await evaluate(`document.title`), 'XR Build · Hands');
     assert.equal(await evaluate(`!!document.querySelector('canvas')`), true);
     assert.equal(await evaluate(`document.querySelector('#hands-view-error').hidden`), true);
     assert.equal(await evaluate(`document.querySelector('#hands-tracking-fps').textContent`), '—');
-    assert.equal(await evaluate(`document.querySelectorAll('[role="tab"]').length`), 1);
-    assert.equal(await evaluate(`document.querySelector('#hands-recording-actions').hidden`), true);
-    await evaluate(`document.querySelector('#hands-view-reset').click();document.querySelector('#hands-recordings-tab').click()`); await sleep(100);
+    assert.equal(await evaluate(`document.querySelectorAll('[role="tab"]').length`), 0);
+    assert.equal(await evaluate(`!!document.querySelector('#hands-recording-actions')`), false);
+    await evaluate(`document.querySelector('#hands-view-reset').click()`); await sleep(100);
     const fullscreen = await evaluate(`(()=>{const r=document.querySelector('#hands-fullscreen').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
     await send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...fullscreen });
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...fullscreen });

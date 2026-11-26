@@ -8,6 +8,7 @@ async function request(method, body) {
 }
 /** Independent of the page/source/adjustment forms; mount into #hands-postprocessing-root. */
 export function mountHandsPostprocessing(root, { load = () => request('GET'), save = body => request('PUT', body), pollMs = 1000 } = {}) {
+  root.hidden = true;
   root.innerHTML = `<form class="xrb-stack" aria-label="Hand post-processing"><h2>Post-processing</h2>
     <label class="xrb-field-label">Hand mesh<select data-mesh-selector aria-label="Hand mesh"></select></label>
     <p class="xrb-help" data-mesh-empty hidden>No post-processing plugins installed.</p>
@@ -53,6 +54,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   }
   function refresh(data, { discard = false } = {}) {
     if (disposed) return; runtime(data);
+    root.hidden = !data.plugins.length;
     if (snapshot && !discard) {
       if (data.revision !== snapshot.revision) {
         revisions.changed(data.revision); message.textContent = 'Hands settings changed. Reload to review; your draft is preserved.';

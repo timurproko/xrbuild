@@ -24,7 +24,7 @@ export async function createBridge({port=5191,origins=defaults,token=randomBytes
     await p.cleanup;
     if(owner===p&&!p.capture&&!p.starting)owner=null;
   };
-  const fatal=(p,error)=>{send(p,{type:'error',fatal:true,message:String(error.message??error).slice(0,2048)});void stop(p).then(()=>send(p,{type:'stopped',fatal:true}));};
+  const fatal=(p,error)=>{send(p,{type:'error',fatal:true,message:String(error.message??error).slice(0,2048),detail:typeof error.detail==='string'?error.detail.slice(0,2048):undefined});void stop(p).then(()=>send(p,{type:'stopped',fatal:true}));};
   server.on('upgrade',(req,socket,head)=>{
     const protocols=String(req.headers['sec-websocket-protocol']??'').split(',').map(v=>v.trim());
     const offered=protocols.find(v=>v.startsWith('auth.'))?.slice(5);

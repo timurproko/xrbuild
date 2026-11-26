@@ -1173,7 +1173,7 @@ function inputField(m) {
   const context = isHeadset(m) ? 'webxr' : 'native';
   const available = (state.plugins?.handProviders ?? []).some(p => p.available && p.transport === context);
   return field('Input', 'inputs', values, { options: ['mouse', 'keyboard', ...(available || values.includes('hand') ? ['hand'] : [])],
-    optionLabels: { mouse: 'Mouse', keyboard: 'Keyboard', hand: available ? 'Hand' : 'Hand (unavailable)' }, multiple: true, raw: true });
+    optionLabels: { mouse: 'Mouse', keyboard: 'Keyboard', hand: available ? 'Hands' : 'Hands (unavailable)' }, multiple: true, raw: true });
 }
 
 /** Drag a platform tab before or after another to reorder the tabs; the order is saved for the workspace. */
