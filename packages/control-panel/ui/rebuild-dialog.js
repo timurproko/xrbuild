@@ -25,26 +25,31 @@ function agoText(ms, now) {
   if (s < 60) return 'just now';
   if (s < 3600) return `${Math.floor(s / 60)} min ago`;
   if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
-  return new Date(ms).toLocaleString();
+  const days = Math.floor(s / 86400);
+  if (days < 14) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return `${Math.floor(days / 7)} weeks ago`;
 }
 
 /**
- * The Update tooltip: one sentence per repository and when the remote was last checked, from `GET /api/update`.
- * This version updates the workspace and only reports the core, so a core that is behind or cannot be updated here
- * says so, and to pull it by hand.
+ * The Update tooltip: one sentence per repository, each with the time of that repository's own last fetch, from
+ * `GET /api/update`. The two remotes are fetched at different times (this version never fetches the core), so one
+ * repository's check never vouches for the other: a core without a fetch time is "not checked yet", never "up to
+ * date". A core that is behind or cannot be updated here says so, and to pull it by hand.
  */
 export function updateTooltip(status, now = Date.now()) {
   if (!status) return '';
   const {core, workspace} = status;
+  const asOf = (repo) => repo.checkedMs ? ` as of ${agoText(repo.checkedMs, now)}` : '';
   const coreText = !core ? '' : !core.available ? `Core: not updated here. ${core.reason ?? ''}`.trim()
-    : core.behind ? `Core: ${commitCount(core.behind)} behind ${core.upstream}, not updated by this version yet; pull it by hand.` : 'Core: up to date.';
+    : core.behind ? `Core: ${commitCount(core.behind)} behind ${core.upstream}${asOf(core)}, not updated by this version yet; pull it by hand.`
+    : core.checkedMs ? `Core: up to date${asOf(core)}.` : 'Core: not checked yet.';
   const remote = workspace?.upstream?.split('/')[0] || 'origin';
+  const checked = (repo) => repo.checkedMs ? `, checked ${agoText(repo.checkedMs, now)}` : '';
   const workspaceText = !workspace ? '' : !workspace.available ? `Workspace: ${workspace.reason ?? 'cannot be updated.'}`
     : workspace.unfinished ? 'Workspace: the last update did not finish; run Update again.'
-    : workspace.behind ? `Workspace: ${commitCount(workspace.behind)} behind ${remote}.` : 'Workspace: up to date.';
-  const checkedMs = workspace?.checkedMs ?? core?.checkedMs ?? null;
-  const checked = checkedMs ? `Remote last checked ${agoText(checkedMs, now)}.` : 'Remote not checked yet.';
-  return [coreText, workspaceText, checked].filter(Boolean).join(' ');
+    : workspace.behind ? `Workspace: ${commitCount(workspace.behind)} behind ${remote}${checked(workspace)}.`
+    : workspace.checkedMs ? `Workspace: up to date${checked(workspace)}.` : 'Workspace: not checked yet.';
+  return [coreText, workspaceText].filter(Boolean).join(' ');
 }
 
 /** Update steps, in order, as announced by `step <id>` job lines. */

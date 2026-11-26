@@ -281,17 +281,21 @@ test('while the core is only reported, the result says it is behind and to pull 
   assert.equal(coreNote(await coreUpdateStatus(core, f.deps.git)), null);
 });
 
-test('the Update tooltip names each repository and when the remote was last checked', () => {
-  const now = Date.now();
+test('the Update tooltip names each repository with its own last check', () => {
+  const now = Date.now(), weeks3 = now - 21 * 86_400_000;
   const repo = { available: true, reason: null, branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0, dirty: 0, checkedMs: now - 5000, unfinished: false };
   const core = { ...repo, role: 'core' as const, readOnly: true }, workspace = { ...repo, role: 'workspace' as const };
-  assert.equal(updateTooltip({ core, workspace }, now), 'Core: up to date. Workspace: up to date. Remote last checked just now.');
-  assert.equal(updateTooltip({ core: { ...core, behind: 3 }, workspace: { ...workspace, behind: 2, checkedMs: now - 120_000 } }, now),
-    'Core: 3 commits behind origin/main, not updated by this version yet; pull it by hand. Workspace: 2 commits behind origin. Remote last checked 2 min ago.');
+  assert.equal(updateTooltip({ core: { ...core, checkedMs: weeks3 }, workspace }, now), 'Core: up to date as of 3 weeks ago. Workspace: up to date, checked just now.',
+    'a fresh workspace check does not make an old core check current');
+  assert.equal(updateTooltip({ core: { ...core, checkedMs: null }, workspace }, now), 'Core: not checked yet. Workspace: up to date, checked just now.',
+    'a core never fetched is not reported up to date on the strength of the workspace check');
+  assert.equal(updateTooltip({ core: { ...core, behind: 3, checkedMs: now - 2 * 86_400_000 }, workspace: { ...workspace, behind: 2, checkedMs: now - 120_000 } }, now),
+    'Core: 3 commits behind origin/main as of 2 days ago, not updated by this version yet; pull it by hand. Workspace: 2 commits behind origin, checked 2 min ago.');
   assert.equal(updateTooltip({ core: { ...core, available: false, reason: 'The core is not on a branch (detached HEAD).' }, workspace: { ...workspace, unfinished: true, checkedMs: null } }, now),
-    'Core: not updated here. The core is not on a branch (detached HEAD). Workspace: the last update did not finish; run Update again. Remote last checked just now.', 'falls back to the core\'s last check');
-  assert.equal(updateTooltip({ core: { ...core, checkedMs: null }, workspace: { ...workspace, available: false, reason: 'The workspace is not a Git clone.', checkedMs: null } }, now),
-    'Core: up to date. Workspace: The workspace is not a Git clone. Remote not checked yet.');
+    'Core: not updated here. The core is not on a branch (detached HEAD). Workspace: the last update did not finish; run Update again.');
+  assert.equal(updateTooltip({ core, workspace: { ...workspace, checkedMs: null } }, now), 'Core: up to date as of just now. Workspace: not checked yet.');
+  assert.equal(updateTooltip({ core, workspace: { ...workspace, available: false, reason: 'The workspace is not a Git clone.', checkedMs: null } }, now),
+    'Core: up to date as of just now. Workspace: The workspace is not a Git clone.');
   assert.equal(updateTooltip(null), '');
 });
 
