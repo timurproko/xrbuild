@@ -11,7 +11,8 @@ export const ENV = { ...process.env, GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 
 export const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, env: ENV, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 export async function fixture(t: TestContext, branch = 'main') {
-  const root = await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'xrb-default-update-'));
+  // Windows TEMP may use an 8.3 alias; match the canonical paths used by build ownership checks.
+  const root = await fs.realpath(await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'xrb-default-update-')));
   t.after(() => fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const calls: Array<{ args: string[]; cwd: string }> = [], lines: string[] = [];
   const runner: GitRunner = async (args, cwd, opts) => {

@@ -7,6 +7,7 @@ import { freePort } from '../src/host-runner.ts';
 import { setupEmbeddedServices, embeddedServiceReadiness, embeddedServiceRuntime, serviceStateRoot, SERVICE_LOCK, SERVICE_RECEIPT } from '../src/service-artifacts.ts';
 import { runUpdate, UpdateFailure } from '../src/update.ts';
 import type { JobContext } from '../src/jobs.ts';
+import { readProject } from '../src/projects.ts';
 import { fixture, git } from './helpers/update-fixture.ts';
 
 async function components(t: TestContext) {
@@ -77,6 +78,45 @@ for (const origin of ['workspace', 'bundled']) for (const action of ['rebuild', 
   assert.equal((await f.request('/api/host', 'GET')).body.componentsNeedRebuild, false);
   assert.equal(f.counts().launches, action === 'run' ? 1 : 0);
   assert.equal(f.counts().nativeBuilds, action === 'rebuild' ? 1 : 0);
+});
+
+for (const [mode, preparation] of [['native', 'current'], ['native', 'services'], ['native', 'native'], ['browser', 'current'], ['browser', 'services']] as const)
+test(`catalog ${mode} launch tolerates an unrelated icon build failure with ${preparation} inputs`, async t => {
+  const f = await components(t);
+  if (preparation === 'services') await f.change();
+  if (preparation === 'native') {
+    const source = path.join(f.core, 'native/host'); await fs.mkdir(source, { recursive: true });
+    await fs.writeFile(path.join(source, 'CMakeLists.txt'), 'project(fixture)');
+  }
+  const broken = path.join(f.user, 'projects/unsorted/broken');
+  await fs.mkdir(path.join(broken, 'src'), { recursive: true });
+  await fs.writeFile(path.join(broken, 'xrb-project.json'), JSON.stringify({ name: 'Broken library app', kind: 'app', scripts: { build: 'build' } }));
+  await fs.writeFile(path.join(broken, 'src/icon.ts'), 'export default () => {};');
+  const launcher = path.join(f.user, 'projects/unsorted/launcher');
+  await fs.mkdir(path.join(launcher, 'dist'), { recursive: true });
+  await fs.writeFile(path.join(launcher, 'xrb-project.json'), JSON.stringify({ name: 'Launcher', kind: 'app', catalog: true, ...(mode === 'browser' ? { target: 'webxr' } : {}) }));
+  await fs.writeFile(path.join(launcher, 'dist/index.html'), '<h1>Launcher</h1>');
+  const p = await readProject(launcher, 'launcher', 'unsorted'); assert.ok(p);
+  let iconAttempts = 0, previews = 0;
+  const panel = f.server.panel as unknown as { executeBrowserBuild: () => Promise<void>; preparePreview: () => Promise<string> };
+  panel.executeBrowserBuild = async () => { iconAttempts++; throw new Error('Unrelated app build failed'); };
+  panel.preparePreview = async () => { previews++; return 'http://127.0.0.1/fixture'; };
+  const result = mode === 'native' ? await f.server.panel.run(p, 'built')
+    : await f.server.panel.preview(p, 'built', false, 'catalog-preview-token-1234', { clientPort: 1 });
+  if (preparation !== 'current') {
+    assert.ok(result && typeof result === 'object');
+    const job = await f.server.panel.jobs.wait(result);
+    assert.equal(job.state, 'done', job.lines.join('\n'));
+    assert.match(job.lines.join('\n'), /Library icon unavailable for broken: Unrelated app build failed/);
+  } else {
+    const iconJob = f.server.panel.jobs.list()[0]!;
+    assert.equal(iconJob.state, 'failed'); assert.match(iconJob.error!, /Unrelated app build failed/);
+  }
+  assert.equal(iconAttempts, 1);
+  assert.equal(f.counts().launches, mode === 'native' ? 1 : 0);
+  assert.equal(previews, mode === 'browser' ? 1 : 0);
+  assert.equal(f.counts().nativeBuilds, preparation === 'native' ? 1 : 0);
+  assert.equal(f.server.panel.jobs.list().length, 1, 'prepared launches keep the best-effort icon output in the same job');
 });
 
 test('Rebuild reloads a generation already prepared by a fresh process without installing again', async t => {

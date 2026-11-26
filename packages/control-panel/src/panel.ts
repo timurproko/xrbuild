@@ -1473,8 +1473,14 @@ export class Panel {
       if (!icon.authored || icon.generated) continue;
       // Jobs expose cold preparation in Activity; the managed build lane deduplicates current output.
       if (ctx) {
-        const effective = await this.prepareProject(project);
-        await this.ensureBrowserBuild(effective, this.editableManifest(effective), ctx);
+        try {
+          const effective = await this.prepareProject(project);
+          await this.ensureBrowserBuild(effective, this.editableManifest(effective), ctx);
+        } catch (error) {
+          // Other catalog entries are best-effort, just like their standalone icon jobs.
+          const warning = `Library icon unavailable for ${project.id}: ${(error as Error).message}`;
+          ctx.line(warning); log(`[panel] ${warning}`);
+        }
       } else {
         const done = await this.jobs.wait(this.webBuild(project));
         if (done.state === 'failed') log(`[panel] Library icon unavailable for ${project.id}: ${done.error}`);

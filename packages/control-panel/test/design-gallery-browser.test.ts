@@ -8,7 +8,7 @@ import {withBrowser, sleep} from './browser-fixture.ts';
 import {navigationItems} from '../ui/navigation.js';
 
 async function fixture(t: {after: (fn: () => Promise<void>) => void}, developerMode=false) {
-  const repo=path.resolve(import.meta.dirname,'../../..'),artifacts=path.join(repo,'.artifacts');
+  const repo=path.resolve(import.meta.dirname,'../../..'),artifacts=process.env.XRB_TEST_ROOT??path.join(repo,'.artifacts');
   await fs.mkdir(artifacts,{recursive:true});
   const root=await fs.mkdtemp(path.join(artifacts,'design-gallery-')),workspace=path.join(root,'absent');
   const reserve=http.createServer();
@@ -97,7 +97,7 @@ test('registered tool navigation discovers the full Dev menu and retains links w
       window.__disposeTool=mountToolNavigation(button,document.querySelector('#discovery-menu'),{origin:location.origin,tools:[],current:'projects'});
       window.fetch=original;
     })()`);
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('#discovery-menu [data-navigation]')].map(item=>item.dataset.navigation)`),['projects','plugins','settings','restart','rebuild','update']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('#discovery-menu [data-navigation]')].map(item=>item.dataset.navigation)`),['projects','hands','plugins','settings','restart','rebuild','update']);
     await evaluate(`window.__disposeTool()`);
   });
   assert.deepEqual(f.apiRequests.filter(request=>request!=='GET /api/navigation'),[]);

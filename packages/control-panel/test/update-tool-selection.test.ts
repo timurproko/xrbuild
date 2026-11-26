@@ -12,7 +12,8 @@ import type { JobContext } from '../src/jobs.ts';
 
 // Fake executable files and synchronous probe output; configure/build are intercepted, never executed.
 test('Update host and plugin builds reuse the checked bundled CMake despite competing PATH installations', { skip: process.platform !== 'win32' }, async t => {
-  const root = await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'update-tools-'));
+  // Configure commands use canonical paths, not a possible 8.3 TEMP alias.
+  const root = await fs.realpath(await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'update-tools-')));
   const beforeEnv = { PATH: process.env.PATH, ProgramW6432: process.env.ProgramW6432 };
   t.after(async () => {
     t.mock.restoreAll(); syncBuiltinESMExports();
