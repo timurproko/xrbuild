@@ -1,6 +1,6 @@
 import type { Point } from '../contracts.ts';
 import { prepareGeometry,type Pixel } from '../rgbd/geometry.ts';
-import { samplePoint,pairing,DEPTH_DEFAULTS } from '../rgbd/reconstruction.ts';
+import { samplePoint,pairing,DEPTH_DEFAULTS } from '../rgbd/point-sampling.ts';
 import type { Packet,WireFrame,Calibration,MarkerDetection } from '../rgbd/protocol.ts';
 import { calibrationMetadata,FIT_LIMITS,fitSpatialCalibration,type TargetSample,type TargetPair,type SpatialCalibration } from './calibration.ts';
 import type { Side } from './fusion.ts';

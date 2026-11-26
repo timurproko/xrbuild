@@ -6,7 +6,7 @@ import { recordingStorePlugin } from './recording-store.mjs';
 import { plainPath } from './state-paths.mjs';
 const root = path.dirname(fileURLToPath(import.meta.url));
 // The browser receives only recording format/read helpers, never a camera/inference/fusion boot module.
-const assets = new Set(['browser.mjs', 'src/live/recording/archive.ts', 'src/live/recording/csv.ts', 'src/live/recording/format.ts', 'src/live/recording/depth-format.ts', 'src/live/recording/depth-recorder.ts', 'src/live/multiview/recording.ts', 'src/live/contracts.ts', 'src/live/observations.ts', 'src/live/legacy.ts', 'src/live/rgbd/protocol.ts', 'src/live/rgbd/profiles.ts', 'src/live/rgbd/geometry.ts', 'src/live/rgbd/reconstruction.ts']);
+const assets = new Set(['browser.mjs', 'src/live/recording/archive.ts', 'src/live/recording/csv.ts', 'src/live/recording/format.ts', 'src/live/recording/depth-format.ts', 'src/live/recording/immutable.ts', 'src/live/recording/depth-recorder.ts', 'src/live/multiview/recording.ts', 'src/live/contracts.ts', 'src/live/observations.ts', 'src/live/legacy.ts', 'src/live/rgbd/protocol.ts', 'src/live/rgbd/profiles.ts', 'src/live/rgbd/geometry.ts', 'src/live/rgbd/reconstruction.ts', 'src/live/rgbd/point-sampling.ts']);
 export async function createHandsTools(context) {
   const handlers = [];
   recordingStorePlugin(context).configureServer({ middlewares: { use(handler) { handlers.push(handler); } } });

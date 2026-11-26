@@ -231,6 +231,18 @@ export class Panel {
   onPluginSourcesChanged: (restartRequired?: boolean) => Promise<void> = async () => {};
   restartPending = false;
   restartWorkPending: () => boolean = () => false;
+  private captureOwner: { label: string } | null = null;
+  /** Shared exclusion for explicit acquisition tools and app launch preparation. */
+  acquireCapture(label: string): () => void {
+    if (this.captureOwner || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.restartPending || this.changingPlugins || this.maintainingCache || this.pluginConsumers || this.settingsWrites.size || this.jobs.active().length)
+      throw new HttpError(409, this.captureOwner ? `${this.captureOwner.label} owns capture. Stop it first.` : 'Another app or panel operation owns acquisition. Stop it first.');
+    const owner = { label }; this.captureOwner = owner;
+    let released = false;
+    return () => { if (!released && this.captureOwner === owner) this.captureOwner = null; released = true; };
+  }
+  private refuseCaptureConflict(): void {
+    if (this.captureOwner) throw new HttpError(409, `${this.captureOwner.label} owns capture. Stop it first.`);
+  }
   private readonly settingsWrites = new Set<string>();
   readonly runner = new HostRunner();
   desktopSetup: DesktopSetup;
@@ -392,6 +404,7 @@ export class Panel {
   }
 
   private async withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
+    this.refuseCaptureConflict();
     if (this.savingHands || this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop running apps and jobs and wait for launch/settings preparation before changing plugins');
     this.changingPlugins = true;
@@ -434,6 +447,7 @@ export class Panel {
   }
 
   async synchronizePluginServices(force = false): Promise<void> {
+    if (this.captureOwner) return;
     if (this.changingPlugins || !force && Date.now() - this.servicesCheckedMs < this.discoveryMaxAgeMs) return;
     if (this.servicesSync) return this.servicesSync;
     this.servicesSync = (async () => {
@@ -491,6 +505,7 @@ export class Panel {
   }
 
   private startJob(...args: Parameters<JobRunner['start']>): Job {
+    this.refuseCaptureConflict();
     if (this.restartPending) throw new HttpError(409, 'The panel is restarting');
     const [kind, projectId] = args;
     const originalWork = args[3];
@@ -927,6 +942,7 @@ export class Panel {
     if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !['action', 'revision', 'confirm'].includes(key))
       || body.confirm !== true || typeof body.action !== 'string' || !['toolchain', 'native-deps'].includes(body.action)) throw new HttpError(400, 'Confirm a supported desktop setup action before installing');
     const requireIdle = () => {
+      this.refuseCaptureConflict();
       if (this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
         throw new HttpError(409, 'Stop apps/jobs and wait for preparation before desktop setup');
     };
@@ -941,6 +957,7 @@ export class Panel {
   }
 
   cleanupWorkingCache(project: Project | undefined, body: Parameters<typeof cleanWorkingCache>[1]): Job {
+    this.refuseCaptureConflict();
     if (this.maintainingCache || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop apps/jobs and wait for preparation before cache maintenance');
     return this.startJob('cache-cleanup', project?.id ?? null, 'remove reviewed working cache', async () => {
@@ -951,6 +968,7 @@ export class Panel {
   }
 
   setupBundledServices(): Job {
+    this.refuseCaptureConflict();
     if (this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop apps/jobs and wait for preparation before setting up bundled services');
     // Setup is the explicit recovery path for a failed/stale installed service snapshot.
@@ -1497,6 +1515,7 @@ export class Panel {
     this.refuseIfLaunchBlocked(p, this.launchState(p));
     if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before running');
     if (p.readOnly && !prepared) this.refuseIfBusy(p.id);
+    this.refuseCaptureConflict();
     this.preparingPreview = true;
     try {
       return await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
@@ -1586,6 +1605,7 @@ export class Panel {
     if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before running');
     if (this.jobs.active().some(job => job.kind === 'desktop-setup') || desktopSetupBusy) throw new HttpError(409, 'wait for desktop setup to finish before running');
     if (p.readOnly && !prepared) this.refuseIfBusy(p.id);
+    this.refuseCaptureConflict();
     this.preparingNativeRun = true;
     try {
       await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
@@ -2231,7 +2251,7 @@ export class Panel {
         if ((confirm !== undefined && typeof confirm !== 'boolean') || (ifIdle !== undefined && typeof ifIdle !== 'boolean')) throw new HttpError(400, 'Restart flags must be boolean');
         if (ifIdle && (confirm !== false || expectedInstanceId !== this.instanceId)) throw new HttpError(409, 'Automatic restart requires the current panel instance and cannot force active work');
         const busy = [this.runner.busy ? `${this.runner.projectId} is running` : '', ...this.jobs.active().map((j) => `${j.title} is ${j.state}`),
-          this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.settingsWrites.size || this.changingPlugins || this.maintainingCache || this.restartWorkPending() ? 'Panel work is preparing or changing' : ''].filter(Boolean);
+          this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.settingsWrites.size || this.changingPlugins || this.maintainingCache || this.restartWorkPending() || this.captureOwner ? 'Panel work is preparing or changing' : ''].filter(Boolean);
         if (busy.length && !confirm) throw new HttpError(409, ifIdle ? 'Waiting for the panel to become idle' : `${busy.join('; ')}. Restart anyway? The host is stopped cleanly first.`, ifIdle ? { retryWhenIdle: true } : { needsConfirm: 'restart' });
         sendJson(res, 200, { restarting: true, pid: process.pid, instanceId: this.instanceId, repo: this.repo, workspace: this.workspace, projects: this.projects });
         if (!this.restartPending) {

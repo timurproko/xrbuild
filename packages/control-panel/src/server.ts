@@ -45,6 +45,7 @@ import { publicationCard } from './publication.ts';
 import { ManagedTools } from './managed-tools.ts';
 import { isRetiredHandsPath } from '../ui/hands-routes.js';
 import { HandsTools } from './hands-tools.ts';
+import { CalibrationTools } from './calibration-tools.ts';
 import { handPolicyDocument } from './hand-policy-document.ts';
 import { listMonitors } from './monitors.ts';
 import { applyLayout, readLayout, validateLayout, type Layout } from './layout.ts';
@@ -293,6 +294,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
   const managedTools = new ManagedTools({ core, workspace, projects, port, server: () => server, prepare: () => panel.prepareManagedTools(), available: () => { const status = panel.pluginServiceStatus(); return status.pending ? status.problem ?? 'Plugin services are changing; wait for setup/refresh to finish' : null; } });
   panel.onPluginSourcesChanged = async (restartRequired) => { if (restartRequired) managedTools.invalidatePluginRuntimes(); await managedTools.navigation(); };
   const handsTools = new HandsTools(core, workspace);
+  const calibrationTools = new CalibrationTools(core, workspace, () => panel.acquireCapture('Calibration'));
   const autoRoute = opts.autoRoute;
   let autoRouteWork: Promise<string | null> | null = null;
 
@@ -325,6 +327,11 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
     }
 
     if (isRetiredHandsPath(url.pathname) || /^\/__(?:handtracking|xrbuild)(?:\/|$)/.test(url.pathname)) throw new HttpError(404, 'not found');
+    if (url.pathname === '/api/calibration' && method === 'GET') return sendJson(res, 200, await calibrationTools.status());
+    if (url.pathname.startsWith('/calibration/tools/') || url.pathname.startsWith('/api/calibration/')) {
+      if (await calibrationTools.handle(req, res)) return;
+      throw new HttpError(404, 'not found');
+    }
     if (url.pathname === '/api/hands/tools' && method === 'GET') return sendJson(res, 200, await handsTools.status());
     if (url.pathname.startsWith('/hands/tools/') || url.pathname.startsWith('/api/hands/tools/')) {
       if (await handsTools.handle(req, res)) return;
@@ -414,6 +421,11 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       return;
     }
     if (parts[0] !== 'api') {
+      if (url.pathname === '/calibration/') {
+        if (!['GET', 'HEAD'].includes(method)) throw new HttpError(405, 'method not allowed');
+        if (method === 'HEAD') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(); return; }
+        return serveStatic(res, uiDir, 'calibration.html');
+      }
       if (url.pathname === '/hands/') {
         if (!['GET', 'HEAD'].includes(method)) throw new HttpError(405, 'method not allowed');
         if (method === 'HEAD') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(); return; }
@@ -724,6 +736,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       hub.closeAll();
       await managedTools.close();
       await handsTools.close();
+      await calibrationTools.close();
       await panel.dispose();
       server.closeIdleConnections();
       await closed;

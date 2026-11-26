@@ -149,15 +149,15 @@ Hands SHALL NOT expose fixtures, browser hand-landmark acquisition, general surf
 
 ### Requirement: Independent calibration boundary
 
-Hands SHALL NOT contain a Calibration tab or camera calibration action. Camera calibration source, stored results and format validators SHALL remain intact for extraction into an independent Calibration module in a following change. Its documented output SHALL identify a B-to-A camera transform bound to serials and profiles, not an app-hand adjustment; removing the old viewer SHALL NOT change its data.
+Hands SHALL NOT contain a Calibration tab or camera calibration action. Camera calibration SHALL be available through the independent Calibration module at `/calibration/`, retaining its source, stored results and format validators. Its documented output SHALL identify a B-to-A camera transform bound to serials and profiles, not an app-hand adjustment; delivering the independent module SHALL NOT migrate or delete its data.
 
 #### Scenario: Hands opened
 - **WHEN** the user opens Hands
 - **THEN** camera calibration is not offered as a Hands tab and no camera measurement is started
 
 #### Scenario: Existing calibration retained
-- **WHEN** old viewer entry points are removed
-- **THEN** persisted calibration keys and validated scalar formats remain readable and unchanged for the separate module
+- **WHEN** the independent Calibration module replaces the removed viewer's calibration UI
+- **THEN** persisted calibration keys and validated scalar formats remain readable and unchanged
 
 #### Scenario: Future consumer documented
 - **WHEN** another module consumes the documented calibration output

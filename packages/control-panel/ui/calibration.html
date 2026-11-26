@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>XR Build · Calibration</title>
+  <script src="/theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/design-system.css">
+  <link rel="stylesheet" href="/calibration.css">
+</head>
+<body>
+  <header class="xrb-app-bar xrb-app-bar--wrap">
+    <h1 class="xrb-brand">XR Build <button id="calibration-menu-button" class="xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Calibration</button></h1>
+  </header>
+  <main class="calibration-page xrb-stack">
+    <p class="xrb-help">Camera B → A transform, bound to camera serials and profiles; hand providers can use it.</p>
+    <p id="calibration-availability" class="xrb-help" role="status">Checking calibration plugin…</p>
+    <div id="calibration-root" class="xrb-stack" hidden>
+      <section class="xrb-card xrb-stack calibration-card" aria-label="Cameras">
+        <div class="xrb-button-row"><h2>Cameras</h2><span class="spacer"></span><button id="cal-connect" type="button">Connect</button><button id="cal-stop" type="button" disabled>Stop</button></div>
+        <div class="calibration-columns">
+          <div class="xrb-stack"><label class="xrb-field-label">Camera A<select id="cal-camera-a" aria-label="Camera A"><option value="">Select camera</option></select></label><label class="xrb-field-label">Profile A<select id="cal-profile-a" aria-label="Profile A"><option value="">Select profile</option></select></label><canvas id="cal-preview-a" width="640" height="480" aria-label="Camera A target preview"></canvas></div>
+          <div class="xrb-stack"><label class="xrb-field-label">Camera B<select id="cal-camera-b" aria-label="Camera B"><option value="">Select camera</option></select></label><label class="xrb-field-label">Profile B<select id="cal-profile-b" aria-label="Profile B"><option value="">Select profile</option></select></label><canvas id="cal-preview-b" width="640" height="480" aria-label="Camera B target preview"></canvas></div>
+        </div>
+        <div class="xrb-button-row"><label class="xrb-field-label">Method<select id="cal-method"><option value="manual">Manual targets</option><option value="marker">Marker</option></select></label><button id="cal-start" type="button" disabled>Start</button></div>
+        <div id="cal-marker-assets" class="xrb-button-row" hidden><button id="cal-marker-download" type="button">Download marker</button><button id="cal-marker-license" type="button">Detector license</button></div>
+        <p id="cal-marker-help" class="xrb-help" hidden>Keep cameras fixed. Show one flat, matte marker to both cameras; move the marker slowly.</p>
+        <p id="cal-capture-status" class="xrb-help" role="status">Not connected.</p>
+      </section>
+      <section id="cal-manual" class="xrb-card xrb-stack calibration-card" aria-label="Manual targets">
+        <h2>Manual targets</h2>
+        <p class="xrb-help">Keep cameras fixed. Click the same static target in both previews. Use ≥6 fit and ≥3 check pairs.</p>
+        <div class="calibration-fields"><label class="xrb-field-label">Target ID<input id="cal-target-id" value="p1" maxlength="32"></label><label class="xrb-field-label">Role<select id="cal-target-use"><option value="fit">Fit</option><option value="check">Held-out check</option></select></label><label class="xrb-field-label">Targets<select id="cal-targets" aria-label="Collected targets"></select></label></div>
+        <div class="xrb-button-row"><button id="cal-remove" type="button">Remove target</button><button id="cal-clear" type="button">Clear</button></div>
+        <label class="toggle"><input id="cal-fixed" type="checkbox"> Cameras fixed; matching targets are static</label>
+        <div class="calibration-fields"><label class="xrb-field-label">Reference<input id="cal-description" maxlength="240" placeholder="Physical target reference"></label><label class="xrb-field-label">Uncertainty (mm)<input id="cal-uncertainty" type="number" min="0" step="0.1" placeholder="Unknown"></label></div>
+        <div class="xrb-button-row"><button id="cal-fit" type="button">Fit</button></div>
+      </section>
+      <section class="xrb-card xrb-stack calibration-card" aria-label="Calibration result">
+        <h2>Result</h2>
+        <p id="cal-quality" class="xrb-help" role="status">No result.</p>
+        <pre id="cal-result" hidden></pre>
+        <div class="xrb-button-row"><button id="cal-save" type="button" disabled>Save</button><button id="cal-export" type="button" disabled>Export</button><button id="cal-import-button" type="button">Import</button><input id="cal-import" type="file" accept=".json,application/json" hidden></div>
+        <div class="calibration-fields"><label class="xrb-field-label">Saved<select id="cal-saved" aria-label="Saved calibrations"></select></label><button id="cal-load" type="button">Open</button><button id="cal-reload" type="button">Reload saved</button></div>
+      </section>
+      <p id="cal-error" class="field-error" role="alert" hidden></p>
+    </div>
+  </main>
+  <div id="calibration-menu" class="menu xrb-menu panel-menu" role="menu" aria-label="XR Build navigation" hidden></div>
+  <script type="module" src="/calibration.js"></script>
+</body>
+</html>
