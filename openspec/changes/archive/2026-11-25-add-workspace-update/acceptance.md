@@ -32,7 +32,7 @@ The maintainer integration decision accepts these scenarios:
     "The panel shows workspace behind origin by N from the last fetch, says when the remote was last checked and never fetches on its own.",
     "Rebuild stays build-only, and the core checkout the panel runs from is never updated."
   ],
-  "archiveDigest": "2542f8b486bb37f44487bd11be0f159ea3bf80aa9275cd5930337b48476a76f3",
+  "archiveDigest": "283e56722f4fdb317b27c29317e67aeac00ea4a461c82e68c1f506391ed16e33",
   "specDigest": "527a68e7e0824d8f2380a440edd73faf5d9a0bb920cbf9f104a1d118b2136230",
   "tasksDigest": "69eb11d749edaa1e80b273af28973ee013a797d1a08ccd988cd59f5bb31970ad",
   "evidenceDigest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
