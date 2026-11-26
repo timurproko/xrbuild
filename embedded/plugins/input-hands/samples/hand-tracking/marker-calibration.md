@@ -12,6 +12,8 @@ duplicate copies of the same ID, severe edge-on views and motion too rapid for t
 per black-square edge is required. The native detector reports subpixel corners tied to the exact color frame.
 Qualified depth surface patches support a plane; color rays intersect that plane in each optical frame.
 
+Native detection selects the first actual color frame in each common 211 ms reported-color-clock bucket, rather than every 200 ms since each independently started process's last detection. The non-frame-multiple bucket period also avoids reintroducing opposite-edge selection at common slower profiles (200 ms is exactly four 20 Hz or three 15 Hz frames). Frame numbers, timestamps and domains remain unchanged. At the ordinary 30 Hz profile, independent camera starts can thus supply observations within the unchanged 40 ms pairing gate instead of remaining stuck at different detector phases. Slower profiles, drops or unqualified clocks may still prevent qualified pairs; this is not exposure synchronization. Changed native sources require an explicit bridge rebuild/stage; old immutable runtime generations are not silently reused or deleted.
+
 The collector retains at most 40 scalar observations per source over eight seconds. It matches the same marker ID
 within 40 ms reported color-time difference and 150 ms receipt separation, with motion/skew rejection. Twelve distinct
 paired frame groups span at least 1.8 seconds: eight fit and four later held-out groups, four corners each. Camera-relative

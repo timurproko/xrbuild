@@ -29,6 +29,39 @@ test('qualified saves preserve the existing key, envelope and unrelated preferen
     assert.equal((await put(base, before.revision, '{}', 'handtracking.capture-preferences.v1')).status, 400); assert.equal(await fs.readFile(file, 'utf8'), bytes);
   });
 });
+test('combined preferences byte budget refuses an eighth valid result without replacing a readable file', async () => {
+  await fixture(async (base, _root, file) => {
+    const records: string[] = [];
+    for (let n = 0; n < 8; n++) {
+      const input = inputFixture(); input.evidence.description = `Valid setup ${n}`;
+      input.targets = Array.from({ length: 64 }, (_, i) => ({ ...input.targets[i % 9], id: `target_${i}` }));
+      const result = await fitSpatialCalibration(input); assert.equal(result.spatialQualified, true);
+      records.push(await exportSpatialCalibration(result).text());
+    }
+    const other = 'handtracking.capture-preferences.v1', limit = 768 * 1024;
+    const envelope = { version: 1, owner: 'input-hands', values: { [key]: JSON.stringify({ version: 1, values: records.slice(0, 7) }), [other]: JSON.stringify({ padding: '' }) } };
+    const paddingBytes = limit - 256 - Buffer.byteLength(JSON.stringify(envelope));
+    // A multibyte unrelated value also catches a mistaken UTF-16 string-length check.
+    envelope.values[other] = JSON.stringify({ padding: 'é'.repeat(Math.floor(paddingBytes / 2)) });
+    assert.ok(Object.values(envelope.values).every(value => value.length <= 524288));
+    const original = JSON.stringify(envelope); assert.ok(Buffer.byteLength(original) <= limit);
+    await fs.writeFile(file, original);
+    const before = await fetch(base + '/api/calibration/preferences'); assert.equal(before.status, 200);
+    const snapshot = await before.json(), value = JSON.stringify({ version: 1, values: [records[7], ...records.slice(0, 7)] });
+    const replacement = JSON.stringify({ ...envelope, values: { ...envelope.values, [key]: value } });
+    assert.ok(value.length <= 524288); assert.ok(Buffer.byteLength(replacement) > limit); assert.ok(replacement.length < limit);
+    const response = await put(base, snapshot.revision, value); assert.equal(response.status, 400);
+    const failure = await response.json();
+    assert.ok((await fs.readFile(file)).equals(Buffer.from(original)), 'Rejected save must preserve the original preferences bytes');
+    assert.match(failure.error, /preferences.*768 KiB/i);
+    const after = await fetch(base + '/api/calibration/preferences'); assert.equal(after.status, 200);
+    assert.deepEqual(await after.json(), snapshot);
+    const hands = await fetch(base + '/api/hands/tools/preferences'); assert.equal(hands.status, 200); assert.deepEqual(await hands.json(), snapshot);
+    assert.deepEqual((await fs.readdir(path.dirname(file))).sort(), ['preferences.json']);
+    // The same revision is still usable for an in-budget retry; no partial write or stale lock remains.
+    assert.equal((await put(base, snapshot.revision, envelope.values[key])).status, 200);
+  });
+});
 test('corrupt, busy and shared-file preferences are preserved without reset or false success', async () => {
   for (const mode of ['corrupt', 'busy', 'shared']) await fixture(async (base, root, file) => {
     const before = await fetch(base + '/api/calibration/preferences').then(r => r.json()), value = await inventory();
