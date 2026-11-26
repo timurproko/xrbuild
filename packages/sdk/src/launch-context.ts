@@ -147,11 +147,16 @@ export function appLaunchUrl(launchHref: string | URL, context: AppLaunchContext
   launch.searchParams.set('xrb-return', target.href);
   copyPreviewScope(launch, target);
   launch.searchParams.delete('xrb-native-root');
+  launch.searchParams.delete('xrb-hand-profile-run');
   try {
     const root = new URL(target.searchParams.get('xrb-native-root') ?? target.href);
     const panel = new URL(root.searchParams.get('xrb-panel') ?? '');
     if (launch.origin === panel.origin && launch.pathname.startsWith('/preview/') && root.href.length <= 8192
-      && nativeRootMatches(root, panel.origin, true)) launch.searchParams.set('xrb-native-root', root.href);
+      && nativeRootMatches(root, panel.origin, true)) {
+      launch.searchParams.set('xrb-native-root', root.href);
+      const runId = root.searchParams.get('xrb-hand-profile-run');
+      if (runId && PREVIEW_TOKEN.test(runId)) launch.searchParams.set('xrb-hand-profile-run', runId);
+    }
   } catch { /* Only same-panel previews receive the native execution marker. */ }
   for (const key of ['xrb-preview-session', 'xrb-preview-fullscreen', 'xrb-hand-project']) {
     launch.searchParams.delete(key);

@@ -254,6 +254,10 @@ export class Xrb {
   private configureHandProfile(): void {
     const g = globalThis as { __XRB_HAND_PROFILE__?: unknown; __XRB_HAND_PROFILE_FROZEN__?: boolean };
     const scope = !this.host && !g.__XRB_HAND_PROFILE_FROZEN__ ? previewHandScope(globalThis.location?.search ?? '') : null;
+    const expectedNative = this.host && new URLSearchParams(globalThis.location?.search ?? '').has('xrb-hand-profile-run');
+    if (expectedNative && !this.host?.handProfileRunId) {
+      this.handIngress.ready = false; this.showHandProblem('Rebuild the host and relaunch to use Hands adjustments.', true); return;
+    }
     const runId = this.host?.handProfileRunId ?? scope?.runId;
     const apply = (p: HandProfile, geometryChanged: boolean) => {
       if (geometryChanged) {

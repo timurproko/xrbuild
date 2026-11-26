@@ -47,7 +47,7 @@ export async function saveHandAdjustments(core: string, workspace: string, value
   try { profile = handProfile(value); } catch (error) { throw new HttpError(400, (error as Error).message); }
   return writeHandsState(core, workspace, revision, state => ({ provider: state.exists ? state.provider : initialProvider,
     offsetMm: profile.offsetMm, sizeFactor: profile.sizeFactor,
-    appearance: { ...Object.fromEntries(Object.entries(state.raw.appearance as object ?? {}).filter(([k]) => !(k in HAND_APPEARANCE_DEFAULTS))), ...profile.appearance } }));
+    appearance: { ...Object.fromEntries(Object.entries(state.raw.appearance as object ?? {}).filter(([k]) => !Object.hasOwn(HAND_APPEARANCE_DEFAULTS, k))), ...profile.appearance } }));
 }
 async function writeHandsState(core: string, workspace: string, revision: unknown, update: (state: HandsState) => Record<string, unknown>): Promise<HandsState> {
   if (typeof revision !== 'string') throw new HttpError(400, 'Hands profile revision required');

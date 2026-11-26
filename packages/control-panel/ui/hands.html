@@ -12,10 +12,8 @@
   <header class="top xrb-app-bar">
     <h1 class="xrb-brand">XR Build <button id="hands-menu-button" class="panel-menu-button xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Hands</button></h1>
   </header>
-  <main class="xrb-workspace-layout">
-    <section class="card xrb-stack" aria-labelledby="hands-title">
-      <h2 id="hands-title">Hand source</h2>
-      <p>Choose one skeleton provider for all apps in this workspace. Changes apply on the next launch.</p>
+  <main class="xrb-workspace-layout xrb-stack">
+    <section class="card xrb-stack" aria-label="Hand source">
       <form id="hands-form" class="xrb-stack">
         <label for="hands-provider">Skeleton provider</label>
         <select id="hands-provider" name="provider" aria-describedby="hands-availability"></select>
@@ -23,9 +21,10 @@
         <div class="row"><button id="hands-save" type="submit" disabled>Save</button><button id="hands-reload" type="button">Reload</button></div>
       </form>
       <p id="hands-message" role="status" aria-live="polite"></p>
-      <p class="xrb-help">This page configures the selected provider; it does not start it or show a live hand. Position, size, appearance and live testing are following changes.</p>
+      <p class="xrb-help">Source changes apply on next launch. No tracking starts here.</p>
       <a id="hands-diagnostics" href="/hands-diagnostics/" hidden>Acquisition diagnostics (separate source)</a>
     </section>
+    <div id="hands-adjustments" class="xrb-stack"></div>
   </main>
   <div id="hands-menu" class="menu xrb-menu panel-menu" role="menu" aria-label="XR Build navigation" hidden></div>
   <script type="module" src="/hands.js"></script>

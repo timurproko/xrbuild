@@ -16,7 +16,7 @@ test('one Hands record preserves source/unknown fields and rejects stale or inva
     assert.equal(first.profile.sizeFactor, 1); await assert.rejects(fs.stat(workspace), /ENOENT/);
     let state = await saveHandsState(core, workspace, { owner: 'core', id: 'webxr' }, first.revision);
     const file = path.join(workspace, 'config/hands/profile.json');
-    const raw = { ...state.raw, future: 7, appearance: { future: 'keep', opacity: .8 } };
+    const raw = { ...state.raw, future: 7, appearance: { future: 'keep', constructor: 'extension', opacity: .8 } };
     await fs.writeFile(file, JSON.stringify(raw)); state = await readHandsState(core, workspace);
     const writes = await Promise.allSettled([
       saveHandAdjustments(core, workspace, { sizeFactor: .75, appearance: {} }, state.revision),
@@ -27,7 +27,7 @@ test('one Hands record preserves source/unknown fields and rejects stale or inva
     const source = state.provider;
     state = await saveHandAdjustments(core, workspace, { offsetMm: { x: 10 }, appearance: {} }, state.revision);
     assert.deepEqual(state.provider, source); assert.equal(state.raw.future, 7);
-    assert.deepEqual(state.raw.appearance, { future: 'keep' });
+    assert.deepEqual(state.raw.appearance, { future: 'keep', constructor: 'extension' });
     const bytes = await fs.readFile(file, 'utf8');
     await assert.rejects(saveHandAdjustments(core, workspace, { sizeFactor: 2 }, state.revision), /sizeFactor/);
     assert.equal(await fs.readFile(file, 'utf8'), bytes);

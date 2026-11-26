@@ -36,5 +36,11 @@ test('managed native runtime gates initial frames, preserves appearance holds an
     profile(3, handProfile({ offsetMm: { x: 100 } })); app.xrb.render(app.scene, app.camera); assert.equal(pointerResets, 1);
     assert.ok(socket.sent.some(b => !!decodeProfileControl(b, MSG_ACK_HAND_PROFILE)));
     app.dispose(); profile(9); assert.equal(app.xrb.currentHands.length, 0);
+    delete g.__XRB_HOST__.handProfileRunId; g.location.search += '&xrb-hand-profile-run=' + runId;
+    const oldHostApp = createXrbApp(renderer, { autoStart: false, xrb: { pointer: false } });
+    try {
+      FakeSocket.all.at(-1)!.receive(handsMessage([{ id: 1 }], performance.now())); oldHostApp.xrb.render(oldHostApp.scene, oldHostApp.camera);
+      assert.equal(oldHostApp.xrb.currentHands.length, 0, 'an old host cannot silently bypass managed adjustments; rebuild required');
+    } finally { oldHostApp.dispose(); }
   } finally { app.dispose(); for (const [k, v] of Object.entries(previous)) { if (v === undefined) delete g[k]; else g[k] = v; } }
 });
