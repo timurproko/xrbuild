@@ -7,7 +7,7 @@ There is no generated viewer, fixture mode, benchmark, comparison dashboard or m
 ## Retained code boundaries
 
 - `browser.mjs` / `src/live/recording/archive.ts`: list/import/export and basic replay of pose CSV, RGB, RGB-D and paired files. Original coordinate, timing and source metadata stay intact. Paired files expose independent streams, not fusion or A/B analysis.
-- `src/live/multiview/calibration.ts`, `automatic-calibration.ts`, `marker.ts`, `panel.ts` and source-only `viewer.ts`: manual/marker camera-to-camera measurement, validation and scalar formats. `calibration.html` is a scriptless retained fragment, not a page or a Hands asset. A following change exposes the independent Calibration module, not a Hands tab.
+- `src/live/multiview/calibration.ts`, `automatic-calibration.ts`, `marker.ts`, `panel.ts` and injected `viewer.ts`: manual/marker camera-to-camera measurement, validation and scalar formats, mounted by the independent `/calibration/` module through `calibration-tools.mjs`. `calibration.html` remains a scriptless legacy fragment, not a page or a Hands asset.
 - `src/live/multiview/fusion.ts` and related geometry/timing, plus browser landmark acquisition/estimators: retained **unwired** as the starting point for a future two-camera provider. No product page imports their boot path, and this change does not build that provider.
 - Native bridge/device/profile/marker code remains an explicit optional calibration prerequisite. Importing recording tools never starts it, invokes inference, downloads assets or compiles native code.
 - The ordinary native Synthetic provider remains a provider, not a local preview or fallback. Its own provider correctness tests are independent of the removed generated browser fixture feature/tests/targets.
@@ -15,7 +15,7 @@ There is no generated viewer, fixture mode, benchmark, comparison dashboard or m
 The camera calibration output is `xrbuild-spatial-calibration` v1: B-to-A rigid mapping in camera A optical metres,
 bound to both serials and exact calibration/profile hashes. It does not modify app hand placement, qualify timing or
 establish physical accuracy. See [calibration](camera-calibration.md) and [markers](marker-calibration.md) for the
-measurement/format background; their product UI is being extracted, not mounted by Hands.
+measurement/format background; the independent [Calibration module](../../../../../docs/calibration.md) owns their product UI, not Hands.
 
 ## Writable data and compatibility
 

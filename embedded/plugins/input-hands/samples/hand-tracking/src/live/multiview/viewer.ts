@@ -1,18 +1,19 @@
-// Source-only calibration controller for the following independent Calibration module.
-// No product document imports this file. Fusion and browser hand acquisition are separate retained algorithms.
+// Injected calibration coordinator for the independent Calibration module.
+// Fusion and browser hand acquisition remain separate, unwired algorithms.
 import { AutomaticMarkerCalibration, automaticMarkerObservation } from './automatic-calibration.ts';
 import { calibrationMetadata, fitSpatialCalibration, importSpatialCalibration, exportSpatialCalibration, FIT_LIMITS, type SpatialCalibration, type TargetSample, type TargetPair } from './calibration.ts';
 import { prepareGeometry, type Pixel } from '../rgbd/geometry.ts';
-import { samplePoint, pairing, DEPTH_DEFAULTS } from '../rgbd/reconstruction.ts';
+import { samplePoint, pairing, DEPTH_DEFAULTS } from '../rgbd/point-sampling.ts';
 import { captureProfile, profileKey } from '../rgbd/profiles.ts';
 import { validSerial, type Calibration, type Packet, type WireFrame } from '../rgbd/protocol.ts';
 import { metadataHash } from '../recording/format.ts';
+import { importCalibrationDocument } from './calibration-document.ts';
 export const CALIBRATION_STORAGE = 'handtracking.fusion-calibrations.v1';
 type Side = 'a' | 'b';
 interface CameraChoice { serial: string; profile: string }
 export interface CalibrationPort {
   /** The module supplies native transport + exclusive lease ownership; no hand model is required. */
-  start(choice: CameraChoice & { markers: true; handInference: false }): Promise<void>;
+  start(choice: CameraChoice & { markers: boolean; handInference: false }): Promise<void>;
   stop(): Promise<void>;
 }
 interface Storage { getItem(key: string): string | null; setItem(key: string, value: string): void; flush?(): Promise<void> }
@@ -30,6 +31,8 @@ export class CameraCalibration {
   private stopWork: Promise<void> | null = null;
   private automatic = new AutomaticMarkerCalibration();
   private fitting = false;
+  private method: 'manual' | 'marker' = 'marker';
+  private markerIssue = '';
   private current: Partial<Record<Side, Current>> = {};
   private targets = new Map<string, Target>();
   private sources: Partial<Record<Side, Calibration>> = {};
@@ -37,14 +40,18 @@ export class CameraCalibration {
   constructor(ports: { a: CalibrationPort; b: CalibrationPort }, storage: Storage, now = () => performance.now()) {
     this.ports = ports; this.storage = storage; this.now = now;
   }
-  snapshot() { return { phase: this.phase, result: this.result, targets: this.targets.size, marker: this.automatic.snapshot(this.now()) }; }
-  async start(choices: { a: CameraChoice; b: CameraChoice }): Promise<void> {
+  snapshot() { return { phase: this.phase, result: this.result, targets: this.targets.size, entries: [...this.targets.values()].map(({ id, use, a, b }) => ({ id, use, a: !!a, b: !!b })), marker: { ...this.automatic.snapshot(this.now()), issue: this.markerIssue } }; }
+  invalidateResult(): void { this.revision++; this.result = null; }
+  removeTarget(id: string): void { this.revision++; this.targets.delete(id); this.result = null; }
+  async start(choices: { a: CameraChoice; b: CameraChoice }, method: 'manual' | 'marker' = 'marker'): Promise<void> {
     if (this.phase !== 'idle' || this.stopWork) throw new Error('Stop calibration cameras first.');
     if (!validSerial(choices.a.serial) || !validSerial(choices.b.serial) || choices.a.serial === choices.b.serial) throw new Error('Choose two different camera serials.');
     for (const side of ['a', 'b'] as const) captureProfile(choices[side].profile);
+    if (this.targets.size) throw new Error('Clear the manual draft before starting another capture.');
+    this.method = method;
     this.selection = structuredClone(choices);
-    const generation = ++this.generation; this.phase = 'starting'; this.current = {}; this.automatic.reset(); this.result = null;
-    const work = Promise.allSettled((['a', 'b'] as const).map(side => this.ports[side].start({ ...choices[side], markers: true, handInference: false })));
+    const generation = ++this.generation; this.phase = 'starting'; this.current = {}; this.automatic.reset(); this.markerIssue = ''; this.result = null;
+    const work = Promise.allSettled((['a', 'b'] as const).map(side => this.ports[side].start({ ...choices[side], markers: method === 'marker', handInference: false })));
     this.startWork = work;
     try { const results = await work; const failed = results.find((value): value is PromiseRejectedResult => value.status === 'rejected'); if (failed) throw failed.reason; if (generation === this.generation) this.phase = 'running'; }
     catch (error) {
@@ -70,17 +77,21 @@ export class CameraCalibration {
     if (this.phase !== 'running') return;
     if (value.calibration.serial !== this.selection?.[side].serial || profileKey(value.calibration.color) !== this.selection?.[side].profile) throw new Error('Calibration source/profile changed.');
     this.current[side] = value;
-    if (!value.packet.meta.marker) return;
-    this.automatic.push(side, automaticMarkerObservation(value.packet, value.calibration, value.receivedPageMs, value.pageOriginMs));
+    if (this.method !== 'marker') return;
+    try {
+      const observation = automaticMarkerObservation(value.packet, value.calibration, value.receivedPageMs, value.pageOriginMs);
+      this.automatic.push(side, observation); this.markerIssue = '';
+    } catch (error) { this.automatic.missing(side, (error as Error).message); return; }
     if (!this.fitting && !this.result && !this.targets.size && this.automatic.snapshot(this.now()).ready) {
       const generation = this.generation, revision = this.revision; this.fitting = true;
-      try { const result = await this.automatic.fit(this.now()); if (generation === this.generation && revision === this.revision && result.spatialQualified) this.result = result; }
+      try { const result = await this.automatic.fit(this.now()); if (generation === this.generation && revision === this.revision) this.result = result; }
+      catch (error) { if (generation === this.generation && revision === this.revision) this.markerIssue = (error as Error).message; }
       finally { if (generation === this.generation) this.fitting = false; }
     }
   }
   async addTarget(side: Side, id: string, use: 'fit' | 'check', pixel: Pixel): Promise<void> {
     const value = this.current[side];
-    if (this.phase !== 'running' || !value || this.now() - value.receivedPageMs > 500) throw new Error('A current native camera target probe is required.');
+    if (this.method !== 'manual' || this.phase !== 'running' || !value || this.now() - value.receivedPageMs > 500) throw new Error('A current native camera target probe is required.');
     if (!/^[a-zA-Z0-9_-]{1,32}$/.test(id) || !['fit', 'check'].includes(use)) throw new Error('Invalid static target.');
     const pair = pairing(value.packet.meta, DEPTH_DEFAULTS.maxPairSkewMs); if (pair.reason) throw new Error(pair.reason);
     const probe = samplePoint(value.packet, value.calibration, prepareGeometry(value.calibration), pixel);
@@ -104,7 +115,7 @@ export class CameraCalibration {
     const result = await fitSpatialCalibration({ sources: { a: this.sources.a, b: this.sources.b }, targets: [...this.targets.values()] as TargetPair[], limits: { ...FIT_LIMITS }, evidence });
     if (generation !== this.generation || revision !== this.revision) throw new Error('Calibration session changed.'); this.result = result; return result;
   }
-  async import(file: Blob): Promise<SpatialCalibration> { if (this.targets.size) throw new Error('Clear the manual draft before importing another calibration.'); const generation = this.generation, revision = this.revision; const result = await importSpatialCalibration(file); if (generation !== this.generation || revision !== this.revision) throw new Error('Calibration session changed.'); this.revision++; this.result = result; return result; }
+  async import(file: Blob): Promise<SpatialCalibration> { if (this.targets.size) throw new Error('Clear the manual draft before importing another calibration.'); const generation = this.generation, revision = this.revision; const result = await importCalibrationDocument(file); if (generation !== this.generation || revision !== this.revision) throw new Error('Calibration session changed.'); this.revision++; this.result = result; return result; }
   export(): Blob { if (!this.result) throw new Error('No calibration result.'); return exportSpatialCalibration(this.result); }
   async saved(): Promise<SpatialCalibration[]> {
     const raw = this.storage.getItem(CALIBRATION_STORAGE); if (!raw) return [];

@@ -39,6 +39,8 @@ toolchain. Installation requires your consent and may show an administrator prom
 
 **Settings → Apps (core) → Theme** offers System, Light and Dark, applied immediately and saved only in this browser. The **Dev shortcut** (or repository-development CLI) exposes **Design** in the app menu. Its [gallery](packages/control-panel/ui/DESIGN-SYSTEM.md#appearance-and-case-gallery) at `/design` collects shared components in Main and simulated workflow cases without installing anything; normal user launches do not show that menu entry.
 
+The **[Calibration module](docs/calibration.md)** measures the transform between two depth cameras for hand providers, independently of Hands. It retains existing saved results and needs the optional calibration plugin and explicitly prepared native bridge for capture; opening the page starts no device.
+
 The core runs without any device: the `desktop` display shows the page in a window and the `simulated`
 or `replay` input stands in for hands. A 3D display, a hand tracker or a station platform comes from a
 plugin, and each plugin lists the hardware and runtimes it needs.

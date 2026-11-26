@@ -1,7 +1,7 @@
 # Camera-to-camera calibration contract
 
-Calibration is being extracted as its own module, not a Hands tab. No standalone acquisition page or old page alias remains.
-This document describes the retained measurement/output contract, not a current camera-start URL.
+Open the independent [Calibration module](../../../../../docs/calibration.md) at `/calibration/`, not a Hands tab.
+Old diagnostic pages/aliases remain removed. The linked module guide documents operation and the stable provider-consumption contract.
 
 ## Manual measurement
 
@@ -24,7 +24,7 @@ never an identity fallback. Native capture, intrinsics and calibrated depth-poin
 Axes are camera optical (+X right, +Y down, +Z forward), not panel/app axes. Bind the result to both native serials,
 exact profiles, intrinsics/extrinsics, depth scale and source metadata hashes. Scalar target/evidence hashes, held-out
 residuals and qualification fields are part of the validated format. Import recomputes the fit and rejects forged
-transforms, qualification, unsupported extensions or `fusionEnabled:true`; signed-zero metadata survives round trips.
+transforms, qualification or `fusionEnabled:true`; unowned fields are discarded and signed-zero metadata survives round trips.
 
 The format declares `physicalValidation: operator-required`, `temporalAlignment: null`, `fusionEnabled: false`.
 It is not a synchronization certificate, app-hand offset, permission to publish input or an accuracy guarantee.
@@ -35,8 +35,8 @@ SDK apps and the global Hands profile do not currently consume this transform.
 
 Manual results export as `hand-tracking-spatial-calibration.json`. Saved marker results use
 `handtracking.fusion-calibrations.v1` in workspace `config/plugins/input-hands/preferences.json`, up to eight
-validated scalar records. Existing exports and keys remain readable and are not migrated or deleted. The retained
-`CameraCalibration` controller and manual panel have no product-page boot and never capture on import/construction.
-The following module must acquire the shared native capture lease before starting either camera.
+validated scalar records. Existing exports and keys remain readable and are not migrated or deleted. The injected
+`CameraCalibration` controller never captures on import/construction. The module acquires the shared native capture
+lease before starting either camera; explicit Stop/disposal closes both streams. Saved-result operations need no camera.
 
 See [marker measurement](marker-calibration.md) for the alternative automatic collector.

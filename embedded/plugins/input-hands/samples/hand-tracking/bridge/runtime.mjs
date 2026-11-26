@@ -6,7 +6,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {userPath,plainPath,dependencyPath} from '../state-paths.mjs';
 const root=path.dirname(fileURLToPath(import.meta.url));
-const sourceInputs=['CMakeLists.txt','build.mjs','capture.cpp','marker-assets.json','markers.hpp','prepare-markers.mjs','sensor-dependency.mjs','runtime.mjs','../state-paths.mjs'];
+const sourceInputs=['CMakeLists.txt','build.mjs','capture.cpp','marker-assets.json','markers.hpp','marker-schedule.hpp','prepare-markers.mjs','sensor-dependency.mjs','runtime.mjs','../state-paths.mjs'];
 const digest=value=>crypto.createHash('sha256').update(value).digest('hex');
 const normalizedText=value=>Buffer.from(value).toString('utf8').replace(/\r\n/g,'\n');
 export const runtimeValueSha256=(name,value)=>digest(/\.(md|txt)$/.test(name)?normalizedText(value):value);
