@@ -14,7 +14,7 @@ test('checked Hands opens the real generated viewer without bridge/bootstrap/cap
   panel.server.on('request', req => { if (!['GET', 'HEAD'].includes(req.method!)) mutations.push(req.method + ' ' + req.url); });
   await withBrowser(async ({ send, navigate, evaluate }) => {
     await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.captureCalls=0;if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw new Error('Camera use forbidden in generated-view fixture')};` });
-    await navigate(`${panel.url}hands/`, `document.querySelector('#input')?.value==='synthetic' && !document.body?.classList.contains('workspace-pending')`);
+    await navigate(`${panel.url}hands-diagnostics/`, `document.querySelector('#input')?.value==='synthetic' && !document.body?.classList.contains('workspace-pending')`);
     await sleep(300);
     assert.equal(await evaluate(`!!document.querySelector('.xrb-app-bar')`), true);
     assert.equal(await evaluate(`!!document.querySelector('canvas')`), true);

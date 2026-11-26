@@ -16,9 +16,9 @@ Implementation is approved with the simplified global input policy. Groups match
 
 ## 3. Core Hands picker and logical Input presentation
 
-- [ ] 3.1 Add core-owned Hands navigation/route and provider picker with explicit Save, availability/reasons and next-launch guidance; browser fixtures cover zero providers, absent optional viewer, saved missing source and revision conflict.
-- [ ] 3.2 Move bundled acquisition diagnostics to a separate route/label with legacy Hands redirect and retained endpoints/state; navigation/server tests reject route shadowing and navigation starts no capture/runtime/install.
-- [ ] 3.3 Present only Mouse, Keyboard and Hand in app Input with context-aware availability without concrete provider names; UI tests retain unavailable saved selections and document the boundary between picker and future live lab.
+- [x] 3.1 Add core-owned Hands navigation/route and provider picker with explicit Save, availability/reasons and next-launch guidance; browser fixtures cover zero providers, absent optional viewer, saved missing source and revision conflict.
+- [x] 3.2 Move bundled acquisition diagnostics to a separate route/label with legacy Hands redirect and retained endpoints/state; navigation/server tests reject route shadowing and navigation starts no capture/runtime/install.
+- [x] 3.3 Present only Mouse, Keyboard and Hand in app Input with context-aware availability without concrete provider names; UI tests retain unavailable saved selections and document the boundary between picker and future live lab.
 
 ## 4. Simple input normalization
 

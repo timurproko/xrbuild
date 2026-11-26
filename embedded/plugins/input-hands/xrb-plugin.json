@@ -12,9 +12,8 @@
     "tools": [
       {
         "id": "hand-tracking",
-        "label": "Hands",
-        "route": "/hands/",
-        "aliases": ["/hand-tracking/"],
+        "label": "Acquisition diagnostics",
+        "route": "/hands-diagnostics/",
         "module": "tool.mjs",
         "independentView": true,
         "endpoints": ["/__handtracking/", "/__xrbuild/"]

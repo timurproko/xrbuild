@@ -392,6 +392,12 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       return;
     }
     if (parts[0] !== 'api') {
+      if (['/hands', '/hands/', '/hand-tracking', '/hand-tracking/'].includes(url.pathname)) {
+        if (!['GET', 'HEAD'].includes(method)) throw new HttpError(405, 'method not allowed');
+        if (url.pathname !== '/hands/') { res.writeHead(302, { location: `/hands/${url.search}`, 'cache-control': 'no-store' }); res.end(); return; }
+        if (method === 'HEAD') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(); return; }
+        return serveStatic(res, uiDir, 'hands.html');
+      }
       if (['/design', '/design/', '/design-system.html'].includes(url.pathname)) {
         if (!['GET','HEAD'].includes(method)) throw new HttpError(405, 'method not allowed');
         if (url.pathname !== '/design') { res.writeHead(302, {location:`/design${url.search}`, 'cache-control':'no-store'}); res.end(); return; }

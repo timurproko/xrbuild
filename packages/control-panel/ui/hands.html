@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>XR Build · Hands</title>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/design-system.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top xrb-app-bar">
+    <h1 class="xrb-brand">XR Build <button id="hands-menu-button" class="panel-menu-button xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Hands</button></h1>
+  </header>
+  <main class="xrb-workspace-layout">
+    <section class="card xrb-stack" aria-labelledby="hands-title">
+      <h2 id="hands-title">Hand source</h2>
+      <p>Choose one skeleton provider for all apps in this workspace. Changes apply on the next launch.</p>
+      <form id="hands-form" class="xrb-stack">
+        <label for="hands-provider">Skeleton provider</label>
+        <select id="hands-provider" name="provider" aria-describedby="hands-availability"></select>
+        <p id="hands-availability" role="status" aria-live="polite"></p>
+        <div class="row"><button id="hands-save" type="submit" disabled>Save</button><button id="hands-reload" type="button">Reload</button></div>
+      </form>
+      <p id="hands-message" role="status" aria-live="polite"></p>
+      <p class="xrb-help">This page configures the selected provider; it does not start it or show a live hand. Position, size, appearance and live testing are following changes.</p>
+      <a id="hands-diagnostics" href="/hands-diagnostics/" hidden>Acquisition diagnostics (separate source)</a>
+    </section>
+  </main>
+  <div id="hands-menu" class="menu xrb-menu panel-menu" role="menu" aria-label="XR Build navigation" hidden></div>
+  <script type="module" src="/hands.js"></script>
+</body>
+</html>

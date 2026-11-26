@@ -35,7 +35,7 @@ import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
 import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
 import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatus, type BuildTarget, type IdentityField, type PackagerDiscovery, type PackagerSetupStatus, type RoleSelection } from './packagers.ts';
 import { PackageList } from './packages.ts';
-import { discoverHandProviders, sameHandProvider } from './hand-providers.ts';
+import { discoverHandProviders, sameHandProvider, handRegistry } from './hand-providers.ts';
 import { readHandsState, saveHandsState, selectedHandProvider, validHandProviderKey } from './hands-state.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
 import { archiveProject, readLayout, removeEmptyProjectSection, unarchiveProject } from './layout.ts';
@@ -1731,7 +1731,7 @@ export class Panel {
         const registry = await discoverHandProviders(this.repo, this.workspace);
         const state = await readHandsState(this.repo, this.workspace);
         const selected = selectedHandProvider(state, registry, 'native');
-        sendJson(res, 200, { ...registry, selected: selected.key, initial: selected.initial, revision: state.revision,
+        sendJson(res, 200, { ...registry, registryRevision: registry.revision, selected: selected.key, initial: selected.initial, revision: state.revision,
           choiceRequired: !selected.key, applies: 'next-launch' });
         return true;
       }
@@ -1805,7 +1805,7 @@ export class Panel {
         }
         const available = await listProviders(this.repo, this.workspace);
         const providers = available.providers.map(presentProvider);
-        sendJson(res, 200, { ...available, providers,
+        sendJson(res, 200, { ...available, providers, handProviders: handRegistry(catalog, all).providers,
           disabled: [...new Map([...disabled.map(({ name, role }) => ({ name, role })), ...disabledNames]
             .map((provider) => [`${provider.role}:${provider.name}`, provider])).values()],
           packagers: platformsFor(this.packagers, 'host'), headsetPlatforms: platformsFor(this.packagers, 'webxr'), standaloneTargets,
