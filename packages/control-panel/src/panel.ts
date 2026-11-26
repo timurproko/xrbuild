@@ -27,18 +27,20 @@ import { log } from './env.ts';
 import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHost, clearProviderCache } from './host-build.ts';
 import { DesktopSetup } from './desktop-setup.ts';
 import { panelFreshness, panelSourceRoots, type PanelFreshness } from './panel-freshness.ts';
-import { HostRunner, type RunMode } from './host-runner.ts';
+import { HostRunner, type RunMode, type RunState } from './host-runner.ts';
 import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings, type PluginSetting, type SettingValue } from './plugin-manager.ts';
 import { PluginConfigConflict, PluginConfigInvalid, readUserPluginConfigState, writeUserPluginConfig, type UserPluginConfigState } from './plugin-config.ts';
 import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, discoverProjectCatalog, containedPath, type PluginCatalog } from './extension-catalog.ts';
 import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
 import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
-import { rebuiltPluginNames, runUpdate, updateStatus, type UpdateDeps, type UpdateStatus } from './update.ts';
+import { runUpdate, updateStatus, type UpdateDeps, type UpdateStatus } from './update.ts';
 import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatus, type BuildTarget, type IdentityField, type PackagerDiscovery, type PackagerSetupStatus, type RoleSelection } from './packagers.ts';
 import { PackageList } from './packages.ts';
 import { discoverHandProviders, sameHandProvider, handRegistry, handProviderKey, type HandProviderKey } from './hand-providers.ts';
 import { isNativeLauncherDocument } from '../../sdk/src/launch-context.ts';
-import { readHandsState, saveHandsState, selectedHandProvider, validHandProviderKey, prepareHandInput, resolveHandInput, type HandContext } from './hands-state.ts';
+import { LiveHands, sendHandProfile, observeHandProfile } from './hands-live.ts';
+import { HAND_APPEARANCE_DEFAULTS, type HandProfile } from '../../sdk/src/hand-profile.ts';
+import { readHandsState, saveHandsState, saveHandAdjustments, selectedHandProvider, validHandProviderKey, prepareHandInput, resolveHandInput, type HandContext } from './hands-state.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
 import { archiveProject, readLayout, removeEmptyProjectSection, unarchiveProject } from './layout.ts';
 import { discoverPublishers, normalizeReleaseCatalog, publicationUrl, publisherFor, publisherUnconfigured, releaseIdProblem, type PublicationCard, type PublicationIdentity, type Publisher, type PublisherDiscovery, type PublisherReleaseCatalog, type PublisherStatus } from './publishers.ts';
@@ -235,6 +237,8 @@ export class Panel {
   /** Test seams for Update (a stubbed Git runner or rebuild); production uses Git and rebuildHost. */
   updateDeps: Partial<UpdateDeps> = {};
   private updateLast: UpdateStatus | null = null;
+  /** A status read already in flight must drain before the reserved Update starts Git mutations. */
+  private updateStatusRead: Promise<UpdateStatus> | null = null;
   readonly packages: PackageList;
   readonly hub: EventHub;
   /** the core repo (host build, templates) */
@@ -269,6 +273,10 @@ export class Panel {
   launchBrowser: typeof launchPreviewBrowser = launchPreviewBrowser;
   /** Metadata probe injection for device-free fixtures. */
   nativeProviders: typeof listProviders = listProviders;
+  /** Device-free transport injection for native control/ack fixtures. */
+  nativeHandSocket: typeof WebSocket = WebSocket;
+  private liveHands: LiveHands | null = null;
+  private nativeHandObserver: { live: LiveHands; url: string; close: () => void } | null = null;
   private previewProjection: { route: string; token: string; session: string; fullscreen: boolean; monitor: number; projection: 'perspective' | 'orthographic'; projectId: string; handPolicy: 'off' | 'webxr' } | null = null;
 
   constructor(repo: string, workspace: string, hub: EventHub, projects = workspace, bootstrapPackageLock = false) {
@@ -289,7 +297,8 @@ export class Panel {
     });
     this.jobs.on('line', (j: Job, text: string) => hub.send('job-line', { id: j.id, text }));
     this.runner.on('state', (s) => {
-      if (s.phase === 'idle') this.nativeHandPolicy = null;
+      if (s.phase === 'idle') { this.nativeHandPolicy = null; this.setLiveHands(null); this.previewProjection = null; }
+      this.syncNativeHandObserver(s);
       hub.send('run', s);
       hub.send('projects-changed', { projectId: s.projectId });
     });
@@ -300,8 +309,23 @@ export class Panel {
     this.runner.on('log', (text) => hub.send('run-log', text));
   }
 
+  private setLiveHands(live: LiveHands | null): void {
+    if (this.liveHands === live) return;
+    this.liveHands?.close(); this.nativeHandObserver?.close(); this.nativeHandObserver = null; this.liveHands = live;
+  }
+
+  private syncNativeHandObserver(state: Pick<RunState, 'phase' | 'channelUrl'>): void {
+    const live = this.liveHands;
+    const url = live && this.nativeHandPolicy !== null && (state.phase === 'starting' || state.phase === 'running') ? state.channelUrl : null;
+    if (this.nativeHandObserver && (this.nativeHandObserver.live !== live || this.nativeHandObserver.url !== url)) {
+      this.nativeHandObserver.close(); this.nativeHandObserver = null;
+    }
+    if (live && url && !this.nativeHandObserver) this.nativeHandObserver = { live, url, close: observeHandProfile(url, live, this.nativeHandSocket) };
+  }
+
   private async withPluginServices<T>(work: () => Promise<T>): Promise<T> {
     await this.synchronizePluginServices(true);
+    if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before using plugin services');
     if (this.savingHands || this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending) throw this.servicesRefusal('Plugin services are changing; retry after the update');
     this.pluginConsumers++;
     try { return await work(); } finally { this.pluginConsumers--; }
@@ -415,10 +439,18 @@ export class Panel {
 
   private startJob(...args: Parameters<JobRunner['start']>): Job {
     if (this.restartPending) throw new HttpError(409, 'The panel is restarting');
-    if (this.servicesPending) throw this.servicesRefusal('Plugin discovery is awaiting refresh');
+    const [kind, projectId, , work] = args;
+    // Git recovery does not consume the loaded plugin services; stale/unavailable services must not veto it.
+    if (this.servicesPending && kind !== 'update') throw this.servicesRefusal('Plugin discovery is awaiting refresh');
     if (this.changingPlugins) throw new HttpError(409, 'Plugin services are changing; retry after the update');
+    if (kind === 'update') {
+      // Last synchronous admission point: JobRunner.start reserves the job before any status/Git await.
+      if (this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop the running or starting host first: its exe must not overlap an update');
+      if (this.preparingPreview) throw new HttpError(409, 'stop the starting browser preview before updating');
+      if (this.maintainingCache || this.pluginConsumers || this.savingHands || this.settingsWrites.size)
+        throw new HttpError(409, 'Wait for cache, plugin or settings work to finish before updating');
+    }
     try {
-      const [kind, projectId, , work] = args;
       if (projectId?.startsWith('bundled:') && kind !== 'cache-cleanup') {
         args[3] = async ctx => {
           const p = (await discoverProjectCatalog(this.repo, this.workspace, this.projects)).projects.find(record => record.project.id === projectId)?.project;
@@ -499,7 +531,7 @@ export class Panel {
     }
     const selected = selectionOf(m);
     const hands = await prepareHandInput(this.repo, this.workspace, await discoverHandProviders(this.repo, this.workspace, this.nativeProviders), selected.inputs ?? [], context);
-    return { ...selected, input: hands.input, inputs: hands.inputs, handPolicy: hands.policy, handSource: hands.source ? { owner: hands.source.owner, id: hands.source.id } : null,
+    return { ...selected, handProfile: (await readHandsState(this.repo, this.workspace)).profile, input: hands.input, inputs: hands.inputs, handPolicy: hands.policy, handSource: hands.source ? { owner: hands.source.owner, id: hands.source.id } : null,
       display: disabled.has(selected.display) ? 'desktop' : selected.display,
       platform: disabled.has(selected.platform) ? '' : selected.platform };
   }
@@ -514,9 +546,12 @@ export class Panel {
   /** Managed documents keep their launch decision; unscoped previews use effective personal inputs. */
   async previewHandPolicy(p: Project, url: URL): Promise<'off' | 'native' | 'webxr'> {
     const scope = url.searchParams, active = this.previewProjection;
-    if (active?.projectId === p.id && active.handPolicy !== undefined
+    if (active && (active.projectId === p.id || scope.get('xrb-hand-project') === active.projectId) && active.handPolicy !== undefined
       && scope.get('xrb-preview-token') === active.token && scope.get('xrb-preview-session') === active.session
-      && scope.get('xrb-preview-route') === active.route) return active.handPolicy;
+      && scope.get('xrb-preview-route') === active.route) {
+      const effective = p.readOnly ? withRunSettings(p, await readProjectRunSettings(this.repo, this.workspace, p)) : p;
+      return active.projectId === p.id || selectionOf(this.manifestOf(effective)).inputs?.includes('hand') ? active.handPolicy : 'off';
+    }
     const effective = p.readOnly ? withRunSettings(p, await readProjectRunSettings(this.repo, this.workspace, p)) : p;
     const m = this.manifestOf(effective);
     if (!selectionOf(m).inputs?.includes('hand')) return 'off';
@@ -533,12 +568,19 @@ export class Panel {
     return this.browserHandPolicy(m);
   }
 
-  private async publicationApp(p: Project, m: Manifest, policy: 'off' | 'native' | 'webxr'): Promise<string> {
+  async previewHandProfile(url: URL): Promise<HandProfile> {
+    const q = url.searchParams, active = this.previewProjection;
+    if (this.liveHands && (this.nativeHandPolicy !== null && isNativeLauncherDocument(url.href, new URL(this.panelUrl ?? url.origin).origin, this.runner.busy)
+      || active && q.get('xrb-preview-token') === active.token && q.get('xrb-preview-session') === active.session && q.get('xrb-preview-route') === active.route)) return this.liveHands.envelope.profile;
+    return (await readHandsState(this.repo, this.workspace)).profile;
+  }
+
+  private async publicationApp(p: Project, m: Manifest, policy: 'off' | 'native' | 'webxr', profile: HandProfile): Promise<string> {
     const root = path.join(this.workspace, 'build', 'publication-inputs');
     assertWritablePath(this.repo, this.workspace, root); await fs.mkdir(root, { recursive: true });
     const generation = await fs.mkdtemp(path.join(root, 'p-'));
     const staged = await stagePackagerInputs({ app: p.workingRoot ? (await effectiveProjectOutput(this.repo, this.workspace, p)).entry : this.entryOf(p, m),
-      runtimeDir: '', plugins: [], selection: { input: 'none', inputs: [], display: 'desktop', platform: '' }, handPolicy: policy,
+      runtimeDir: '', plugins: [], selection: { input: 'none', inputs: [], display: 'desktop', platform: '' }, handPolicy: policy, handProfile: profile,
       projectName: m.name, identity: {}, out: path.join(generation, 'out'), workDir: path.join(generation, 'work'), log: () => {},
     }, path.join(generation, 'inputs'), this.entryOf(p, m) === p.dir);
     return staged.app;
@@ -1048,7 +1090,7 @@ export class Panel {
       if (body.version !== undefined) throw new HttpError(409, `publisher "${publisher.name}" has no versioned release support`);
       return this.startJob('publication', p.id, `build and publish (${publisher.name}): ${m.name}`, async (ctx) => {
         await build(ctx);
-        return publisher.publish({ app: await this.publicationApp(p, m, selection.handPolicy), publication: identity, card: await this.cardOf(p, m), log: ctx.line });
+        return publisher.publish({ app: await this.publicationApp(p, m, selection.handPolicy, selection.handProfile!), publication: identity, card: await this.cardOf(p, m), log: ctx.line });
       }, 'publish', snapshot);
     }
     const version = body.version;
@@ -1065,7 +1107,7 @@ export class Panel {
     const release = { version: version as string, expectedRevision: catalog.revision };
     return this.startJob('publication', p.id, `build and ${operation} ${version} (${publisher.name}): ${m.name}`, async (ctx) => {
       await build(ctx);
-      return releases.publish({ app: await this.publicationApp(p, m, selection.handPolicy), publication: identity, version: release.version, expectedRevision: release.expectedRevision, card: await this.cardOf(p, m), log: ctx.line });
+      return releases.publish({ app: await this.publicationApp(p, m, selection.handPolicy, selection.handProfile!), publication: identity, version: release.version, expectedRevision: release.expectedRevision, card: await this.cardOf(p, m), log: ctx.line });
     }, operation, snapshot, release);
   }
 
@@ -1358,6 +1400,7 @@ export class Panel {
     if (mode === 'dev' && !p.manifest?.scripts?.dev) throw new HttpError(409, `${p.id} has no dev script`);
     await this.synchronizePluginServices(true);
     this.refuseIfLaunchBlocked(p, this.launchState(p));
+    if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before running');
     if (p.readOnly) this.refuseIfBusy(p.id);
     this.preparingPreview = true;
     try {
@@ -1396,6 +1439,7 @@ export class Panel {
     if (this.runner.busy) throw new HttpError(409, 'stop the running app first');
     this.previewProjection = { route, token, session, fullscreen: browser.fullscreen, monitor: browser.monitor, projection,
       projectId: p.id, handPolicy: selection.handPolicy === 'off' ? 'off' : 'webxr' };
+    this.setLiveHands(new LiveHands(selection.handProfile!, (await readHandsState(this.repo, this.workspace)).revision, session));
     let href = '';
     try {
       await this.runner.startPreview({ projectId: p.id, projectDir: p.dir, devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, flat }, mode, async (devUrl) => {
@@ -1405,6 +1449,7 @@ export class Panel {
         url.searchParams.set('xrb-preview-panel', new URL(this.panelUrl!).origin);
         url.searchParams.set('xrb-panel', this.panelUrl!);
         url.searchParams.set('xrb-project', p.id);
+        url.searchParams.set('xrb-hand-project', p.id);
         url.searchParams.set('xrb-camera', projection);
         url.searchParams.set('xrb-mouse', mouseEnabled ? '1' : '0');
         url.searchParams.set('xrb-hand', selection.handPolicy);
@@ -1422,7 +1467,7 @@ export class Panel {
         return this.launchBrowser(wrapper.href, browser.clientPort, browser.monitor, browser.fullscreen);
       });
     } catch (e) {
-      if (this.previewProjection?.token === token) this.previewProjection = null;
+      if (this.previewProjection?.token === token) { this.previewProjection = null; this.setLiveHands(null); }
       throw new HttpError(400, (e as Error).message);
     }
     return href;
@@ -1475,17 +1520,20 @@ export class Panel {
     const attemptedAt = Date.now();
     const cursor = (await readAppSettings(this.workspace)).cursor;
     this.nativeHandPolicy = selection.handPolicy === 'off' ? 'off' : 'native';
+    const nativeHands = new LiveHands(selection.handProfile!, (await readHandsState(this.repo, this.workspace)).revision);
+    this.setLiveHands(nativeHands);
+    selection.handProfileRun = nativeHands.envelope;
     try {
       await this.runner.start({
         projectId: p.id, mode, hostExe: fresh.exe, projectDir: p.dir, entryDir: bundledOutput?.entry ?? this.entryOf(p, m),
         builtUrl: mode === 'built' && this.panelUrl
-          ? `https://app.local/index.html?xrb-panel=${encodeURIComponent(this.panelUrl)}&xrb-project=${encodeURIComponent(p.id)}&xrb-mouse=${selection.inputs?.includes('mouse') ? '1' : '0'}&xrb-cursor=${cursor}&xrb-hand=${selection.handPolicy}` : undefined,
-        devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, panelUrl: this.panelUrl ?? undefined, mouseEnabled: selection.inputs?.includes('mouse') ?? true, handPolicy: selection.handPolicy, cursor, flat, switchView: selection.display !== 'desktop', cameraView,
+          ? `https://app.local/index.html?xrb-panel=${encodeURIComponent(this.panelUrl)}&xrb-project=${encodeURIComponent(p.id)}&xrb-mouse=${selection.inputs?.includes('mouse') ? '1' : '0'}&xrb-cursor=${cursor}&xrb-hand=${selection.handPolicy}&xrb-hand-profile-run=${nativeHands.envelope.runId}` : undefined,
+        devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, panelUrl: this.panelUrl ?? undefined, mouseEnabled: selection.inputs?.includes('mouse') ?? true, handPolicy: selection.handPolicy, handProfileRunId: nativeHands.envelope.runId, cursor, flat, switchView: selection.display !== 'desktop', cameraView,
         cameraAvailable: (selection.inputs ?? []).some((name) => !BUILTIN_PROVIDERS.has(name)),
         hostArgs: [`--title=${m.name}`, `--camera-projection=${flat ? 'orthographic' : 'perspective'}`, ...(await this.hostArgs(p, m, desktop, selection)), ...(flat && selection.display !== 'desktop' ? ['--view=2d'] : [])],
       });
     } catch (e) {
-      this.nativeHandPolicy = null;
+      this.nativeHandPolicy = null; this.setLiveHands(null);
       const last = this.runner.state().last;
       const output = last?.projectId === p.id && last.endedMs >= attemptedAt ? last.lines : null;
       throw new HttpError(400, (e as Error).message, output?.length ? output.join('\n') : undefined);
@@ -1523,6 +1571,7 @@ export class Panel {
   }
 
   private refuseIfBusy(id: string): void {
+    if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before changing projects');
     if (this.runner.projectId === id) throw new HttpError(409, `${id} is running: stop it first`);
     const busy = this.jobs.active().find((j) => j.projectId === id);
     if (busy) throw new HttpError(409, `${busy.title} is ${busy.state} for this project`);
@@ -1797,7 +1846,40 @@ export class Panel {
         const state = await readHandsState(this.repo, this.workspace);
         const selected = selectedHandProvider(state, registry, 'native');
         sendJson(res, 200, { ...registry, providers: registry.providers.map(p => ({ ...p, runtimeState: this.handRuntimeStates.get(handProviderKey(p)) ?? null })), registryRevision: registry.revision, selected: selected.key, initial: selected.initial, revision: state.revision,
-          choiceRequired: !selected.key, applies: 'next-launch' });
+          choiceRequired: !selected.key, applies: 'next-launch', profile: state.profile, appearanceDefaults: HAND_APPEARANCE_DEFAULTS, delivery: this.liveHands?.delivery ?? 'Saved for next launch', deliveryState: this.liveHands?.deliveryState ?? 'saved' });
+        return true;
+      }
+      case 'POST hands/apply': {
+        if (this.savingHands || this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.changingPlugins || this.jobs.active().length)
+          throw new HttpError(409, 'Wait for launch, package or provider preparation before applying Hands');
+        this.savingHands = true;
+        try {
+          const body = await readJson<{ profile?: unknown; revision?: string; registryRevision?: string }>(req);
+          const state = await readHandsState(this.repo, this.workspace);
+          let initial = null;
+          if (!state.exists) {
+            const registry = await discoverHandProviders(this.repo, this.workspace, this.nativeProviders);
+            if (body.registryRevision !== registry.revision) throw new HttpError(409, 'Hand providers changed; reload before applying');
+            initial = selectedHandProvider(state, registry, 'native').key;
+          }
+          if (!body.profile) throw new HttpError(400, 'Hands adjustment profile required');
+          const saved = await saveHandAdjustments(this.repo, this.workspace, body.profile, body.revision, initial);
+          const live = this.liveHands;
+          if (live && this.runner.busy) {
+            live.update(saved.profile, saved.revision);
+            if (this.nativeHandPolicy !== null) {
+              try {
+                const channel = this.runner.state().channelUrl;
+                if (!channel) throw new Error('Saved; running host channel is unavailable. Retry Apply or relaunch.');
+                const expected = live.envelope;
+                await sendHandProfile(channel, expected, this.nativeHandSocket); live.acknowledge(expected);
+              } catch (error) { live.fail((error as Error).message); }
+            }
+          }
+          this.hub.send('hands-changed', { revision: saved.revision });
+          const active = this.liveHands === live && this.runner.busy ? live : null;
+          sendJson(res, 200, { revision: saved.revision, profile: saved.profile, delivery: active?.delivery ?? 'Saved for next launch', deliveryState: active?.deliveryState ?? 'saved' });
+        } finally { this.savingHands = false; }
         return true;
       }
       case 'PUT hands': {
@@ -1811,7 +1893,7 @@ export class Panel {
           if (body.provider !== null && (!validHandProviderKey(body.provider) || !registry.providers.some(p => p.available && sameHandProvider(p, body.provider as import('./hand-providers.ts').HandProviderKey))))
             throw new HttpError(400, 'Choose an installed enabled hand provider');
           const saved = await saveHandsState(this.repo, this.workspace, body.provider, body.revision);
-          this.hub.send('hands-changed', {});
+          this.hub.send('hands-changed', { revision: saved.revision });
           sendJson(res, 200, { revision: saved.revision, selected: saved.provider });
         } finally { this.savingHands = false; }
         return true;
@@ -1908,31 +1990,31 @@ export class Panel {
       case 'GET update': {
         // While an update job runs Git in the clones, answer from the last status instead of running Git beside it.
         const updating = this.jobs.active().some(job => job.kind === 'update');
-        if (!updating || !this.updateLast) this.updateLast = await updateStatus(this.repo, this.workspace, this.updateDeps.git);
-        sendJson(res, 200, { ...this.updateLast, updating });
+        if (!updating) {
+          const scan = this.updateStatusRead ??= updateStatus(this.repo, this.workspace, this.updateDeps.git);
+          try { this.updateLast = await scan; }
+          finally { if (this.updateStatusRead === scan) this.updateStatusRead = null; }
+        }
+        // Before the first completed scan, only updating=true is available; never start another Git read beside it.
+        sendJson(res, 200, { ...this.updateLast, updating: this.jobs.active().some(job => job.kind === 'update') });
         return true;
       }
       case 'POST update': {
-        // The same guards as Rebuild: the update ends with one. The job runner keeps it apart from every other job.
         if (await this.desktopSetup.isBusy()) throw new HttpError(409, 'Wait for desktop setup to finish before updating');
-        if (this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop the running or starting host first: its exe must not overlap a rebuild');
-        const status = this.updateLast = await updateStatus(this.repo, this.workspace, this.updateDeps.git);
-        // This version updates the workspace only; the core is reported and the result says what holds for it.
-        if (!status.workspace.available) throw new HttpError(409, status.workspace.reason ?? 'The workspace cannot be updated');
-        sendJson(res, 202, jobSummary(this.startJob('update', null, 'update', ctx => runUpdate(this.workspace, ctx, {
-          core: this.repo,
-          coreHostCurrent: async () => {
-            const core = await resolvedHostFreshness(this.repo, this.workspace, true);
-            return core.exists && !core.outdated;
-          },
-          rebuild: async (pluginsOnly, context) => {
-            const tools = await this.desktopSetup.deps.tools();
-            const freshness = await rebuildHost(this.repo, this.workspace, context, { cmake: tools.cmake ?? undefined, generator: tools.generator, pluginsOnly });
-            return rebuiltPluginNames(freshness.plugins);
-          },
-          ...this.updateDeps,
-        }))));
+        // startJob revalidates launch/mutation guards and reserves Update synchronously after this last await.
+        // Repository eligibility belongs inside the job, never in a global workspace or plugin-services preflight.
+        sendJson(res, 202, jobSummary(this.startJob('update', null, 'update', async ctx => {
+          await this.updateStatusRead?.catch(() => {});
+          return runUpdate(this.workspace, ctx, { core: this.repo, ...this.updateDeps });
+        })));
         return true;
+      }
+      case 'GET preview/hands': {
+        const q = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams, current = this.previewProjection, live = this.liveHands;
+        if (!current || !live || !this.runner.busy || q.get('route') !== current.route || q.get('token') !== current.token || q.get('session') !== current.session || q.get('project') !== current.projectId)
+          throw new HttpError(404, 'Hands preview scope is not active');
+        if (q.get('ack') === String(live.envelope.sequence) && q.get('revision') === live.envelope.revision) live.acknowledge(live.envelope);
+        res.setHeader('cache-control', 'no-store'); sendJson(res, 200, live.envelope); return true;
       }
       case 'GET preview/projection': {
         const query = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams;
@@ -2042,6 +2124,7 @@ export class Panel {
   }
 
   async dispose(): Promise<void> {
+    this.setLiveHands(null);
     if (this.runner.busy) await this.runner.stop();
   }
 }

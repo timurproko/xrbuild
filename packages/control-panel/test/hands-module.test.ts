@@ -24,7 +24,7 @@ test('core Hands opens without optional plugins or state creation; old alias red
   try {
     const address = app.server.address() as { port: number }, base = `http://127.0.0.1:${address.port}`;
     const html = await fetch(base + '/hands/').then(r => r.text());
-    assert.match(html, /Skeleton provider/); assert.match(html, /does not start it/);
+    assert.match(html, /Skeleton provider/); assert.match(html, /No tracking starts here/);
     const old = await fetch(base + '/hand-tracking/?x=1', { redirect: 'manual' });
     assert.equal(old.headers.get('location'), '/hands/?x=1');
     const state = await fetch(base + '/api/hands').then(r => r.json());

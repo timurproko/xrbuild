@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { test, type TestContext } from 'node:test';
 import { REPO } from '../src/env.ts';
 import { createServer } from '../src/server.ts';
+import { handProfile } from '../../sdk/src/hand-profile.ts';
 import { handPolicyDocument } from '../src/hand-policy-document.ts';
 import { freePort } from '../src/host-runner.ts';
 import { discoverProjectCatalog } from '../src/extension-catalog.ts';
@@ -332,7 +333,9 @@ test('packaged browser preview and icons are read-only, skip scripts/finalizatio
   const locked = path.join(dir, 'dist/index.html'); await fs.chmod(locked, 0o444);
   t.after(() => fs.chmod(locked, 0o644).catch(() => {}));
   const page = await f.request('GET', '/preview/bundled%3Aarchive/demo/');
-  assert.equal(page.status, 200); assert.equal(page.text, handPolicyDocument('<h1>demo</h1>', 'off'));
+  assert.equal(page.status, 200); assert.equal(page.text, handPolicyDocument('<h1>demo</h1>', 'off', handProfile(), false));
+  assert.match(page.text, /__XRB_HAND_PROFILE__=\{"version":1,"offsetMm":\{"x":0,"y":0,"z":0\},"sizeFactor":1,"appearance":\{\}\}/);
+  assert.match(page.text, /__XRB_HAND_PROFILE_FROZEN__=false/);
   assert.equal(await fs.readFile(locked, 'utf8'), '<h1>demo</h1>', 'policy stamping changes the response, never packaged source bytes');
   assert.equal((await f.request('GET', '/preview/bundled%3Aarchive/demo/icon.js')).status, 200);
   assert.equal((await f.request('GET', '/api/projects/bundled%3Aarchive/demo/icon')).status, 200);

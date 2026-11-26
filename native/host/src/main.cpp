@@ -32,6 +32,7 @@
 #include "hand_recording.h"
 #include "host_channel.h"
 #include "host_config.h"
+#include "hand_profile.h"
 #include "cef_client.h"
 #include "log.h"
 #include "plugins.h"
@@ -217,6 +218,13 @@ int main() {
       else if (!err.empty()) throw std::runtime_error("config " + narrow(cfgPath) + ": " + err);
       else if (!args.configFile.empty()) throw std::runtime_error("config " + narrow(cfgPath) + " not found");
     }
+    handprofile::State handProfileState;
+    std::mutex handProfileMutex;
+    if (fileCfg.contains("handProfileRun")) {
+      if (!handprofile::validEnvelope(fileCfg["handProfileRun"])) throw std::runtime_error("invalid managed Hands profile");
+      handProfileState.current = fileCfg["handProfileRun"];
+    }
+    if (fileCfg.contains("handProfile") && !handprofile::validProfile(fileCfg["handProfile"])) throw std::runtime_error("invalid portable Hands profile");
     hostcfg::Selection sel = hostcfg::selectRoles(fileCfg, args);
     if (iconRender) sel = {"none", "desktop", "", ""};  // an icon render is a build step: no device, no station
     std::string inputNames;
@@ -378,6 +386,18 @@ int main() {
     std::atomic<int> viewRequest{-1};
     std::atomic<int> projectionRequest{-1};
     chan.onMessage = [&](const uint8_t* d, size_t n) {
+      if (n >= 16 && (d[0] == handprofile::kSetProfile || d[0] == handprofile::kAckProfile)) {
+        const auto j = handprofile::decode(d, n, d[0]);
+        std::lock_guard<std::mutex> g(handProfileMutex);
+        if (d[0] == handprofile::kSetProfile && handProfileState.accept(j)) {
+          const auto text = handProfileState.current.dump();
+          chan.publish(static_cast<channel::MessageType>(handprofile::kProfile), text.data(), text.size());
+        } else if (d[0] == handprofile::kAckProfile && handProfileState.acknowledge(j)) {
+          const auto text = j.dump();
+          chan.publish(static_cast<channel::MessageType>(handprofile::kProfileAck), text.data(), text.size());
+        }
+        return;
+      }
       if (bool want = false; decodeSetView(d, n, &want)) {
         viewRequest = want ? 1 : 0;
         return;
@@ -421,6 +441,14 @@ int main() {
     publishPlatform("{}");
     CefRefPtr<CefDictionaryValue> info = CefDictionaryValue::Create();
     info->SetInt("version", 1);
+    {
+    std::lock_guard<std::mutex> g(handProfileMutex);
+    if (!handProfileState.current.is_null()) {
+      info->SetString("handProfileRunId", jsonOr(handProfileState.current, "runId", ""));
+      const auto text = handProfileState.current.dump();
+      chan.publish(static_cast<channel::MessageType>(handprofile::kProfile), text.data(), text.size());
+    } else if (fileCfg.contains("handProfile")) info->SetString("handProfileJson", fileCfg["handProfile"].dump());
+    }
     info->SetBool("stereo", stereo);
     info->SetBool("fullscreen", fullscreen);
     info->SetBool("mouseEnabled", sel.mouse);

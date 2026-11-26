@@ -16,6 +16,10 @@ export interface HostInfo {
   /** Current native presentation mode; absent on older hosts. */
   fullscreen?: boolean;
   mouseEnabled?: boolean;
+  /** Managed run binding; latest profile is retained on the authenticated host channel. */
+  handProfileRunId?: string;
+  /** Portable frozen package profile, encoded to preserve arrays through the native bridge. */
+  handProfileJson?: string;
   /** Page-scoped native shell bridge; the host rejects non-fullscreen close requests. */
   requestClose?(): void;
   setCursorStyle?(style: 'system' | 'ring' | 'ring-dot'): void;

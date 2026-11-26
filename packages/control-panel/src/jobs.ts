@@ -52,6 +52,15 @@ export const MAX_LINES = 2000;
 
 export class JobRefused extends Error {}
 
+/** A failed operation can retain its partial results and a mandatory final recovery instruction. */
+export class JobFailure extends Error {
+  readonly result: unknown;
+  readonly lastLine?: string;
+  constructor(message: string, result: unknown, lastLine?: string) {
+    super(message); this.result = result; this.lastLine = lastLine;
+  }
+}
+
 export interface JobContext {
   /** Appends a line to the job output. */
   line(text: string): void;
@@ -180,7 +189,9 @@ export class JobRunner extends EventEmitter {
       } catch (e) {
         job.state = 'failed';
         job.error = (e as Error).message;
+        if (e instanceof JobFailure) job.result = e.result;
         work.ctx.line(`FAILED: ${job.error}`);
+        if (e instanceof JobFailure && e.lastLine) work.ctx.line(e.lastLine);
       }
       job.endedMs = Date.now();
       this.work.delete(job.id);

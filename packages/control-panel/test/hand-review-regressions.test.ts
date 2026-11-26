@@ -9,7 +9,7 @@ import { Panel } from '../src/panel.ts';
 import { freePort } from '../src/host-runner.ts';
 import { discoverProjectCatalog } from '../src/extension-catalog.ts';
 import { readProjectRunSettings, saveProjectRunSettings } from '../src/project-run-settings.ts';
-import { readHandsState, saveHandsState, validHandProviderKey } from '../src/hands-state.ts';
+import { readHandsState, saveHandsState, saveHandAdjustments, validHandProviderKey } from '../src/hands-state.ts';
 import { readProject } from '../src/projects.ts';
 import { writeBuildReceipt } from '../src/publication.ts';
 import { portableHostConfig } from '../src/package-content.ts';
@@ -79,11 +79,20 @@ test('publication always resolves browser context even when the selected package
     await assert.rejects(panel.publish(p), /incompatible with browser preview\/publication/);
     assert.equal(published, ''); assert.equal(panel.jobs.list().length, 0);
     await f.choose({ owner: 'core', id: 'webxr' });
+    await saveHandAdjustments(f.core, f.workspace, { sizeFactor: 1.1 }, (await readHandsState(f.core, f.workspace)).revision);
     const job = await panel.publish(p), done = await panel.jobs.wait(job);
     assert.equal(done.state, 'done', done.error ?? '');
     assert.match(published, /__XRB_HAND_POLICY__="webxr"/);
     assert.doesNotMatch(published, /__XRB_HAND_POLICY__="native"/);
     assert.equal(p.manifest!.target, undefined, 'publishing did not rewrite the desktop package selection');
+    assert.match(published, /"sizeFactor":1.1/); assert.match(published, /__XRB_HAND_PROFILE_FROZEN__=true/);
+    const sourceBeforeVersioned = await fs.readFile(path.join(dir, 'dist/index.html'), 'utf8');
+    assert.doesNotMatch(sourceBeforeVersioned, /__XRB_HAND_PROFILE__/);
+    (panel.publishers.found[0].publisher as any).releases = { catalog: async () => ({ revision: 'fixture', releases: [] }),
+      publish: async input => { published = await fs.readFile(path.join(input.app, 'index.html'), 'utf8'); return { releaseId: 'release-1', version: '1.0.0' }; } };
+    const versioned = await panel.publish(p, { version: '1.0.0', expectedRevision: 'fixture' });
+    assert.equal((await panel.jobs.wait(versioned)).state, 'done'); assert.match(published, /"sizeFactor":1.1/);
+    assert.equal(await fs.readFile(path.join(dir, 'dist/index.html'), 'utf8'), sourceBeforeVersioned);
   } finally { await f.close(); }
 });
 

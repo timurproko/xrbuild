@@ -2,12 +2,15 @@
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
+import { handProfile } from '../../sdk/src/hand-profile.ts';
 import { handPolicyDocument } from './hand-policy-document.ts';
 import type { PackagerBuildOptions } from './packagers.ts';
 import { appContent, hostContent, pluginContent, portableHostConfig, iconContent, assertPackageDestination, copyContent, verifyContent, RUNTIME_MANIFEST } from './package-content.ts';
 
 export async function stagePackagerInputs(options: PackagerBuildOptions, folder: string, staticProjectRoot = false): Promise<PackagerBuildOptions> {
   const hosted = !!options.runtimeDir;
+  const profile = options.handProfile ?? options.selection.handProfile;
+  const snapshot = profile ? handProfile(profile) : undefined;
   if (!hosted && (options.plugins.length || Object.keys(options.pluginDirs ?? {}).length || options.config)) throw new Error('WebXR package inputs must not contain host runtime state');
   const config = hosted ? portableHostConfig(options) : undefined;
   const app = await appContent(options.app, staticProjectRoot), runtime = hosted ? await hostContent(options.runtimeDir) : null;
@@ -20,7 +23,7 @@ export async function stagePackagerInputs(options: PackagerBuildOptions, folder:
   await copyContent(app, path.join(folder, 'app'));
   if (options.handPolicy) {
     const index = path.join(folder, 'app', 'index.html');
-    await fs.writeFile(index, handPolicyDocument(await fs.readFile(index, 'utf8'), options.handPolicy));
+    await fs.writeFile(index, handPolicyDocument(await fs.readFile(index, 'utf8'), options.handPolicy, snapshot));
   }
   if (runtime) await copyContent(runtime, path.join(folder, 'runtime'));
   const pluginDirs: Record<string, string> = {};
@@ -38,6 +41,6 @@ export async function stagePackagerInputs(options: PackagerBuildOptions, folder:
   await Promise.all([verifyContent(app), ...(runtime ? [verifyContent(runtime)] : []), ...plugins.map(plugin => verifyContent(plugin.content))]);
   return { app: path.join(folder, 'app'), runtimeDir: hosted ? path.join(folder, 'runtime') : '',
     ...(hosted ? { pluginDirs } : {}), plugins: [...options.plugins], selection: { input: options.selection.input, ...(options.selection.inputs ? { inputs: [...options.selection.inputs] } : {}), display: options.selection.display, platform: options.selection.platform },
-    handPolicy: options.handPolicy, projectName: options.projectName, identity: { ...options.identity }, config, launchUrl: options.launchUrl,
+    handPolicy: options.handPolicy, handProfile: snapshot, projectName: options.projectName, identity: { ...options.identity }, config, launchUrl: options.launchUrl,
     icon, iconColor: options.iconColor, out: options.out, workDir: options.workDir, log: options.log };
 }

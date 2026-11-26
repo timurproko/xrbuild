@@ -29,6 +29,9 @@ import { PointerEmulation } from './pointer.ts';
 import { type HandCapabilities, type PagePerformance, type PlatformInfo, type StatusMessage, type Vec3 } from './protocol.ts';
 import { toSceneHand, type SceneHand } from './scene-hands.ts';
 import { nominalEyes, panelCropPlanes, StereoRenderer, type AppCamera, type EyePair, type PanelMapping } from './stereo.ts';
+import { handProfile, type HandProfile } from './hand-profile.ts';
+import { HandProfileReceiver } from './hand-profile-control.ts';
+import { previewHandScope, subscribeHandProfile } from './hand-profile-preview.ts';
 import { HandFrameIngress, handSourcePolicy } from './hand-source.ts';
 import { detectXrMode, eyesInPanel, headOf, rigMatrix, virtualDisplay, VirtualPanel, wantsAutoEnter, XrHands, type XrFrameLike, type XrMode, type XrOptions, type XrSessionLike, type XrSystemLike } from './webxr.ts';
 
@@ -171,6 +174,8 @@ export class Xrb {
   private readonly xrPanel: VirtualPanel;
   private readonly xrHands = new XrHands();
   private readonly handIngress: HandFrameIngress;
+  private handProfileReceiver: HandProfileReceiver | null = null;
+  private handProfileTransport: ReturnType<typeof subscribeHandProfile> | null = null;
   private readonly managedHandPolicy: boolean;
   private handProblemNotice: HTMLElement | null = null;
   /** parent of the XR camera: reference space -> scene, so the virtual panel lands where the mapping puts the panel */
@@ -233,6 +238,7 @@ export class Xrb {
     });
     this.iconOptions = { autoReady: options.icon?.autoReady ?? true, readyMs: options.icon?.readyMs ?? 1000 };
     this.pointer = options.pointer === false || this.icon ? null : new PointerEmulation({ element: renderer.domElement });
+    this.configureHandProfile();
     if (this.icon) this.startIcon(this.icon.size);
     if (this.icon && options.icon?.create) this.createIconStage(options.icon.create);
     this.setSize();
@@ -243,6 +249,36 @@ export class Xrb {
       if (this.disposed) control?.dispose();
       else this.returnControl = control;
     });
+  }
+
+  private configureHandProfile(): void {
+    const g = globalThis as { __XRB_HAND_PROFILE__?: unknown; __XRB_HAND_PROFILE_FROZEN__?: boolean };
+    const scope = !this.host && !g.__XRB_HAND_PROFILE_FROZEN__ ? previewHandScope(globalThis.location?.search ?? '') : null;
+    const expectedNative = this.host && new URLSearchParams(globalThis.location?.search ?? '').has('xrb-hand-profile-run');
+    if (expectedNative && !this.host?.handProfileRunId) {
+      this.handIngress.ready = false; this.showHandProblem('Rebuild the host and relaunch to use Hands adjustments.', true); return;
+    }
+    const runId = this.host?.handProfileRunId ?? scope?.runId;
+    const apply = (p: HandProfile, geometryChanged: boolean) => {
+      if (geometryChanged) {
+        this.pointer?.reset(); this.currentHands = []; this.sceneHands = [];
+        this.interaction.update([], this.metre); this.handIngress.reset();
+        this.handsObject.update([], this.view.panel);
+      }
+      this.handIngress.profile = p; this.handIngress.ready = true;
+      this.handsObject.applyAppearance(p.appearance);
+    };
+    if (runId) {
+      this.handIngress.ready = false;
+      this.handProfileReceiver = new HandProfileReceiver(runId, apply, e => {
+        this.channel?.ackHandProfile(e); this.handProfileTransport?.ack(e);
+      });
+      this.channel?.onHandProfile(value => this.handProfileReceiver?.receive(value));
+      if (scope) this.handProfileTransport = subscribeHandProfile(scope.endpoint, value => this.handProfileReceiver?.receive(value));
+    } else {
+      try { apply(handProfile(this.host?.handProfileJson ? JSON.parse(this.host.handProfileJson) : g.__XRB_HAND_PROFILE__), false); }
+      catch (error) { this.handIngress.ready = false; this.showHandProblem(`Hands profile: ${(error as Error).message}`, true); }
+    }
   }
 
   /** true: the page shows two eyes side by side in 3D (or a headset session runs); false: one view in 2D. Can change at run time (onView). */
@@ -312,8 +348,8 @@ export class Xrb {
     if (this.xrOptions.autoEnter ?? wantsAutoEnter(search)) enter();
   }
 
-  private showHandProblem(message: string): void {
-    if (!this.managedHandPolicy || this.handIngress.policy !== 'webxr' || this.disposed || typeof document === 'undefined') return;
+  private showHandProblem(message: string, profileError = false): void {
+    if ((!profileError && (!this.managedHandPolicy || this.handIngress.policy !== 'webxr')) || this.disposed || typeof document === 'undefined') return;
     if (!this.handProblemNotice) {
       this.handProblemNotice = document.createElement('p');
       this.handProblemNotice.setAttribute('role', 'status');
@@ -518,6 +554,7 @@ export class Xrb {
       this.renderIcon(scene, camera);
       return;
     }
+    this.handProfileReceiver?.flush();
     const now = performance.now();
     const xr = this.presenting;
     const e = this.channel?.eyes;
@@ -728,6 +765,7 @@ export class Xrb {
 
   dispose(): void {
     this.disposed = true;
+    this.handProfileReceiver?.close(); this.handProfileTransport?.close();
     this.handIngress.close();
     this.pointer?.reset();
     this.currentHands = []; this.sceneHands = [];
