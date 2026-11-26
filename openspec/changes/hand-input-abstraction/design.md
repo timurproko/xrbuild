@@ -2,7 +2,7 @@
 
 ## Context
 
-See proposal.md for motivation. This is a plan, not implementation approval.
+See proposal.md for motivation. Approved for implementation with simplified global migration: every saved hand-provider name means Hand, without compatibility phases or input-semantics versions.
 
 ### 1. What “raw provider data” means
 
@@ -30,7 +30,7 @@ The single-host comment in `native/host/src/main.cpp:122-128` says machine-wide,
 
 ## Goals / Non-Goals
 
-**Goals:** stable logical input, global source ownership, honest states, exact existing single-provider behaviour, and a shared identity ingress seam designed first for position/size adjustment.
+**Goals:** stable logical input, global source ownership, honest states, unchanged provider signals, and a shared identity ingress seam designed first for position/size adjustment. Behaviour parity for old per-app provider assignments is explicitly not required.
 
 **Non-goals in this PR:** live hand preview; offset/size or appearance controls; profile editing/delivery; post-processing plugin loading; meshes/skins; recording; gesture tests; acquisition worker/broker; calibration/runtime/advanced-setting removal; changing any provider's tracking code; per-app provider/profile options; multiple simultaneous providers, fusion or failover. The immediate next change is offset/size **and appearance**, ahead of the laboratory, as specified below.
 
@@ -62,7 +62,7 @@ Alternatives rejected: renaming a plugin to Hand still exposes implementation se
 
 Store version 1 state at `<selected-workspace>/config/hands/profile.json`, initially `{ "version": 1, "provider": { "owner": "...", "id": "..." } }`. `provider: null` means unselected. There is one shared record per selected integration workspace, including when project repositories differ. Do not use plugin preferences, browser localStorage or app manifests for the new provider choice.
 
-A missing record resolves in memory to unselected. Discovery/GET creates nothing and never chooses the first/last/only provider automatically. Legacy launches do not initialize this record implicitly. Use bounded (16 KiB) regular/unlinked files, parent containment, revision-aware writes, cooperating lock and atomic replacement; preserve unknown fields, reject malformed/foreign/concurrently edited state without resetting it. Global scope follows the selected workspace, not every workspace on the machine. Numeric/appearance fields are reserved for follow-up design, not partially implemented controls.
+With no saved choice, exactly one installed enabled real (non-synthetic/non-replay) source compatible with the requesting execution context is the initial default, displayed as selected in Hands. Zero or several real sources require a choice. Resolve and pin that initial default on the first explicit launch or preference Save so it can never become a fallback after removal. Discovery/GET creates nothing; once a choice exists it is never silently replaced. Explicit null is an intentional unselected choice, not permission to infer another default. Use bounded (16 KiB) regular/unlinked files, parent containment, revision-aware writes, cooperating lock and atomic replacement; preserve unknown fields, reject malformed/foreign/concurrently edited state without resetting it. Global scope follows the selected workspace, not every workspace on the machine. Numeric/appearance fields are reserved for follow-up design, not partially implemented controls.
 
 Registry states distinguish installed/enabled/ABI-compatible from unbuilt, disabled, missing, ambiguous, incompatible-context, configuration-required and runtime state (`starting`, `running`, `needs-setup`, `device-missing`, `failed`). An installed provider is not proof of connected hardware. Idle says **Not started; device availability checked at launch**, not Ready/Running. Last runtime failure is tied to the provider/run, not inferred by opening a camera. No-hands-detected is not provider failure.
 
@@ -78,7 +78,7 @@ Move the optional diagnostic declaration to a distinct `/hands-diagnostics/` rou
 
 ### D. Resolve once for every consumer
 
-Create a single panel-side resolution operation taking effective project/run inputs, registry revision, global profile revision and execution context. It yields logical inputs, exactly one selected source (or none), concrete native role selection, selected owner/binary closure, effective provider config, and a source-policy snapshot. All run, dev, build, copy/adoption and package validation call it rather than each interpreting `hand` differently.
+Create a single panel-side resolution operation taking effective project/run inputs, registry revision, global profile revision and execution context. It yields logical inputs, exactly one selected source (or none), concrete native role selection, selected owner/binary closure, effective provider config, and a source-policy snapshot. All run, dev, build and package validation call it rather than each interpreting `hand` differently.
 
 | Consumer | Resolution and delivery |
 | --- | --- |
@@ -89,26 +89,20 @@ Create a single panel-side resolution operation taking effective project/run inp
 | Published WebXR build | Resolve the same global source at build. Only a browser-capable source is accepted for Hand; package a bounded source-policy bootstrap with checked staged output, no workspace identity/paths. Native DLLs are not copied or magically bridged. |
 | Direct old host CLI / old packages / unmanaged old browser apps | Their concrete configs and existing SDK WebXR defaults remain supported; no ambient panel lookup or state rewrite. Raw CLI `--input=hand` without resolved context gets an actionable error, not a default source. |
 
-Managed SDK source policy is a bounded `off/native/webxr` launch/deployment context, not a new app-facing provider override. New/explicitly adopted input manifests carry `inputVersion: 2` (also implied by a logical `hand` entry); this versions input semantics, not provider choice. Unversioned legacy browser apps retain their existing automatic WebXR hand behaviour, even when their old inputs array is empty. Only version-two input semantics gate Hand-off delivery. New templates and explicit input saves write this version; unrelated saves do not. Update manifest validation, copy and embedded personal-field/refresh rules accordingly. Carry it through existing launcher destination/return context without loosening URL trust. Gate WebXR ingestion when managed Hand is off or assigned to native, so entering XR does not inject a second source. Both accepted ingress paths call one identity `prepareHandFrame` stage before `HandInput.push`, after native timestamp conversion or WebXR panel conversion. In this change it preserves optional fields/capabilities and feeds the unchanged processing defaults. Future typed layers attach here; no loader, transform, smoothing changes or wire identity envelope is introduced. Rendering plugins later attach downstream to processed SceneHands, not to native tracking code.
+Managed SDK source policy is a bounded `off/native/webxr` launch/deployment context, not a new app-facing provider override. There are no old/new input-semantics versions. All managed applications use the same policy derived from logical inputs and the global source. Carry it through existing launcher destination/return context without loosening URL trust. Gate WebXR ingestion when managed Hand is off or assigned to native, so entering XR does not inject a second source. Both accepted ingress paths call one identity `prepareHandFrame` stage before `HandInput.push`, after native timestamp conversion or WebXR panel conversion. In this change it preserves optional fields/capabilities and feeds the unchanged processing defaults. Future typed layers attach here; no loader, transform, smoothing changes or wire identity envelope is introduced. Rendering plugins later attach downstream to processed SceneHands, not to native tracking code.
 
 Keep source/session generation and revisions in the managed launch lifecycle outside HANDS payloads. On end/disposal reset hand/filter/capture state; late retired-session messages cannot affect the next session. Source changes require restart in this PR. The binary HANDS v1/v2 readers, 456-byte hand and recordings remain untouched.
 
-### E. Legacy compatibility without introducing per-app provider options
+### E. Simple normalization, no compatibility phase
 
-There is a real tension between one global source and retaining arbitrary existing concrete source assignments. Do not hide it by importing the first app's provider globally. **Compatibility-only concrete manifests retain their concrete source until explicit adoption**; this is not a new editable per-app preference. New logical-Hand apps always follow the one global selection.
-
-Normalize a copy in memory, resolving legacy `input`, `inputs`, per-platform fields, legacy personal `run.json` and origin/alias mappings. Presentation is Hand with a **Legacy source retained** notice. The launch uses that exact legacy provider/config even if the global source differs or is unset. An existing concrete name whose plugin is absent stays an unresolved legacy selection; never reinterpret it as a different available source. Keep all original file bytes on discovery, navigation, GET and launch, apart from ordinary unrelated generated run output.
-
-An explicit **Use global Hand / Save input** action converts the selected logical input to `hand` and removes obsolete singular `input` only in the saved scope. If the current global choice differs or is unset, warn about the exact behaviour change and require choosing/adopting globally, or keep the legacy input. Saving a name/icon/unrelated field must not silently migrate inputs. Do not add `handProvider` to the project. Keep plugin configuration and inactive platform choices; preserve embedded personal-field/refresh/copy allowlists and legacy schema-bound provider overrides. Input adoption per platform is explicit, never a sweep of all apps or installed embedded sources.
-
-Normalize duplicate aliases for the same source to one source. A legacy manifest naming multiple **distinct** hand sources remains on the unchanged legacy concrete launch path, with a visible compatibility notice; do not silently drop, fuse or reassign its sources. Explicit adoption requires consolidating to one global source and acknowledging that change. The fixed one-source contract governs logical Hand, not a retroactive rewrite of old concrete host configurations; no new UI can create multiple sources. The required pre-change single-source application regression is exact provider/config/gesture behaviour before and after upgrade, including while a different global source is selected. Also retain legacy multi-input launch configuration until adoption. Existing raw CLI multi-provider support is not expanded or used by logical Hand.
+Read every input other than Mouse/Keyboard/none as logical Hand, including unknown or missing old provider names and arrays naming several providers. Deduplicate to one Hand. Apply uniformly to singular `input`, `inputs`, platform choices and personal run settings. Every such app launches the globally selected source immediately; no per-app concrete assignment survives and no adoption UI or semantics version exists. Reading and launching do not rewrite source manifests. The next explicit settings Save writes canonical `inputs`, removes singular `input`, and normalizes saved platform choices. Preserve `plugins.<provider>` configuration and unrelated fields. Old per-app source parity is deliberately waived; native pinch/grab signals from the chosen provider are not changed. Embedded installed sources stay immutable.
 
 ### F. Existing hidden/development providers
 
 - Built-in `simulated`: a clearly labelled synthetic source in Hands, not another app Input kind; never automatic fallback.
 - Embedded `hand-tracking`: another synthetic source with its existing scenarios/settings, registered under its owner. Its synthetic data does not define Hands.
 - Built-in `replay`: a replay source; existing file/loop settings and recordings remain compatible. Without a configured recording, show configuration-required, not Running. This PR adds no file browser or recorder; new acquisition configuration UI is later.
-- `calibrated`: currently only an excluded UI name, **not a built-in provider** in `builtin_inputs.cpp`/`builtin_providers.cpp`. If an installed extension actually owns it, register its existing hand ABI source normally; otherwise preserve it as missing legacy state. Do not invent or alias it to a different provider.
+- `calibrated`: currently only an excluded UI name, **not a built-in provider** in `builtin_inputs.cpp`/`builtin_providers.cpp`. If an installed extension actually owns it, register its existing hand ABI source normally; its saved name still means Hand, not permission to substitute a source. Do not invent or alias it to a different provider.
 - Diagnostic RGB/RGB-D observations are not registered as app skeletons: camera/surface-relative observations have not met the canonical panel-space joint contract.
 
 ### G. First follow-up: position, size and appearance profile (recommended separate PR)
@@ -159,8 +153,8 @@ Concurrent app observation/control needs a shared acquisition broker/subscriptio
 
 ## Risks / Trade-offs
 
-- [Global choice versus immutable legacy behaviour] -> Explicit legacy compatibility boundary and adoption notice; no new per-app picker or automatic global import.
-- [Several distinct legacy sources] -> Retain the old concrete path only for compatibility; explicit adoption requires source consolidation. Logical Hand never starts multiple providers.
+- [Old apps change provider] -> Deliberately approved simplification: all old provider names mean one global Hand; the owner will recheck the few apps manually. No compatibility or adoption machinery.
+- [Initial default mistaken for fallback] -> Only infer one real source before any saved choice, pin it on explicit launch/save, and retain unavailable saved choices.
 - [Synthetic core source makes native Hand usually available] -> Distinguish installed from selected/running; no default source, no fallback and no fake hardware-ready state.
 - [Selected source unavailable in another target] -> Clear incompatibility, not per-target provider preferences or automatic WebXR substitution.
 - [Hidden-provider routes and independently installed diagnostics] -> Reserve core routes, migrate bundled declaration, keep diagnostic endpoints/state and test collisions.
@@ -173,19 +167,19 @@ Concurrent app observation/control needs a shared acquisition broker/subscriptio
 ## Migration Plan
 
 1. Land backwards-compatible declaration/registry and Hands record API with read-only discovery. Do not create state on navigation.
-2. Introduce core picker and app logical choice with visible legacy markers; preserve origin/runtime config and immutable installed sources.
-3. Route every managed execution/package consumer through the resolver and identity SDK ingress; maintain old concrete launch paths and recording readers.
-4. Release metadata-only provider declarations independently; implicit compatibility works before their release. Explicit source/adoption Save is the only migration write.
-5. Add focused tests below; no hardware tests or background setup. Rolling back this PR before adoption leaves app/settings bytes unchanged. After explicit adoption, older core cannot understand logical `hand`: restore the previous manifest input or use a previously built concrete package; preserve rather than delete the new global record.
+2. Introduce core picker and normalize every concrete input name to Hand in memory, preserving plugin config and immutable installed sources.
+3. Route every managed execution/package consumer through the global resolver and identity SDK ingress; preserve recording readers, not old per-app provider assignments.
+4. Release metadata-only provider declarations independently; implicit native-role registration works before their release. Next settings Save writes canonical inputs; no explicit adoption or input versions.
+5. Add focused tests below; no hardware tests or background setup. Rollback before a settings Save leaves manifest bytes unchanged. Older core cannot understand canonical `hand`: restore the previous manifest input or use a previously built concrete package; preserve rather than delete the new global record.
 
 ## Validation plan
 
 Use isolated fixture workspaces/profiles under the task's output area; never the person's live panel/state or physical devices.
 
 - Catalog/manifest fixtures: explicit and legacy declarations; spoofed/mismatched ownership/role/ABI; duplicate origins and aliases; disabled/unbuilt/missing plugin; installed-but-unconfigured replay; no-provider and core WebXR/synthetic contexts; discovery starts no capture and writes nothing.
-- State/API fixtures: two app/project repositories share one choice; revision/lock/atomic failure; malformed/oversized/linked/foreign records; unknown-field preservation; no first-source default; next-launch snapshot/race behaviour.
+- State/API fixtures: two app/project repositories share one choice; revision/lock/atomic failure; malformed/oversized/linked/foreign records; unknown-field preservation; unique-real initial default, zero/multiple-real choice-required and no replacement after pinning; next-launch snapshot/race behaviour.
 - UI/navigation fixtures: only Mouse/Keyboard/Hand; unavailable saved Hand retained; core Hands without optional viewer; picker Save, stale conflict and failure reasons; old route redirect and distinct diagnostic route; no camera request/runtime start on navigation.
 - Launch/dev/browser/package fixtures: one source resolved before config and dependency closure; browser/native mismatch fails, WebXR session gating and Hand-off gating; owned package source/config only; offline snapshot; existing launcher trust/context propagation unaffected.
-- Migration fixtures: singular input, aliases, inputs array, platformSettings, embedded legacy run.json and effective-manifest refresh/copy, schema-bound provider overrides, missing source, alias duplicates, legacy multi-source launch and adoption conflict; unrelated saves leave legacy inputs alone. Unversioned old WebXR apps retain automatic hands; only explicit version-two input semantics introduce Hand-off gating. Before-change single-source app launches the **same provider, same effective settings and same native pinch/grab behaviour**, even with another global source selected. Discovery/run do not rewrite saved bytes; explicit adoption does only approved scope.
+- Normalization fixtures: singular input, unknown concrete names, several providers collapsing to Hand, platformSettings, embedded run.json and effective-manifest refresh/copy. All apps use the global provider; next settings Save writes canonical inputs and retains plugin config. Discovery/run leave manifest bytes unchanged. No adoption/version/parity tests.
 - SDK protocol/signal fixtures: existing 456-byte ABI/wire v1/v2 and recordings, capability-preserving identity ingress, native and WebXR use the same seam, source disposal/reset and late-frame exclusion; existing hand-signal/grab/pinch traces unchanged.
-- Planning gates now: strict OpenSpec validation, delivery PR-body validation, name guard and diff whitespace. No application implementation or hardware/native runtime acceptance is claimed by this planning PR.
+- Delivery gates: strict OpenSpec validation, delivery PR-body validation, name guard, targeted type/tests and diff whitespace. No hardware/native tracking acceptance is claimed.

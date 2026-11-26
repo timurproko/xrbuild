@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Makes Hand a logical application input backed by one globally selected skeleton source, with explicit availability and compatible legacy launches.
+Makes Hand a logical application input backed by one globally selected skeleton source, with explicit availability and simple normalization of historical input names.
 
 ## ADDED Requirements
 
@@ -32,15 +32,19 @@ Plugins and core SHALL register hand skeleton sources with stable owner-qualifie
 
 ### Requirement: One global selected source
 
-Hands SHALL store one explicit source choice in the selected integration workspace for all logical-Hand applications, including applications from separate project repositories. There SHALL be no new per-application source setting. Discovery SHALL NOT choose a source or create state. Selection changes SHALL apply to subsequent launches, not hot-switch running acquisition.
+Hands SHALL store one global source choice in the selected workspace, never per application. With no choice, exactly one installed enabled real source compatible with the execution context SHALL be the initial default; zero or several SHALL require a choice. Discovery SHALL NOT create state. Changes SHALL apply on next launch, not hot-switch running acquisition.
 
 #### Scenario: Two logical-Hand applications
 - **WHEN** the user saves a different source in Hands
 - **THEN** both applications use that source on their next launch and an existing running application retains its launch source
 
-#### Scenario: No saved selection
-- **WHEN** several or only one source is installed but no source has been saved
-- **THEN** Hands remains unselected and a logical-Hand launch asks for an explicit selection
+#### Scenario: Unique real source initially
+- **WHEN** no choice exists and exactly one real source is installed and enabled in the execution context
+- **THEN** Hands shows it selected and the first launch pins it before starting
+
+#### Scenario: Zero or multiple real sources initially
+- **WHEN** no choice exists and zero or several real sources qualify
+- **THEN** Hand requires an explicit choice and synthetic or replay sources are not automatically selected
 
 ### Requirement: Visible source failure without fallback
 
@@ -74,45 +78,37 @@ Managed native runs, development runs, browser previews and packages SHALL resol
 - **WHEN** a native package is built and the workspace selection subsequently changes
 - **THEN** the package retains its checked concrete provider/configuration snapshot and runs without reading workspace preferences
 
-### Requirement: Preserve legacy source behaviour until adoption
+### Requirement: Normalize all provider inputs to Hand
 
-Legacy concrete input selections and aliases SHALL retain their provider configuration and gesture behaviour until explicit adoption of global Hand. Reads, launches and unrelated saves SHALL NOT implicitly migrate inputs. Adopting multiple distinct legacy sources SHALL require explicit consolidation to one global source; until then the legacy concrete launch path SHALL remain supported.
+Saved concrete hand-provider inputs SHALL be read as logical Hand, including unknown names and arrays naming several providers. They SHALL launch the global source, without per-app assignments, adoption steps or semantics versions. Reads SHALL NOT rewrite manifests; the next settings Save SHALL write canonical inputs and preserve plugin configuration.
 
-#### Scenario: Application saved before upgrade
-- **WHEN** an old application's input names a concrete provider and the global choice names another
-- **THEN** the old application still launches its original provider with unchanged effective settings and native pinch/grab behaviour, with a legacy-source notice
+#### Scenario: Old application names another provider
+- **WHEN** an application's saved input names a different provider from the global choice
+- **THEN** it launches the global provider and its file remains unchanged until settings are saved
 
-#### Scenario: Explicit adoption
-- **WHEN** the user explicitly saves the input as global Hand after acknowledging any source change
-- **THEN** only the approved saved input scope is migrated and provider configuration is retained
+#### Scenario: Several old names
+- **WHEN** an input list names several concrete hand providers
+- **THEN** they are represented as one Hand and only the global source launches
 
-#### Scenario: Old provider missing
-- **WHEN** an old concrete selection no longer resolves
-- **THEN** it remains an unavailable legacy selection without falling back or rewriting the file
-
-#### Scenario: Multiple distinct old sources
-- **WHEN** a legacy application names two distinct skeleton sources
-- **THEN** its original concrete launch path and files are retained and explicit adoption requires consolidating sources
+#### Scenario: Next settings save
+- **WHEN** settings for an old application are saved
+- **THEN** canonical inputs replace historical provider input names and plugins configuration is retained
 
 ### Requirement: Preserve published signals and shared processing
 
-Native and WebXR hand delivery SHALL enter the shared processing pipeline without changing existing ABI/wire structures or default processing behaviour. Native optional gesture/palm fields and capabilities SHALL remain available. Version-two logical input policy SHALL prevent WebXR injecting hands when Hand is off or assigned to native. Unversioned legacy browser input behaviour SHALL remain supported.
+Native and WebXR hand delivery SHALL enter the shared processing pipeline without changing existing ABI/wire structures or default processing behaviour. Native optional gesture/palm fields and capabilities SHALL remain available. Managed input policy SHALL prevent WebXR injecting hands when Hand is off or assigned to native, without input-semantics versions.
 
 #### Scenario: Native gesture compatibility
 - **WHEN** a provider publishes native pinch, grab and palm capabilities
 - **THEN** those signals reach the existing SDK processing with unchanged native-pinch/native-grab policy and no extra filtering
 
 #### Scenario: Managed Hand disabled
-- **WHEN** an application explicitly using version-two input semantics without Hand enters an XR session
+- **WHEN** a managed application without Hand enters an XR session
 - **THEN** WebXR hand observations do not bypass that input policy
-
-#### Scenario: Unversioned browser application
-- **WHEN** an existing unversioned WebXR application enters a session after upgrade
-- **THEN** its automatic WebXR hands remain unchanged until explicit input-policy adoption
 
 ### Requirement: Development and replay sources are providers
 
-Synthetic and replay sources SHALL be labelled sources in Hands rather than application input kinds or silent fallbacks. Existing replay recordings and configuration SHALL remain readable. A historical calibrated source name SHALL resolve only to its actual installed owner, never to an invented built-in substitute.
+Synthetic and replay sources SHALL be labelled sources in Hands rather than application input kinds or silent fallbacks. Existing replay recordings and configuration SHALL remain readable. A historical calibrated input name SHALL normalize to Hand, not an invented built-in provider.
 
 #### Scenario: Synthetic source explicitly selected
 - **WHEN** the user selects an installed synthetic source in Hands and launches logical Hand
