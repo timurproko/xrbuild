@@ -6,7 +6,7 @@ import { installCore, installerEnvironment } from '../../../tools/panel-bootstra
 import { CORE_MARKER, WORKSPACE_MARKER, runUpdate, runUpdateCommand, UpdateFailure, type UpdateResult } from '../src/update.ts';
 import { rebuildUpdatedSources, setupUpdatedCore } from '../src/update-runtime.ts';
 import { JobRunner } from '../src/jobs.ts';
-import { fixture } from './helpers/update-fixture.ts';
+import { fixture, git } from './helpers/update-fixture.ts';
 
 async function rejected(promise: Promise<unknown>): Promise<UpdateResult> {
   try { await promise; assert.fail('expected failed update'); }
@@ -89,6 +89,33 @@ test('build failure resumes for core-only and workspace-only changes without unn
     const retry = await runUpdate(f.workspace.checkout, f.ctx, deps);
     assert.equal(retry.state, 'updated'); assert.deepEqual(retry.rebuilt, ['xrb-host', 'tracker']); assert.equal(builds, 2);
     assert.equal((await runUpdate(f.workspace.checkout, f.ctx, deps)).state, 'up-to-date'); assert.equal(builds, 2);
+  });
+});
+
+test('regression: reverted dependency inputs are prepared again after an interrupted update', async t => {
+  for (const failure of ['build', 'install']) await t.test(failure, async t => {
+    const f = await fixture(t);
+    const v1 = '{"dependencies":{"example":"1.0.0"}}', v2 = '{"dependencies":{"example":"2.0.0"}}';
+    await f.core.publish('package.json', v1);
+    git(f.core.checkout, 'fetch', 'origin'); git(f.core.checkout, 'merge', '--ff-only', 'origin/main');
+    let installed = v1, installs = 0, interrupted = true;
+    const deps = { core: f.core.checkout, git: f.runner,
+      setupCore: async (core: string) => {
+        installs++; installed = await fs.readFile(path.join(core, 'package.json'), 'utf8');
+        if (interrupted && failure === 'install') throw new Error('installation partially changed node_modules');
+      },
+      rebuild: async () => { if (interrupted) throw new Error('temporary native build failure'); return []; } };
+    await f.core.publish('package.json', v2);
+    await rejected(runUpdate(f.workspace.checkout, f.ctx, deps));
+    assert.equal(installed, v2);
+    // C restores A's dependency inputs, but the successful/partial installation still contains B's v2.
+    await f.core.publish('package.json', v1); interrupted = false;
+    const retry = await runUpdate(f.workspace.checkout, f.ctx, deps);
+    assert.equal(retry.state, 'updated'); assert.equal(retry.coreDependencies, 'prepared');
+    assert.equal(installed, v1); assert.equal(installs, 2, 'receipt follows installed inputs, not the original update commit');
+    await f.core.publish('other.txt', 'code-only change\n');
+    const codeOnly = await runUpdate(f.workspace.checkout, f.ctx, deps);
+    assert.equal(codeOnly.coreDependencies, 'unchanged'); assert.equal(installs, 2, 'matching successful preparation remains reusable');
   });
 });
 

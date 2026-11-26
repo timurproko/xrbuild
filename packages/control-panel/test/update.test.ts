@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { test, type TestContext } from 'node:test';
@@ -36,6 +38,7 @@ test('regression: workspace success cannot conceal an unfetched stale core check
   assert.equal(f.lines.at(-1), result.lastLine); assert.match(result.lastLine, /Restart required.*did not restart/);
   const current = await runUpdate(f.workspace.checkout, f.ctx, f.deps);
   assert.equal(current.state, 'up-to-date'); assert.ok(current.repositories.every(repo => repo.fetched && repo.from === repo.to));
+  assert.equal(current.restartRequired, true, 'a second Update has not restarted this process');
   assert.equal(f.calls.filter(call => call.args[0] === 'fetch').length, 4, 'both clones fetched on every invocation');
 });
 
@@ -77,6 +80,30 @@ test('same checkout is fetched and advanced once for both roles, without requiri
   assert.equal(result.repositories.length, 1); assert.deepEqual(result.repositories[0]!.roles, ['core', 'workspace']);
   assert.equal(f.calls.filter(call => call.args[0] === 'fetch').length, 1);
   assert.equal((await updateStatus(f.core.checkout, f.core.checkout, f.runner)).workspace.sameAsCore, true);
+});
+
+test('regression: repeated jobs retain the activation warning until a new process starts', async t => {
+  const f = await setup(t), loadedCore = f.core.head(); await f.core.publish();
+  const jobs = new JobRunner();
+  const first = jobs.start('update', null, 'update', ctx => runUpdate(f.workspace.checkout, ctx, f.deps));
+  await jobs.wait(first); assert.notEqual(f.core.head(), loadedCore);
+  const second = jobs.start('update', null, 'update', ctx => runUpdate(f.workspace.checkout, ctx, { ...f.deps }));
+  await jobs.wait(second);
+  assert.equal(second.state, 'done'); assert.equal((second.result as UpdateResult).state, 'up-to-date');
+  assert.equal((second.result as UpdateResult).restartRequired, true);
+  assert.match(second.lines.at(-1)!, /Restart required.*did not restart/);
+  assert.equal(rebuildPresentation(second).title, 'Restart required');
+  // A genuinely new Node process loads the current checkout and has no stale-code latch.
+  const script = `import {runUpdate,runGit} from ${JSON.stringify(new URL('../src/update.ts', import.meta.url).href)};
+    const result=await runUpdate(${JSON.stringify(f.workspace.checkout)}, {line(){},async run(){throw Error('unexpected build')}},
+      {core:${JSON.stringify(f.core.checkout)},git:(args,cwd,opts)=>args[0]==='lfs'?Promise.resolve({code:0,output:''}):runGit(args,cwd,opts)});
+    console.log(JSON.stringify({restartRequired:result.restartRequired,state:result.state}));`;
+  const fresh = await promisify(execFile)(process.execPath, ['--input-type=module', '--eval', script], { timeout: 60_000 });
+  assert.deepEqual(JSON.parse(fresh.stdout), { restartRequired: false, state: 'up-to-date' });
+  await fs.writeFile(path.join(f.workspace.checkout, 'local.txt'), 'local work\n');
+  const failed = jobs.start('update', null, 'update', ctx => runUpdate(f.workspace.checkout, ctx, { ...f.deps }));
+  await jobs.wait(failed); assert.equal(failed.state, 'failed');
+  assert.equal((failed.result as UpdateResult).restartRequired, true); assert.match(failed.lines.at(-1)!, /Restart required/);
 });
 
 test('CLI boundary returns nonzero and retains final restart instruction on partial failure', async t => {

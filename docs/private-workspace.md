@@ -100,13 +100,19 @@ After pulling, Update runs these visible steps:
 
 The output retains each repository's full before/after commit, even after setup/build failure. Completed pulls are
 not rolled back. Pending markers under each repository's Git metadata cause the next Update to retry setup/build
-at an unchanged HEAD; markers clear only after that work succeeds. A refusal in either source defers builds that
-would consume unsafe local work, without undoing the other source's successful pull.
+at an unchanged HEAD; markers clear only after that work succeeds. A separate dependency receipt records the
+fingerprint of public inputs last successfully installed, independently of the pending update's original commit.
+It is invalidated before installation and only renewed after success, so reverted dependency inputs on a later
+retry are prepared again even when they match the original commit. Missing receipts are conservatively prepared.
+A refusal in either source defers builds that would consume unsafe local work, without undoing the other source's
+successful pull.
 
 Update does **not** restart the running panel. Whenever core HEAD changes, its last job-output line explicitly says
 **Restart required**, including when setup, rebuild or the workspace fails afterwards. Workspace source changes also
-conservatively require Restart so loaded plugin code is replaced. Choose the existing panel **Restart** action after
-resolving failures; browser reload alone does not reload the running server's modules.
+conservatively require Restart so loaded plugin code is replaced. The warning remains latched in that process
+across subsequent Update jobs, even when disk commits are already current and build markers have cleared; only
+starting a new panel process clears it. Choose the existing panel **Restart** action after resolving failures;
+browser reload alone does not reload the running server's modules.
 
 Older panels with the workspace-only Update implementation cannot install this fix by pressing their Update button:
 they never fetch core. For the first upgrade only, inspect and preserve core local work, manually fetch its remote

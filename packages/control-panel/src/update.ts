@@ -1,6 +1,7 @@
 // Update both independent checkouts to freshly fetched origin default-branch commits, without discarding work.
 // One repository's refusal never prevents the other's attempt; partial success is a failed job, not all-green.
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { JobFailure, LineSplitter, type JobContext } from './jobs.ts';
@@ -67,11 +68,18 @@ export interface RepoStatusOptions {
 const unavailable = (dir: string, role: RepoRole, reason: string, extra: Partial<RepoStatus> = {}): RepoStatus =>
   ({ dir, role, available: false, reason, branch: null, upstream: null, ahead: 0, behind: 0, dirty: 0, checkedMs: null, unfinished: false, ...extra });
 
-async function samePath(a: string, b: string): Promise<boolean> {
-  const real = async (p: string) => path.resolve(await fs.realpath(p).catch(() => p));
-  const [x, y] = await Promise.all([real(a), real(b)]);
-  return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
+async function canonicalPath(p: string): Promise<string> {
+  const real = path.resolve(await fs.realpath(p).catch(() => p));
+  return process.platform === 'win32' ? real.toLowerCase() : real;
 }
+async function samePath(a: string, b: string): Promise<boolean> {
+  const [x, y] = await Promise.all([canonicalPath(a), canonicalPath(b)]);
+  return x === y;
+}
+
+// Process-local activation state, deliberately independent of resumable build markers.
+// Only a new panel process clears this latch; another Update is not a restart.
+const restartNeeded = new Set<string>();
 
 const firstLine = (text: string) => text.split('\n').map((l) => l.trim()).find(Boolean) ?? '';
 
@@ -86,6 +94,8 @@ export function redactRemote(line: string): string {
 /** The marker an update leaves under the workspace's Git folder after pulling, until its rebuild succeeds. */
 export const WORKSPACE_MARKER = 'xrb-workspace-update';
 export const CORE_MARKER = 'xrb-core-update';
+/** Last dependency inputs successfully prepared, not the original commit of a pending update. */
+export const CORE_DEPENDENCIES_MARKER = 'xrb-core-dependencies';
 async function markerPath(dir: string, git: GitRunner, marker: string): Promise<string | null> {
   const found = await git(['rev-parse', '--git-path', marker], dir);
   return found.code === 0 ? path.resolve(dir, firstLine(found.output)) : null;
@@ -389,6 +399,18 @@ async function checkoutHead(dir: string, git: GitRunner): Promise<string | null>
   return head.code === 0 && /^[0-9a-f]{40,64}$/.test(head.output.trim()) ? head.output.trim() : null;
 }
 
+/** Fingerprint dependency inputs in the fetched tree independently of the pending update's original commit. */
+async function coreDependencyFingerprint(core: RepoOutcome, git: GitRunner): Promise<string | null> {
+  const tree = await readOnly(git)(['ls-tree', '-rz', '--full-tree', core.to!, '--',
+    'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'packages', 'tools'], core.dir);
+  if (tree.code !== 0) throw new Error('Cannot inspect public core dependency inputs');
+  const entries = tree.output.split('\0').filter(entry => {
+    const file = entry.slice(entry.indexOf('\t') + 1);
+    return /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|(?:packages|tools)\/[^/]+\/(?:package\.json|\.npmrc))$/.test(file);
+  });
+  return entries.length ? createHash('sha256').update(entries.join('\0')).digest('hex') : null;
+}
+
 /** Both attempts finish before the aggregate result fails; nothing rolls back an already advanced repository. */
 export async function runUpdate(workspace: string, ctx: JobContext, deps: UpdateDeps): Promise<UpdateResult> {
   const git = deps.git ?? runGit;
@@ -431,16 +453,23 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
       try {
         const core = work.find(repo => repo.role === 'core');
         if (core) {
-          const changed = await readOnly(git)(['diff', '--name-only', core.updateFrom!, core.to!, '--',
-            'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc',
-            ':(glob)packages/*/package.json', ':(glob)tools/*/package.json',
-            ':(glob)packages/*/.npmrc', ':(glob)tools/*/.npmrc'], core.dir);
-          if (changed.code !== 0) throw new Error('Cannot inspect public core dependency changes');
-          if (changed.output.trim()) {
+          const fingerprint = await coreDependencyFingerprint(core, git);
+          const receipt = await markerPath(core.dir, readOnly(git), CORE_DEPENDENCIES_MARKER);
+          if (!receipt) throw new Error('Cannot locate the core dependency receipt');
+          let installed: unknown = null;
+          try {
+            const value: unknown = JSON.parse(await fs.readFile(receipt, 'utf8'));
+            if (value && typeof value === 'object' && 'fingerprint' in value) installed = value.fingerprint;
+          } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error; }
+          if (fingerprint && installed !== fingerprint) {
             ctx.line('step setup');
+            // Installation can partially change node_modules even if it fails: invalidate the old proof first.
+            await fs.writeFile(receipt, '{}\n');
             await (deps.setupCore ?? setupUpdatedCore)(core.dir, ctx);
+            await fs.writeFile(receipt, `${JSON.stringify({ fingerprint })}\n`);
             coreDependencies = 'prepared';
-          } else ctx.line('Core dependency inputs unchanged; no package install needed.');
+          } else ctx.line(fingerprint ? 'Core dependency inputs match the last successful preparation; no package install needed.'
+            : 'No public core dependency inputs; no package install needed.');
         }
         stage = 'rebuild';
         ctx.line('step rebuild');
@@ -463,9 +492,12 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
       }
     }
   }
-  const changed = repositories.some(repo => (!!repo.from && !!repo.to && repo.from !== repo.to)
-    || (!!repo.updateFrom && repo.updateFrom !== repo.to));
-  const restartRequired = !!changed;
+  for (const repo of repositories) {
+    if ((repo.from && repo.to && repo.from !== repo.to) || (repo.updateFrom && repo.updateFrom !== repo.to))
+      restartNeeded.add(await canonicalPath(repo.dir));
+  }
+  const restartRequired = (await Promise.all(targets.map(target => canonicalPath(target.dir))))
+    .some(dir => restartNeeded.has(dir));
   const lastLine = restartRequired
     ? 'Restart required: restart the panel to load the updated code; Update did not restart the panel.'
     : 'Update did not restart the panel; no repository code changed in this run.';

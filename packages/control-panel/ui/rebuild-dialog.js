@@ -65,7 +65,7 @@ function updatePresentation(job, error, running, failed, phase) {
   const doing = step.id === 'rebuild' ? `Rebuilding ${phase ? phase.slice('plugin '.length) : 'plugins'}` : step.message;
   return {
     step: step.id,
-    title: running ? 'Updating' : failed ? 'Update needs attention' : upToDate ? 'Already up to date' : 'Updated',
+    title: running ? 'Updating' : failed ? 'Update needs attention' : job?.result?.restartRequired ? 'Restart required' : upToDate ? 'Already up to date' : 'Updated',
     message: error || (running ? `Step ${at + 1} of ${UPDATE_STEPS.length}, ${step.title}: ${doing}…`
       : failed ? job?.result?.summary || job?.error || `${step.title} failed: see the output below.` : job?.result?.summary || 'Update completed.'),
   };
