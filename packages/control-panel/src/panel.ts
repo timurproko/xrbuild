@@ -27,7 +27,7 @@ import { log } from './env.ts';
 import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHost, clearProviderCache } from './host-build.ts';
 import { DesktopSetup } from './desktop-setup.ts';
 import { panelFreshness, panelSourceRoots, type PanelFreshness } from './panel-freshness.ts';
-import { HostRunner, type RunMode } from './host-runner.ts';
+import { HostRunner, type RunMode, type RunState } from './host-runner.ts';
 import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings, type PluginSetting, type SettingValue } from './plugin-manager.ts';
 import { PluginConfigConflict, PluginConfigInvalid, readUserPluginConfigState, writeUserPluginConfig, type UserPluginConfigState } from './plugin-config.ts';
 import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, discoverProjectCatalog, containedPath, type PluginCatalog } from './extension-catalog.ts';
@@ -38,7 +38,7 @@ import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatu
 import { PackageList } from './packages.ts';
 import { discoverHandProviders, sameHandProvider, handRegistry, handProviderKey, type HandProviderKey } from './hand-providers.ts';
 import { isNativeLauncherDocument } from '../../sdk/src/launch-context.ts';
-import { LiveHands, sendHandProfile } from './hands-live.ts';
+import { LiveHands, sendHandProfile, observeHandProfile } from './hands-live.ts';
 import { HAND_APPEARANCE_DEFAULTS, type HandProfile } from '../../sdk/src/hand-profile.ts';
 import { readHandsState, saveHandsState, saveHandAdjustments, selectedHandProvider, validHandProviderKey, prepareHandInput, resolveHandInput, type HandContext } from './hands-state.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
@@ -271,7 +271,10 @@ export class Panel {
   launchBrowser: typeof launchPreviewBrowser = launchPreviewBrowser;
   /** Metadata probe injection for device-free fixtures. */
   nativeProviders: typeof listProviders = listProviders;
+  /** Device-free transport injection for native control/ack fixtures. */
+  nativeHandSocket: typeof WebSocket = WebSocket;
   private liveHands: LiveHands | null = null;
+  private nativeHandObserver: { live: LiveHands; url: string; close: () => void } | null = null;
   private previewProjection: { route: string; token: string; session: string; fullscreen: boolean; monitor: number; projection: 'perspective' | 'orthographic'; projectId: string; handPolicy: 'off' | 'webxr' } | null = null;
 
   constructor(repo: string, workspace: string, hub: EventHub, projects = workspace, bootstrapPackageLock = false) {
@@ -292,7 +295,8 @@ export class Panel {
     });
     this.jobs.on('line', (j: Job, text: string) => hub.send('job-line', { id: j.id, text }));
     this.runner.on('state', (s) => {
-      if (s.phase === 'idle') { this.nativeHandPolicy = null; this.liveHands = null; this.previewProjection = null; }
+      if (s.phase === 'idle') { this.nativeHandPolicy = null; this.setLiveHands(null); this.previewProjection = null; }
+      this.syncNativeHandObserver(s);
       hub.send('run', s);
       hub.send('projects-changed', { projectId: s.projectId });
     });
@@ -301,6 +305,20 @@ export class Panel {
       hub.send('status', s);
     });
     this.runner.on('log', (text) => hub.send('run-log', text));
+  }
+
+  private setLiveHands(live: LiveHands | null): void {
+    if (this.liveHands === live) return;
+    this.liveHands?.close(); this.nativeHandObserver?.close(); this.nativeHandObserver = null; this.liveHands = live;
+  }
+
+  private syncNativeHandObserver(state: Pick<RunState, 'phase' | 'channelUrl'>): void {
+    const live = this.liveHands;
+    const url = live && this.nativeHandPolicy !== null && (state.phase === 'starting' || state.phase === 'running') ? state.channelUrl : null;
+    if (this.nativeHandObserver && (this.nativeHandObserver.live !== live || this.nativeHandObserver.url !== url)) {
+      this.nativeHandObserver.close(); this.nativeHandObserver = null;
+    }
+    if (live && url && !this.nativeHandObserver) this.nativeHandObserver = { live, url, close: observeHandProfile(url, live, this.nativeHandSocket) };
   }
 
   private async withPluginServices<T>(work: () => Promise<T>): Promise<T> {
@@ -1409,7 +1427,7 @@ export class Panel {
     if (this.runner.busy) throw new HttpError(409, 'stop the running app first');
     this.previewProjection = { route, token, session, fullscreen: browser.fullscreen, monitor: browser.monitor, projection,
       projectId: p.id, handPolicy: selection.handPolicy === 'off' ? 'off' : 'webxr' };
-    this.liveHands = new LiveHands(selection.handProfile!, (await readHandsState(this.repo, this.workspace)).revision, session);
+    this.setLiveHands(new LiveHands(selection.handProfile!, (await readHandsState(this.repo, this.workspace)).revision, session));
     let href = '';
     try {
       await this.runner.startPreview({ projectId: p.id, projectDir: p.dir, devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, flat }, mode, async (devUrl) => {
@@ -1437,7 +1455,7 @@ export class Panel {
         return this.launchBrowser(wrapper.href, browser.clientPort, browser.monitor, browser.fullscreen);
       });
     } catch (e) {
-      if (this.previewProjection?.token === token) this.previewProjection = null;
+      if (this.previewProjection?.token === token) { this.previewProjection = null; this.setLiveHands(null); }
       throw new HttpError(400, (e as Error).message);
     }
     return href;
@@ -1490,19 +1508,20 @@ export class Panel {
     const attemptedAt = Date.now();
     const cursor = (await readAppSettings(this.workspace)).cursor;
     this.nativeHandPolicy = selection.handPolicy === 'off' ? 'off' : 'native';
-    this.liveHands = new LiveHands(selection.handProfile!, (await readHandsState(this.repo, this.workspace)).revision);
-    selection.handProfileRun = this.liveHands.envelope;
+    const nativeHands = new LiveHands(selection.handProfile!, (await readHandsState(this.repo, this.workspace)).revision);
+    this.setLiveHands(nativeHands);
+    selection.handProfileRun = nativeHands.envelope;
     try {
       await this.runner.start({
         projectId: p.id, mode, hostExe: fresh.exe, projectDir: p.dir, entryDir: bundledOutput?.entry ?? this.entryOf(p, m),
         builtUrl: mode === 'built' && this.panelUrl
-          ? `https://app.local/index.html?xrb-panel=${encodeURIComponent(this.panelUrl)}&xrb-project=${encodeURIComponent(p.id)}&xrb-mouse=${selection.inputs?.includes('mouse') ? '1' : '0'}&xrb-cursor=${cursor}&xrb-hand=${selection.handPolicy}&xrb-hand-profile-run=${this.liveHands.envelope.runId}` : undefined,
-        devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, panelUrl: this.panelUrl ?? undefined, mouseEnabled: selection.inputs?.includes('mouse') ?? true, handPolicy: selection.handPolicy, handProfileRunId: this.liveHands.envelope.runId, cursor, flat, switchView: selection.display !== 'desktop', cameraView,
+          ? `https://app.local/index.html?xrb-panel=${encodeURIComponent(this.panelUrl)}&xrb-project=${encodeURIComponent(p.id)}&xrb-mouse=${selection.inputs?.includes('mouse') ? '1' : '0'}&xrb-cursor=${cursor}&xrb-hand=${selection.handPolicy}&xrb-hand-profile-run=${nativeHands.envelope.runId}` : undefined,
+        devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, panelUrl: this.panelUrl ?? undefined, mouseEnabled: selection.inputs?.includes('mouse') ?? true, handPolicy: selection.handPolicy, handProfileRunId: nativeHands.envelope.runId, cursor, flat, switchView: selection.display !== 'desktop', cameraView,
         cameraAvailable: (selection.inputs ?? []).some((name) => !BUILTIN_PROVIDERS.has(name)),
         hostArgs: [`--title=${m.name}`, `--camera-projection=${flat ? 'orthographic' : 'perspective'}`, ...(await this.hostArgs(p, m, desktop, selection)), ...(flat && selection.display !== 'desktop' ? ['--view=2d'] : [])],
       });
     } catch (e) {
-      this.nativeHandPolicy = null; this.liveHands = null;
+      this.nativeHandPolicy = null; this.setLiveHands(null);
       const last = this.runner.state().last;
       const output = last?.projectId === p.id && last.endedMs >= attemptedAt ? last.lines : null;
       throw new HttpError(400, (e as Error).message, output?.length ? output.join('\n') : undefined);
@@ -1814,7 +1833,7 @@ export class Panel {
         const state = await readHandsState(this.repo, this.workspace);
         const selected = selectedHandProvider(state, registry, 'native');
         sendJson(res, 200, { ...registry, providers: registry.providers.map(p => ({ ...p, runtimeState: this.handRuntimeStates.get(handProviderKey(p)) ?? null })), registryRevision: registry.revision, selected: selected.key, initial: selected.initial, revision: state.revision,
-          choiceRequired: !selected.key, applies: 'next-launch', profile: state.profile, appearanceDefaults: HAND_APPEARANCE_DEFAULTS, delivery: this.liveHands?.delivery ?? 'Saved for next launch' });
+          choiceRequired: !selected.key, applies: 'next-launch', profile: state.profile, appearanceDefaults: HAND_APPEARANCE_DEFAULTS, delivery: this.liveHands?.delivery ?? 'Saved for next launch', deliveryState: this.liveHands?.deliveryState ?? 'saved' });
         return true;
       }
       case 'POST hands/apply': {
@@ -1839,12 +1858,14 @@ export class Panel {
               try {
                 const channel = this.runner.state().channelUrl;
                 if (!channel) throw new Error('Saved; running host channel is unavailable. Retry Apply or relaunch.');
-                await sendHandProfile(channel, live.envelope); live.acknowledge(live.envelope);
-              } catch (error) { live.delivery = (error as Error).message; }
+                const expected = live.envelope;
+                await sendHandProfile(channel, expected, this.nativeHandSocket); live.acknowledge(expected);
+              } catch (error) { live.fail((error as Error).message); }
             }
           }
-          this.hub.send('hands-changed', {});
-          sendJson(res, 200, { revision: saved.revision, profile: saved.profile, delivery: live?.delivery ?? 'Saved for next launch' });
+          this.hub.send('hands-changed', { revision: saved.revision });
+          const active = this.liveHands === live && this.runner.busy ? live : null;
+          sendJson(res, 200, { revision: saved.revision, profile: saved.profile, delivery: active?.delivery ?? 'Saved for next launch', deliveryState: active?.deliveryState ?? 'saved' });
         } finally { this.savingHands = false; }
         return true;
       }
@@ -1859,7 +1880,7 @@ export class Panel {
           if (body.provider !== null && (!validHandProviderKey(body.provider) || !registry.providers.some(p => p.available && sameHandProvider(p, body.provider as import('./hand-providers.ts').HandProviderKey))))
             throw new HttpError(400, 'Choose an installed enabled hand provider');
           const saved = await saveHandsState(this.repo, this.workspace, body.provider, body.revision);
-          this.hub.send('hands-changed', {});
+          this.hub.send('hands-changed', { revision: saved.revision });
           sendJson(res, 200, { revision: saved.revision, selected: saved.provider });
         } finally { this.savingHands = false; }
         return true;
@@ -2097,6 +2118,7 @@ export class Panel {
   }
 
   async dispose(): Promise<void> {
+    this.setLiveHands(null);
     if (this.runner.busy) await this.runner.stop();
   }
 }
