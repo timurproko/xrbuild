@@ -8,7 +8,9 @@ export class LiveHands {
   deliveryState: 'pending' | 'applied' | 'failed' = 'pending';
   private deadline: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
-  constructor(profile: HandProfile, revision: string, runId = randomUUID()) {
+  private target: string;
+  constructor(profile: HandProfile, revision: string, runId: string = randomUUID(), target = 'app') {
+    this.target = target;
     this.envelope = { version: 1, runId, sequence: 0, revision, profile }; this.armDeadline();
   }
   private clearDeadline(): void { if (this.deadline) clearTimeout(this.deadline); this.deadline = null; }
@@ -17,7 +19,7 @@ export class LiveHands {
     this.deadline = setTimeout(() => {
       this.deadline = null;
       if (!this.closed && this.envelope === expected && this.deliveryState === 'pending')
-        this.fail('Saved; the app has not acknowledged the hand profile. Retry Apply or rebuild/relaunch the app.');
+        this.fail(this.target === 'app' ? 'Saved; the app has not acknowledged the hand profile. Retry Apply or rebuild/relaunch the app.' : `Saved; the ${this.target} has not acknowledged the hand profile. Retry delivery or rebuild/relaunch it.`);
     }, HAND_PROFILE_ACK_TIMEOUT_MS);
     this.deadline.unref();
   }

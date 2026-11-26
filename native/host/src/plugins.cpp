@@ -31,8 +31,10 @@ static std::string lastErrorText() {
   return "error " + std::to_string(e) + (s.empty() ? "" : " (" + s + ")");
 }
 
-Catalog::~Catalog() {
+Catalog::~Catalog() { unload(); }
+void Catalog::unload() {
   for (HMODULE m : loaded_) FreeLibrary(m);
+  loaded_.clear();
 }
 
 void Catalog::scan(const std::vector<std::wstring>& roots) {

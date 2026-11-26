@@ -107,7 +107,7 @@ test('regression: reserving Update before status yields excludes real launches a
   assert.equal((await f.finish(started.data.id)).state, 'done');
 });
 
-for (const kind of ['native', 'preview']) test(`launch winning the final desktop-status await excludes Update (${kind})`, async t => {
+for (const kind of ['native', 'preview', 'hands']) test(`launch winning the final desktop-status await excludes Update (${kind})`, async t => {
   const f = await serverFixture(t), checked = gate(), check = gate(), launchEntered = gate(), launch = gate();
   t.after(() => { check.release(); launch.release(); });
   await f.core.publish(); const before = f.core.head();
@@ -120,6 +120,16 @@ for (const kind of ['native', 'preview']) test(`launch winning the final desktop
   panel.runNative = async () => { launchEntered.release(); await launch.wait; };
   panel.preparePreview = async () => { launchEntered.release(); await launch.wait; return 'http://127.0.0.1/'; };
   const update = f.request('POST'); await checked.wait;
+  if (kind === 'hands') {
+    const busy = t.mock.getter(f.server.panel.handSessions, 'busy', () => true);
+    try {
+      check.release(); const response = await update;
+      assert.equal(response.status, 409); assert.match(response.data.error, /Hands owns capture/);
+      assert.equal(f.server.panel.jobs.list().length, 0); assert.equal(f.core.head(), before);
+      assert.equal(f.calls.length, 0, 'live Hands ownership must refuse Update before Git');
+    } finally { busy.mock.restore(); }
+    return;
+  }
   const starting = kind === 'native' ? f.server.panel.run(f.project, 'built')
     : f.server.panel.preview(f.project, 'built', false, 'token', { clientPort: f.server.port });
   await launchEntered.wait; check.release();

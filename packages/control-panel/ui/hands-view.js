@@ -7,9 +7,10 @@ import { PanelFrame } from '/sdk/stereo.js';
 import { toSceneHand } from '/sdk/scene-hands.js';
 import { Interactor } from '/sdk/interaction/core/interactor.js';
 import { createHandStream } from './hands-stream.js';
+import { createHandTestTargets } from './hands-targets.js';
 
 /** Core-owned scene. No provider, device, app host or optional diagnostic module is started here. */
-export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStatus = () => {} }) {
+export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStatus = () => {}, onTestFeedback = () => {} }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(40, 1, .005, 10);
@@ -21,9 +22,10 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   const axes = new THREE.AxesHelper(.09); axes.visible = false; scene.add(axes);
   const panel = new PanelFrame(), input = new HandInput(), ingress = new HandFrameIngress(input, 'native'), visual = new HandVisual(), interaction = new Interactor();
   scene.add(visual);
-  let currentHands = [], sceneHands = [], profile = null, profileRequest = 0, recordedSession = false;
+  const tests = createHandTestTargets(scene, interaction, onTestFeedback);
+  let currentHands = [], sceneHands = [], profile = null, profileRequest = 0, recordedSession = false, pendingProfile = null;
   const legacy = new THREE.Group(); scene.add(legacy);
-  function clearHands() { currentHands = []; sceneHands = []; interaction.update([], 1); visual.update([], panel); }
+  function clearHands() { currentHands = []; sceneHands = []; interaction.update([], 1); visual.update([], panel); tests.reset(); }
   const stream = createHandStream({ ingress, clear: clearHands });
   function clearLegacy() { for (const object of [...legacy.children]) { object.geometry.dispose(); object.material.dispose(); legacy.remove(object); } }
   async function setProfile(value, { isCurrent = () => true, mode = 'live' } = {}) {
@@ -37,12 +39,17 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     if (closed || request !== profileRequest || !isCurrent()) return false;
     guard();
     if (!('profile' in ingress) || typeof visual.applyAppearance !== 'function') throw new Error('Rebuild the SDK to apply hand adjustments.');
-    if (profile && !api.sameHandGeometry(profile, next)) { ingress.reset(performance.now()); clearHands(); }
-    ingress.profile = next; visual.applyAppearance(next.appearance); profile = next; stream.setReady(true); return true;
+    pendingProfile?.resolve(false);
+    return new Promise(resolve => { pendingProfile = { resolve, apply() {
+      if (closed || request !== profileRequest || !isCurrent() || !allowed()) { resolve(false); return; }
+      if (profile && !api.sameHandGeometry(profile, next)) { ingress.reset(performance.now()); clearHands(); }
+      ingress.profile = next; visual.applyAppearance(next.appearance); profile = next; stream.setReady(true); resolve(true);
+    } }; });
   }
   function theme() {
     const css = getComputedStyle(document.documentElement);
     scene.background = new THREE.Color(css.getPropertyValue('--log-bg').trim());
+    tests.theme(css.getPropertyValue('--accent').trim());
     for (const material of Array.isArray(grid.material) ? grid.material : [grid.material]) {
       material.color.set(css.getPropertyValue('--line').trim()); material.transparent = true; material.opacity = .5;
     }
@@ -55,10 +62,13 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   let frameId, closed = false, ticks = 0, start = performance.now();
   function render(now) {
     if (closed) return;
+    if (pendingProfile) { const pending = pendingProfile; pendingProfile = null; pending.apply(); }
     controls.update();
+    stream.tick();
     panel.update({ mode: 'world', center: new THREE.Vector3(), scale: 1 }, camera);
     currentHands = stream.active ? input.sample(now) : [];
     sceneHands = currentHands.map(hand => toSceneHand(hand, panel));
+    tests.setActive(stream.active && !recordedSession);
     interaction.update(sceneHands, 1); visual.update(currentHands, panel);
     renderer.render(scene, camera); ticks++;
     if (now - start >= 1000) { onMetrics({ renderFps: ticks * 1000 / (now - start), ...stream.metrics(), ...(recordedSession ? { trackingFps: null } : {}) }); ticks = 0; start = now; }
@@ -69,13 +79,16 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     setProfile,
     beginSession(options) { if (stream.active && recordedSession !== (options.mode === 'replay')) return false; const accepted = stream.beginSession(options); if (accepted) { clearLegacy(); recordedSession = options.mode === 'replay'; onStatus({ phase: recordedSession ? 'replay' : 'running', hands: 0 }); } return accepted; },
     pushFrame(value) { const accepted = stream.pushFrame(value); if (accepted) onStatus({ phase: recordedSession ? 'replay' : 'running', hands: value.frame.hands.length }); return accepted; },
-    clearSession() { stream.clearSession(); recordedSession = false; onStatus({ phase: 'idle', hands: null }); },
+    clearHands() { stream.clearHands(); },
+    clearSession() { pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; stream.clearSession(); recordedSession = false; onStatus({ phase: 'idle', hands: null }); },
     get replaying() { return recordedSession; },
     get active() { return stream.active; },
     get profile() { return profile ? structuredClone(profile) : null; },
     get currentHands() { return currentHands; },
     get sceneHands() { return sceneHands; },
     get interaction() { return interaction; },
+    get testTargets() { return tests.targets; },
+    get testState() { return tests.state; },
     showLegacyFrame(frame) {
       if (stream.active) throw new Error('Stop live hands before replay.');
       clearLegacy();
@@ -90,7 +103,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     resetView,
     setViewOptions(options) { grid.visible = options.includes('grid'); axes.visible = options.includes('axes'); },
     dispose() {
-      if (closed) return; closed = true; profileRequest++; stream.dispose(); clearLegacy(); cancelAnimationFrame(frameId); resize.disconnect(); observer.disconnect(); system.removeEventListener('change', theme); controls.dispose();
+      if (closed) return; closed = true; pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; stream.dispose(); tests.dispose(); clearLegacy(); cancelAnimationFrame(frameId); resize.disconnect(); observer.disconnect(); system.removeEventListener('change', theme); controls.dispose();
       scene.traverse(object => { object.geometry?.dispose(); for (const material of object.material ? Array.isArray(object.material) ? object.material : [object.material] : []) material.dispose(); });
       renderer.renderLists.dispose(); renderer.dispose();
     },

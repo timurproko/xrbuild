@@ -1,6 +1,7 @@
 #include "providers.h"
 
 #include <algorithm>
+#include <type_traits>
 
 #include "host_channel.h"
 
@@ -77,11 +78,19 @@ static bool create(int role, const std::string& name, plugins::Catalog& catalog,
     out->bridge.reset();
     return false;
   }
-  if (api->size < sizeof(Api)) {
+  if (api->size < sizeof(Api) || !api->destroy) {
     *error = std::string(plugins::roleName(role)) + " provider " + name + " has an incomplete function table";
-    if (api->destroy) api->destroy(self);
+    // A truncated table cannot safely expose its destroy field. The rejected plugin is trusted code,
+    // not a memory sandbox; a session process contains its allocation until process exit.
+    if (api->size >= sizeof(Api) && api->destroy) api->destroy(self);
     out->bridge.reset();
     return false;
+  }
+  if constexpr (std::is_same_v<Api, XrbInputApi>) {
+    if (!api->start || !api->stop) {
+      *error = "input provider " + name + " has an incomplete lifecycle table";
+      api->destroy(self); out->bridge.reset(); return false;
+    }
   }
   out->self = self;
   out->api = api;
