@@ -740,6 +740,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       sendJson(res, status, { error: (e as Error).message, details: e instanceof HttpError ? e.details : undefined });
     }).finally(() => { if (mutation) activeMutations--; });
   });
+  server.once('listening', () => panel.remoteUpdates.start());
   panel.onQuit = () => void closeServer();
   panel.onRestart = () => void closeServer();
   let closeWork: Promise<void> | null = null;

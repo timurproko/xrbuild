@@ -34,6 +34,7 @@ import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pl
 import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
 import { JobFailure, JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
 import { runUpdate, updateStatus, type UpdateDeps, type UpdateStatus } from './update.ts';
+import { RemoteUpdates } from './remote-updates.ts';
 import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatus, type BuildTarget, type IdentityField, type PackagerDiscovery, type PackagerSetupStatus, type RoleSelection } from './packagers.ts';
 import { PackageList } from './packages.ts';
 import { discoverHandProviders, sameHandProvider, handRegistry, handProviderKey, type HandProviderKey } from './hand-providers.ts';
@@ -265,6 +266,7 @@ export class Panel {
   desktopSetup: DesktopSetup;
   /** Test seams for Update (a stubbed Git runner or rebuild); production uses Git and rebuildHost. */
   updateDeps: Partial<UpdateDeps> = {};
+  readonly remoteUpdates: RemoteUpdates;
   private updateLast: UpdateStatus | null = null;
   /** A status read already in flight must drain before the reserved Update starts Git mutations. */
   private updateStatusRead: Promise<UpdateStatus> | null = null;
@@ -317,6 +319,10 @@ export class Panel {
     this.projects = projects;
     this.bootstrapPackageLock = bootstrapPackageLock;
     this.hub = hub;
+    this.remoteUpdates = new RemoteUpdates(repo, workspace, () => this.jobs.active().length > 0 || this.runner.busy || this.restartPending,
+      status => hub.send('remote-update', status));
+    this.jobs.beforeStart = () => this.remoteUpdates.pause();
+    this.jobs.on('end', (job: Job) => { void this.remoteUpdates.check(job.kind === 'update'); });
     this.packages = new PackageList(path.join(workspace, 'builds'));
     this.jobs.on('change', (j: Job) => {
       hub.send('job', jobSummary(j));
@@ -328,6 +334,7 @@ export class Panel {
     this.runner.on('state', (s) => {
       if (s.phase === 'idle') { this.nativeHandPolicy = null; this.setLiveHands(null); this.previewProjection = null; void this.stopMesh().catch(() => { this.meshStatus = 'Skeleton fallback: mesh child cleanup failed'; }); }
       this.syncNativeHandObserver(s);
+      if (s.phase === 'idle') void this.remoteUpdates.check();
       hub.send('run', s);
       hub.send('projects-changed', { projectId: s.projectId });
     });
@@ -2199,6 +2206,8 @@ export class Panel {
           return resolvedHostFreshness(this.repo, this.workspace);
         })));
         return true;
+      case 'GET update/available':
+        sendJson(res, 200, this.remoteUpdates.status); return true;
       case 'GET update': {
         // While an update job runs Git in the clones, answer from the last status instead of running Git beside it.
         const updating = this.jobs.active().some(job => job.kind === 'update');
@@ -2336,6 +2345,7 @@ export class Panel {
   }
 
   async dispose(): Promise<void> {
+    await this.remoteUpdates.close();
     await this.stopMesh(); await this.meshCleanup;
     this.setLiveHands(null);
     if (this.runner.busy) await this.runner.stop();

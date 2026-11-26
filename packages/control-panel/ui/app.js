@@ -3,7 +3,7 @@
 import { SettingsWriter } from './settings-writer.js';
 import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
-import {requestedNavigation,menuKeyboard,renderNavigationMenu,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
+import {requestedNavigation,menuKeyboard,renderNavigationMenu,renderRemoteUpdate,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
 import {rebuildHostInPlace,updateInPlace,updateTooltip,followStartedJobInPlace} from './rebuild-dialog.js';
 import {enhanceHelpText,iconSvg,installDropdowns,installIcons,installNumberSteppers,installTabs,installTooltips,openFloating,renderField,resumeAnimations,setFieldError,setPageIdentity,setRevealed,stabilizePanelHeight,transitionPanelHeight,updateRebuildChip,updateRestartChip} from './design-system.js';
 import {logicalInputNames} from './provider-choice.js';
@@ -407,6 +407,7 @@ function setView(view) {
 }
 const loadPackages = async () => { state.packages = (await api('GET', '/api/packages')).packages; renderPackages(); };
 const loadPanelFreshness = async () => { state.panel = await api('GET', '/api/panel'); renderPanelFreshness(); };
+const loadRemoteUpdates = async () => { state.remoteUpdates = await api('GET', '/api/update/available'); renderUpdate(); };
 const loadMonitors = async () => { state.monitors = (await api('GET', '/api/monitors')).monitors ?? []; };
 const loadPlugins = async () => {
   state.plugins = await api('GET', '/api/plugins').catch(() => null);
@@ -1928,7 +1929,7 @@ function renderDetail(force = false) {
     if (selected()?.id !== p.id || selected()?.packaging?.platform !== p.packaging.platform) return;
     const job = await api('POST', `${projectUrl(p.id)}/package-setup`, { acceptTerms });
     showProgressDialog('setup', job);
-    if (job.state !== 'running' || finishedSetups.has(job.id)) void finishPackageSetup(state.jobs.get(job.id) ?? job);
+    if (['done', 'failed'].includes(job.state) || finishedSetups.has(job.id)) void finishPackageSetup(state.jobs.get(job.id) ?? job);
   }));
   $('#act-publish')?.addEventListener('click', action(async () => { if (await confirmNewVersion(p)) await startPublicationJob(p, 'publish', releaseRequest(p)); }));
   $('#act-update')?.addEventListener('click', action(async () => { if (await confirmNewVersion(p)) await startPublicationJob(p, 'update', releaseRequest(p)); }));
@@ -2377,18 +2378,10 @@ function renderHost() {
   rebuildDot.hidden = !needsRebuild;
 }
 
-/** The "workspace behind" hint and the Update menu item, from a status that never fetches. */
+/** Local eligibility stays separate from the cached passive remote indication. */
 function renderUpdate() {
-  const status = state.update, workspace = status?.workspace, chip = $('#update-chip'), item = $('#panel-update');
-  const remote = workspace?.upstream?.split('/')[0] || 'origin';
-  const checked = workspace?.checkedMs ? `Remote last checked ${ago(workspace.checkedMs)}` : 'Remote not checked yet';
-  const behind = !!workspace?.available && workspace.behind > 0, unfinished = !!workspace?.available && !!workspace.unfinished;
-  if (chip) {
-    chip.hidden = !behind && !unfinished;
-    chip.textContent = behind ? `workspace behind ${remote} by ${workspace.behind}` : unfinished ? 'workspace update unfinished' : '';
-    chip.title = behind ? `${checked}. Choose Update to fetch, pull and rebuild the workspace.`
-      : unfinished ? 'An earlier update pulled new workspace commits but its rebuild did not succeed. Choose Update to finish it.' : '';
-  }
+  const status = state.update, item = $('#panel-update');
+  renderRemoteUpdate($('#panel-menu'), state.remoteUpdates, () => void updateBoth());
   if (item) {
     // Always allow the explicit attempt: an unsafe workspace must not prevent a safe core update (or vice versa).
     if (status?.updating) item.setAttribute('aria-disabled', 'true'); else item.removeAttribute('aria-disabled');
@@ -3593,7 +3586,7 @@ function renderProgressDialog() {
   const dialog = $('#job-progress');
   if (!dialog.open) return;
   const job = state.jobs.get(progressJobId);
-  const running = !progressError && (!job || job.state === 'running');
+  const running = !progressError && (!job || job.state === 'running' || job.state === 'queued');
   const failed = !!progressError || job?.state === 'failed';
   const setup = progressKind === 'setup';
   $('#job-progress-status-icon').dataset.state = running ? 'running' : failed ? 'failed' : 'done';
@@ -3621,7 +3614,7 @@ function showProgressDialog(kind, job) {
   progressJobId = job?.id ?? null;
   progressError = null;
   if (job && !state.jobs.has(job.id)) state.jobs.set(job.id, job);
-  $('#job-progress-actions').classList.toggle('is-building', kind !== 'setup' && (!job || job.state === 'running'));
+  $('#job-progress-actions').classList.toggle('is-building', kind !== 'setup' && (!job || job.state === 'running' || job.state === 'queued'));
   $('#job-progress').showModal();
   renderProgressDialog();
 }
@@ -3787,12 +3780,12 @@ function connect() {
     }
     if (j.kind === 'packager-setup') {
       if (j.projectId === selected()?.id && j.state === 'running') renderDetail();
-      if (j.state !== 'running') {
+      if (['done', 'failed'].includes(j.state)) {
         renderDetail();
         void finishPackageSetup(j).catch(report);
       }
     }
-    if (j.state !== 'running' && (j.kind === 'host-rebuild' || j.kind === 'update')) loadHost().then(() => renderDetail()).catch(report);
+    if (['done', 'failed'].includes(j.state) && (j.kind === 'host-rebuild' || j.kind === 'update')) loadHost().then(() => renderDetail()).catch(report);
   });
   on('job-line', ({ id, text }) => {
     const j = state.jobs.get(id);
@@ -3807,6 +3800,7 @@ function connect() {
     loadHost().catch(report);
     if (state.page === 'plugins' || state.page === 'settings') loadManagedPlugins().catch(report);
   });
+  on('remote-update', status => { state.remoteUpdates = status;renderUpdate(); });
   on('plugins-changed', () => {
     state.packageSetup.clear(); state.packageSetupChecks.clear(); state.publicationOverrides.clear(); state.releaseOverrides.clear(); state.releaseSelection.clear(); state.publicationEffects.clear();
     loadNavigation().catch(report);
@@ -3833,6 +3827,7 @@ const identityReady = Promise.all([
 ]).catch(report);
 const pageReady = showPage(initialPage).catch(report);
 void loadNavigation().catch(report);
+void loadRemoteUpdates().catch(() => {});
 void identityReady.then(async () => {
   await Promise.all([loadProjects(), loadRun()]);
   // Keep the HTTP/1 connection pool available for interactions rather than launching
@@ -3852,7 +3847,7 @@ if(navigationRequest.maintenance){
   else if(navigationRequest.maintenance==='update')$('#panel-update').click();
   else $('#panel-restart').click();
 }
-setInterval(() => { renderProjects(); loadHost().catch(() => {}); loadPanelFreshness().catch(() => {}); }, 30000);
+setInterval(() => { renderProjects(); loadHost().catch(() => {}); loadPanelFreshness().catch(() => {}); loadRemoteUpdates().catch(() => {}); }, 30000);
 addEventListener('focus', () => loadPanelFreshness().catch(() => {}));
 
 $('#studio-pick').addEventListener('click', () => $('#studio-file').click());

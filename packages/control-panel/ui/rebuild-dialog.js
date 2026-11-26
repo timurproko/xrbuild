@@ -238,7 +238,7 @@ export async function followStartedJobInPlace(origin, started, options = {}) {
       if (!job) continue;
       progress.render(job);
       options.onJob?.(job);
-      if (job.state !== 'running') {
+      if (job.state === 'done' || job.state === 'failed') {
         options.onComplete?.(job);
         return job;
       }

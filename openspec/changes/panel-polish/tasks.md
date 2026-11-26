@@ -8,9 +8,9 @@
 
 ## 2. Passive remote updates use the existing maintenance label and dot
 
-- [ ] 2.1 Add bounded read-only origin default-tip discovery and cached five-minute idle-only scheduling with job-start coordination; targeted tests cover offline/timeouts, busy jobs, local-ahead/dirty state, both repositories and identical roots without fetch/ref/index changes.
-- [ ] 2.2 Wire update available labels and Update menu dots through existing shared maintenance styles/order and Update handlers; targeted header/navigation tests and isolated browser screenshots show either repository triggering the same action.
-- [ ] 2.3 Document the passive interval and advisory semantics in the relevant panel documentation, keeping explicit Update safety unchanged; confirm no page boot waits on remote discovery.
+- [x] 2.1 Add bounded read-only origin default-tip discovery and cached five-minute idle-only scheduling with job-start coordination; targeted tests cover offline/timeouts, busy jobs, local-ahead/dirty state, both repositories and identical roots without fetch/ref/index changes.
+- [x] 2.2 Wire update available labels and Update menu dots through existing shared maintenance styles/order and Update handlers; targeted header/navigation tests and isolated browser screenshots show either repository triggering the same action.
+- [x] 2.3 Document the passive interval and advisory semantics in the relevant panel documentation, keeping explicit Update safety unchanged; confirm no page boot waits on remote discovery.
 
 ## 3. Background app saves leave Run in place
 
