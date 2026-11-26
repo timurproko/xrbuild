@@ -79,6 +79,11 @@ The control panel SHALL offer an Update action that brings the selected workspac
 - **WHEN** the core checkout is not a Git checkout, is on a detached HEAD, or its branch has no upstream
 - **THEN** the panel reports the core as unavailable with that reason, does not require Git LFS for it, and the workspace status is unaffected
 
+#### Scenario: Core behind while only its status is reported
+
+- **WHEN** the core checkout is 3 commits behind its upstream as of its last fetch, or cannot be updated, and the person points at Update or runs it
+- **THEN** the tooltip and the result say that the core is behind or why it cannot be updated, that this version does not update it yet and to pull it by hand, and the result never reports the core as updated
+
 #### Scenario: Workspace is the core checkout
 
 - **WHEN** the selected workspace is the core checkout the panel runs from
