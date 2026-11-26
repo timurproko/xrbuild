@@ -2,7 +2,7 @@
 
 ## Context
 
-This revision supersedes the original two-slot design, following the person's scope reduction. See proposal.md for intent. Baseline PR #48 supplies the common ingress; PR #50 remains open and owns global adjustments/profile writes. Its implementation must be integrated after landing, not duplicated.
+This revision supersedes the original two-slot design, following the person's scope reduction. See proposal.md for intent. Baseline PR #48 supplies the common ingress; merged PR #50 supplies global adjustments/profile writes, reused rather than duplicated. The component is now mounted in the dedicated slot supplied by merged PR #51.
 
 `index.ts` samples `HandInput` before standard drawing: that sampled/predicted canonical pose, after size/offset/filtering, is the mesh input. `Hand` is not `WireHand` and has no fresh sensor confidence. `hand-source.ts`, provider binaries, native hand layout and interaction remain unchanged. Existing skeleton grace must not keep a stale mesh alive after an explicit no-hand frame.
 

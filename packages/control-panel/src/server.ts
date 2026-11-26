@@ -54,7 +54,7 @@ export const APP_NAME = 'xrb-control-panel';
 const ICON_LIMIT = 8 * 1024 * 1024;
 const RESTART_SILENT = path.join(PANEL_DIR, 'src', 'restart-silent.vbs');
 /** SDK modules the icon preview page loads (`/sdk/<name>`); they import only `three`. */
-const SDK_MODULES = new Set(['icon.js', 'icon-object.js', 'hands.js', 'hand-source.js', 'hand-profile.js', 'hand-visual.js', 'one-euro.js', 'protocol.js', 'stereo.js', 'scene-hands.js', 'interaction/grab.js', 'interaction/core/interactor.js', 'interaction/core/targets.js', 'interaction/core/tuning.js']);
+const SDK_MODULES = new Set(['icon.js', 'icon-object.js', 'hands.js', 'hand-source.js', 'hand-profile.js', 'hand-visual.js', 'hand-mesh-visual.js', 'one-euro.js', 'protocol.js', 'stereo.js', 'scene-hands.js', 'interaction/grab.js', 'interaction/core/interactor.js', 'interaction/core/targets.js', 'interaction/core/tuning.js']);
 
 export type WorkspaceKind = 'user' | 'repository' | 'explicit';
 
