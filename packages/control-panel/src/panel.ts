@@ -234,7 +234,7 @@ export class Panel {
   private captureOwner: { label: string } | null = null;
   /** Shared exclusion for explicit acquisition tools and app launch preparation. */
   acquireCapture(label: string): () => void {
-    if (this.captureOwner || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.restartPending || this.changingPlugins || this.jobs.active().length)
+    if (this.captureOwner || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.restartPending || this.changingPlugins || this.maintainingCache || this.pluginConsumers || this.settingsWrites.size || this.jobs.active().length)
       throw new HttpError(409, this.captureOwner ? `${this.captureOwner.label} owns capture. Stop it first.` : 'Another app or panel operation owns acquisition. Stop it first.');
     const owner = { label }; this.captureOwner = owner;
     let released = false;
@@ -351,6 +351,7 @@ export class Panel {
   }
 
   private async withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
+    this.refuseCaptureConflict();
     if (this.savingHands || this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop running apps and jobs and wait for launch/settings preparation before changing plugins');
     this.changingPlugins = true;
@@ -393,6 +394,7 @@ export class Panel {
   }
 
   async synchronizePluginServices(force = false): Promise<void> {
+    if (this.captureOwner) return;
     if (this.changingPlugins || !force && Date.now() - this.servicesCheckedMs < this.discoveryMaxAgeMs) return;
     if (this.servicesSync) return this.servicesSync;
     this.servicesSync = (async () => {
@@ -871,6 +873,7 @@ export class Panel {
     if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !['action', 'revision', 'confirm'].includes(key))
       || body.confirm !== true || typeof body.action !== 'string' || !['toolchain', 'native-deps'].includes(body.action)) throw new HttpError(400, 'Confirm a supported desktop setup action before installing');
     const requireIdle = () => {
+      this.refuseCaptureConflict();
       if (this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
         throw new HttpError(409, 'Stop apps/jobs and wait for preparation before desktop setup');
     };
@@ -885,6 +888,7 @@ export class Panel {
   }
 
   cleanupWorkingCache(project: Project | undefined, body: Parameters<typeof cleanWorkingCache>[1]): Job {
+    this.refuseCaptureConflict();
     if (this.maintainingCache || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop apps/jobs and wait for preparation before cache maintenance');
     return this.startJob('cache-cleanup', project?.id ?? null, 'remove reviewed working cache', async () => {
@@ -895,6 +899,7 @@ export class Panel {
   }
 
   setupBundledServices(): Job {
+    this.refuseCaptureConflict();
     if (this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop apps/jobs and wait for preparation before setting up bundled services');
     // Setup is the explicit recovery path for a failed/stale installed service snapshot.

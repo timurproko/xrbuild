@@ -8,10 +8,10 @@
 
 ## 2. Explicit native capture and manual static-target calibration
 
-- [ ] 2.1 Extract calibration-only authenticated native transport, packet/clock/source validation and RGB preview/point-sampling primitives without estimator/fusion boot; verify the import boundary and accepted/rejected fake packets with focused tests.
-- [ ] 2.2 Wire explicit two-serial/profile selection and Start/Stop through shared acquisition exclusion, coupled rollback and disposal; test busy owner, partial start, Stop-during-Start, disconnect, stale work and changed profile using injected ports.
-- [ ] 2.3 Bind manual probe clicks, target IDs/roles, remove/clear and fixed-rig/reference evidence to the retained coordinator; test six-fit/three-held-out success, invalid/stale/unmatched probes, degenerate evidence, draft invalidation and provisional quality display.
-- [ ] 2.4 Document the manual workflow and exercise its controls and residual summary with fake browser ports, without creating any real camera/model session.
+- [x] 2.1 Extract calibration-only authenticated native transport, packet/clock/source validation and RGB preview/point-sampling primitives without estimator/fusion boot; verify the import boundary and accepted/rejected fake packets with focused tests.
+- [x] 2.2 Wire explicit two-serial/profile selection and Start/Stop through shared acquisition exclusion, coupled rollback and disposal; test busy owner, partial start, Stop-during-Start, disconnect, stale work and changed profile using injected ports.
+- [x] 2.3 Bind manual probe clicks, target IDs/roles, remove/clear and fixed-rig/reference evidence to the retained coordinator; test six-fit/three-held-out success, invalid/stale/unmatched probes, degenerate evidence, draft invalidation and provisional quality display.
+- [x] 2.4 Document the manual workflow and exercise its controls and residual summary with fake browser ports, without creating any real camera/model session.
 
 ## 3. Marker collection and qualified result review
 

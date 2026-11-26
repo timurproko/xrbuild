@@ -30,12 +30,8 @@ export interface DepthFrameMetadata extends DepthFrameInput {
 export interface DepthRecordedFrame { readonly meta: Readonly<DepthFrameMetadata>; readonly data: Blob }
 export interface DepthClip { readonly manifest: Readonly<DepthManifest>; readonly frames: readonly DepthRecordedFrame[] }
 
-/** Keep snapshots isolated from source objects, including all calibration/settings arrays. */
-export function immutable<T>(value: T): T {
-  const copy = structuredClone(value);
-  const freeze = (v: unknown): void => { if (v && typeof v === 'object') { Object.values(v).forEach(freeze); Object.freeze(v); } };
-  freeze(copy); return copy;
-}
+import { immutable } from './immutable.ts';
+export { immutable } from './immutable.ts';
 export function validateDepthCapture(value: unknown): asserts value is DepthCaptureMetadata {
   validateAssetsSettings(value); const v = object(value), source = object(v.source), backend = object(v.backend);
   validateCalibration(v.calibration);
