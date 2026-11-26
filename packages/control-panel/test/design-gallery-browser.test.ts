@@ -97,10 +97,10 @@ test('registered tool navigation discovers the full Dev menu and retains links w
       window.__disposeTool=mountToolNavigation(button,document.querySelector('#discovery-menu'),{origin:location.origin,tools:[],current:'projects'});
       window.fetch=original;
     })()`);
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('#discovery-menu [data-navigation]')].map(item=>item.dataset.navigation)`),['projects','hands','plugins','settings','restart','rebuild','update']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('#discovery-menu [data-navigation]')].map(item=>item.dataset.navigation)`),['projects','hands','calibration','plugins','settings','restart','rebuild','update']);
     await evaluate(`window.__disposeTool()`);
   });
-  assert.deepEqual(f.apiRequests.filter(request=>request!=='GET /api/navigation'),[]);
+  assert.deepEqual(f.apiRequests.filter(request=>!['GET /api/navigation','GET /api/update/available'].includes(request)),[]);
   assert.equal(f.panel.panel.jobs.list().length,0);
 });
 
@@ -112,17 +112,17 @@ test('separate-origin gallery maintenance follows panel links rather than sendin
       window.fetch=async(...args)=>{window.__maintenanceRequests.push(String(args[0]));throw new Error('No external request authorized');};
       document.addEventListener('click',event=>{
         const item=event.target.closest('[data-navigation]');
-        if(['restart','rebuild'].includes(item?.dataset.navigation)){
+        if(['restart','rebuild','update'].includes(item?.dataset.navigation)){
           event.preventDefault();window.__maintenanceLinks.push(item.href);
         }
       },{capture:true});
-      document.querySelector('#panel-restart').click();document.querySelector('#host-rebuild').click();`);
+      document.querySelector('#panel-restart').click();document.querySelector('#host-rebuild').click();document.querySelector('#panel-update').click();`);
     await sleep(100);
-    assert.deepEqual(await evaluate(`window.__maintenanceLinks`),[`${other}/?maintenance=restart`,`${other}/?maintenance=rebuild`]);
+    assert.deepEqual(await evaluate(`window.__maintenanceLinks`),[`${other}/?maintenance=restart`,`${other}/?maintenance=rebuild`,`${other}/?maintenance=update`]);
     assert.deepEqual(await evaluate(`window.__maintenanceRequests`),[]);
     assert.equal(await evaluate(`!!document.querySelector('body > [data-xrb-restart-dialog],body > [data-xrb-rebuild-dialog]')`),false);
   });
-  assert.deepEqual(f.apiRequests.filter(request=>request!=='GET /api/navigation'),[]);
+  assert.deepEqual(f.apiRequests.filter(request=>!['GET /api/navigation','GET /api/update/available'].includes(request)),[]);
   assert.equal(f.panel.panel.jobs.list().length,0);
 });
 
@@ -168,7 +168,7 @@ test('Design Main collects shared primitives with interactive local-only example
     assert.equal(await evaluate(`fetch('/api/navigation').then(response=>response.ok)`),true,'inline Main never replaces shell networking with a mock');
     assert.equal(await evaluate(`document.querySelector('#design-main [data-xrb-rebuild-title]').id===document.querySelector('#design-main [data-xrb-rebuild-dialog]').getAttribute('aria-labelledby')`),true,'mock progress has correctly scoped shared-dialog IDs');
   });
-  assert.deepEqual(f.apiRequests.filter(request=>request!=='GET /api/navigation'),[]);
+  assert.deepEqual(f.apiRequests.filter(request=>!['GET /api/navigation','GET /api/update/available'].includes(request)),[]);
   assert.equal(f.panel.panel.jobs.list().length,0);
 });
 
@@ -198,7 +198,7 @@ test('field titles stay aligned with controls during validation and checkbox/col
       assert.ok(spacing.rowGap>=8,'checkbox rows have breathing room');assert.ok(spacing.columnGap>=12);assert.equal(spacing.swatchBorder,0,'no divider before colors');
     }
   });
-  assert.deepEqual(f.apiRequests.filter(request=>request!=='GET /api/navigation'),[]);
+  assert.deepEqual(f.apiRequests.filter(request=>!['GET /api/navigation','GET /api/update/available'].includes(request)),[]);
 });
 
 test('Design system offers dependency cases with a clean dimmed background and simulated-only actions', {skip:!process.env.XRB_TEST_BROWSER,timeout:60000},async t=>{
@@ -271,7 +271,7 @@ test('Design system offers dependency cases with a clean dimmed background and s
         if(width===1280){await sleep(200);const image=await send('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(f.artifacts,`design-system-${theme}.png`),Buffer.from(image.data,'base64'));}
       }
     }
-    assert.deepEqual(f.apiRequests.filter(request=>request!=='GET /api/navigation'),[],'only the shell reads navigation; case APIs are simulated');
+    assert.deepEqual(f.apiRequests.filter(request=>!['GET /api/navigation','GET /api/update/available'].includes(request)),[],'only the shell reads navigation/update notices; case APIs are simulated');
     await evaluate(`window.__maintenanceCalls=[];window.__originalFetch=window.fetch;window.fetch=async(input,options={})=>{
       const route=new URL(input,location.href).pathname;window.__maintenanceCalls.push([route,options.method??'GET']);
       if(route==='/api/host/setup')return new Response(JSON.stringify({canBuild:true}),{status:200});
@@ -285,7 +285,7 @@ test('Design system offers dependency cases with a clean dimmed background and s
     assert.deepEqual(await evaluate(`window.__maintenanceCalls`),[['/api/restart','POST'],['/api/host/setup','GET'],['/api/host/rebuild','POST']],'gallery shell uses the shared explicit maintenance flow');
     assert.equal(await evaluate(`document.querySelector('#preview').contentDocument.querySelector('[data-desktop-setup]').open`),true,'preview remains isolated from shell maintenance');
     await evaluate(`document.querySelector('body > [data-xrb-rebuild-dialog] [data-xrb-rebuild-close]').click();window.fetch=window.__originalFetch`);
-    assert.deepEqual(f.apiRequests.filter(request=>request!=='GET /api/navigation'),[],'maintenance validation never reached the backend');
+    assert.deepEqual(f.apiRequests.filter(request=>!['GET /api/navigation','GET /api/update/available'].includes(request)),[],'maintenance validation never reached the backend');
     await evaluate(`document.querySelector('#panel-menu-button').click();document.querySelector('#panel-home').click()`);
     await until(evaluate,`location.pathname==='/'&&!!document.querySelector('#design-system-open')`);
     assert.equal(await evaluate(`document.querySelector('#design-system-open').previousElementSibling.dataset.navigation`),'settings','Apps round-trip keeps the Dev entry directly after Settings');

@@ -67,7 +67,6 @@ html.xrb-overlay-scrollbars::-webkit-scrollbar, html.xrb-overlay-scrollbars *::-
 html { overflow-y: auto; }
 html:has(dialog:modal) { overflow: hidden; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font-sans); }
-body.workspace-pending .xrb-app-bar, body.workspace-pending .top, body.workspace-pending main { visibility: hidden; }
 code, .mono { font-family: var(--font-mono); font-size: .88em; }
 h1, .xrb-brand { margin: 0; font-size: 1.15rem; line-height: 1.5; letter-spacing: -.01em; font-weight: 700; }
 h2, .label, .xrb-section-label { margin: 0; font-size: .74rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
@@ -246,6 +245,7 @@ a.xrb-path:hover, a.xrb-path:focus-visible { color: var(--accent); text-decorati
 .xrb-error-banner { max-height: 96px; overflow: auto; background: var(--err-soft); color: var(--err); }
 .xrb-error-banner:empty { display: none; }
 .state, .chip { font-size: .74rem; font-weight: 600; padding: 3px 10px; border-radius: 99px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.chip[role="button"] { cursor: pointer; }
 .state.none, .chip { color: var(--muted); border: 1px dashed var(--line); }
 .state.neutral { background: var(--surface-2); color: var(--muted); }
 .state.busy, .chip.warn { background: var(--warn-soft); color: var(--warn); border: 0; }
@@ -515,6 +515,7 @@ button.xrb-dialog-close:hover:not(:disabled), button.xrb-dialog-close:focus-visi
 dialog.xrb-rebuild-dialog, dialog.xrb-job-progress-dialog { width: min(660px, calc(100vw - 32px)); }
 .xrb-rebuild-dialog .xrb-progress-status, .xrb-job-progress-dialog .xrb-progress-status { min-height: 64px; }
 .xrb-rebuild-dialog > .log, .xrb-job-progress-dialog > .log { margin-top: 20px; height: min(33vh, 280px); max-height: none; }
+.xrb-rebuild-dialog > .xrb-copy-block:has(> .log[hidden]) { min-height: 36px; }
 .xrb-progress-status-icon { display: grid; place-items: center; width: 28px; height: 28px; flex: none; }
 .xrb-progress-status-icon > * { grid-area: 1 / 1; }
 .xrb-progress-status-icon > svg { width: 28px; height: 28px; color: var(--accent); }

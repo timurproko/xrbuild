@@ -1,5 +1,9 @@
 // Loaded before styles so a saved appearance never flashes the opposite palette.
 (() => {
+  // Remote typography is optional: never block the local shell's first paint on it.
+  document.addEventListener('load', event => {
+    if (event.target instanceof HTMLLinkElement && event.target.hasAttribute('data-xrb-fonts')) event.target.media = 'all';
+  }, true);
   const root = document.documentElement, key = 'panel.theme';
   const normalize = value => ['light', 'dark'].includes(value) ? value : 'system';
   const apply = value => {

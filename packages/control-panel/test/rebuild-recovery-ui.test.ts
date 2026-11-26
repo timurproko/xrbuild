@@ -17,7 +17,7 @@ test('component refresh uses the existing Rebuild concept and truthful header st
 });
 
 test('shared progress offers Retry or Restart in place, preserving failed output', { skip: !process.env.XRB_TEST_BROWSER, timeout: 30000 }, async () => {
-  const files = new Map(await Promise.all(['rebuild-dialog.js', 'design-system.js', 'scrollbars.js', 'workspace-layout.js', 'design-system.css'].map(async name => [name, await fs.readFile(path.resolve(import.meta.dirname, '../ui', name), 'utf8')] as const)));
+  const files = new Map(await Promise.all(['rebuild-dialog.js', 'job-log.js', 'design-system.js', 'scrollbars.js', 'workspace-layout.js', 'design-system.css'].map(async name => [name, await fs.readFile(path.resolve(import.meta.dirname, '../ui', name), 'utf8')] as const)));
   const server = createServer((req, res) => {
     const name = req.url!.slice(1);
     res.setHeader('content-type', name.endsWith('.css') ? 'text/css' : name ? 'text/javascript' : 'text/html');
@@ -50,7 +50,7 @@ test('shared progress offers Retry or Restart in place, preserving failed output
           repositories:[{role:'core',state:'updated'},{role:'workspace',state:'failed'}],
           repositoryLines:['Core: 1234567 → abcdef0.','Workspace: 7654321 → 7654321; source conflict in plugins/tracker/src/main.cpp.'],
           nextAction:'Reconcile the source file and retry Update; workspace plugins deferred; Restart to load updated code.'},
-          lines:['Full revisions and step output stay in View job.']});
+          lines:Array.from({length:60},(_,i)=>'Full revision / step '+i)});
       })()`);
       assert.equal(await browser.evaluate("document.querySelector('[data-xrb-rebuild-title]').textContent"), 'Core updated; workspace needs attention');
       assert.equal(await browser.evaluate("document.querySelector('[data-xrb-rebuild-message]').textContent.split('\\n').length"), 3);
@@ -58,6 +58,14 @@ test('shared progress offers Retry or Restart in place, preserving failed output
       assert.equal(await browser.evaluate("document.querySelectorAll('[data-xrb-rebuild-restart]').length"), 1);
       assert.equal(await browser.evaluate("document.querySelector('[data-xrb-rebuild-restart]').hidden"), false);
       assert.equal(await browser.evaluate('progress.element.open'), true, 'Autoclose must leave partial-success Restart available');
+      assert.equal(await browser.evaluate(`document.querySelector('[data-xrb-rebuild-copy]').getBoundingClientRect().bottom <= document.querySelector('[data-xrb-rebuild-actions]').getBoundingClientRect().top`), true, 'Copy must not overlap the compact result actions');
+      const copied = await browser.evaluate(`(async()=>{
+        Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.copiedLog=text;}}});
+        document.querySelector('[data-xrb-rebuild-copy]').click();
+        await Promise.resolve();await Promise.resolve();return window.copiedLog;
+      })()`);
+      assert.equal(copied, Array.from({length:60},(_,i)=>'Full revision / step '+i).join('\n'), 'the concise result still copies the complete log');
+      assert.equal(await browser.evaluate('progress.element.open'), true, 'Copy must not close the partial-success result');
       if (process.env.XRB_UPDATE_PROOF) {
         const picture = await browser.send('Page.captureScreenshot', { format: 'png' });
         await fs.writeFile(process.env.XRB_UPDATE_PROOF, Buffer.from(picture.data, 'base64'));

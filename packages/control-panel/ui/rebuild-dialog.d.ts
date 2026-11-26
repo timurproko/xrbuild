@@ -21,6 +21,7 @@ export interface RebuildPresentation {
 export interface RebuildProgressController {
   element:HTMLDialogElement;
   setViewJob(callback:((job:RebuildJob)=>void)|undefined):void;
+  setLogReader(callback:(job:RebuildJob|null,fallback:string)=>string|Promise<string>):void;
   setRecovery(callbacks:{retry?:()=>unknown;restart?:()=>unknown}):void;
   render(job:RebuildJob|null,error?:string):RebuildPresentation;
   show(job?:RebuildJob|null,error?:string):void;

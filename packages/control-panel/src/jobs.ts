@@ -109,6 +109,7 @@ export function runProcess(cmd: string, args: string[], onLine: (l: string) => v
 }
 
 interface JobWork {
+  ready: boolean;
   body: (ctx: JobContext) => Promise<unknown>;
   ctx: JobContext;
 }
@@ -116,6 +117,8 @@ interface JobWork {
 const terminal = (job: Job) => job.state === 'done' || job.state === 'failed';
 
 export class JobRunner extends EventEmitter {
+  /** Optional admission barrier: reserve the job now, but drain passive work before running its body. */
+  beforeStart: () => Promise<void> | void = () => {};
   private readonly jobs: Job[] = [];
   private readonly work = new Map<number, JobWork>();
   private nextId = 1;
@@ -178,12 +181,12 @@ export class JobRunner extends EventEmitter {
 
   private launch(job: Job): void {
     const work = this.work.get(job.id);
-    if (!work) return;
+    if (!work?.ready) return;
     const waited = job.state === 'queued';
     job.state = 'running';
     job.startedMs = Date.now();
     this.emit('change', job);
-    if (waited) work.ctx.line('Starting queued publication job.');
+    if (waited && job.kind === 'publication') work.ctx.line('Starting queued publication job.');
     void (async () => {
       try {
         job.result = await work.body(work.ctx);
@@ -223,7 +226,8 @@ export class JobRunner extends EventEmitter {
   ): Job {
     const why = this.conflict(kind, projectId);
     if (why) throw new JobRefused(why);
-    const queued = kind === 'publication' && this.active().some((job) => job.kind === 'publication');
+    const admission = this.beforeStart();
+    const queued = !!admission || kind === 'publication' && this.active().some((job) => job.kind === 'publication');
     const now = Date.now();
     const job: Job = {
       id: this.nextId++, kind, projectId, title, state: queued ? 'queued' : 'running', queuedMs: queued ? now : null,
@@ -246,7 +250,8 @@ export class JobRunner extends EventEmitter {
       },
     };
     this.jobs.push(job);
-    this.work.set(job.id, { body, ctx });
+    const work: JobWork = { body, ctx, ready: !admission };
+    this.work.set(job.id, work);
     while (this.jobs.length > this.keep) {
       const i = this.jobs.findIndex(terminal);
       if (i < 0) break;
@@ -254,8 +259,12 @@ export class JobRunner extends EventEmitter {
     }
     if (queued) {
       this.emit('change', job);
-      line('Waiting for the current publication job to finish.');
+      if (kind === 'publication' && this.running().some(current => current.kind === 'publication')) line('Waiting for the current publication job to finish.');
     } else this.launch(job);
+    if (admission) void admission.catch(error => { work.body = async () => { throw error; }; }).then(() => {
+      work.ready = true;
+      if (kind === 'publication') this.pumpPublications(); else this.launch(job);
+    });
     return job;
   }
 
