@@ -401,7 +401,7 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
   if (to !== target) throw fail('pull', 'HEAD does not match the fetched target; inspect other Git activity before retrying Update.');
   if (pending?.from && (options.workspaceData ?? options.role === 'workspace')) {
     // A process can exit after retiring the checkout journal but before returning its notice.
-    const range = await readOnly(git)(['diff-tree', '--no-commit-id', '--name-only', '-r', '-z', pending.from, to], dir, { raw: true });
+    const range = await readOnly(git)(['diff-tree', '--no-renames', '--no-commit-id', '--name-only', '-r', '-z', pending.from, to], dir, { raw: true });
     if (range.code === 0) retained = [...new Set([...retained, ...range.output.split('\0').filter(file => keptWorkspacePath(file)
       && (options.role === 'workspace' || file.toLowerCase() !== 'pnpm-lock.yaml'))])];
   }

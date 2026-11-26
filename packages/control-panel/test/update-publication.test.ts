@@ -12,12 +12,27 @@ const points = ['prepare', 'partial-manifest', 'manifest-synced', 'publish-befor
   'legacy-initial-next', 'legacy-initial-partial', 'legacy-ready-next', 'legacy-ready-partial'];
 
 test('every protected-checkout publication resumes or rolls back without Git metadata surgery', { concurrency: 2 }, async t => {
-  await Promise.all(points.map(point => t.test(point, async t => {
+  const cases = ['file-edit', 'file-to-directory', 'directory-to-file'].flatMap(layout => points.map(point => ({ layout, point })));
+  await Promise.all(cases.map(({ layout, point }) => t.test(`${layout}: ${point}`, async t => {
     const f = await fixture(t), dir = f.workspace.checkout;
+    if (layout === 'directory-to-file') {
+      await fs.unlink(path.join(f.workspace.publisher, 'shared.txt'));
+      await fs.mkdir(path.join(f.workspace.publisher, 'shared.txt'));
+      await fs.writeFile(path.join(f.workspace.publisher, 'shared.txt/child.txt'), 'base child\n');
+    }
     await f.workspace.publish('xrb-plugins.json', 'base\n');
     git(dir, 'fetch', '-q', 'origin'); git(dir, 'merge', '-q', '--ff-only', 'origin/main');
     const before = f.workspace.head(); await fs.writeFile(path.join(dir, 'xrb-plugins.json'), 'personal\n');
-    await f.workspace.publish('xrb-plugins.json', 'incoming defaults\n'); const target = await f.workspace.publish('shared.txt', 'incoming source\n');
+    await fs.writeFile(path.join(f.workspace.publisher, 'xrb-plugins.json'), 'incoming defaults\n');
+    if (layout === 'file-to-directory') {
+      await fs.unlink(path.join(f.workspace.publisher, 'shared.txt'));
+      await fs.mkdir(path.join(f.workspace.publisher, 'shared.txt'));
+      await fs.writeFile(path.join(f.workspace.publisher, 'shared.txt/child.txt'), 'incoming child\n');
+    } else if (layout === 'directory-to-file') {
+      await fs.rm(path.join(f.workspace.publisher, 'shared.txt'), { recursive: true });
+      await fs.writeFile(path.join(f.workspace.publisher, 'shared.txt'), 'incoming parent\n');
+    } else await fs.writeFile(path.join(f.workspace.publisher, 'shared.txt'), 'incoming source\n');
+    const target = await f.workspace.publish('other.txt', 'incoming sibling\n');
     git(dir, 'fetch', '-q', 'origin');
     const script = `import fs from 'node:fs/promises';
       import {checkoutFetchedCommit} from ${JSON.stringify(new URL('../src/update-checkout.ts', import.meta.url).href)};
@@ -61,7 +76,10 @@ test('every protected-checkout publication resumes or rolls back without Git met
       await resumeProtectedCheckout(dir, f.runner, f.ctx.line);
       if (f.workspace.head() !== target) await checkoutFetchedCommit(dir, { git: f.runner, workspace: true, before: f.workspace.head(), target, branch: 'main', line: f.ctx.line, ensureUnchanged: async () => {} });
     }
-    assert.equal(f.workspace.head(), target); assert.equal(await fs.readFile(path.join(dir, 'shared.txt'), 'utf8'), 'incoming source\n');
+    assert.equal(f.workspace.head(), target);
+    const source = layout === 'file-to-directory' ? 'shared.txt/child.txt' : 'shared.txt';
+    assert.equal(await fs.readFile(path.join(dir, source), 'utf8'), layout === 'file-to-directory' ? 'incoming child\n' : layout === 'directory-to-file' ? 'incoming parent\n' : 'incoming source\n');
+    assert.equal(await fs.readFile(path.join(dir, 'other.txt'), 'utf8'), 'incoming sibling\n');
     assert.equal(await fs.readFile(path.join(dir, 'xrb-plugins.json'), 'utf8'), 'personal\n');
     assert.equal(await fs.stat(path.join(dir, '.git/index.lock')).then(() => true, () => false), false);
     assert.equal((await fs.stat(path.join(dir, '.git/index'))).nlink, 1);

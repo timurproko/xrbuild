@@ -185,7 +185,7 @@ export async function resumeProtectedCheckout(dir: string, git: GitRunner, line:
   }
   line('Resuming protected-data fast-forward from its immutable checkout journal.');
   await finishTransaction(dir, git, index, root, journal);
-  const changed = records(await commands(dir, git).checked(['diff-tree', '--no-commit-id', '--name-only', '-r', '-z', journal.before, journal.target]));
+  const changed = records(await commands(dir, git).checked(['diff-tree', '--no-renames', '--no-commit-id', '--name-only', '-r', '-z', journal.before, journal.target]));
   return changed.filter(protectedBy(journal));
 }
 
@@ -195,14 +195,24 @@ async function applyJournalCheckout(dir: string, git: GitRunner, root: string, j
   const before = new Map((await stagedEntries(dir, git, original)).map(entry => [entry.file, entry]));
   const after = new Map((await stagedEntries(dir, git, expected)).map(entry => [entry.file, entry]));
   const applied: Entry[] = [], names = new Set<string>();
-  const matches = async (index: string, file: string, entry: Entry | undefined) => !entry
-    ? !await fs.lstat(path.join(dir, file)).then(() => true, error => { if (['ENOENT', 'ENOTDIR'].includes(error.code)) return false; throw error; })
-    : (await commands(dir, git, index).run(['diff', '--quiet', '--no-ext-diff', '--no-textconv', '--', file])).code === 0;
+  const directories = (entries: Map<string, Entry>) => {
+    const result = new Set<string>();
+    for (const file of entries.keys()) for (let slash = file.lastIndexOf('/'); slash > 0; slash = file.lastIndexOf('/', slash - 1)) result.add(key(file.slice(0, slash)));
+    return result;
+  };
+  const beforeDirs = directories(before), afterDirs = directories(after);
+  const matches = async (index: string, file: string, entry: Entry | undefined, dirs: Set<string>) => {
+    if (entry) return (await commands(dir, git, index).run(['diff', '--quiet', '--no-ext-diff', '--no-textconv', '--', file])).code === 0;
+    const stat = await fs.lstat(path.join(dir, file)).catch(error => { if (['ENOENT', 'ENOTDIR'].includes(error.code)) return null; throw error; });
+    // Git indexes files, not directories. A removed file may now be an expected directory;
+    // its changed descendants are checked separately, including partially applied transitions.
+    return !stat || dirs.has(key(file)) && stat.isDirectory() && !stat.isSymbolicLink();
+  };
   for (const file of sources) {
     const old = before.get(file), next = after.get(file);
     if (old?.mode === next?.mode && old?.oid === next?.oid) continue; // Git will not write an already-adopted index entry.
-    if (await matches(original, file, old)) continue;
-    if (!await matches(expected, file, after.get(file))) throw new CheckoutRefusal('Source changed outside the interrupted checkout', [file]);
+    if (await matches(original, file, old, beforeDirs)) continue;
+    if (!await matches(expected, file, next, afterDirs)) throw new CheckoutRefusal('Source changed outside the interrupted checkout', [file]);
     names.add(file); const entry = after.get(file); if (entry) applied.push(entry);
   }
   const suffix = `${process.pid}-${randomUUID()}`, working = path.join(root, `working-${suffix}.index`);
@@ -221,8 +231,8 @@ async function applyJournalCheckout(dir: string, git: GitRunner, root: string, j
 async function finishTransaction(dir: string, git: GitRunner, index: string, root: string, journal: Journal) {
   const { checked, run } = commands(dir, git);
   if ((await run(['merge-base', '--is-ancestor', journal.before, journal.target])).code) throw new Error('Checkout journal is not a fast-forward');
-  const sources = records(await checked(['diff-tree', '--no-commit-id', '--name-only', '-r', '-z', journal.before, journal.projected]));
-  const excluded = records(await checked(['diff-tree', '--no-commit-id', '--name-only', '-r', '-z', journal.projected, journal.target]));
+  const sources = records(await checked(['diff-tree', '--no-renames', '--no-commit-id', '--name-only', '-r', '-z', journal.before, journal.projected]));
+  const excluded = records(await checked(['diff-tree', '--no-renames', '--no-commit-id', '--name-only', '-r', '-z', journal.projected, journal.target]));
   if (sources.some(protectedBy(journal)) || excluded.some(file => !protectedBy(journal)(file))) throw new Error('Invalid checkout projection; user data was not touched');
   for (const state of ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply']) {
     if (await exists(path.resolve(dir, (await checked(['rev-parse', '--git-path', state])).trim()))) throw new Error('Another Git operation is active; finish it before resuming Update');
@@ -248,7 +258,7 @@ async function finishTransaction(dir: string, git: GitRunner, index: string, roo
 export async function checkoutFetchedCommit(dir: string, options: CheckoutOptions): Promise<string[]> {
   const { git, before, target, branch, line } = options, { checked, run } = commands(dir, git);
   if (before === target) return [];
-  const changed = records(await checked(['diff-tree', '--no-commit-id', '--name-only', '-r', '-z', before, target]));
+  const changed = records(await checked(['diff-tree', '--no-renames', '--no-commit-id', '--name-only', '-r', '-z', before, target]));
   const protect = protectedBy(options), retained = options.workspace ? changed.filter(protect) : [], sources = changed.filter(file => !retained.includes(file));
   const localSources = async () => [...new Set([...records(await checked(['diff', '--name-only', '-z'])),
     ...records(await checked(['diff', '--cached', '--name-only', '-z']))].filter(file => sources.some(incoming => overlaps(file, incoming))))];
