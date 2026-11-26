@@ -22,6 +22,11 @@ An unrecognized workspace graph, unsafe local package link or checkout-local `.n
 
 If this core is already in use but needs dependency repair, close its existing panel first. Setup will not change dependencies underneath it or force a new restart. Responsive foreign workspace/core panels are not adopted; normal explicit restart and verified shortcut recovery policies remain separate. Distinct user/development modes serialize core setup but retain their own workspace/project/port selection.
 
+The panel's explicit **Update** action is a separate maintenance operation: after safely advancing core, it reuses
+this frozen installer in a fresh process when public dependency inputs changed. Update excludes other jobs in that
+panel, reports setup failures and retained commits, and requires an explicit panel Restart to load changed code;
+it does not use shortcut startup's responsive-panel reuse as proof that the new code is running.
+
 ## User workspace
 
 The panel reads `XRB_HOME`, otherwise `%USERPROFILE%\.xrbuild`; a missing, empty or uninitialized folder is valid. Apps, Plugins and Settings open without Create your workspace or an automatic New project dialog. Available embedded apps remain visible. Browsing and startup do not initialize the selected folder or rewrite its editor configuration.

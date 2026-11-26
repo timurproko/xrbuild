@@ -30,34 +30,30 @@ function agoText(ms, now) {
   return `${Math.floor(days / 7)} weeks ago`;
 }
 
-/**
- * The Update tooltip: one sentence per repository, each with the time of that repository's own last fetch, from
- * `GET /api/update`. The two remotes are fetched at different times (this version never fetches the core), so one
- * repository's check never vouches for the other: a core without a fetch time is "not checked yet", never "up to
- * date". A core that is behind or cannot be updated here says so, and to pull it by hand.
- */
+/** Cached status only: a successful explicit Update is what establishes fresh default-branch equality. */
 export function updateTooltip(status, now = Date.now()) {
   if (!status) return '';
   const {core, workspace} = status;
-  const asOf = (repo) => repo.checkedMs ? ` as of ${agoText(repo.checkedMs, now)}` : '';
-  const coreText = !core ? '' : !core.available ? `Core: not updated here. ${core.reason ?? ''}`.trim()
-    : core.behind ? `Core: ${commitCount(core.behind)} behind ${core.upstream}${asOf(core)}, not updated by this version yet; pull it by hand.`
-    : core.checkedMs ? `Core: up to date${asOf(core)}.` : 'Core: not checked yet.';
-  const remote = workspace?.upstream?.split('/')[0] || 'origin';
-  const checked = (repo) => repo.checkedMs ? `, checked ${agoText(repo.checkedMs, now)}` : '';
-  const workspaceText = !workspace ? '' : !workspace.available ? `Workspace: ${workspace.reason ?? 'cannot be updated.'}`
-    : workspace.unfinished ? 'Workspace: the last update did not finish; run Update again.'
-    : workspace.behind ? `Workspace: ${commitCount(workspace.behind)} behind ${remote}${checked(workspace)}.`
-    : workspace.checkedMs ? `Workspace: up to date${checked(workspace)}.` : 'Workspace: not checked yet.';
-  return [coreText, workspaceText].filter(Boolean).join(' ');
+  const describe = (repo, label) => {
+    if (!repo) return '';
+    if (repo.sameAsCore) return 'Workspace: same checkout as core; updated once.';
+    if (!repo.available) return `${label}: ${repo.reason ?? 'needs attention.'}`;
+    if (repo.dirty) return `${label}: local changes need attention before Update.`;
+    if (repo.unfinished) return `${label}: the last update did not finish; run Update again.`;
+    if (repo.ahead) return `${label}: ${commitCount(repo.ahead)} not on the cached upstream; reconcile local history first.`;
+    const checked = repo.checkedMs ? `, checked ${agoText(repo.checkedMs, now)}` : ', not fetched yet';
+    return `${label}: ${repo.behind ? `${commitCount(repo.behind)} behind` : 'no missing commits in'} cached ${repo.upstream || 'upstream'}${checked}.`;
+  };
+  return [describe(core, 'Core'), describe(workspace, 'Workspace')].filter(Boolean).join(' ');
 }
 
 /** Update steps, in order, as announced by `step <id>` job lines. */
 export const UPDATE_STEPS = Object.freeze([
   Object.freeze({id: 'check', title: 'Check', message: 'Checking the core and the workspace'}),
-  Object.freeze({id: 'fetch', title: 'Fetch', message: 'Fetching the workspace from its remote'}),
-  Object.freeze({id: 'lfs', title: 'LFS', message: 'Downloading the workspace\'s LFS files'}),
-  Object.freeze({id: 'pull', title: 'Pull', message: 'Pulling new workspace commits'}),
+  Object.freeze({id: 'fetch', title: 'Fetch', message: 'Discovering and fetching each origin default branch'}),
+  Object.freeze({id: 'lfs', title: 'LFS', message: 'Downloading required LFS files'}),
+  Object.freeze({id: 'pull', title: 'Pull', message: 'Fast-forwarding to the fetched commit'}),
+  Object.freeze({id: 'setup', title: 'Dependencies', message: 'Preparing pinned public core dependencies'}),
   Object.freeze({id: 'rebuild', title: 'Rebuild', message: 'Rebuilding'}),
 ]);
 
@@ -69,10 +65,9 @@ function updatePresentation(job, error, running, failed, phase) {
   const doing = step.id === 'rebuild' ? `Rebuilding ${phase ? phase.slice('plugin '.length) : 'plugins'}` : step.message;
   return {
     step: step.id,
-    // Titles name the repository the result is about: this version updates the workspace and only reports the core.
-    title: running ? 'Updating' : failed ? 'Update failed' : upToDate ? 'Workspace already up to date' : 'Workspace updated',
+    title: running ? 'Updating' : failed ? 'Update needs attention' : job?.result?.restartRequired ? 'Restart required' : upToDate ? 'Already up to date' : 'Updated',
     message: error || (running ? `Step ${at + 1} of ${UPDATE_STEPS.length}, ${step.title}: ${doing}…`
-      : failed ? job?.error || `${step.title} failed: see the output below.` : job?.result?.summary || 'The workspace is up to date.'),
+      : failed ? job?.result?.summary || job?.error || `${step.title} failed: see the output below.` : job?.result?.summary || 'Update completed.'),
   };
 }
 
