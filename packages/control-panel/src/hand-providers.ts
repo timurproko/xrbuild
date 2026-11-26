@@ -23,7 +23,7 @@ export function handRegistry(catalog: PluginCatalog, native: ProviderList): Hand
   for (const [id, label, purpose] of [['simulated', 'Synthetic (core)', 'synthetic'], ['replay', 'Replay (core)', 'replay']] as const) {
     const installed = !native.unsafe && native.providers.some(p => p.builtin && p.role === 'input' && p.name === id);
     providers.push({ owner: 'core', id, label, transport: 'native', runtimeName: id, purpose, available: installed,
-      reason: installed ? 'Not started; device availability checked at launch' : native.error ?? 'Native provider is not installed', aliases: [id] });
+      reason: installed ? id === 'replay' ? 'Recording required in provider configuration; checked at launch' : 'Not started; device availability checked at launch' : native.error ?? 'Native provider is not installed', aliases: [id] });
   }
   providers.push({ owner: 'core', id: 'webxr', label: 'WebXR hands', transport: 'webxr', purpose: 'tracked', available: true,
     reason: 'Requires a supported browser and explicit XR session', aliases: [] });

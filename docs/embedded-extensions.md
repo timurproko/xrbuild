@@ -434,6 +434,19 @@ replay sources use the same registry. Source identity is owner-qualified, never 
 Discovery is metadata-only and never calls input creation/start. A declaration without a valid owned binary
 remains unavailable rather than borrowing another plugin's provider.
 
+### Global Hands selection
+
+`<selected-workspace>/config/hands/profile.json` is Hands-owned user state, shared by all project repositories
+using that integration workspace. `GET /api/hands` is read-only; `PUT /api/hands` requires the profile `revision`,
+`registryRevision` and `provider: {owner,id}` (or explicit null). Writes are bounded, revision-checked, locked and atomic;
+invalid/linked/foreign state is preserved and reported. Unknown fields survive. Source changes affect the next
+launch, not an existing app's acquisition. With no record, exactly one installed enabled real source compatible
+with the execution context is displayed as the initial selection and pinned on explicit launch/save. Zero or
+several real sources require a choice; synthetic/replay sources never become automatic defaults. Once saved,
+a missing/failed source stays selected and unavailable, never replaced. Installed does not mean a device is
+connected: idle providers are not started, and replay still requires a configured recording. The picker is not
+a live viewer; offsets, skeleton size/appearance and the live laboratory are subsequent changes.
+
 ## Native builds and providers
 
 ### Host cache and runtime selection

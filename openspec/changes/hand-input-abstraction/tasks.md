@@ -10,9 +10,9 @@ Implementation is approved with the simplified global input policy. Groups match
 
 ## 2. Global source state and resolution
 
-- [ ] 2.1 Add bounded revision-aware Hands profile storage/API with locking, containment and atomic replacement; isolated tests cover missing-state no-write, unsafe/malformed/oversized files, unknown fields and stale-writer preservation.
-- [ ] 2.2 Implement one context-aware source resolver and preparation snapshot/lease; fixtures prove two project repositories share the choice, unique-real initial default and no fallback, one logical source and immutable running/preparing snapshots.
-- [ ] 2.3 Document state ownership and installed-versus-running states; tests cover synthetic/replay configuration and unavailable saved selections without hardware discovery.
+- [x] 2.1 Add bounded revision-aware Hands profile storage/API with locking, containment and atomic replacement; isolated tests cover missing-state no-write, unsafe/malformed/oversized files, unknown fields and stale-writer preservation.
+- [x] 2.2 Implement one context-aware source resolver and preparation snapshot/lease; fixtures prove two project repositories share the choice, unique-real initial default and no fallback, one logical source and immutable running/preparing snapshots.
+- [x] 2.3 Document state ownership and installed-versus-running states; tests cover synthetic/replay configuration and unavailable saved selections without hardware discovery.
 
 ## 3. Core Hands picker and logical Input presentation
 

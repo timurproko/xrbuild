@@ -35,6 +35,8 @@ import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
 import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
 import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatus, type BuildTarget, type IdentityField, type PackagerDiscovery, type PackagerSetupStatus, type RoleSelection } from './packagers.ts';
 import { PackageList } from './packages.ts';
+import { discoverHandProviders, sameHandProvider } from './hand-providers.ts';
+import { readHandsState, saveHandsState, selectedHandProvider, validHandProviderKey } from './hands-state.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
 import { archiveProject, readLayout, removeEmptyProjectSection, unarchiveProject } from './layout.ts';
 import { discoverPublishers, normalizeReleaseCatalog, publicationUrl, publisherFor, publisherUnconfigured, releaseIdProblem, type PublicationCard, type PublicationIdentity, type Publisher, type PublisherDiscovery, type PublisherReleaseCatalog, type PublisherStatus } from './publishers.ts';
@@ -204,6 +206,7 @@ export async function packageGraphReady(root: string): Promise<boolean> {
 
 export class Panel {
   readonly jobs = new JobRunner();
+  private savingHands = false;
   private preparingNativeRun = false;
   private preparingPreview = false;
   private changingPlugins = false;
@@ -285,7 +288,7 @@ export class Panel {
 
   private async withPluginServices<T>(work: () => Promise<T>): Promise<T> {
     await this.synchronizePluginServices(true);
-    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending) throw this.servicesRefusal('Plugin services are changing; retry after the update');
+    if (this.savingHands || this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending) throw this.servicesRefusal('Plugin services are changing; retry after the update');
     this.pluginConsumers++;
     try { return await work(); } finally { this.pluginConsumers--; }
   }
@@ -298,7 +301,7 @@ export class Panel {
   }
 
   private async withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
-    if (this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
+    if (this.savingHands || this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop running apps and jobs and wait for launch/settings preparation before changing plugins');
     this.changingPlugins = true;
     try { return await work(); } finally { this.changingPlugins = false; }
@@ -1434,7 +1437,7 @@ export class Panel {
 
   /** Refuses with the first specific cause; `details.reason` lets the UI offer Restart when only a restart helps. */
   private refuseIfLaunchBlocked(p: Project, state: LaunchState): void {
-    const blocked = launchBlocker({ ...state, settingsSaving: this.settingsWrites.has(p.id) });
+    const blocked = launchBlocker({ ...state, settingsSaving: this.savingHands || this.settingsWrites.has(p.id) });
     if (blocked) throw new HttpError(409, blocked.message, { reason: blocked.reason, restart: blocked.restart });
   }
 
@@ -1724,6 +1727,30 @@ export class Panel {
       return true;
     }
     switch (key) {
+      case 'GET hands': {
+        const registry = await discoverHandProviders(this.repo, this.workspace);
+        const state = await readHandsState(this.repo, this.workspace);
+        const selected = selectedHandProvider(state, registry, 'native');
+        sendJson(res, 200, { ...registry, selected: selected.key, initial: selected.initial, revision: state.revision,
+          choiceRequired: !selected.key, applies: 'next-launch' });
+        return true;
+      }
+      case 'PUT hands': {
+        if (this.savingHands || this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.changingPlugins || this.jobs.active().length)
+          throw new HttpError(409, 'Wait for launch, package or provider preparation before saving Hands');
+        this.savingHands = true;
+        try {
+          const body = await readJson<{ provider?: unknown; revision?: string; registryRevision?: string }>(req);
+          const registry = await discoverHandProviders(this.repo, this.workspace);
+          if (body.registryRevision !== registry.revision) throw new HttpError(409, 'Hand providers changed; reload before saving');
+          if (body.provider !== null && (!validHandProviderKey(body.provider) || !registry.providers.some(p => p.available && sameHandProvider(p, body.provider as import('./hand-providers.ts').HandProviderKey))))
+            throw new HttpError(400, 'Choose an installed enabled hand provider');
+          const saved = await saveHandsState(this.repo, this.workspace, body.provider, body.revision);
+          this.hub.send('hands-changed', {});
+          sendJson(res, 200, { revision: saved.revision, selected: saved.provider });
+        } finally { this.savingHands = false; }
+        return true;
+      }
       case 'GET jobs':
         sendJson(res, 200, { jobs: this.jobs.list() });
         return true;
