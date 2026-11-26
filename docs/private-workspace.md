@@ -85,6 +85,13 @@ reported default branch and configure its matching tracking branch, then retry. 
 stashes changes, resets, forces refs or reconciles divergence on your behalf. Dirty tracked, staged, untracked and
 locally deleted files all block that repository, including non-conflicting edits.
 
+Loaded plugin services are not a prerequisite for Git recovery: stale JS, missing runtimes and restart-required
+service discovery do not veto either repository's attempt. Active plugin mutation/consumption, settings writes,
+cache maintenance, desktop setup, running/starting apps, another job or panel shutdown still exclude Update.
+After the desktop-busy check, Update reserves its job synchronously before any status/Git await; native launches,
+browser previews and a second Update honor that reservation. An older status read drains first; later status
+requests reuse the cache while Update runs (before the first snapshot they return only the updating flag).
+
 After pulling, Update runs these visible steps:
 
 - Workspace LFS: `git lfs fetch origin <captured-commit>` before checkout, honoring clone fetch exclusions. Core

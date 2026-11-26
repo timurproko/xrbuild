@@ -235,6 +235,8 @@ export class Panel {
   /** Test seams for Update (a stubbed Git runner or rebuild); production uses Git and rebuildHost. */
   updateDeps: Partial<UpdateDeps> = {};
   private updateLast: UpdateStatus | null = null;
+  /** A status read already in flight must drain before the reserved Update starts Git mutations. */
+  private updateStatusRead: Promise<UpdateStatus> | null = null;
   readonly packages: PackageList;
   readonly hub: EventHub;
   /** the core repo (host build, templates) */
@@ -302,6 +304,7 @@ export class Panel {
 
   private async withPluginServices<T>(work: () => Promise<T>): Promise<T> {
     await this.synchronizePluginServices(true);
+    if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before using plugin services');
     if (this.savingHands || this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending) throw this.servicesRefusal('Plugin services are changing; retry after the update');
     this.pluginConsumers++;
     try { return await work(); } finally { this.pluginConsumers--; }
@@ -415,10 +418,18 @@ export class Panel {
 
   private startJob(...args: Parameters<JobRunner['start']>): Job {
     if (this.restartPending) throw new HttpError(409, 'The panel is restarting');
-    if (this.servicesPending) throw this.servicesRefusal('Plugin discovery is awaiting refresh');
+    const [kind, projectId, , work] = args;
+    // Git recovery does not consume the loaded plugin services; stale/unavailable services must not veto it.
+    if (this.servicesPending && kind !== 'update') throw this.servicesRefusal('Plugin discovery is awaiting refresh');
     if (this.changingPlugins) throw new HttpError(409, 'Plugin services are changing; retry after the update');
+    if (kind === 'update') {
+      // Last synchronous admission point: JobRunner.start reserves the job before any status/Git await.
+      if (this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop the running or starting host first: its exe must not overlap an update');
+      if (this.preparingPreview) throw new HttpError(409, 'stop the starting browser preview before updating');
+      if (this.maintainingCache || this.pluginConsumers || this.savingHands || this.settingsWrites.size)
+        throw new HttpError(409, 'Wait for cache, plugin or settings work to finish before updating');
+    }
     try {
-      const [kind, projectId, , work] = args;
       if (projectId?.startsWith('bundled:') && kind !== 'cache-cleanup') {
         args[3] = async ctx => {
           const p = (await discoverProjectCatalog(this.repo, this.workspace, this.projects)).projects.find(record => record.project.id === projectId)?.project;
@@ -1358,6 +1369,7 @@ export class Panel {
     if (mode === 'dev' && !p.manifest?.scripts?.dev) throw new HttpError(409, `${p.id} has no dev script`);
     await this.synchronizePluginServices(true);
     this.refuseIfLaunchBlocked(p, this.launchState(p));
+    if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before running');
     if (p.readOnly) this.refuseIfBusy(p.id);
     this.preparingPreview = true;
     try {
@@ -1523,6 +1535,7 @@ export class Panel {
   }
 
   private refuseIfBusy(id: string): void {
+    if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before changing projects');
     if (this.runner.projectId === id) throw new HttpError(409, `${id} is running: stop it first`);
     const busy = this.jobs.active().find((j) => j.projectId === id);
     if (busy) throw new HttpError(409, `${busy.title} is ${busy.state} for this project`);
@@ -1908,23 +1921,23 @@ export class Panel {
       case 'GET update': {
         // While an update job runs Git in the clones, answer from the last status instead of running Git beside it.
         const updating = this.jobs.active().some(job => job.kind === 'update');
-        if (!updating || !this.updateLast) this.updateLast = await updateStatus(this.repo, this.workspace, this.updateDeps.git);
-        sendJson(res, 200, { ...this.updateLast, updating });
+        if (!updating) {
+          const scan = this.updateStatusRead ??= updateStatus(this.repo, this.workspace, this.updateDeps.git);
+          try { this.updateLast = await scan; }
+          finally { if (this.updateStatusRead === scan) this.updateStatusRead = null; }
+        }
+        // Before the first completed scan, only updating=true is available; never start another Git read beside it.
+        sendJson(res, 200, { ...this.updateLast, updating: this.jobs.active().some(job => job.kind === 'update') });
         return true;
       }
       case 'POST update': {
-        // The same guards as Rebuild: the update ends with one. The job runner keeps it apart from every other job.
         if (await this.desktopSetup.isBusy()) throw new HttpError(409, 'Wait for desktop setup to finish before updating');
-        if (this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop the running or starting host first: its exe must not overlap a rebuild');
-        // Eligibility is per repository inside the job: one refusal must not block the other checkout.
-        // Refuse conflicting jobs before running any Git beside them.
-        const conflict = this.jobs.conflict('update', null);
-        if (conflict) throw new HttpError(409, conflict);
-        this.updateLast = await updateStatus(this.repo, this.workspace, this.updateDeps.git);
-        sendJson(res, 202, jobSummary(this.startJob('update', null, 'update', ctx => runUpdate(this.workspace, ctx, {
-          core: this.repo,
-          ...this.updateDeps,
-        }))));
+        // startJob revalidates launch/mutation guards and reserves Update synchronously after this last await.
+        // Repository eligibility belongs inside the job, never in a global workspace or plugin-services preflight.
+        sendJson(res, 202, jobSummary(this.startJob('update', null, 'update', async ctx => {
+          await this.updateStatusRead?.catch(() => {});
+          return runUpdate(this.workspace, ctx, { core: this.repo, ...this.updateDeps });
+        })));
         return true;
       }
       case 'GET preview/projection': {

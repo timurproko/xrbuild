@@ -422,7 +422,8 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
     const is = (m: string, ...segs: string[]) => method === m && api.length === segs.length && segs.every((s, i) => s === '*' || s === api[i]);
 
     if (is('GET', 'ping')) return sendJson(res, 200, { app: APP_NAME, repo: core, workspace, projects, pid: process.pid, instanceId: panel.instanceId });
-    if (!(method !== 'GET' && ['plugins', 'restart', 'quit'].includes(api[0]))) await panel.synchronizePluginServices(method !== 'GET');
+    // Git status/recovery must remain reachable without healthy (or importable) plugin services.
+    if (api[0] !== 'update' && !(method !== 'GET' && ['plugins', 'restart', 'quit'].includes(api[0]))) await panel.synchronizePluginServices(method !== 'GET');
     if (is('GET', 'navigation')) {
       const navigation = await managedTools.navigation();
       return sendJson(res, 200, { ...navigation, tools: [...navigation.tools,
