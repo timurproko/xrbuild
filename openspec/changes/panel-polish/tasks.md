@@ -2,9 +2,9 @@
 
 ## 1. Module shells appear without a blank navigation delay
 
-- [ ] 1.1 Capture isolated baseline navigation/resource timings for all six modules, including five warm transitions per destination and cold/delayed-request/font cases; save timing evidence in the task folder.
-- [ ] 1.2 Remove measured shell paint blockers and decouple unrelated hydration while preserving route/history/theme behavior; pass targeted shell/navigation browser tests with delayed endpoints.
-- [ ] 1.3 Record comparable after timings and screenshots for Apps, Hands, Calibration, Plugins, Settings and Design; document the diagnosed bottleneck and before/after results in the task report.
+- [x] 1.1 Capture isolated baseline navigation/resource timings for all six modules, including five warm transitions per destination and cold/delayed-request/font cases; save timing evidence in the task folder.
+- [x] 1.2 Remove measured shell paint blockers and decouple unrelated hydration while preserving route/history/theme behavior; pass targeted shell/navigation browser tests with delayed endpoints.
+- [x] 1.3 Record comparable after timings and screenshots for Apps, Hands, Calibration, Plugins, Settings and Design; document the diagnosed bottleneck and before/after results in the task report.
 
 ## 2. Passive remote updates use the existing maintenance label and dot
 

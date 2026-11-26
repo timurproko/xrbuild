@@ -3819,25 +3819,30 @@ function connect() {
   es.onerror = () => { /* EventSource reconnects by itself */ };
 }
 
-// The workspace path first: links to project files and the out folder need it.
-const initialPing = await api('GET', '/api/ping').catch(() => ({}));
-state.repo = initialPing.workspace ?? '';
-await loadWorkspace().catch(report);
-// Monitors come from a PowerShell query (~0.5 s): they only fill the display choice, so they do not hold the reveal.
-loadMonitors().then(() => { if (!document.activeElement || document.activeElement === document.body) renderDetail(); }).catch(report);
-await Promise.all([loadPackages(), loadHost(), loadPanelFreshness(), loadJobs(), loadRun()]).catch(report);
-await loadProjects().catch(report);
 // Plugins and Settings are standalone routes; legacy ?page= links are consumed once.
 const navigationRequest=initialNavigationRequest;
 if(navigationRequest.page==='plugins'&&location.pathname!=='/plugins/'&&!navigationRequest.maintenance){location.replace('/plugins/');}
 if(navigationRequest.page==='settings'&&location.pathname!=='/settings/'&&!navigationRequest.maintenance){const destination=new URL(navigationRequest.cleanUrl);destination.pathname='/settings/';location.replace(destination.href);}
 if(navigationRequest.cleanUrl!==location.href)history.replaceState(null,'',navigationRequest.cleanUrl);
 const initialPage = ['plugins', 'settings'].includes(navigationRequest.page) ? navigationRequest.page : 'projects';
-await showPage(initialPage).catch(report);
+// The server already painted the destination frame. Hydrate independent surfaces concurrently;
+// projects need workspace identity and job overlays, not packages, native scans or menu discovery.
+const identityReady = Promise.all([
+  api('GET', '/api/ping').then(ping => { state.repo = ping.workspace ?? ''; }),
+  loadWorkspace(), loadJobs(),
+]).catch(report);
+const pageReady = showPage(initialPage).catch(report);
+void loadNavigation().catch(report);
+void identityReady.then(async () => {
+  await Promise.all([loadProjects(), loadRun()]);
+  // Keep the HTTP/1 connection pool available for interactions rather than launching
+  // every scan at once (the SSE stream also owns a connection).
+  await Promise.all([loadPackages(), loadHost(), loadPanelFreshness()]);
+  await loadMonitors();
+  if (!document.activeElement || document.activeElement === document.body) renderDetail();
+}).catch(report);
+await pageReady;
 if(navigationRequest.job)await openJobInActivity(navigationRequest.job);
-await loadNavigation().catch(report);
-// Reveal only the fully populated layout, after its web fonts settle, so refresh has no card or text jumps.
-await Promise.race([document.fonts.ready, new Promise((resolve) => setTimeout(resolve, 1500))]);
 document.body.classList.remove('workspace-pending');
 document.body.removeAttribute('data-xrb-scrollbar');
 connect();

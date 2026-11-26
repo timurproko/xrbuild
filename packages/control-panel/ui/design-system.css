@@ -67,7 +67,6 @@ html.xrb-overlay-scrollbars::-webkit-scrollbar, html.xrb-overlay-scrollbars *::-
 html { overflow-y: auto; }
 html:has(dialog:modal) { overflow: hidden; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font-sans); }
-body.workspace-pending .xrb-app-bar, body.workspace-pending .top, body.workspace-pending main { visibility: hidden; }
 code, .mono { font-family: var(--font-mono); font-size: .88em; }
 h1, .xrb-brand { margin: 0; font-size: 1.15rem; line-height: 1.5; letter-spacing: -.01em; font-weight: 700; }
 h2, .label, .xrb-section-label { margin: 0; font-size: .74rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
