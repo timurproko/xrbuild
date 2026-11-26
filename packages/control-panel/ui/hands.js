@@ -1,6 +1,7 @@
 import { mountToolNavigation } from './navigation.js';
 import { mountHandsShell } from './hands-shell.js';
 import { mountProviderRecorder } from './hands-recorder.js';
+import { mountHandsPostprocessing } from './hands-postprocessing.js';
 import { handsEditorRevisions } from './hands-editor-revisions.js';
 const $ = id => document.getElementById(id), key = p => p ? `${p.owner}/${p.id}` : '';
 let snapshot = null, view = null, adjustments = null, tools = null, disposed = false, profileKey = '', profileGeneration = 0, writes = 0;
@@ -79,6 +80,7 @@ $('hands-form').addEventListener('submit', async event => {
 });
 const navigation = mountToolNavigation($('hands-menu-button'), $('hands-menu'), { origin: location.origin, current: 'hands' });
 const disposeShell = mountHandsShell({ resetView: () => view?.resetView(), setViewOptions: options => view?.setViewOptions(options) });
+const postprocessing = mountHandsPostprocessing($('hands-postprocessing-root'));
 try {
   const { createHandsView } = await import('./hands-view.js');
   view = createHandsView({ canvas: $('hands-canvas'), viewport: $('hands-viewport'),
@@ -143,5 +145,5 @@ const deliveryTimer = setInterval(() => {
   const generation = profileGeneration, read = ++deliveryRead, epoch = adjustments?.deliveryEpoch;
   void request('GET').then(data => { if (!disposed && !writes && read === deliveryRead && generation === profileGeneration) { adjustments?.updateDelivery(data.delivery, data.deliveryState, data.revision, epoch); void applyViewProfile(data, generation); } }).catch(() => {});
 }, 1000);
-addEventListener('pagehide', () => { disposed = true; clearInterval(deliveryTimer); events.close(); recorder.dispose(); tools?.dispose(); adjustments?.dispose(); navigation?.(); disposeShell(); view?.dispose(); }, { once: true });
+addEventListener('pagehide', () => { disposed = true; clearInterval(deliveryTimer); events.close(); recorder.dispose(); tools?.dispose(); adjustments?.dispose(); postprocessing.dispose(); navigation?.(); disposeShell(); view?.dispose(); }, { once: true });
 await load();
