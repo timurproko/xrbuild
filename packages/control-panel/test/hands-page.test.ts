@@ -26,6 +26,16 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(page, /view\.active \|\| view\.replaying/);
 });
 
+test('adjustment groups are direct standard sections, retain controls and only the size hint', async () => {
+  const component = await fs.readFile(path.join(ui, 'hands-adjustments.js'), 'utf8');
+  assert.equal((component.match(/<section class="xrb-sidebar-section"/g) ?? []).length, 2);
+  assert.doesNotMatch(component, /class="card|Drawing only|X right/);
+  assert.match(component, /Changes where the hand touches/);
+  assert.equal((component.match(/Reset to defaults/g) ?? []).length, 2);
+  assert.match(component, /class="small" data-reset="geometry"/);
+  assert.match(component, /class="small" data-reset="appearance"/);
+});
+
 test('stale diagnostic tool declarations cannot register or return to navigation', () => {
   for (const route of ['/hands-diagnostics/', '/hand-tracking/', '/hands-diagnostics/nested/']) {
     const tool = { id: 'old-tool', label: 'Retired', route, module: 'old.mjs' };

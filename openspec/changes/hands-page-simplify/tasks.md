@@ -12,8 +12,8 @@ Each group corresponds to the same-order Implementation outcome in the draft PR.
 
 ## 2. Standard direct adjustment sections
 
-- [ ] 2.1 Flatten Position and size and Appearance into the existing right panel using Apps heading/section styles and shared secondary Reset to defaults actions; verify all existing controls remain and no nested cards exist in focused UI tests.
-- [ ] 2.2 Remove axis/drawing helper prose while retaining the size/contact hint; update adjustment UI documentation and assertions and capture both sections in isolated desktop/narrow real-browser screenshots.
+- [x] 2.1 Flatten Position and size and Appearance into the existing right panel using Apps heading/section styles and shared secondary Reset to defaults actions; verify all existing controls remain and no nested cards exist in focused UI tests.
+- [x] 2.2 Remove axis/drawing helper prose while retaining the size/contact hint; update adjustment UI documentation and assertions and capture both sections in isolated desktop/narrow real-browser screenshots.
 
 ## 3. Committed adjustments save and deliver with retry and conflict safety
 
