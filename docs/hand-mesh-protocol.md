@@ -24,6 +24,8 @@ Two mid-detail hands (2,859 vertices and 5,692 triangles each) with positions, n
 
 The SDK connects once with authenticated `POST /connect`, then sends frames with `POST /frame`; both carry the frame JSON and `Authorization: Bearer <token>`. Exact app/dev origins are checked; preflight permits only POST and the two required headers. `/connect` assigns a consumer epoch and retires the prior one; old frames cannot re-activate it. Credentials never enter URLs, logs or portable output.
 
+A frame may include a bounded `drawingStatus` string so the selector can show actual SDK fallback independently of sidecar readiness. Two seconds without consumer requests stops the optional child, allowing brief page replacement without overlapping consumers. A later disconnected client gets skeleton fallback/relaunch guidance rather than stalled input.
+
 A successful frame response is the binary result packet. HTTP 204 means no usable mesh yet, with an exposed `x-xrb-mesh-status` reason. A superseded newest-pending request is released immediately. The child and SDK paths each hold at most one frame in flight plus one newest pending snapshot. The renderer never awaits a response in its draw/input loop.
 
 Late (over 33 ms from dispatch), malformed, retired-revision/epoch or wrong-hand results are discarded. A previous mesh is drawable only while fresh and within 10 mm maximum keypoint displacement of its associated pose; otherwise draw the ordinary skeleton and show fallback. No detection/hand loss immediately invalidates geometry even during skeleton grace. A physically stuck child gets a two-second frame watchdog, rather than accumulating a FIFO. Keep source confidence separate from fit residuals; this minimum frame contract does not invent confidence.

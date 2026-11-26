@@ -217,10 +217,17 @@ export class Panel {
   private nativeHandPolicy: 'off' | 'native' | null = null;
   private meshRun: HandMeshRun | null = null;
   private meshStatus = 'None';
+  private activeMesh: { owner: string; id: string; label: string } | null = null;
   private meshCleanup: Promise<void> = Promise.resolve();
+  private meshCleanupFailed = false;
   private async stopMesh(): Promise<void> {
-    const run = this.meshRun; this.meshRun = null;
-    if (run) { this.meshCleanup = run.stop(); await this.meshCleanup; }
+    const run = this.meshRun; this.meshRun = null; this.activeMesh = null;
+    if (run) {
+      this.meshCleanup = run.stop().catch(() => {
+        this.meshCleanupFailed = true; this.meshStatus = 'Skeleton fallback: mesh child cleanup failed; restart the panel before using mesh';
+      });
+      await this.meshCleanup;
+    }
   }
   private handRuntimeStates = new Map<string, string>();
   private savingHands = false;
@@ -1534,9 +1541,9 @@ export class Panel {
     this.setLiveHands(nativeHands);
     selection.handProfileRun = nativeHands.envelope;
     await this.meshCleanup;
-    this.meshStatus = 'None';
+    this.meshStatus = this.meshCleanupFailed ? 'Skeleton fallback: prior mesh cleanup failed; restart the panel before using mesh' : 'None';
     let meshRuntime: import('../../sdk/src/hand-mesh-protocol.ts').MeshRuntime | null = null;
-    if (selection.handPolicy !== 'off') {
+    if (selection.handPolicy !== 'off' && !this.meshCleanupFailed) {
       try {
         const choice = meshChoice((await readHandsState(this.repo, this.workspace)).raw.postprocessing);
         if (choice.selected) {
@@ -1544,8 +1551,8 @@ export class Panel {
           const plugin = registry.plugins.find(p => meshKey(p) === meshKey(choice.selected!));
           const saved = choice.settings[meshKey(choice.selected)];
           if (!plugin?.available || !saved || saved.version !== plugin.declaration.settingsVersion) throw new Error('Selected mesh plugin is missing, unavailable or needs settings review');
-          const run = new HandMeshRun(() => ['https://app.local', ...(this.panelUrl ? [new URL(this.panelUrl).origin] : []), ...(this.runner.state().devUrl ? [new URL(this.runner.state().devUrl!).origin] : [])], status => { this.meshStatus = status; });
-          this.meshRun = run; this.meshStatus = 'Starting';
+          const run = new HandMeshRun(() => ['https://app.local', ...(this.panelUrl ? [new URL(this.panelUrl).origin] : []), ...(this.runner.state().devUrl ? [new URL(this.runner.state().devUrl!).origin] : [])], status => { if (this.meshRun === run) this.meshStatus = status; });
+          this.meshRun = run; this.activeMesh = { owner: plugin.owner, id: plugin.id, label: plugin.label }; this.meshStatus = 'Starting';
           meshRuntime = await run.start(plugin, saved.values);
         }
       } catch (error) { this.meshStatus = `Skeleton fallback: ${(error as Error).message}`; await this.stopMesh(); }
@@ -1874,7 +1881,8 @@ export class Panel {
         let choice; let problem: string | null = null;
         try { choice = meshChoice(state.raw.postprocessing); } catch (e) { problem = (e as Error).message; }
         sendJson(res, 200, { plugins: registry.plugins.map(({ program, ...p }) => ({ ...p, declaration: { ...p.declaration, program: undefined, args: undefined } })),
-          revision: state.revision, registryRevision: registry.revision, choice, problem, status: this.meshRun?.status ?? this.meshStatus });
+          revision: state.revision, registryRevision: registry.revision, choice, problem, status: this.meshRun?.status ?? this.meshStatus,
+          running: this.runner.busy && this.nativeHandPolicy !== null, active: this.activeMesh });
         return true;
       }
       case 'PUT hands/postprocessing': {

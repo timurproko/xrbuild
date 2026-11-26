@@ -22,6 +22,8 @@ Implementation approved for the reduced scope. PR #50 is merged; the page mount 
 
 ## 4. Selector component and end-to-end proof
 
+The independent component, API, browser coverage and proof pictures are complete. Task 4.1 remains open only for the production mount in PR #51's `hands-postprocessing-root` slot after that page lands.
+
 - [ ] 4.1 Add the root-scoped Post-processing component after Source and before Position and size, with None/installed selector, settings, Save, status and the single-line context notice; isolated browser tests cover empty/missing states, independent drafts and conflicts without a page redesign.
-- [ ] 4.2 Connect saved-next-run selection and actual run status; one fake-sidecar integration test demonstrates automatic mesh, visible fallback, unchanged interaction, next-run switching and cleanup with no hardware or user-state access.
-- [ ] 4.3 Finish concise user documentation and isolated component proofs; confirm all owned processes are stopped and report actual targeted checks without claiming a real processor or model benchmark.
+- [x] 4.2 Connect saved-next-run selection and actual run status; one fake-sidecar integration test demonstrates automatic mesh, visible fallback, unchanged interaction, next-run switching and cleanup with no hardware or user-state access.
+- [x] 4.3 Finish concise user documentation and isolated component proofs; confirm all owned processes are stopped and report actual targeted checks without claiming a real processor or model benchmark.

@@ -595,9 +595,10 @@ export class Xrb {
       this.cursorObject.update(this.interaction, this.view.panel, eye, now, this.lastFrameAt > 0 ? (now - this.lastFrameAt) / 1000 : 1 / 60);
     }
     this.handsObject.update(this.currentHands, this.view.panel);
-    if (this.meshClient) this.handsObject.updateMeshes(this.meshClient.update(this.currentHands, handSampleMs, this.handIngress.generation), this.view.panel);
     const l = this.currentEyes.left, r = this.currentEyes.right;
     this.pointer?.update(this.currentHands, [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2, (l[2] + r[2]) / 2], this.display);
+    // Optional mesh dispatch/upload is after every interaction and pointer update, never an input gate.
+    if (this.meshClient) this.handsObject.updateMeshes(this.meshClient.update(this.currentHands, handSampleMs, this.handIngress.generation), this.view.panel);
     const t0 = performance.now();
     if (xr) this.drawXr(scene, camera);
     else this.view.render(scene, camera, this.currentEyes);
