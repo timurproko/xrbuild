@@ -19,7 +19,7 @@ test('rebuild presentation has stable running, success and failure states',()=>{
   const failed=rebuildPresentation({id:4,state:'failed',error:'compile failed',lines:['error']});
   assert.equal(failed.state,'failed');assert.equal(failed.title,'Rebuild failed');assert.equal(failed.message,'compile failed');assert.equal(failed.succeeded,false);
   const startFailure=rebuildPresentation(null,'request failed');
-  assert.equal(startFailure.state,'failed');assert.equal(startFailure.output,'The job could not start.');assert.equal(startFailure.viewJobDisabled,true);
+  assert.equal(startFailure.state,'failed');assert.equal(startFailure.output,'request failed');assert.equal(startFailure.viewJobDisabled,true);
 });
 
 test('update presentation follows its steps and reports Git refusals and the result',()=>{
@@ -35,10 +35,12 @@ test('update presentation follows its steps and reports Git refusals and the res
   const summary='Core: 1111111 → 2222222. Workspace: 3333333 → 4444444. Restart required; Update did not restart the panel.';
   const done=rebuildPresentation({id:7,kind:'update',state:'done',lines:['step rebuild'],result:{state:'updated',summary}});
   assert.equal(done.title,'Updated');assert.equal(done.message,summary);assert.equal(done.succeeded,true);
+  const needsRestart=rebuildPresentation({id:7,kind:'update',state:'done',result:{restartRequired:true,summary},lines:[]});
+  assert.equal(needsRestart.title,'Restart required');assert.equal(needsRestart.succeeded,false,'autoclose must not hide the Restart control');
   const current=rebuildPresentation({id:7,kind:'update',state:'done',lines:['step fetch'],result:{state:'up-to-date',summary:'Workspace already up to date (1111111). Nothing was rebuilt.'}});
   assert.equal(current.title,'Already up to date','success refers to both repositories after fresh fetches');
   const notStarted=rebuildPresentation({kind:'update',state:'running',lines:[]},'The workspace is not a Git clone.');
-  assert.equal(notStarted.title,'Update needs attention');assert.equal(notStarted.message,'The workspace is not a Git clone.');assert.equal(notStarted.output,'The job could not start.');
+  assert.equal(notStarted.title,'Update needs attention');assert.equal(notStarted.message,'The workspace is not a Git clone.');assert.equal(notStarted.output,'The workspace is not a Git clone.');
 });
 
 test('the behind hint and the update menu item read a status that never fetches',async()=>{
@@ -82,7 +84,10 @@ test('all host rebuild entry points consume one full dialog component',async()=>
   assert.match(component,/presentation\.succeeded && autoclose\.checked && dialog\.open/);
   assert.match(component,/destination\.searchParams\.set\('job', String\(job\.id\)\)/);
   assert.match(navigation,/import \{rebuildHostInPlace,updateInPlace\} from '\.\/rebuild-dialog\.js'/);
-  assert.match(app,/import \{rebuildHostInPlace,updateInPlace,updateTooltip\} from '\.\/rebuild-dialog\.js'/);
+  assert.match(app,/import \{rebuildHostInPlace,updateInPlace,updateTooltip,followStartedJobInPlace\} from '\.\/rebuild-dialog\.js'/);
+  assert.match(component,/data-xrb-rebuild-retry hidden>Retry/);
+  assert.match(component,/data-xrb-rebuild-restart hidden>Restart/);
+  assert.doesNotMatch(component,/The job could not start\./);
   assert.doesNotMatch(navigation,/data-xrb-rebuild-output|function rebuildDialog|function renderRebuild/);
   assert.doesNotMatch(app,/data-xrb-rebuild-output|id="host-rebuilding"/);
   assert.doesNotMatch(index,/id="host-rebuilding"|data-xrb-rebuild-dialog/);

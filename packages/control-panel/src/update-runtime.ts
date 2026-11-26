@@ -7,6 +7,11 @@ export async function setupUpdatedCore(core: string, ctx: JobContext): Promise<v
   await ctx.run(process.execPath, [path.join(core, 'tools/panel-bootstrap/update-setup.mjs')], { cwd: core });
 }
 
+/** Service preparation also loads post-pull code rather than the panel's cached modules. */
+export async function rebuildUpdatedServices(core: string, workspace: string, ctx: JobContext): Promise<void> {
+  await ctx.run(process.execPath, [path.join(core, 'packages/control-panel/src/update-services.ts'), `--workspace=${workspace}`], { cwd: core });
+}
+
 export async function rebuildUpdatedSources(core: string, workspace: string, ctx: JobContext, run = runProcess): Promise<string[]> {
   const args = [path.join(core, 'packages/control-panel/src/update-rebuild.ts'), `--workspace=${workspace}`];
   ctx.line(`> ${process.execPath} ${args.join(' ')}`);

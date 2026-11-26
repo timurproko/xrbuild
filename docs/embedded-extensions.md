@@ -259,7 +259,13 @@ types, authored/mocked algorithm/lifecycle fixtures, user-state/link/revision is
 Public-only, read-only-source installation validates the product graph without a private clone, model/toolchain download, cameras or
 inference. Distribution and physical-device/model acceptance remain separate from local graph/module validation.
 
-### Explicit installed public services
+### Application components and Rebuild
+
+After a pull changes installed application inputs, **Rebuild** refreshes their frozen public component snapshot before compiling native output. **Run** and **Build** perform the same needed preparation automatically, with visible steps and retained output in the action's job. **Update** prepares changed components through freshly loaded code before finishing its native rebuild. A failed preparation can be retried at the same Git commit; no separate service-setup action or page is needed in normal use.
+
+New immutable component generations normally reload while idle without a panel restart. Changed already-executed in-place code or tool identity can still require restart; the job keeps its output and offers **Restart** there. Unsafe/foreign records, modified installed output and active or leftover locks are preserved, not automatically reset. Resolve the concrete ownership/lock problem before retrying.
+
+For manual recovery only, from the repository root use `node tools/embedded/embedded.ts services --workspace=<integration-workspace>` with the exact integration workspace shown in the panel header (not a separately selected projects repository). This needs Node 22+, Corepack and access to the pinned dependencies, not an administrator prompt or native compiler. The tool unavailable-view setup button remains a last-resort recovery path.
 
 `pnpm setup:services --workspace=<writable-root>` (optional `--core=<product-root>`) or the explicit `POST /api/plugins/setup-bundled`
 installs/builds the public embedded graph in a fresh writable snapshot and explicitly activates that completed generation.

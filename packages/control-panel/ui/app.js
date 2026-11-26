@@ -4,7 +4,7 @@ import { SettingsWriter } from './settings-writer.js';
 import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
 import {requestedNavigation,menuKeyboard,renderNavigationMenu,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
-import {rebuildHostInPlace,updateInPlace,updateTooltip} from './rebuild-dialog.js';
+import {rebuildHostInPlace,updateInPlace,updateTooltip,followStartedJobInPlace} from './rebuild-dialog.js';
 import {enhanceHelpText,iconSvg,installDropdowns,installIcons,installNumberSteppers,installTabs,installTooltips,openFloating,renderField,resumeAnimations,setFieldError,setPageIdentity,setRevealed,stabilizePanelHeight,transitionPanelHeight,updateRebuildChip,updateRestartChip} from './design-system.js';
 import {logicalInputNames} from './provider-choice.js';
 import {bumpPackageVersion, nextPublicationVersion} from './package-version.js';
@@ -143,6 +143,11 @@ function report(e) {
   console.error(e);
   const rawMessage = String(e?.message ?? e ?? 'Unknown error');
   const blocked = e?.data?.details && typeof e.data.details.reason === 'string' ? e.data.details : null;
+  if (e?.data?.details?.needsRebuild) {
+    void ask({ title: 'Rebuild needed', message: rawMessage, ok: 'Rebuild', cancel: 'Close' })
+      .then(yes => { if (yes) return rebuildHost(); }).catch(report);
+    return;
+  }
   if (blocked?.restart) {
     // Waiting cannot clear this cause; offer the one action that does.
     void ask({ title: 'Restart needed', message: rawMessage, ok: 'Restart', cancel: 'Close' })
@@ -1630,6 +1635,7 @@ function packageSetupStatus(p) {
 }
 function packageAction(p) {
   const pk = p.packaging;
+  if (p.componentsNeedRebuild) return { button: '<button type="button" id="act-package" class="action-button">Build</button>', details: '' };
   if (!pk?.available) return { button: '', details: '' };
   const setup = packageSetupStatus(p);
   const setupNeeded = setup.state === 'setup-required' || setup.state === 'unavailable';
@@ -1726,7 +1732,17 @@ async function startManagedRun(p, mode, flat, request) {
   renderDetail(true);
   renderRun();
   try {
-    await request();
+    const started = await request();
+    if (started?.kind === 'run' || started?.kind === 'preview-run') {
+      const done = await followStartedJobInPlace(location.origin, started, {
+        onRetry: () => startManagedRun(p, mode, flat, request),
+        onJob(job) { state.jobs.set(job.id, job); renderJobsSoon(); },
+        onViewJob: job => void openJobInActivity(job.id),
+      });
+      if (done?.state !== 'done') {
+        state.run = previousRun; renderRun(); renderDetail(); return;
+      }
+    }
     await loadRun();
     renderDetail();
   } catch (error) {
@@ -1895,7 +1911,7 @@ function renderDetail(force = false) {
   renderPackages();
   $('#act-package')?.addEventListener('click', action(async () => {
     try {
-      const job = await confirmable(`${projectUrl(p.id)}/package`, { version: $('#act-version').value.trim() });
+      const job = await confirmable(`${projectUrl(p.id)}/package`, { version: $('#act-version')?.value.trim() });
       if (job) showProgressDialog('package', job);
     } catch (error) {
       if (!(error instanceof ApiError) || !error.data?.details?.needsSetup) throw error;
@@ -1972,8 +1988,9 @@ function renderDetail(force = false) {
       const monitor = Math.max(0, Number(p.manifest?.plugins?.desktop?.monitor) || 0);
       const token = crypto.randomUUID();
       return startManagedRun(p, mode, flat, async () => {
-        await api('POST', `${projectUrl(p.id)}/preview`, { mode, flat, fullscreen, monitor, token });
+        const started = await api('POST', `${projectUrl(p.id)}/preview`, { mode, flat, fullscreen, monitor, token });
         sessionStorage.setItem(previewTokenKey(p), token);
+        return started;
       });
     })
     : action(() => {
@@ -2353,7 +2370,7 @@ function renderHost() {
   const chip = $('#host-chip');
   if (!h) return;
   const needsRebuild = updateRebuildChip(chip, h, `rebuilt ${ago(h.exeMs)}`);
-  chip.title = h.hostProblem ?? (h.exists && h.staleHostPlugins?.length ? `plugins from an older build sit next to xrb-host.exe (${h.staleHostPlugins.join(', ')}): rebuild to use selected plugin roots`
+  chip.title = h.componentsNeedRebuild ? 'Rebuild prepares changed application components and any outdated native output.' : h.hostProblem ?? (h.exists && h.staleHostPlugins?.length ? `plugins from an older build sit next to xrb-host.exe (${h.staleHostPlugins.join(', ')}): rebuild to use selected plugin roots`
     : h.exists && h.outdated ? `host sources or plugins changed (${h.newestSource ?? 'source membership'}): ${h.exe}` : `xrb-host.exe (${h.runtimeOrigin === 'cache' ? 'user cache' : 'product/source build'}): ${h.exe}`);
   // Only a problem is worth a chip; the matching dot identifies its action in the menu.
   const rebuildDot = $('#host-rebuild-dot');
@@ -3590,9 +3607,11 @@ function renderProgressDialog() {
       : setup ? 'You can build the package now.' : 'The package is ready.');
   const output = $('#job-progress-output');
   output.textContent = job?.lines?.length ? job.lines.slice(setup ? -200 : -20).join('\n')
-    : progressError ? 'The job could not start.' : 'Waiting for output…';
+    : progressError || 'Waiting for output…';
   output.scrollTop = output.scrollHeight;
   $('#job-progress-view-job').disabled = !!progressError && !job;
+  $('#job-progress-restart').hidden = running || !(job?.result?.restart || job?.result?.restartRequired);
+  $('#job-progress-retry').hidden = running || !failed || !$('#job-progress-restart').hidden;
   $('#job-progress-actions').classList.toggle('is-building', running && !setup);
   $('#job-progress-autoclose').closest('label').hidden = setup;
   if (!setup && job?.state === 'done' && $('#job-progress-autoclose').checked) dialog.close();
@@ -3665,6 +3684,12 @@ $('#job-progress-view-job').addEventListener('click', () => {
   void openJobInActivity(progressJobId);
 });
 $('#job-progress-close').addEventListener('click', () => $('#job-progress').close());
+$('#job-progress-restart').addEventListener('click', () => { $('#job-progress').close(); void restartPanel().catch(report); });
+$('#job-progress-retry').addEventListener('click', () => {
+  const job = state.jobs.get(progressJobId);
+  $('#job-progress').close();
+  if (job?.projectId === selected()?.id) $('#act-package-setup, #act-package')?.click();
+});
 $('#job-progress').addEventListener('cancel', (event) => { if ($('#job-progress-actions').classList.contains('is-building')) event.preventDefault(); });
 $('#jobs-clear').addEventListener('click', action(async (e) => {
   e.preventDefault();
