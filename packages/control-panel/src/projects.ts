@@ -30,7 +30,7 @@ export interface Manifest {
   /** what the app is built for: `host` (unset; xrb-host on a display) or `webxr` (a standalone headset, no host or providers) */
   target?: BuildTarget;
   /** providers per role, built in or plugin names (`xrb-host --list-plugins`); unset: none, desktop, standalone */
-  /** Enabled input methods; mouse and keyboard are browser inputs, other names are host providers. */
+  /** Logical methods: mouse, keyboard, hand. Historical provider names are read as hand. */
   inputs?: string[];
   /** Legacy single host input (read when inputs is absent). */
   input?: string;
@@ -170,9 +170,25 @@ export function validateManifest(m: unknown, projectDir: string): FieldError[] {
   return errors;
 }
 
-/** Which provider runs each role for a project (unset: no hands, the desktop display, standalone). */
+/** Any old concrete hand input means the single globally selected Hand, even if no longer installed. */
+export function logicalInputs(inputs: string[]): string[] {
+  return [...new Set(inputs.filter(name => name && name !== 'none').map(name => name === 'mouse' || name === 'keyboard' ? name : 'hand'))];
+}
+export function canonicalInputs(m: Manifest): Manifest {
+  const next = structuredClone(m);
+  next.inputs = selectionOf(m).inputs;
+  delete next.input;
+  if (next.platformSettings) for (const settings of Object.values(next.platformSettings)) {
+    if (settings.inputs !== undefined || settings.input !== undefined) {
+      settings.inputs = logicalInputs(settings.inputs ?? ['mouse', 'keyboard', ...(settings.input && settings.input !== 'none' ? [settings.input] : [])]);
+      delete settings.input;
+    }
+  }
+  return next;
+}
+/** Logical selection; native runtime resolution happens once at managed execution preparation. */
 export function selectionOf(m: Manifest): RoleSelection {
-  const inputs = m.inputs ?? ['mouse', 'keyboard', ...(m.input && m.input !== 'none' ? [m.input] : [])];
+  const inputs = logicalInputs(m.inputs ?? ['mouse', 'keyboard', ...(m.input && m.input !== 'none' ? [m.input] : [])]);
   return { input: inputs.find((n) => n !== 'mouse' && n !== 'keyboard') ?? 'none', inputs,
     display: m.display ?? 'desktop', platform: m.platform ?? '' };
 }
@@ -350,6 +366,7 @@ export class ManifestConflictError extends Error {}
 export async function saveManifest(dir: string, manifest: Manifest, expectedMtimeMs?: number): Promise<{ errors: FieldError[]; mtimeMs: number }> {
   const errors = validateManifest(manifest, dir);
   if (errors.length) return { errors, mtimeMs: expectedMtimeMs ?? 0 };
+  manifest = canonicalInputs(manifest);
   const file = path.join(dir, MANIFEST);
   if (expectedMtimeMs !== undefined) {
     const now = await fs.stat(file).then((s) => s.mtimeMs, () => 0);

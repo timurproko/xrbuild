@@ -70,7 +70,7 @@ test('roles and plugin sections; the identity is the platform section (the packa
   assert.deepEqual(fields({ name: 'D', kind: 'app', package: { id: 'D', version: '1.0' } }), ['package'], 'the old field is not written back');
   assert.deepEqual(selectionOf({ name: 'D', kind: 'app' }), { input: 'none', inputs: ['mouse', 'keyboard'], display: 'desktop', platform: '' });
   assert.deepEqual(selectionOf({ name: 'D', kind: 'app', inputs: ['mouse', 'tracker', 'simulated'] }),
-    { input: 'tracker', inputs: ['mouse', 'tracker', 'simulated'], display: 'desktop', platform: '' });
+    { input: 'hand', inputs: ['mouse', 'hand'], display: 'desktop', platform: '' });
   assert.deepEqual(fields({ name: 'D', kind: 'app', inputs: ['tracker', 'tracker'] }), ['inputs']);
   assert.deepEqual(fields({ name: 'D', kind: 'app', inputs: ['bad name'] }), ['inputs']);
   assert.deepEqual(identityOf({ name: 'D', kind: 'app', platform: 'station', plugins: { station: { id: 'X' } } }), { id: 'X' });

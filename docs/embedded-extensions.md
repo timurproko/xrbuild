@@ -447,6 +447,15 @@ a missing/failed source stays selected and unavailable, never replaced. Installe
 connected: idle providers are not started, and replay still requires a configured recording. The picker is not
 a live viewer; offsets, skeleton size/appearance and the live laboratory are subsequent changes.
 
+Application `inputs` contain only `mouse`, `keyboard` and `hand`. Every historical concrete hand-provider
+name (including unknown names or several sources) reads as one Hand and launches the global source; there
+is no per-app source assignment or adoption phase. Discovery/run do not rewrite manifests. The next settings
+Save canonicalizes inputs and saved platform input choices, removes singular `input`, and retains all
+`plugins.<provider>` configuration. Those settings still reach that provider when it is globally selected.
+Embedded personal run records and working manifests follow the same logical-input rules; installed sources
+remain immutable. Reverting to an older core after a settings Save may require restoring the old manifest's
+concrete input from version control; old per-app provider parity is intentionally not retained.
+
 ## Native builds and providers
 
 ### Host cache and runtime selection

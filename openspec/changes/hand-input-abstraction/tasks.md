@@ -22,9 +22,9 @@ Implementation is approved with the simplified global input policy. Groups match
 
 ## 4. Simple input normalization
 
-- [ ] 4.1 Normalize every concrete input name to Hand in memory across manifests, platform choices and personal run settings, collapsing multiple providers; tests prove reads do not rewrite files and launches use the global source.
-- [ ] 4.2 Canonicalize inputs on the next app settings Save without adoption steps or semantics versions; tests preserve plugins configuration and normalize saved platform choices.
-- [ ] 4.3 Preserve embedded effective-manifest refresh/copy/personal-field rules and schema-bound provider overrides; fixtures cover both origins and document migration/rollback without modifying installed sources or private integrations.
+- [x] 4.1 Normalize every concrete input name to Hand in memory across manifests, platform choices and personal run settings, collapsing multiple providers; tests prove reads do not rewrite files and launches use the global source.
+- [x] 4.2 Canonicalize inputs on the next app settings Save without adoption steps or semantics versions; tests preserve plugins configuration and normalize saved platform choices.
+- [x] 4.3 Preserve embedded effective-manifest refresh/copy/personal-field rules and schema-bound provider overrides; fixtures cover both origins and document migration/rollback without modifying installed sources or private integrations.
 
 ## 5. Shared runtime ingress and resolved package closure
 
