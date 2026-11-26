@@ -7,6 +7,6 @@ export function toolPanelOrigin():string{
 export function setupNavigation():()=>void{
   const origin=toolPanelOrigin();
   return mountToolNavigation(document.getElementById('panel-menu-button')!,document.getElementById('panel-menu')!,{
-    origin,current:'hand-tracking',tools:[{id:'hand-tracking',label:'Hands',url:location.origin+location.pathname}]
+    origin,current:'hand-tracking',tools:[{id:'hand-tracking',label:'Acquisition diagnostics',url:location.origin+location.pathname}]
   });
 }

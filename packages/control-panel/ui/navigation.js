@@ -38,7 +38,7 @@ export function toolDestination(url,origin,passPanelOrigin=true) {
 }
 export function managedToolDestination(route,origin) {
   const safe=panelOrigin(origin);
-  if(!safe||typeof route!=='string'||!/^\/(?:[a-z][a-z0-9-]*\/)+$/.test(route)||['/api/','/plugins/','/settings/','/preview/','/vendor/','/sdk/','/design-system/','/design/'].some(prefix=>route.startsWith(prefix)))throw new Error('Invalid managed tool destination');
+  if(!safe||typeof route!=='string'||!/^\/(?:[a-z][a-z0-9-]*\/)+$/.test(route)||['/hands/','/hand-tracking/','/api/','/plugins/','/settings/','/preview/','/vendor/','/sdk/','/design-system/','/design/'].some(prefix=>route.startsWith(prefix)))throw new Error('Invalid managed tool destination');
   return new URL(route,safe).href;
 }
 /** A stale panel already has one actionable state: restart to load its newer code. */

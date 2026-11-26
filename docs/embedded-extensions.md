@@ -445,7 +445,8 @@ with the execution context is displayed as the initial selection and pinned on e
 several real sources require a choice; synthetic/replay sources never become automatic defaults. Once saved,
 a missing/failed source stays selected and unavailable, never replaced. Installed does not mean a device is
 connected: idle providers are not started, and replay still requires a configured recording. The picker is not
-a live viewer; offsets, skeleton size/appearance and the live laboratory are subsequent changes.
+a live viewer; offsets, skeleton size/appearance and the live laboratory are subsequent changes. New combined
+workspace templates ignore `config/hands/`; existing workspace ignore files are not rewritten automatically.
 
 Application `inputs` contain only `mouse`, `keyboard` and `hand`. Every historical concrete hand-provider
 name (including unknown names or several sources) reads as one Hand and launches the global source; there

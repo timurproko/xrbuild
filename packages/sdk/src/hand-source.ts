@@ -1,5 +1,5 @@
 import { HandInput } from './hands.ts';
-import type { HandsMessage } from './protocol.ts';
+import { ALL_CAPABILITIES, type HandCapabilities, type HandsMessage } from './protocol.ts';
 
 export type HandSourcePolicy = 'off' | 'native' | 'webxr';
 export function handSourcePolicy(hosted: boolean, search = '', bundled?: unknown): HandSourcePolicy {
@@ -14,15 +14,18 @@ export function prepareHandFrame(frame: HandsMessage): HandsMessage { return fra
 
 export class HandFrameIngress {
   generation = 0;
+  capabilities: HandCapabilities = ALL_CAPABILITIES;
   private closed = false;
   private readonly input: HandInput;
   readonly policy: HandSourcePolicy;
   constructor(input: HandInput, policy: HandSourcePolicy) { this.input = input; this.policy = policy; }
   push(source: 'native' | 'webxr', frame: HandsMessage, capturePageMs: number, generation = this.generation): boolean {
     if (this.closed || source !== this.policy || generation !== this.generation) return false;
-    this.input.push(prepareHandFrame(frame), capturePageMs);
+    const prepared = prepareHandFrame(frame);
+    this.capabilities = prepared.capabilities ?? ALL_CAPABILITIES;
+    this.input.push(prepared, capturePageMs);
     return true;
   }
-  reset(now = performance.now()): void { this.generation++; this.input.reset(now); }
+  reset(now = performance.now()): void { this.generation++; this.input.reset(now); this.capabilities = ALL_CAPABILITIES; }
   close(now = performance.now()): void { this.closed = true; this.reset(now); }
 }

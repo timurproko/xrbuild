@@ -56,7 +56,7 @@ const app = createXrbApp(renderer, {
   camera: { position: [0, 0, 6], near: 0.05, far: 100 },
   autoStart: false,
 });
-scene.add(app.xrb.handsObject);                                // optional hand skeleton
+// Managed apps attach hands and the cursor automatically; no provider-specific wiring.
 new OrbitControls(app.camera, renderer.domElement);           // works with pinch-drag too
 app.setFrame(() => { /* update app objects here */ });
 app.start();                                                   // runtime owns resize and rendering
@@ -138,6 +138,19 @@ For a fixed placement use `{ mode: 'world', center, scale, quaternion }`
 (`scale` = scene units per metre).
 
 ## Hands
+
+### One provider-independent app API
+
+Enable **Hand** in the app's Input settings; choose its source once in **Hands**. Apps use the same
+`xrb.currentHands`, `xrb.sceneHands`, gesture events, `xrb.interaction` targets and standard drawing for native,
+WebXR and synthetic sources. App code never names, detects or branches on a concrete hand provider, and needs
+no changes when the source is switched. Providers may supply native pinch/grab/palm; the SDK derives missing
+gestures and scene-space palm data from the skeleton through this same API.
+
+`createXrbApp()` attaches the hand visual automatically, including fresh projects; `handVisual: false` opts out
+of drawing only, not input or interaction. Existing explicit attachment is harmless but unnecessary. The lower-level
+`createXrb()` has no scene and therefore still leaves scene attachment to its caller. Hand visibility follows data;
+enabling Hand does not invent application-specific interaction targets for arbitrary meshes.
 
 Managed applications select logical Hand; the panel's core **Hands** page owns one workspace-wide source choice.
 Old concrete provider input names simply mean Hand. No provider acquisition/filtering/calibration code changes:

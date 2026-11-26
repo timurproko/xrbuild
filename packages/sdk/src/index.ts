@@ -26,7 +26,7 @@ import { appLaunchContextFromLocation, appResumeProjectionFromLocation, type Cam
 import { loadReturnOverlay } from './return-overlay.ts';
 import type { ReturnControl } from './return-control.ts';
 import { PointerEmulation } from './pointer.ts';
-import { ALL_CAPABILITIES, type HandCapabilities, type PagePerformance, type PlatformInfo, type StatusMessage, type Vec3 } from './protocol.ts';
+import { type HandCapabilities, type PagePerformance, type PlatformInfo, type StatusMessage, type Vec3 } from './protocol.ts';
 import { toSceneHand, type SceneHand } from './scene-hands.ts';
 import { nominalEyes, panelCropPlanes, StereoRenderer, type AppCamera, type EyePair, type PanelMapping } from './stereo.ts';
 import { HandFrameIngress, handSourcePolicy } from './hand-source.ts';
@@ -440,10 +440,10 @@ export class Xrb {
 
   /**
    * What the input provider tracks natively (from its newest hand frame). Gestures work either way: without
-   * pinch or grab the SDK computes them from the keypoints. All true until the first frame and in a browser.
+   * pinch or grab the SDK computes them from the keypoints. All true until the first frame.
    */
   get handCapabilities(): HandCapabilities {
-    return this.channel?.hands?.capabilities ?? ALL_CAPABILITIES;
+    return this.handIngress.capabilities;
   }
 
   /**
@@ -736,6 +736,7 @@ export class Xrb {
     this.restoreCursor();
     this.disposeShell();
     this.cursorObject.removeFromParent();
+    this.handsObject.removeFromParent();
     this.returnControl?.dispose();
     this.resumeCover?.remove();
     this.resumeCover = null;
@@ -937,6 +938,8 @@ export interface XrbAppFrame {
 
 export interface XrbAppOptions {
   scene?: THREE.Scene;
+  /** Attach the provider-independent SDK skeleton automatically (default true). Does not gate input/interaction. */
+  handVisual?: boolean;
   projection?: CameraProjection;
   camera?: ManagedCameraOptions;
   xrb?: XrbOptions;
@@ -968,6 +971,7 @@ export class XrbAppRuntime {
     this.xrb = createXrb(renderer, options.xrb);
     this.xrb.bindMouse();
     this.scene.add(this.xrb.cursorObject);
+    if (options.handVisual !== false) this.scene.add(this.xrb.handsObject);
     this.offView = this.xrb.onView(this.onResize);
     this.offProjection = this.xrb.onProjection((projection) => this.setProjection(projection));
     this.offPreviewProjection = subscribePreviewProjection((projection) => this.setProjection(projection));

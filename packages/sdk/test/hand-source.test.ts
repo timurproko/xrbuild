@@ -34,6 +34,27 @@ test('source policy prevents WebXR injection, resets immediately and excludes re
   const webxr = new HandFrameIngress(input, 'webxr'); assert.equal(webxr.push('webxr', frame(50), 50), true);
 });
 
+test('native, synthetic-style skeleton-only and WebXR data expose the same app API with derived gestures', () => {
+  const apiKeys: string[][] = [];
+  for (const source of ['native', 'webxr'] as const) {
+    for (const capabilities of [0, 7]) {
+      const input = new HandInput({ smoothing: false, prediction: false, nativePinch: true });
+      const ingress = new HandFrameIngress(input, source);
+      for (const time of [0, 16, 32]) {
+        const message = frame(time);
+        message.capabilities = { pinch: !!capabilities, grab: !!capabilities, palm: !!capabilities };
+        message.hands[0].keypoints[4] = [...message.hands[0].keypoints[8]];
+        ingress.push(source, message, time);
+      }
+      const hand = input.sample(32)[0];
+      apiKeys.push(Object.keys(hand).sort());
+      assert.equal(hand.pinching, true, 'skeleton-only providers get keypoint-derived pinch through the same API');
+      assert.equal(typeof hand.grabbing, 'boolean'); assert.ok(hand.pinchPoint); assert.equal(hand.keypoints.length, 21);
+    }
+  }
+  for (const keys of apiKeys) assert.deepEqual(keys, apiKeys[0]);
+});
+
 test('managed and packaged source policy is bounded and survives trusted launcher navigation', () => {
   assert.equal(handSourcePolicy(false), 'webxr'); assert.equal(handSourcePolicy(true), 'native');
   assert.equal(handSourcePolicy(false, '?xrb-hand=off'), 'off');

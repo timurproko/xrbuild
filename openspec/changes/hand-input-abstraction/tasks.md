@@ -35,6 +35,6 @@ Implementation is approved with the simplified global input policy. Groups match
 
 ## 6. Working default hands in fresh managed apps
 
-- [ ] 6.1 Compare the new-project template and UI Kit creation/config/frame/scene paths; document the verified missing-attachment cause and regression boundaries without running the person's app.
-- [ ] 6.2 Attach SDK hands by default in the managed runtime with an explicit visual opt-out; SDK tests prove visible hands and interaction from fake frames, no duplicate attachment and disposal.
-- [ ] 6.3 Create an isolated Unsorted project, save Hand, resolve its fake provider into host config and deliver binary frames through the SDK channel; regression assertions require scene-visible hands without adding template hand boilerplate.
+- [x] 6.1 Compare the new-project template and UI Kit creation/config/frame/scene paths; document the verified missing-attachment cause and regression boundaries without running the person's app.
+- [x] 6.2 Attach SDK hands by default in the managed runtime with an explicit visual opt-out; SDK tests prove visible hands and interaction from fake frames, no duplicate attachment and disposal.
+- [x] 6.3 Create an isolated Unsorted project, save Hand, resolve its fake provider into host config and deliver binary frames through the SDK channel; regression assertions require scene-visible hands without adding template hand boilerplate.
