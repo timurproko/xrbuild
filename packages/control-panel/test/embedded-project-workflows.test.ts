@@ -20,8 +20,9 @@ import { withBrowser, sleep } from './browser-fixture.ts';
 import type { Manifest } from '../src/projects.ts';
 
 async function fixture(t: TestContext) {
-  await fs.mkdir(path.join(REPO, '.artifacts'), { recursive: true });
-  const root = await fs.mkdtemp(path.join(REPO, '.artifacts/embedded-workflows-'));
+  const artifacts = process.env.XRB_TEST_ROOT ?? path.join(REPO, '.artifacts');
+  await fs.mkdir(artifacts, { recursive: true });
+  const root = await fs.mkdtemp(path.join(artifacts, 'embedded-workflows-'));
   const core = path.join(root, 'core'), workspace = path.join(root, 'workspace'), projects = path.join(root, 'projects-home');
   for (const dir of [core, workspace, projects]) await fs.mkdir(dir);
   const write = async (file: string, value: unknown) => {
@@ -432,7 +433,9 @@ test('embedded publication and web packaging refresh installed sources and use n
   response = await f.request('POST', '/api/projects/bundled%3Asample/publish', {});
   assert.equal(response.status, 202, response.text);
   let done = await f.server.panel.jobs.wait(f.server.panel.jobs.get(response.json.id)!); assert.equal(done.state, 'done', done.error ?? '');
-  assert.match(published, /r-[a-zA-Z0-9]{6}[\\/]out$/); assert.match(await fs.readFile(path.join(published, 'index.html'), 'utf8'), /current publication source/);
+  assert.match(published, /publication-inputs[\\/]p-[a-zA-Z0-9]{6}[\\/]inputs[\\/]app$/);
+  const publishedHtml = await fs.readFile(path.join(published, 'index.html'), 'utf8');
+  assert.match(publishedHtml, /current publication source/); assert.match(publishedHtml, /__XRB_HAND_POLICY__="off"/);
   await f.write(path.join(f.source, 'dist/index.html'), '<html><head></head><body>current package source</body></html>');
   const before = (await buildInventory(f.core)).fingerprint;
   response = await f.request('POST', '/api/projects/bundled%3Asample/package', {});

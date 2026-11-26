@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { test, type TestContext } from 'node:test';
 import { REPO } from '../src/env.ts';
 import { createServer } from '../src/server.ts';
+import { handPolicyDocument } from '../src/hand-policy-document.ts';
 import { freePort } from '../src/host-runner.ts';
 import { discoverProjectCatalog } from '../src/extension-catalog.ts';
 import { copyBundledProject } from '../src/embedded-projects.ts';
@@ -21,7 +22,7 @@ import { withBrowser, sleep } from './browser-fixture.ts';
 import { defaultIcon } from '../../app-icon/src/icon.ts';
 
 async function fixture(t: TestContext) {
-  const artifacts = path.join(REPO, '.artifacts'); await fs.mkdir(artifacts, { recursive: true });
+  const artifacts = process.env.XRB_TEST_ROOT ?? path.join(REPO, '.artifacts'); await fs.mkdir(artifacts, { recursive: true });
   const root = await fs.mkdtemp(path.join(artifacts, 'project-origins-'));
   const core = path.join(root, 'core'), workspace = path.join(root, 'integration'), projects = path.join(root, 'editable');
   for (const dir of [core, workspace, projects]) await fs.mkdir(dir);
@@ -331,7 +332,8 @@ test('packaged browser preview and icons are read-only, skip scripts/finalizatio
   const locked = path.join(dir, 'dist/index.html'); await fs.chmod(locked, 0o444);
   t.after(() => fs.chmod(locked, 0o644).catch(() => {}));
   const page = await f.request('GET', '/preview/bundled%3Aarchive/demo/');
-  assert.equal(page.status, 200); assert.equal(page.text, '<h1>demo</h1>');
+  assert.equal(page.status, 200); assert.equal(page.text, handPolicyDocument('<h1>demo</h1>', 'off'));
+  assert.equal(await fs.readFile(locked, 'utf8'), '<h1>demo</h1>', 'policy stamping changes the response, never packaged source bytes');
   assert.equal((await f.request('GET', '/preview/bundled%3Aarchive/demo/icon.js')).status, 200);
   assert.equal((await f.request('GET', '/api/projects/bundled%3Aarchive/demo/icon')).status, 200);
   const icon = await fetch(`${f.url}api/projects/bundled%3Aarchive/demo/icon`, { headers: { origin: 'https://app.local' } });

@@ -11,7 +11,7 @@ import { portableHostConfig } from '../src/package-content.ts';
 import type { ProviderList } from '../src/host-build.ts';
 
 test('native/dev host config resolves every old input to the global source and retains provider settings', async () => {
-  const root = await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'hand-runtime-'));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'hand-runtime-')));
   const core = path.join(root, 'core'), workspace = path.join(root, 'workspace'), plugin = path.join(workspace, 'plugins', 'input-example');
   await fs.mkdir(core); await fs.mkdir(path.join(plugin, 'bin'), { recursive: true });
   await fs.writeFile(path.join(plugin, 'xrb-plugin.json'), JSON.stringify({ title: 'Real source', type: 'input', version: '1.0.0',

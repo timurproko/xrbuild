@@ -429,7 +429,9 @@ IDs and runtime names are distinct bounded lowercase names; purpose is `tracked`
 with an optional label (otherwise the plugin title). A native declaration must resolve to that selected owner's
 validated input binary. It reuses the existing 21-point panel-metre `XrbInputApi`/`XrbHandFrame` contract,
 including optional native gestures; no ABI or recording format changes. Undeclared validated native inputs
-receive equivalent descriptors, so metadata-only updates can ship independently. Core WebXR, simulated and
+receive equivalent descriptors, so metadata-only updates can ship independently. Their existing native IDs are
+preserved exactly (including capitals, underscores and dots, up to the native query's 128-character bound) in
+profiles and package selections; new authored declaration IDs retain their stricter lowercase metadata schema. Core WebXR, simulated and
 replay sources use the same registry. Source identity is owner-qualified, never a label or discovery order.
 Discovery is metadata-only and never calls input creation/start. A declaration without a valid owned binary
 remains unavailable rather than borrowing another plugin's provider.
@@ -445,7 +447,10 @@ with the execution context is displayed as the initial selection and pinned on e
 several real sources require a choice; synthetic/replay sources never become automatic defaults. Once saved,
 a missing/failed source stays selected and unavailable, never replaced. Installed does not mean a device is
 connected: idle providers are not started, and replay still requires a configured recording. The picker is not
-a live viewer; offsets, skeleton size/appearance and the live laboratory are subsequent changes. New combined
+a live viewer; offsets, skeleton size/appearance and the live laboratory are subsequent changes. Browser preview
+documents use effective personal run inputs and a token/session/project-bound policy snapshot for an active run;
+later source/settings changes do not rewrite that launch decision. Publication always resolves in the browser
+context, independently of the app's selected desktop/headset package target. New combined
 workspace templates ignore `config/hands/`; existing workspace ignore files are not rewritten automatically.
 
 Application `inputs` contain only `mouse`, `keyboard` and `hand`. Every historical concrete hand-provider

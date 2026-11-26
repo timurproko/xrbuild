@@ -381,7 +381,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       }
       if ((!file || file === 'index.html') && !url.searchParams.has('xrb-icon')) {
         const document = await projectFile({ ...p, dir: entry }, 'index.html');
-        const policy = await panel.browserHandPolicy(usable(p));
+        const policy = await panel.previewHandPolicy(p, url.searchParams);
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
         res.end(handPolicyDocument(await fs.readFile(document, 'utf8'), policy)); return;
       }

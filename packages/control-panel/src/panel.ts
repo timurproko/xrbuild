@@ -37,7 +37,7 @@ import { rebuiltPluginNames, runUpdate, updateStatus, type UpdateDeps, type Upda
 import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatus, type BuildTarget, type IdentityField, type PackagerDiscovery, type PackagerSetupStatus, type RoleSelection } from './packagers.ts';
 import { PackageList } from './packages.ts';
 import { discoverHandProviders, sameHandProvider, handRegistry, handProviderKey, type HandProviderKey } from './hand-providers.ts';
-import { readHandsState, saveHandsState, selectedHandProvider, validHandProviderKey, prepareHandInput, resolveHandInput } from './hands-state.ts';
+import { readHandsState, saveHandsState, selectedHandProvider, validHandProviderKey, prepareHandInput, resolveHandInput, type HandContext } from './hands-state.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
 import { archiveProject, readLayout, removeEmptyProjectSection, unarchiveProject } from './layout.ts';
 import { discoverPublishers, normalizeReleaseCatalog, publicationUrl, publisherFor, publisherUnconfigured, releaseIdProblem, type PublicationCard, type PublicationIdentity, type Publisher, type PublisherDiscovery, type PublisherReleaseCatalog, type PublisherStatus } from './publishers.ts';
@@ -267,7 +267,7 @@ export class Panel {
   launchBrowser: typeof launchPreviewBrowser = launchPreviewBrowser;
   /** Metadata probe injection for device-free fixtures. */
   nativeProviders: typeof listProviders = listProviders;
-  private previewProjection: { route: string; token: string; session: string; fullscreen: boolean; monitor: number; projection: 'perspective' | 'orthographic' } | null = null;
+  private previewProjection: { route: string; token: string; session: string; fullscreen: boolean; monitor: number; projection: 'perspective' | 'orthographic'; projectId: string; handPolicy: 'off' | 'webxr' } | null = null;
 
   constructor(repo: string, workspace: string, hub: EventHub, projects = workspace, bootstrapPackageLock = false) {
     assertUserRoot(repo, workspace);
@@ -481,7 +481,7 @@ export class Panel {
   }
 
   /** Disabled plugins stay in the manifest, but runs and packages use available alternatives. */
-  private async effectiveSelection(m: Manifest): Promise<RoleSelection & { handPolicy: 'off' | 'native' | 'webxr'; handSource: HandProviderKey | null }> {
+  private async effectiveSelection(m: Manifest, context: HandContext = buildTargetOf(m) === 'webxr' ? 'webxr' : 'native'): Promise<RoleSelection & { handPolicy: 'off' | 'native' | 'webxr'; handSource: HandProviderKey | null }> {
     const catalog = await resolvePluginCatalog(this.workspace, this.repo, true), prefs = catalog.prefs;
     const disabled = new Set(prefs.disabled);
     const all = await this.nativeProviders(this.repo, this.workspace, true);
@@ -495,7 +495,7 @@ export class Panel {
         if (folder.startsWith(prefix)) disabled.add(folder.slice(prefix.length));
     }
     const selected = selectionOf(m);
-    const hands = await prepareHandInput(this.repo, this.workspace, await discoverHandProviders(this.repo, this.workspace, this.nativeProviders), selected.inputs ?? [], buildTargetOf(m) === 'webxr' ? 'webxr' : 'native');
+    const hands = await prepareHandInput(this.repo, this.workspace, await discoverHandProviders(this.repo, this.workspace, this.nativeProviders), selected.inputs ?? [], context);
     return { ...selected, input: hands.input, inputs: hands.inputs, handPolicy: hands.policy, handSource: hands.source ? { owner: hands.source.owner, id: hands.source.id } : null,
       display: disabled.has(selected.display) ? 'desktop' : selected.display,
       platform: disabled.has(selected.platform) ? '' : selected.platform };
@@ -506,6 +506,16 @@ export class Panel {
     if (!selectionOf(m).inputs?.includes('hand')) return 'off';
     const resolved = resolveHandInput(selectionOf(m).inputs ?? [], await readHandsState(this.repo, this.workspace), await discoverHandProviders(this.repo, this.workspace, this.nativeProviders), 'webxr');
     return resolved.policy === 'off' ? 'off' : 'webxr';
+  }
+
+  /** Managed documents keep their launch decision; unscoped previews use effective personal inputs. */
+  async previewHandPolicy(p: Project, scope: URLSearchParams): Promise<'off' | 'webxr'> {
+    const active = this.previewProjection;
+    if (active?.projectId === p.id && active.handPolicy !== undefined
+      && scope.get('xrb-preview-token') === active.token && scope.get('xrb-preview-session') === active.session
+      && scope.get('xrb-preview-route') === active.route) return active.handPolicy;
+    const effective = p.readOnly ? withRunSettings(p, await readProjectRunSettings(this.repo, this.workspace, p)) : p;
+    return this.browserHandPolicy(this.manifestOf(effective));
   }
 
   private async publicationApp(p: Project, m: Manifest, policy: 'off' | 'native' | 'webxr'): Promise<string> {
@@ -1010,7 +1020,7 @@ export class Panel {
     if (unconfigured) throw new HttpError(409, unconfigured, { configuration: true });
     const errors = publisher.validate(identity);
     if (errors.length) throw new HttpError(400, errors.map((e) => e.message).join('; '), { errors });
-    const selection = await this.effectiveSelection(m);
+    const selection = await this.effectiveSelection(m, 'webxr');
     const build = async (ctx: JobContext) => {
       if (m.scripts?.build) {
         ctx.line('Building current source before publishing.');
@@ -1367,7 +1377,8 @@ export class Panel {
     this.activeHandSource = selection.handSource;
     // Settings/provider reads yielded: another request may have reserved the runner meanwhile.
     if (this.runner.busy) throw new HttpError(409, 'stop the running app first');
-    this.previewProjection = { route, token, session, fullscreen: browser.fullscreen, monitor: browser.monitor, projection };
+    this.previewProjection = { route, token, session, fullscreen: browser.fullscreen, monitor: browser.monitor, projection,
+      projectId: p.id, handPolicy: selection.handPolicy === 'off' ? 'off' : 'webxr' };
     let href = '';
     try {
       await this.runner.startPreview({ projectId: p.id, projectDir: p.dir, devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, flat }, mode, async (devUrl) => {

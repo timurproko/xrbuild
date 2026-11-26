@@ -20,10 +20,11 @@ function renderer() {
 }
 
 test('a newly created Unsorted project resolves Hand and shows SDK hands from fake binary provider frames without app wiring', async () => {
-  const root = await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'fresh-project-hands-'));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'fresh-project-hands-')));
   const g = globalThis as Record<string, any>, previous = { host: g.__XRB_HOST__, socket: g.WebSocket, location: g.location, width: g.innerWidth, height: g.innerHeight };
   let app: ReturnType<typeof createXrbApp> | undefined;
   try {
+    assert.equal(root, await fs.realpath(root), 'fake binary paths use the same canonical root as catalog ownership, including Windows short temp paths');
     await createProject(core, root, 'fresh-hand', 'Fresh Hand', 'combined');
     assert.match(await fs.readFile(path.join(root, '.gitignore'), 'utf8'), /config\/hands\//);
     const dir = path.join(root, 'projects/unsorted/fresh-hand');

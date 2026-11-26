@@ -11,7 +11,7 @@ const FILE = 'config/hands/profile.json', MAX_BYTES = 16384;
 export const validHandProviderKey = (v: unknown): v is HandProviderKey => !!v && typeof v === 'object' && !Array.isArray(v)
   && Object.keys(v).every(k => k === 'owner' || k === 'id')
   && typeof (v as HandProviderKey).owner === 'string' && /^(core|(?:bundled|workspace):[a-zA-Z0-9][a-zA-Z0-9._-]*)$/.test((v as HandProviderKey).owner)
-  && typeof (v as HandProviderKey).id === 'string' && /^[a-z][a-z0-9-]{0,47}$/.test((v as HandProviderKey).id);
+  && typeof (v as HandProviderKey).id === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test((v as HandProviderKey).id);
 const hash = (bytes: Buffer | null) => createHash('sha256').update(bytes ?? 'missing').digest('hex');
 export async function readHandsState(core: string, workspace: string): Promise<HandsState> {
   const file = path.join(workspace, FILE);
