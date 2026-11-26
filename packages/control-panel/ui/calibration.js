@@ -14,7 +14,7 @@ function notice(value) {
     action.addEventListener('click', async () => {
       if (value.recovery === 'plugins') { location.assign('/plugins/'); return; }
       action.disabled = true;
-      try { const job = await rebuildHostInPlace(location.origin); if (job?.state === 'done' && !disposed) location.reload(); }
+      try { await rebuildHostInPlace(location.origin, { onComplete(job) { if (job?.state === 'done' && !disposed) location.reload(); } }); }
       finally { action.disabled = false; }
     });
     status.append(' ', action);

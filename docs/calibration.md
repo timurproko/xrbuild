@@ -8,7 +8,7 @@ The core page opens without optional tools. The optional calibration contributio
 
 ## Availability and recovery
 
-After updating, choose **Rebuild** in the module menu (or the availability notice), let it complete, then open Calibration and **Connect**. Rebuild prepares missing/stale public service dependencies and rebuilds/stages the source-bound camera bridge using the desktop-validated CMake and generator. A bridge built before a native source update is refreshed automatically; no separate bridge command is needed. The bridge step runs framing/geometry/marker self-tests, never device enumeration or capture. It skips an unconfigured optional device SDK rather than installing it or failing an unrelated host build.
+After updating, choose **Rebuild** in the module menu (or the availability notice), let it complete, then open Calibration and **Connect**. Rebuild prepares missing/stale public service dependencies and rebuilds/stages the source-bound camera bridge using the desktop-validated CMake and generator and the same checked core native dependency root as the host. Core native libraries installed by Desktop setup may live entirely in the selected workspace cache; the bridge does not require a second product-tree header copy. A bridge built before a native source update is refreshed automatically; no separate bridge command is needed. The bridge step runs framing/geometry/marker self-tests, never device enumeration or capture. It skips an unconfigured optional device SDK rather than installing it or failing an unrelated host build.
 
 | Notice cause | Action |
 | --- | --- |
@@ -22,7 +22,7 @@ After updating, choose **Rebuild** in the module menu (or the availability notic
 | Device-runtime loader or enumeration failure after Connect | Restore the reviewed device runtime or check camera connections; details retain the native failure without claiming which unobserved library is missing. |
 | Fewer than two compatible cameras | Connect a second supported camera, then Connect again. |
 
-The notice contains only the current reason and applicable action. Additional diagnostics are available on hover. A successful Rebuild from the notice reloads this route and rechecks availability without starting cameras. If an already-running panel reports a real loaded-code restart requirement, use Restart in its existing job result. Save/Import/Export remain available when only capture prerequisites are missing. Physical camera behavior and Windows device-runtime loading still require an operator check on the rig.
+The notice contains only the current reason and applicable action. Additional diagnostics are available on hover. A successful Rebuild from the notice, including a successful Retry after a failed attempt, reloads this route and rechecks availability without starting cameras. If an already-running panel reports a real loaded-code restart requirement, use Restart in its existing job result. Save/Import/Export remain available when only capture prerequisites are missing. Physical camera behavior and Windows device-runtime loading still require an operator check on the rig.
 
 ## Manual targets
 
