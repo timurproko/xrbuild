@@ -161,8 +161,14 @@ Update does **not** restart the running panel. Whenever core HEAD changes, its l
 **Restart required**, including when setup, rebuild or the workspace fails afterwards. Workspace source changes also
 conservatively require Restart so loaded plugin code is replaced. The warning remains latched in that process
 across subsequent Update jobs, even when disk commits are already current and build markers have cleared; only
-starting a new panel process clears it. Choose the existing panel **Restart** action after resolving failures;
-browser reload alone does not reload the running server's modules.
+starting a new panel process clears it. The result offers the existing in-place **Restart** control even after a
+partial failure and stays open when Restart is needed, including with Autoclose selected. Browser reload alone
+does not reload the running server's modules.
+
+The completed dialog has one overall title, one short line per repository (seven-character revisions or already
+up to date, plus any refusal/defaults notice) and at most one next-action line naming deferred work and activation.
+It does not repeat the full-hash job tail. **View job** retains full before/after revisions, step output, skipped
+upstream-default inspection guidance and one terminal result; CLI and failed-job handling do not replay that record.
 
 Older panels with the workspace-only Update implementation cannot install this fix by pressing their Update button:
 they never fetch core. For the first upgrade only, inspect and preserve core local work, manually fetch its remote

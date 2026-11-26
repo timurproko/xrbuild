@@ -215,7 +215,9 @@ and 3D, shows the input provider's camera view and renders app icons.
 in place. Workspace settings and user projects always stay local, including when upstream changes those paths;
 skipped defaults are reported for explicit adoption. Genuine source collisions, unsafe history or an old removed
 upstream leave that checkout untouched while the other is still attempted; any failure makes the job fail with both
-results. It prepares changed public core dependencies with the pinned frozen hook-disabled install, then rebuilds
+results. Its compact result has one short line per repository; full revisions and steps stay in View job.
+Independent core setup/build continues if workspace source needs attention; only dependent work is deferred.
+It prepares changed public core dependencies with the pinned frozen hook-disabled install, then rebuilds
 native plugins and the host when outdated. It never discards work or restarts the panel: when core advances, the
 job's last line explicitly requires **Restart** to load the new code. See [Update and recovery](docs/private-workspace.md#update-and-recovery),
 including the initial manual core update needed when upgrading from the old workspace-only action.

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { test } from 'node:test';
-import { fastForward, runGit, UpdateError, type GitRunner } from '../src/update.ts';
+import { fastForward, runGit, workspaceUpdateStatus, UpdateError, type GitRunner } from '../src/update.ts';
 import { ENV, fixture, git, snapshot } from './helpers/update-fixture.ts';
 
 const options = { role: 'core' as const, lfs: 'optional' as const, marker: 'xrb-test-update' };
@@ -114,6 +114,7 @@ test('Git fast-forward refusal leaves HEAD and files unchanged and removes only 
 test('a freshly current workspace succeeds without LFS materialization even when LFS is missing', async t => {
   const f = await fixture(t), before = await snapshot(f.workspace.checkout);
   const runner: GitRunner = (args, cwd, opts) => args[0] === 'lfs' ? Promise.resolve({ code: 127, output: 'missing' }) : f.runner(args, cwd, opts);
+  assert.equal((await workspaceUpdateStatus(f.workspace.checkout, runner)).available, true, 'cached currentness must not disable the explicit Update action solely for missing LFS');
   const result = await fastForward(f.workspace.checkout, f.ctx, { ...options, role: 'workspace', lfs: 'required', git: runner });
   assert.equal(result.commits, 0);
   assert.deepEqual(await snapshot(f.workspace.checkout), before);

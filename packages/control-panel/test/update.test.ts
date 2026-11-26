@@ -32,8 +32,9 @@ test('regression: workspace success cannot conceal an unfetched stale core check
   const result = await runUpdate(f.workspace.checkout, f.ctx, f.deps);
   assert.equal(result.state, 'updated'); assert.equal(f.core.head(), nextCore); assert.equal(f.workspace.head(), nextWorkspace);
   assert.deepEqual(result.repositories.map(repo => [repo.from, repo.to, repo.fetched]), [[beforeCore, nextCore, true], [beforeWorkspace, nextWorkspace, true]]);
-  assert.match(result.summary, new RegExp(`${beforeCore} → ${nextCore}`));
-  assert.match(result.summary, new RegExp(`${beforeWorkspace} → ${nextWorkspace}`));
+  assert.match(result.summary, new RegExp(`${beforeCore.slice(0, 7)} → ${nextCore.slice(0, 7)}`));
+  assert.match(result.summary, new RegExp(`${beforeWorkspace.slice(0, 7)} → ${nextWorkspace.slice(0, 7)}`));
+  assert.equal(f.lines.filter(line => line.startsWith(`Core: ${beforeCore} → ${nextCore}`)).length, 1);
   assert.deepEqual(f.rebuilds, [true]); assert.equal(result.restartRequired, true);
   assert.equal(f.lines.at(-1), result.lastLine); assert.match(result.lastLine, /Restart required.*did not restart/);
   const current = await runUpdate(f.workspace.checkout, f.ctx, f.deps);
@@ -93,7 +94,7 @@ test('regression: repeated jobs retain the activation warning until a new proces
   assert.equal(second.state, 'done'); assert.equal((second.result as UpdateResult).state, 'up-to-date');
   assert.equal((second.result as UpdateResult).restartRequired, true);
   assert.match(second.lines.at(-1)!, /Restart required.*did not restart/);
-  assert.equal(rebuildPresentation(second).title, 'Restart required');
+  assert.equal(rebuildPresentation(second).title, 'Updated, restart needed');
   // A genuinely new Node process loads the current checkout and has no stale-code latch.
   const script = `import {runUpdate,runGit} from ${JSON.stringify(new URL('../src/update.ts', import.meta.url).href)};
     const result=await runUpdate(${JSON.stringify(f.workspace.checkout)}, {line(){},async run(){throw Error('unexpected build')}},
@@ -113,6 +114,9 @@ test('CLI boundary returns nonzero and retains final restart instruction on part
   git(f.workspace.checkout, 'checkout', '-q', '--detach');
   assert.equal(await runUpdateCommand(f.workspace.checkout, f.ctx, f.deps), 1);
   assert.match(f.lines.at(-1)!, /Restart required.*did not restart/);
+  assert.equal(f.lines.filter(line => line.startsWith('Update result:')).length, 1);
+  assert.equal(f.lines.filter(line => line.startsWith('Restart required:')).length, 1);
+  assert.ok(!f.lines.some(line => line.startsWith('Update failed: Core:')));
 });
 
 test('read-only status leaves index and remote refs alone, and tooltip never vouches for cached currentness', async t => {
@@ -150,8 +154,11 @@ test('POST still updates core when workspace is unavailable; failed job retains 
   assert.equal((job.result as UpdateResult).repositories.length, 2);
   assert.match(job.lines.at(-1)!, /Restart required/);
   const shown = rebuildPresentation(job);
-  assert.equal(shown.title, 'Update needs attention'); assert.equal(shown.succeeded, false);
-  assert.match(shown.message, /Core:.*Workspace:/);
+  assert.equal(shown.title, 'Core updated; workspace needs attention'); assert.equal(shown.succeeded, false);
+  assert.match(shown.message, /Core:[\s\S]*Workspace:/);
+  assert.equal(shown.message.split('\n').length, 3); assert.equal(shown.outputHidden, true);
+  assert.equal(job.lines.filter(line => line.startsWith('Update result:')).length, 1);
+  assert.equal(job.lines.filter(line => line.startsWith('Restart required:')).length, 1);
 });
 
 test('update, rebuild, status and native run exclusion guards remain effective', async t => {

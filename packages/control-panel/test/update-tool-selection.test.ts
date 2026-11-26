@@ -6,9 +6,17 @@ import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { test } from 'node:test';
 import { probeDesktopTools } from '../src/desktop-setup.ts';
-import { findCmake } from '../src/host-build.ts';
+import { findCmake, nativePluginPlan } from '../src/host-build.ts';
 import { rebuildForUpdate } from '../src/update-rebuild.ts';
 import type { JobContext } from '../src/jobs.ts';
+
+test('scoped workspace builds retain the embedded-product storage boundary', async t => {
+  const core = await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'update-scope-'));
+  t.after(() => fs.rm(core, { recursive: true, force: true }));
+  const workspace = path.join(core, 'embedded/user'); await fs.mkdir(workspace, { recursive: true });
+  const plan = await nativePluginPlan(core, workspace, false, 'workspace');
+  assert.deepEqual(plan.projects, []); assert.match(plan.problems.join('; '), /outside embedded/);
+});
 
 // Fake executable files and synchronous probe output; configure/build are intercepted, never executed.
 test('Update host and plugin builds reuse the checked bundled CMake despite competing PATH installations', { skip: process.platform !== 'win32' }, async t => {

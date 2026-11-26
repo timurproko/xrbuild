@@ -91,6 +91,12 @@ export async function resolvePluginCatalog(workspace: string, core?: string, inc
   const prefs = preferences ?? await readPluginPrefs(workspace), plugins: ResolvedPlugin[] = [], problems: string[] = [];
   const seenRoots = new Set<string>(), invalid = new Set<string>();
   let embeddedRoot: string | null = null;
+  if (core && origins && !origins.includes('bundled')) {
+    // A scoped source scan must not bypass the global product/user storage boundary.
+    const embedded = await futurePath(path.join(core, 'embedded'));
+    if (withinRoot(embedded, await futurePath(workspace)))
+      return { plugins: [], selected: [], prefs, problems: ['The user workspace must be outside embedded product sources'] };
+  }
   for (const { origin, root } of roots(core, workspace).filter(item => !origins || origins.includes(item.origin))) {
     try {
       const workspaceRoot = await plainRoot(root);

@@ -51,6 +51,16 @@ for (const kind of ['modified', 'staged', 'untracked', 'ignored']) test(`refuses
   assert.equal(await fs.readFile(path.join(f.repo.checkout, file), 'utf8'), 'local\n');
 });
 
+test('already adopted incoming defaults use plain fast-forward without a checkout journal', async t => {
+  const f = await setup(t);
+  await f.put(f.repo.checkout, 'xrb-plugins.json', 'already adopted\n'); git(f.repo.checkout, 'add', 'xrb-plugins.json');
+  await f.put(f.repo.publisher, 'xrb-plugins.json', 'already adopted\n');
+  const target = await f.repo.publish('shared.txt', 'incoming source\n');
+  await f.update(); assert.equal(f.repo.head(), target);
+  assert.ok(f.lines.some(line => line.includes('ordinary Git fast-forward')));
+  assert.equal(await fs.stat(path.join(f.repo.checkout, '.git', CHECKOUT_JOURNAL)).then(() => true, () => false), false);
+});
+
 test('native fast-forward cannot satisfy local-wins; projected transaction preserves exact ordinary-use state', async t => {
   const f = await setup(t);
   for (const file of ['xrb-plugins.json', 'xrb-panel.json', 'pnpm-lock.yaml', 'projects/kept/app.txt', 'config/local.json']) {
@@ -135,14 +145,59 @@ test('a competing index writer or branch change is preserved with its recovery j
   assert.deepEqual(await fs.readFile(path.join(f.repo.checkout, '.git/index')), index);
 });
 
-test('dead process lock and ready journal resume after a real process exit', async t => {
+for (const outsideEdit of [false, true]) test(`partial source checkout resumes only recorded content (outside edit=${outsideEdit})`, async t => {
+  const f = await setup(t);
+  await f.put(f.repo.publisher, 'xrb-plugins.json', 'incoming defaults\n');
+  await f.put(f.repo.publisher, 'other.txt', 'remote second source\n');
+  const target = await f.repo.publish('shared.txt', 'remote first source\n');
+  let interrupted = false;
+  const runner: GitRunner = async (args, cwd, opts) => {
+    if (!interrupted && args[0] === 'read-tree' && args.includes('-u') && !args.includes('-n')) {
+      interrupted = true;
+      await f.put(f.repo.checkout, 'shared.txt', 'remote first source\n');
+      return { code: 1, output: 'simulated process interruption before index publication' };
+    }
+    return f.runner(args, cwd, opts);
+  };
+  await assert.rejects(f.update(runner), /fast-forward/);
+  if (outsideEdit) {
+    await f.put(f.repo.checkout, 'shared.txt', 'new outside edit\n');
+    await assert.rejects(resumeProtectedCheckout(f.repo.checkout, f.runner, f.ctx.line), /shared.txt/);
+    assert.equal(await fs.readFile(path.join(f.repo.checkout, 'shared.txt'), 'utf8'), 'new outside edit\n');
+    assert.equal(f.repo.head(), f.before);
+  } else {
+    await resumeProtectedCheckout(f.repo.checkout, f.runner, f.ctx.line);
+    assert.equal(f.repo.head(), target);
+    assert.equal(await fs.readFile(path.join(f.repo.checkout, 'other.txt'), 'utf8'), 'remote second source\n');
+    assert.equal(await fs.readFile(path.join(f.repo.checkout, 'xrb-plugins.json'), 'utf8'), 'base\n');
+  }
+});
+
+test('an outside branch ref update is never forced away by checkout or recovery', async t => {
+  const f = await setup(t);
+  await f.put(f.repo.publisher, 'xrb-plugins.json', 'incoming defaults\n'); await f.repo.publish();
+  const external = git(f.repo.checkout, 'commit-tree', git(f.repo.checkout, 'rev-parse', 'HEAD^{tree}'), '-p', f.before, '-m', 'outside local commit');
+  const runner: GitRunner = async (args, cwd, opts) => {
+    if (args[0] === 'update-ref') {
+      git(f.repo.checkout, 'update-ref', 'refs/heads/main', external, f.before);
+      return { code: 1, output: 'simulated ref race' };
+    }
+    return f.runner(args, cwd, opts);
+  };
+  await assert.rejects(f.update(runner), /Branch changed/);
+  assert.equal(f.repo.head(), external);
+  await assert.rejects(resumeProtectedCheckout(f.repo.checkout, f.runner, f.ctx.line), /Git changed/);
+  assert.equal(f.repo.head(), external);
+});
+
+for (const afterRef of [false, true]) test(`dead process lock and journal resume after real exit (ref published=${afterRef})`, async t => {
   const f = await setup(t);
   await f.put(f.repo.publisher, 'xrb-plugins.json', 'incoming\n');
   const target = await f.repo.publish(); git(f.repo.checkout, 'fetch', '-q', 'origin');
   const script = `import {checkoutFetchedCommit} from ${JSON.stringify(new URL('../src/update-checkout.ts', import.meta.url).href)};
     import {runGit} from ${JSON.stringify(new URL('../src/update.ts', import.meta.url).href)};
     await checkoutFetchedCommit(${JSON.stringify(f.repo.checkout)}, {before:${JSON.stringify(f.before)},target:${JSON.stringify(target)},branch:'main',workspace:true,
-      ensureUnchanged:async()=>{},line(){},git:(args,cwd,opts)=>{if(args[0]==='update-ref')process.exit(88);return runGit(args,cwd,opts);}});`;
+      ensureUnchanged:async()=>{},line(){},git:async(args,cwd,opts)=>{if(args[0]==='update-ref'){if(${afterRef})await runGit(args,cwd,opts);process.exit(88);}return runGit(args,cwd,opts);}});`;
   await assert.rejects(promisify(execFile)(process.execPath, ['--input-type=module', '--eval', script], { env: ENV }), error => (error as { code: number }).code === 88);
   await fs.access(path.join(f.repo.checkout, '.git/index.lock'));
   await resumeProtectedCheckout(f.repo.checkout, f.runner, f.ctx.line);

@@ -7,7 +7,7 @@ import { finishUpdateWork, type BuildScope, type FollowupDeps } from '../src/upd
 import type { RepoOutcome } from '../src/update.ts';
 
 async function setup(t: TestContext) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'xrb-followup-')); t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const root = await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'xrb-followup-')); t.after(() => fs.rm(root, { recursive: true, force: true }));
   const repos: RepoOutcome[] = [];
   for (const role of ['core', 'workspace'] as const) {
     const dir = path.join(root, role); await fs.mkdir(path.join(dir, '.git'), { recursive: true });

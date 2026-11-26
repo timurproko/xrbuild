@@ -61,7 +61,7 @@ for (const problem of ['frozen-lock', 'network', 'local-config']) test(`post-pul
   assert.equal(job.state, 'failed'); assert.equal(result.coreDependencies, 'failed'); assert.equal(builds, 0);
   assert.equal(f.core.head(), target); assert.equal(f.workspace.head(), workspaceTarget);
   assert.ok(result.repositories.every(repo => repo.pending)); assert.match(job.lines.at(-1)!, /Restart required.*did not restart/);
-  assert.match(result.summary, problem === 'local-config' ? /manual review/ : problem === 'frozen-lock' ? /OUTDATED_LOCKFILE/ : /network unavailable/);
+  assert.match(result.steps.find(step => step.state === 'failed')!.reason!, problem === 'local-config' ? /manual review/ : problem === 'frozen-lock' ? /OUTDATED_LOCKFILE/ : /network unavailable/);
   await fs.access(path.join(f.core.checkout, '.git', CORE_MARKER)); await fs.access(path.join(f.workspace.checkout, '.git', WORKSPACE_MARKER));
   fail = false;
   // Config refusal requires a person's review, not automatic removal or a blind retry.

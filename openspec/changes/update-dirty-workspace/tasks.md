@@ -15,7 +15,7 @@
 
 ## 3. Readable results and single-copy job output
 
-- [ ] 3.1 Present a truthful overall title, one seven-character-range or already-up-to-date line per repository, bounded local-default/refusal details and at most one next-action line; focused presentation tests cover success, no-op, protected defaults and partial failure.
-- [ ] 3.2 Reuse pull request 54's single in-place Restart control and preserve its service preparation, validated toolchain and no-autoclose activation behavior; targeted dialog/browser fixtures prove recovery controls work without a live panel or real restart.
-- [ ] 3.3 Give Update one terminal-detail output owner and use short job/CLI failure envelopes; focused job and CLI tests assert full revision records and terminal summary are not repeated and unrelated job failure behavior is unchanged.
-- [ ] 3.4 Update result/recovery documentation and run only the affected temporary-repository, setup, presentation and recovery test files; report exact commands and outcomes without running the full local suite or touching private checkouts.
+- [x] 3.1 Present a truthful overall title, one seven-character-range or already-up-to-date line per repository, bounded local-default/refusal details and at most one next-action line; focused presentation tests cover success, no-op, protected defaults and partial failure.
+- [x] 3.2 Reuse pull request 54's single in-place Restart control and preserve its service preparation, validated toolchain and no-autoclose activation behavior; targeted dialog/browser fixtures prove recovery controls work without a live panel or real restart.
+- [x] 3.3 Give Update one terminal-detail output owner and use short job/CLI failure envelopes; focused job and CLI tests assert full revision records and terminal summary are not repeated and unrelated job failure behavior is unchanged.
+- [x] 3.4 Update result/recovery documentation and run only the affected temporary-repository, setup, presentation and recovery test files; report exact commands and outcomes without running the full local suite or touching private checkouts.

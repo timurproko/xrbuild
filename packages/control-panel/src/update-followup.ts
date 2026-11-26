@@ -65,7 +65,7 @@ export async function finishUpdateWork(repositories: RepoOutcome[], ctx: JobCont
   if (work) {
     if (!coreReady && core) coreDependencies = 'deferred';
     // For the all-good case keep one ordinary combined build boundary. Partial failures select safe roots only.
-    const coreReceipt = core ? await receiptFile('core-build') : null;
+    const coreReceipt = core ? await receiptFile('core-build').catch(() => null) : null;
     const coreAlreadyBuilt = !!coreReceipt && await fs.readFile(coreReceipt, 'utf8').then(text => text === core?.to, () => false);
     if ((!core || coreReady) && workspaceReady && dependenciesReady && !coreAlreadyBuilt) {
       const key = `${core?.to ?? 'external-core'}:${workspace?.to ?? 'none'}`;
@@ -83,7 +83,14 @@ export async function finishUpdateWork(repositories: RepoOutcome[], ctx: JobCont
   for (const repo of repositories.filter(repo => repo.pending && repo.state !== 'failed')) {
     const complete = (!repo.roles.includes('core') || (dependenciesReady && componentsReady && coreBuildReady))
       && (!repo.roles.includes('workspace') || workspaceBuildReady);
-    if (complete) { if (repo.marker) await fs.rm(repo.marker, { force: true }); repo.pending = false; }
+    if (complete) {
+      try { if (repo.marker) await fs.rm(repo.marker, { force: true }); repo.pending = false; }
+      catch (error) {
+        const reason = deps.sanitize?.((error as Error).message) ?? (error as Error).message;
+        steps.push({ id: repo.role === 'core' ? 'core-build' : 'workspace-build', label: `${repo.role} retry marker`, state: 'failed', reason });
+        ctx.line(`Could not clear ${repo.role} retry marker: ${reason}; retry Update.`);
+      }
+    }
   }
   return { steps, rebuilt: [...new Set(rebuilt)], coreDependencies };
 }

@@ -17,11 +17,11 @@ test('component refresh uses the existing Rebuild concept and truthful header st
 });
 
 test('shared progress offers Retry or Restart in place, preserving failed output', { skip: !process.env.XRB_TEST_BROWSER, timeout: 30000 }, async () => {
-  const files = new Map(await Promise.all(['rebuild-dialog.js', 'design-system.js', 'scrollbars.js', 'workspace-layout.js'].map(async name => [name, await fs.readFile(path.resolve(import.meta.dirname, '../ui', name), 'utf8')] as const)));
+  const files = new Map(await Promise.all(['rebuild-dialog.js', 'design-system.js', 'scrollbars.js', 'workspace-layout.js', 'design-system.css'].map(async name => [name, await fs.readFile(path.resolve(import.meta.dirname, '../ui', name), 'utf8')] as const)));
   const server = createServer((req, res) => {
     const name = req.url!.slice(1);
-    res.setHeader('content-type', name ? 'text/javascript' : 'text/html');
-    res.end(!name ? '<html><body></body></html>' : files.get(name) ?? 'export async function desktopSetupBeforeRebuild(){return true;}');
+    res.setHeader('content-type', name.endsWith('.css') ? 'text/css' : name ? 'text/javascript' : 'text/html');
+    res.end(!name ? '<html><head><link rel="stylesheet" href="/design-system.css"></head><body></body></html>' : files.get(name) ?? 'export async function desktopSetupBeforeRebuild(){return true;}');
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -44,6 +44,26 @@ test('shared progress offers Retry or Restart in place, preserving failed output
       assert.equal(await browser.evaluate("document.querySelector('[data-xrb-rebuild-restart]').hidden"), false);
       await browser.evaluate("document.querySelector('[data-xrb-rebuild-restart]').click()");
       assert.equal(await browser.evaluate('document.body.dataset.restarted'), 'yes');
+      await browser.evaluate(`(() => {
+        document.querySelector('[data-xrb-rebuild-autoclose]').checked=true;
+        progress.show({id:2,kind:'update',state:'failed',result:{title:'Core updated; workspace needs attention',restartRequired:true,
+          repositories:[{role:'core',state:'updated'},{role:'workspace',state:'failed'}],
+          repositoryLines:['Core: 1234567 → abcdef0.','Workspace: 7654321 → 7654321; source conflict in plugins/tracker/src/main.cpp.'],
+          nextAction:'Reconcile the source file and retry Update; workspace plugins deferred; Restart to load updated code.'},
+          lines:['Full revisions and step output stay in View job.']});
+      })()`);
+      assert.equal(await browser.evaluate("document.querySelector('[data-xrb-rebuild-title]').textContent"), 'Core updated; workspace needs attention');
+      assert.equal(await browser.evaluate("document.querySelector('[data-xrb-rebuild-message]').textContent.split('\\n').length"), 3);
+      assert.equal(await browser.evaluate("document.querySelector('[data-xrb-rebuild-output]').hidden"), true);
+      assert.equal(await browser.evaluate("document.querySelectorAll('[data-xrb-rebuild-restart]').length"), 1);
+      assert.equal(await browser.evaluate("document.querySelector('[data-xrb-rebuild-restart]').hidden"), false);
+      assert.equal(await browser.evaluate('progress.element.open'), true, 'Autoclose must leave partial-success Restart available');
+      if (process.env.XRB_UPDATE_PROOF) {
+        const picture = await browser.send('Page.captureScreenshot', { format: 'png' });
+        await fs.writeFile(process.env.XRB_UPDATE_PROOF, Buffer.from(picture.data, 'base64'));
+      }
+      await browser.evaluate("document.querySelector('[data-xrb-rebuild-restart]').click()");
+      assert.equal(await browser.evaluate('progress.element.open'), false);
     });
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
