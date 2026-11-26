@@ -1821,7 +1821,7 @@ export class Panel {
       case 'GET workspace/update': {
         // While an update job runs Git in the clone, answer from the last status instead of running Git beside it.
         const updating = this.jobs.active().some(job => job.kind === 'workspace-update');
-        if (!updating || !this.workspaceUpdateLast) this.workspaceUpdateLast = await workspaceUpdateStatus(this.workspace, this.workspaceUpdateDeps.git);
+        if (!updating || !this.workspaceUpdateLast) this.workspaceUpdateLast = await workspaceUpdateStatus(this.workspace, this.workspaceUpdateDeps.git, this.repo);
         sendJson(res, 200, { ...this.workspaceUpdateLast, updating });
         return true;
       }
@@ -1829,9 +1829,10 @@ export class Panel {
         // The same guards as Rebuild: the update ends with one. The job runner keeps it apart from every other job.
         if (await this.desktopSetup.isBusy()) throw new HttpError(409, 'Wait for desktop setup to finish before updating the workspace');
         if (this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop the running or starting host first: its exe must not overlap a rebuild');
-        const status = this.workspaceUpdateLast = await workspaceUpdateStatus(this.workspace, this.workspaceUpdateDeps.git);
+        const status = this.workspaceUpdateLast = await workspaceUpdateStatus(this.workspace, this.workspaceUpdateDeps.git, this.repo);
         if (!status.available) throw new HttpError(409, status.reason ?? 'The workspace cannot be updated');
         sendJson(res, 202, jobSummary(this.startJob('workspace-update', null, 'update workspace', ctx => updateWorkspace(this.workspace, ctx, {
+          core: this.repo,
           coreHostCurrent: async () => {
             const core = await resolvedHostFreshness(this.repo, this.workspace, true);
             return core.exists && !core.outdated;

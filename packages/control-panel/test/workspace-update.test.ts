@@ -8,7 +8,7 @@ import { JobRunner, type JobContext } from '../src/jobs.ts';
 import { rebuildPresentation } from '../ui/rebuild-dialog.js';
 import { freePort } from '../src/host-runner.ts';
 import { createServer } from '../src/server.ts';
-import { lfsProgressFilter, overwrittenFiles, rebuiltPluginNames, runGit, updateWorkspace, workspaceUpdateStatus, WorkspaceUpdateError, type GitRunner } from '../src/workspace-update.ts';
+import { lfsProgressFilter, overwrittenFiles, rebuiltPluginNames, runGit, SAME_AS_CORE, updateWorkspace, workspaceUpdateStatus, WorkspaceUpdateError, type GitRunner } from '../src/workspace-update.ts';
 
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.invalid', GIT_TERMINAL_PROMPT: '0' };
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, env: ENV, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -208,6 +208,20 @@ test('not a clone, a folder inside another clone, no upstream, a detached HEAD a
   assert.deepEqual(f.rebuilds, []);
 });
 
+test('a workspace that is the core checkout is one repository: reported as the core and not fast-forwarded as the workspace', async (t) => {
+  const f = await fixture(t), before = f.head();
+  await f.publish('shared.txt', 'two\n');
+  const status = await workspaceUpdateStatus(f.workspace, f.deps.git, f.workspace);
+  assert.equal(status.available, false); assert.equal(status.sameAsCore, true); assert.equal(status.reason, SAME_AS_CORE);
+  assert.equal((await workspaceUpdateStatus(f.workspace, f.deps.git, path.join(f.root, 'core'))).sameAsCore, undefined, 'another core path is not the same repository');
+  // The same folder written differently is still the same repository.
+  const spelled = process.platform === 'win32' ? f.workspace.toUpperCase() : `${f.workspace}${path.sep}.`;
+  assert.equal((await workspaceUpdateStatus(f.workspace, f.deps.git, spelled)).sameAsCore, true);
+  await rejectsAt(updateWorkspace(f.workspace, f.ctx, { ...f.deps, core: f.workspace }), 'check', /The workspace is the core checkout: it is updated as the core.*Nothing changed\./);
+  assert.equal(f.head(), before); assert.deepEqual(f.rebuilds, []);
+  assert.ok(!f.calls.some((args) => ['fetch', 'merge'].includes(args[0]!) || (args[0] === 'lfs' && args[1] === 'fetch')), 'nothing is fetched or fast-forwarded');
+});
+
 test('overwritten file lists are read from Git output', () => {
   const output = [
     'Updating 1111111..2222222',
@@ -291,6 +305,16 @@ test('POST workspace/update refuses a workspace that is not a clone, with the re
   await fs.rm(path.join(f.workspace, '.git'), { recursive: true, force: true });
   const refused = await f.request('POST', '/api/workspace/update');
   assert.equal(refused.status, 409); assert.equal(refused.data.error, 'The workspace is not a Git clone.');
+  assert.equal(f.server.panel.jobs.list().length, 0);
+});
+
+test('POST workspace/update refuses a workspace that is the core checkout the panel runs from', async (t) => {
+  const f = await serverFixture(t);
+  (f.server.panel as unknown as { repo: string }).repo = f.workspace;
+  const status = await f.request('GET', '/api/workspace/update');
+  assert.equal(status.data.sameAsCore, true); assert.equal(status.data.available, false);
+  const refused = await f.request('POST', '/api/workspace/update');
+  assert.equal(refused.status, 409); assert.equal(refused.data.error, SAME_AS_CORE);
   assert.equal(f.server.panel.jobs.list().length, 0);
 });
 

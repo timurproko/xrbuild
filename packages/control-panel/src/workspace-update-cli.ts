@@ -23,6 +23,7 @@ const ctx: JobContext = {
 try {
   console.log(`updating the workspace ${workspace} (core ${REPO} is not updated)`);
   await updateWorkspace(workspace, ctx, {
+    core: REPO,
     coreHostCurrent: async () => {
       const core = await resolvedHostFreshness(REPO, workspace, true);
       return core.exists && !core.outdated;

@@ -6,9 +6,9 @@
 
 ## 2. Workspace that is the core checkout
 
-- [ ] 2.1 Status marks a workspace whose path equals the core path as the core repository, with its reason
-- [ ] 2.2 The update job never fast-forwards that repository twice; in this change the workspace part skips it
-- [ ] 2.3 Tests for the status and the job
+- [x] 2.1 Status marks a workspace whose path equals the core path as the core repository, with its reason
+- [x] 2.2 The update job never fast-forwards that repository twice; in this change the workspace part skips it
+- [x] 2.3 Tests for the status and the job
 
 ## 3. Shared helpers and core status
 

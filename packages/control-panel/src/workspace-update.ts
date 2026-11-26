@@ -46,6 +46,8 @@ export interface WorkspaceUpdateStatus {
   checkedMs: number | null;
   /** An earlier update pulled new commits but its rebuild did not succeed: Update finishes it. */
   unfinished: boolean;
+  /** The workspace is the core checkout the panel runs from: one repository, updated as the core, never twice. */
+  sameAsCore?: boolean;
 }
 
 const unavailable = (workspace: string, reason: string, extra: Partial<WorkspaceUpdateStatus> = {}): WorkspaceUpdateStatus =>
@@ -78,10 +80,17 @@ async function readMarker(file: string | null): Promise<{ from: string } | null>
   }
 }
 
-/** Whether Update can run and how far the workspace is from its upstream as of the last fetch. Writes nothing. */
-export async function workspaceUpdateStatus(workspace: string, runner: GitRunner = runGit): Promise<WorkspaceUpdateStatus> {
+/** Why the workspace part skips a workspace that is the core checkout: that repository belongs to the core part. */
+export const SAME_AS_CORE = 'The workspace is the core checkout: it is updated as the core, which this version does not do yet. Pull it by hand.';
+
+/**
+ * Whether Update can run and how far the workspace is from its upstream as of the last fetch. Writes nothing.
+ * `core` is the core checkout the panel runs from: a workspace at the same path is that one repository.
+ */
+export async function workspaceUpdateStatus(workspace: string, runner: GitRunner = runGit, core?: string): Promise<WorkspaceUpdateStatus> {
   const git = readOnly(runner);
   if (!await fs.stat(workspace).then((s) => s.isDirectory(), () => false)) return unavailable(workspace, 'The workspace folder does not exist.');
+  if (core && await samePath(workspace, core)) return unavailable(workspace, SAME_AS_CORE, { sameAsCore: true });
   const top = await git(['rev-parse', '--show-toplevel'], workspace);
   if (top.code === 127) return unavailable(workspace, 'Git is not installed.');
   // A workspace folder inside another clone (such as the core checkout) is not a clone of its own: never update that one.
@@ -128,6 +137,8 @@ export interface WorkspaceUpdateResult {
 
 export interface WorkspaceUpdateDeps {
   git?: GitRunner;
+  /** The core checkout the panel runs from; a workspace at the same path is not updated a second time as the workspace. */
+  core?: string;
   /** True when the core host is built and current, so only plugins need a rebuild. */
   coreHostCurrent: () => Promise<boolean>;
   /** The existing native rebuild, with the same tool discovery as Rebuild; returns the rebuilt plugin folders. */
@@ -186,7 +197,7 @@ export async function updateWorkspace(workspace: string, ctx: JobContext, deps: 
   const head = async () => firstLine((await quiet(['rev-parse', 'HEAD'])).output);
 
   step('check');
-  const status = await workspaceUpdateStatus(workspace, git);
+  const status = await workspaceUpdateStatus(workspace, git, deps.core);
   if (!status.available) throw new WorkspaceUpdateError('check', `${status.reason} Nothing changed.`);
   ctx.line(`workspace ${workspace} on ${status.branch}, tracking ${status.upstream}`);
   const marker = await markerPath(workspace, readOnly(git));
