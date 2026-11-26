@@ -18,9 +18,9 @@ Each numbered group corresponds, in order, to one PR Implementation outcome. All
 
 ## 3. Drawing-only skeleton appearance
 
-- [ ] 3.1 Add mutable joint/bone visibility, diameters, linear colours and skeleton opacity plus independent indicator settings to the standard renderer; fixtures compare default materials, counts, matrices and pinch-or-grab midpoint to current drawing.
-- [ ] 3.2 Layer only explicit global appearance overrides over existing constructor styles without recreating interaction or multiplying geometry; tests assert independent visibility/thickness, absent-override compatibility and unchanged interaction/pointer traces during appearance updates.
-- [ ] 3.3 Preserve managed automatic drawing and `handVisual:false` while retaining raw/custom drawing ownership; runtime tests cover opt-out with adjusted interaction and no duplicate attachment, and SDK docs explain the standard-renderer boundary.
+- [x] 3.1 Add mutable joint/bone visibility, diameters, linear colours and skeleton opacity plus independent indicator settings to the standard renderer; fixtures compare default materials, counts, matrices and pinch-or-grab midpoint to current drawing.
+- [x] 3.2 Layer only explicit global appearance overrides over existing constructor styles without recreating interaction or multiplying geometry; tests assert independent visibility/thickness, absent-override compatibility and unchanged interaction/pointer traces during appearance updates.
+- [x] 3.3 Preserve managed automatic drawing and `handVisual:false` while retaining raw/custom drawing ownership; runtime tests cover opt-out with adjusted interaction and no duplicate attachment, and SDK docs explain the standard-renderer boundary.
 
 ## 4. Frozen launch/build profiles and safe running-app Apply
 
