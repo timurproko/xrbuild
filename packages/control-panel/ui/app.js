@@ -3831,9 +3831,10 @@ if(navigationRequest.cleanUrl!==location.href)history.replaceState(null,'',navig
 const initialPage = ['plugins', 'settings'].includes(navigationRequest.page) ? navigationRequest.page : 'projects';
 // The server already painted the destination frame. Hydrate independent surfaces concurrently;
 // projects need workspace identity and job overlays, not packages, native scans or menu discovery.
+const jobsReady = loadJobs().catch(report);
 const identityReady = Promise.all([
   api('GET', '/api/ping').then(ping => { state.repo = ping.workspace ?? ''; }),
-  loadWorkspace(), loadJobs(),
+  loadWorkspace(), jobsReady,
 ]).catch(report);
 const pageReady = showPage(initialPage).catch(report);
 void loadNavigation().catch(report);
@@ -3847,10 +3848,12 @@ void identityReady.then(async () => {
   if (!document.activeElement || document.activeElement === document.body) renderDetail();
 }).catch(report);
 await pageReady;
-if(navigationRequest.job)await openJobInActivity(navigationRequest.job);
 document.body.classList.remove('workspace-pending');
 document.body.removeAttribute('data-xrb-scrollbar');
 connect();
+// A View job link needs the retained job map, not merely the page frame. Keep
+// the shell visible/connected while waiting, then consume the requested job once.
+if(navigationRequest.job){await jobsReady;await openJobInActivity(navigationRequest.job);}
 // A maintenance link is an explicit one-shot action; shared tool navigation normally handles it in place.
 if(navigationRequest.maintenance){
   if(navigationRequest.maintenance==='rebuild')$('#host-rebuild').click();

@@ -77,6 +77,10 @@ export class RemoteUpdates {
     this.timer=setInterval(()=>void this.check(),REMOTE_UPDATE_INTERVAL_MS);this.timer.unref();
     void this.check();
   }
+  /** Lifecycle notifications must not start discovery before the owning server starts. */
+  checkWhenStarted(force=false):Promise<void> {
+    return this.timer ? this.check(force) : Promise.resolve();
+  }
   check(force=false):Promise<void> {
     if(this.closed||this.busy())return Promise.resolve();
     if(this.work)return this.work;
@@ -103,5 +107,5 @@ export class RemoteUpdates {
     if(!this.work)return;
     this.due=0;this.controller?.abort();return this.work;
   }
-  async close():Promise<void> {this.closed=true;if(this.timer)clearInterval(this.timer);await this.pause();}
+  async close():Promise<void> {this.closed=true;if(this.timer)clearInterval(this.timer);this.timer=null;await this.pause();}
 }

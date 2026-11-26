@@ -578,9 +578,12 @@ test('native and browser launches consume saved settings while per-run options r
 test('settings updates refuse active project work and launch preparation, then release their reservation', async t => {
   const f = await fixture(t); await f.project(f.embedded, 'core', 'web', { target: 'webxr' });
   const p = await f.bundled('web'), settings = await readProjectRunSettings(f.core, f.workspace, p);
+  // This scenario exercises a running writer, not a job waiting for startup discovery to drain.
+  await f.panel.remoteUpdates.pause();
   let release!: () => void;
   let gate = new Promise<void>(resolve => { release = resolve; });
   const job = f.panel.jobs.start('web-build', p.id, 'fixture work', () => gate);
+  assert.equal(job.state, 'running');
   await assert.rejects(f.panel.saveRunSettings(p, {}, settings.revision), /running/);
   release(); await f.panel.jobs.wait(job);
   let starting!: () => void; const ready = new Promise<void>(resolve => { starting = resolve; });

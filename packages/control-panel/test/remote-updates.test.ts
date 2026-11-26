@@ -4,6 +4,7 @@ import http from 'node:http';
 import { once } from 'node:events';
 import { test } from 'node:test';
 import { JobRunner } from '../src/jobs.ts';
+import { Panel } from '../src/panel.ts';
 import { discoverRemoteTip, remoteGit, RemoteUpdates, REMOTE_UPDATE_INTERVAL_MS, type RemoteGit } from '../src/remote-updates.ts';
 import { fixture, git, snapshot } from './helpers/update-fixture.ts';
 
@@ -47,6 +48,33 @@ test('five-minute caching, identical-root deduplication and silent offline check
   service.git=async()=>({code:1,output:'offline'});await service.check(true);
   assert.equal(service.status.core?.checkedMs,checked);
   await service.close();
+});
+
+test('job and idle notifications cannot activate discovery before server startup or after shutdown', async t => {
+  const f=await fixture(t);
+  const panel=new Panel(f.core.checkout,f.workspace.checkout,{send(){}} as ConstructorParameters<typeof Panel>[2]);
+  let calls=0;
+  panel.remoteUpdates.git=async()=>{calls++;return {code:1,output:''};};
+  try {
+    for(const kind of ['web-build','update'] as const) {
+      const job=panel.jobs.start(kind,null,'fixture work',async()=>{});
+      assert.equal(job.state,'running');await panel.jobs.wait(job);
+    }
+    panel.runner.emit('state',{phase:'idle'});
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(calls,0,'bare Panel use must not acquire a background Git process or admission barrier');
+    panel.remoteUpdates.start();await panel.remoteUpdates.check();
+    assert.ok(calls>0,'server startup still checks immediately');
+    const initial=calls;
+    const update=panel.jobs.start('update',null,'fixture update',async()=>{});
+    await panel.jobs.wait(update);await panel.remoteUpdates.check();
+    assert.ok(calls>initial,'an active server still rechecks after Update');
+    await panel.remoteUpdates.close();const stopped=calls;
+    const later=panel.jobs.start('update',null,'after shutdown',async()=>{});
+    await panel.jobs.wait(later);panel.runner.emit('state',{phase:'idle'});
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(calls,stopped,'shutdown cannot be undone by completion/idle notifications');
+  } finally {await panel.dispose();}
 });
 
 test('job reservation cancels and drains a passive query before any queued job body starts', async () => {

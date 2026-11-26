@@ -322,7 +322,7 @@ export class Panel {
     this.remoteUpdates = new RemoteUpdates(repo, workspace, () => this.jobs.active().length > 0 || this.runner.busy || this.restartPending,
       status => hub.send('remote-update', status));
     this.jobs.beforeStart = () => this.remoteUpdates.pause();
-    this.jobs.on('end', (job: Job) => { void this.remoteUpdates.check(job.kind === 'update'); });
+    this.jobs.on('end', (job: Job) => { void this.remoteUpdates.checkWhenStarted(job.kind === 'update'); });
     this.packages = new PackageList(path.join(workspace, 'builds'));
     this.jobs.on('change', (j: Job) => {
       hub.send('job', jobSummary(j));
@@ -334,7 +334,7 @@ export class Panel {
     this.runner.on('state', (s) => {
       if (s.phase === 'idle') { this.nativeHandPolicy = null; this.setLiveHands(null); this.previewProjection = null; void this.stopMesh().catch(() => { this.meshStatus = 'Skeleton fallback: mesh child cleanup failed'; }); }
       this.syncNativeHandObserver(s);
-      if (s.phase === 'idle') void this.remoteUpdates.check();
+      if (s.phase === 'idle') void this.remoteUpdates.checkWhenStarted();
       hub.send('run', s);
       hub.send('projects-changed', { projectId: s.projectId });
     });
