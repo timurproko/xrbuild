@@ -29,7 +29,7 @@ test('Calibration is a reserved core module, not an optional or old laboratory r
   assert.throws(() => managedToolDestination('/calibration/', 'http://127.0.0.1:5180'));
   assert.throws(() => validateToolLinks({ tools: [{ id: 'calibration', label: 'Other', route: '/other/', module: 'other.mjs' }] }));
   await fixture(false, async (base, root, app) => {
-    const page = await fetch(base + '/calibration/'); assert.equal(page.status, 200); assert.match(await page.text(), /Camera B → A transform/);
+    const page = await fetch(base + '/calibration/'); assert.equal(page.status, 200); const html = await page.text(); assert.doesNotMatch(html, /Camera B → A transform|Checking calibration plugin/); assert.match(html, /xrb-spinner/);
     const status = await fetch(base + '/api/calibration').then(r => r.json());
     assert.equal(status.available, true, status.reason); assert.equal(status.capture.available, false); assert.match(status.capture.reason, /Native bridge/);
     assert.equal((await fetch(base + status.module)).status, 200);

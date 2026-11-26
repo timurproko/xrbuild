@@ -18,4 +18,5 @@ try {
       disposers.push(enhanceSelects());
     }
   }
-} catch (error) { if (!disposed) status.textContent = error.message; }
+} catch (error) { if (!disposed) { status.textContent = error.message; status.hidden = false; } }
+finally { document.getElementById('calibration-loading').hidden = true; }

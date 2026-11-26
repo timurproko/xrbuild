@@ -16,8 +16,8 @@
     <h1 class="xrb-brand">XR Build <button id="calibration-menu-button" class="xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Calibration</button></h1>
   </header>
   <main class="calibration-page xrb-stack">
-    <p class="xrb-help">Camera B → A transform, bound to camera serials and profiles; hand providers can use it.</p>
-    <p id="calibration-availability" class="xrb-help" role="status">Checking calibration plugin…</p>
+    <div id="calibration-loading" role="status" aria-label="Loading calibration"><span class="xrb-spinner xrb-spinner-accent" aria-hidden="true"></span></div>
+    <p id="calibration-availability" class="warning" role="status" hidden></p>
     <div id="calibration-root" class="xrb-stack" hidden>
       <section class="xrb-card xrb-stack calibration-card" aria-label="Cameras">
         <div class="xrb-button-row"><h2>Cameras</h2><span class="spacer"></span><button id="cal-connect" type="button">Connect</button><button id="cal-stop" type="button" disabled>Stop</button></div>
@@ -25,7 +25,7 @@
           <div class="xrb-stack"><label class="xrb-field-label">Camera A<select id="cal-camera-a" aria-label="Camera A"><option value="">Select camera</option></select></label><label class="xrb-field-label">Profile A<select id="cal-profile-a" aria-label="Profile A"><option value="">Select profile</option></select></label><canvas id="cal-preview-a" width="640" height="480" aria-label="Camera A target preview"></canvas></div>
           <div class="xrb-stack"><label class="xrb-field-label">Camera B<select id="cal-camera-b" aria-label="Camera B"><option value="">Select camera</option></select></label><label class="xrb-field-label">Profile B<select id="cal-profile-b" aria-label="Profile B"><option value="">Select profile</option></select></label><canvas id="cal-preview-b" width="640" height="480" aria-label="Camera B target preview"></canvas></div>
         </div>
-        <div class="xrb-button-row"><label class="xrb-field-label">Method<select id="cal-method"><option value="manual">Manual targets</option><option value="marker">Marker</option></select></label><button id="cal-start" type="button" disabled>Start</button></div>
+        <div class="xrb-button-row calibration-method"><label class="xrb-field-label">Method<select id="cal-method"><option value="manual">Manual targets</option><option value="marker">Marker</option></select></label><button id="cal-start" type="button" disabled>Start</button></div>
         <div id="cal-marker-assets" class="xrb-button-row" hidden><button id="cal-marker-download" type="button">Download marker</button><button id="cal-marker-license" type="button">Detector license</button></div>
         <p id="cal-marker-help" class="xrb-help" hidden>Keep cameras fixed. Show one flat, matte marker to both cameras; move the marker slowly.</p>
         <p id="cal-capture-status" class="xrb-help" role="status">Not connected.</p>

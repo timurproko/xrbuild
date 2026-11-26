@@ -9,7 +9,7 @@ Calibration shows redundant loading copy and misaligned controls, while its gene
 - Remove the purpose line in every page state and replace the loading sentence with the existing panel loading indicator.
 - Align Start with the Method control at the same baseline and height using shared controls and layout.
 - Replace vague capture availability with concise cause-specific notices and applicable existing actions, including Rebuild for recoverable application components.
-- Trace missing/disabled contributions, missing or stale bridge output, service dependencies and device-runtime failures; fix any normal Rebuild recovery gap without implicitly provisioning optional device dependencies.
+- Trace missing/disabled contributions, missing or stale bridge output, service dependencies and device-runtime failures; normal Rebuild rebuilds/stages an existing bridge for current source when its reviewed device dependency is present, without provisioning the device dependency.
 - Document what the operator must do and what remains hardware-unverified; preserve passive navigation and stored-result operations.
 
 ## Capabilities

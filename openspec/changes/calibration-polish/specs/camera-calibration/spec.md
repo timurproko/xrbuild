@@ -32,6 +32,11 @@ Navigation SHALL NOT start cameras, native services, installation or inference, 
 - **THEN** Calibration identifies the component preparation problem and offers the existing explicit Rebuild flow
 - **AND** successful preparation makes the current contribution available, or identifies an actual restart requirement
 
+#### Scenario: Previously built bridge after source update
+- **WHEN** a source update invalidates a previously built bridge and the reviewed device dependency is present
+- **THEN** normal explicit Rebuild rebuilds and stages the bridge for current source without a separate manual build step or device capture
+- **AND** a genuinely missing device dependency instead produces one sentence naming what is missing, without downloading it
+
 #### Scenario: Device runtime fails after explicit Connect
 - **WHEN** native device enumeration or startup fails after the user requests Connect or Start
 - **THEN** the page identifies the runtime or device failure without misreporting it as a missing calibration plugin

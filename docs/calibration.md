@@ -2,6 +2,8 @@
 
 Open **Calibration** in the module menu, or `/calibration/`. It measures the depth-camera B → A optical-space transform, bound to both camera serials and exact profiles. Hand providers can consume the result; this page does not change app hand placement or start a hand provider.
 
+The page uses the panel's standard loading indicator without a description subtitle. Method and Start share a control baseline and height.
+
 The core page opens without optional tools. The optional calibration contribution supplies measurement and saved-result operations. A missing/stale checked native bridge blocks capture only. **Connect** explicitly starts authenticated local bridge services and checks camera inventory; opening the page does neither. Two distinct supported depth cameras are required. Build/stage the optional bridge explicitly through its documented setup; navigation never installs or builds it.
 
 ## Manual targets
