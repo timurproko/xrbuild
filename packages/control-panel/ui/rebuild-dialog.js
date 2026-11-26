@@ -38,7 +38,6 @@ export function updateTooltip(status, now = Date.now()) {
     if (!repo) return '';
     if (repo.sameAsCore) return 'Workspace: same checkout as core; updated once.';
     if (!repo.available) return `${label}: ${repo.reason ?? 'needs attention.'}`;
-    if (repo.dirty) return `${label}: local changes need attention before Update.`;
     if (repo.unfinished) return `${label}: the last update did not finish; run Update again.`;
     if (repo.ahead) return `${label}: ${commitCount(repo.ahead)} not on the cached upstream; reconcile local history first.`;
     const checked = repo.checkedMs ? `, checked ${agoText(repo.checkedMs, now)}` : ', not fetched yet';

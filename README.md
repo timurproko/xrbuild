@@ -211,7 +211,9 @@ The panel lists the selected project root's projects while loading plugins and g
 and 3D, shows the input provider's camera view and renders app icons.
 
 **Update** freshly fetches and fast-forwards both the running core checkout and the selected workspace to each
-`origin`'s default branch, reporting their full before/after commits. Unsafe local changes/history or an old removed
+`origin`'s default branch. Current repositories succeed even with local work; safe non-overlapping source edits stay
+in place. Workspace settings and user projects always stay local, including when upstream changes those paths;
+skipped defaults are reported for explicit adoption. Genuine source collisions, unsafe history or an old removed
 upstream leave that checkout untouched while the other is still attempted; any failure makes the job fail with both
 results. It prepares changed public core dependencies with the pinned frozen hook-disabled install, then rebuilds
 native plugins and the host when outdated. It never discards work or restarts the panel: when core advances, the

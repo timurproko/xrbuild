@@ -6,13 +6,14 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { JobFailure, LineSplitter, type JobContext } from './jobs.ts';
 import { rebuildUpdatedSources, rebuildUpdatedServices, setupUpdatedCore } from './update-runtime.ts';
+import { checkoutFetchedCommit, resumeProtectedCheckout, CheckoutRefusal } from './update-checkout.ts';
 
 export interface GitResult { code: number; output: string }
 /** Runs `git <args>` in a folder; streamed lines go to onLine. Injectable so tests can stub `git lfs`. */
-export type GitRunner = (args: string[], cwd: string, opts?: { onLine?: (line: string) => void; env?: NodeJS.ProcessEnv }) => Promise<GitResult>;
+export type GitRunner = (args: string[], cwd: string, opts?: { onLine?: (line: string) => void; env?: NodeJS.ProcessEnv; raw?: boolean }) => Promise<GitResult>;
 
 export const runGit: GitRunner = (args, cwd, opts = {}) => new Promise((resolve) => {
-  const lines: string[] = [];
+  const lines: string[] = [], stdout: string[] = [];
   const onLine = (line: string) => { lines.push(line); opts.onLine?.(line); };
   let child;
   try {
@@ -22,10 +23,10 @@ export const runGit: GitRunner = (args, cwd, opts = {}) => new Promise((resolve)
     return;
   }
   const out = new LineSplitter(onLine), err = new LineSplitter(onLine);
-  child.stdout!.setEncoding('utf8').on('data', (d: string) => out.push(d));
+  child.stdout!.setEncoding('utf8').on('data', (d: string) => { stdout.push(d); out.push(d); });
   child.stderr!.setEncoding('utf8').on('data', (d: string) => err.push(d));
   child.on('error', (e) => { lines.push(e.message); });
-  child.on('close', (code) => { out.flush(); err.flush(); resolve({ code: code ?? 127, output: lines.join('\n') }); });
+  child.on('close', (code) => { out.flush(); err.flush(); resolve({ code: code ?? 127, output: opts.raw && code === 0 ? stdout.join('') : lines.join('\n') }); });
 });
 
 /** Which of the two repositories of an update a folder is. */
@@ -139,7 +140,7 @@ export async function repoUpdateStatus(dir: string, options: RepoStatusOptions):
   const checkedMs = fetchHead.code === 0 ? (await fs.stat(fetchFile).catch(() => null))?.mtimeMs ?? null : null;
   const unfinished = options.marker ? !!await readMarker(await markerPath(dir, git, options.marker)) : false;
   const base = { branch: name, upstream: firstLine(upstream.output), ahead: ahead ?? 0, behind: behind ?? 0, dirty: status.output.split('\n').filter((l) => l.trim()).length, checkedMs, unfinished };
-  if (options.lfs === 'required' && (await git(['lfs', 'version'], dir)).code !== 0) return unavailable(dir, role, 'Git LFS is not installed.', base);
+  if (options.lfs === 'required' && behind > 0 && (await git(['lfs', 'version'], dir)).code !== 0) return unavailable(dir, role, 'Git LFS is not installed.', base);
   return { dir, role, available: true, reason: null, ...base };
 }
 
@@ -187,6 +188,7 @@ export interface RepoOutcome {
   step: UpdateStep | null;
   pending: boolean;
   marker: string | null;
+  retained?: string[];
 }
 
 export interface UpdateResult {
@@ -255,6 +257,8 @@ export interface FastForwardOptions {
   lfs: 'required' | 'optional';
   /** The resume marker written after the fast-forward, until the caller's update finishes. */
   marker: string;
+  /** The core can also be the selected user workspace; protect data for either workspace role. */
+  workspaceData?: boolean;
 }
 
 export interface FastForwardResult {
@@ -272,6 +276,7 @@ export interface FastForwardResult {
   pending: boolean;
   /** The marker file to remove once the update finishes, or null. */
   marker: string | null;
+  retained: string[];
 }
 
 /** Freshly discover/fetch origin's default branch, refuse unsafe local state, and fast-forward to that exact target.
@@ -302,6 +307,7 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
     ? 'The core is not a Git checkout; install a newer package instead of using Update.'
     : 'The workspace is not a Git clone; select an independent clone before retrying Update.');
   if (!await samePath(top.output.trim(), dir)) throw fail('check', 'This is not an independent clone; select its checkout root before retrying Update.');
+  await resumeProtectedCheckout(dir, git, out);
   const before = await head();
   const marker = await markerPath(dir, readOnly(git), options.marker);
   if (!marker) throw fail('check', 'Cannot locate the update marker; check Git permissions and retry Update.');
@@ -337,8 +343,6 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
     const currentBranch = await quiet(['symbolic-ref', '-q', '--short', 'HEAD']);
     if (currentBranch.code !== 0 || currentBranch.output.trim() !== branch || await head() !== before)
       throw fail('check', 'HEAD changed during Update; finish other Git work and retry Update.');
-    const status = await checked(['status', '--porcelain', '--untracked-files=all']);
-    if (status) throw fail('check', 'Uncommitted or untracked changes exist; commit or move them to safety before retrying Update.');
     for (const state of ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply']) {
       const file = await checked(['rev-parse', '--git-path', state]);
       if (await fs.stat(path.resolve(dir, file)).then(() => true, () => false))
@@ -352,7 +356,7 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
   if (ahead > 0) throw fail('fetch', `${ahead} local commit(s) are absent from origin/${defaultBranch}${behind ? ` and ${behind} remote commit(s) are missing locally` : ''}; reconcile local history by hand before retrying Update.`);
 
   const lfsInstalled = (await quiet(['lfs', 'version'])).code === 0;
-  if (options.lfs === 'required' && !lfsInstalled) throw fail('lfs', 'Git LFS is required; install it and retry Update.');
+  let retained: string[] = [];
   if (behind > 0) {
     // Optional LFS still must not silently check out pointers when the fetched core tracks LFS files.
     const attributes = await quiet(['grep', '-l', 'filter=lfs', target, '--', '.gitattributes', '**/.gitattributes']);
@@ -370,10 +374,18 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
     step('pull');
     // Write before checkout so a crash after advancing HEAD still leaves retryable build work.
     if (!pending) await fs.writeFile(marker, `${JSON.stringify({ from: before })}\n`);
-    const pulled = await loud(['-c', 'merge.autostash=false', 'merge', '--ff-only', '--no-edit', target]);
-    if (pulled.code !== 0) {
-      if (!pending && await head() === before) await fs.rm(marker, { force: true });
-      throw fail('pull', 'Git could not fast-forward; check git status and reconcile by hand before retrying Update.');
+    try {
+      retained = await checkoutFetchedCommit(dir, { git, before, target, branch,
+        workspace: options.workspaceData ?? options.role === 'workspace', ensureUnchanged, line: out });
+      if (retained.length) out(`${prefix}Kept local user data: ${retained.map(file => JSON.stringify(file)).join(', ')}; upstream defaults were not applied. Inspect with git show ${target}:<path> before explicitly adopting settings or reconciling the workspace lock.`);
+    } catch (error) {
+      if (!pending && await head() === before) {
+        // A checkout journal is independent of the retryable build marker and must remain recoverable.
+        const journal = await markerPath(dir, readOnly(git), 'xrb-update-checkout');
+        if (!journal || !await fs.stat(journal).then(() => true, () => false)) await fs.rm(marker, { force: true });
+      }
+      if (error instanceof CheckoutRefusal) { out(error.output); throw fail('pull', error.message); }
+      throw fail('pull', (error as Error).message);
     }
   }
   const to = await head();
@@ -381,7 +393,7 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
   const from = pending?.from || before;
   const count = await checked(['rev-list', '--count', `${from}..${to}`]);
   if (!/^\d+$/.test(count)) throw fail('check', 'Cannot read the update range; inspect Git history before retrying Update.');
-  return { before, from, to, commits: Number(count), ahead: 0, defaultBranch, fetched: true, pending: !!pending, marker };
+  return { before, from, to, commits: Number(count), ahead: 0, defaultBranch, fetched: true, pending: !!pending, marker, retained };
 }
 
 export interface UpdateStatus { core: RepoStatus; workspace: RepoStatus }
@@ -428,10 +440,10 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
     repositories.push(outcome);
     try {
       const moved = await fastForward(target.dir, ctx, { git, role: target.role, lfs: target.role === 'core' ? 'optional' : 'required',
-        marker: target.role === 'core' ? CORE_MARKER : WORKSPACE_MARKER });
+        marker: target.role === 'core' ? CORE_MARKER : WORKSPACE_MARKER, workspaceData: target.roles.includes('workspace') });
       Object.assign(outcome, { state: moved.commits || moved.pending ? 'updated' : 'up-to-date', from: moved.before, to: moved.to,
         updateFrom: moved.from, commits: moved.commits, fetched: true, defaultBranch: moved.defaultBranch,
-        pending: moved.pending || moved.before !== moved.to, marker: moved.marker });
+        pending: moved.pending || moved.before !== moved.to, marker: moved.marker, retained: moved.retained });
     } catch (e) {
       outcome.to = await checkoutHead(target.dir, git).catch(() => null);
       outcome.error = redactRemote((e as Error).message);

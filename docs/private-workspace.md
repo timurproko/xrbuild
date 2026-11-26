@@ -19,8 +19,9 @@ never leave it.
   Each repository reports full before/after commits; already up to date requires a fresh successful fetch.
   A refusal/failure in one repository does not prevent the other attempt, but the overall job fails with both results.
   A shared core/workspace checkout is updated once. Rebuild stays build-only; Update never stashes or discards work.
-  Setup and recovery details are below. The updater refuses every uncommitted
-  tracked/staged/untracked change (including non-conflicting edits), detached HEAD and local-only commits.
+  Setup and recovery details are below. Dirty state alone never blocks Update: current repositories succeed,
+  non-overlapping source edits survive, and workspace user data stays local even when upstream changes it.
+  Genuine source collisions, detached HEAD and local-only commits still require attention.
   A removed or non-default upstream is not migrated automatically: preserve local work and safely switch to the
   advertised default branch with matching origin tracking, then retry. Never discard work to satisfy Update.
 - `pnpm panel:repo`, `start-repo.vbs` and `pnpm fetch-deps:repo` explicitly select the current checkout's
@@ -82,8 +83,47 @@ currentness: only a successful fresh fetch can produce the job's already-up-to-d
 The checked-out branch must be the advertised default and track its matching origin branch. A stale local branch
 tracking a deleted upstream is an attention result, not success. Preserve local/unpublished work, safely select the
 reported default branch and configure its matching tracking branch, then retry. Update never switches branches,
-stashes changes, resets, forces refs or reconciles divergence on your behalf. Dirty tracked, staged, untracked and
-locally deleted files all block that repository, including non-conflicting edits.
+stashes changes, resets, forces refs or reconciles divergence on your behalf. Non-overlapping tracked, staged,
+untracked and deleted source files survive a safe fast-forward; actual source collisions name the first few paths.
+A fresh match with the remote succeeds regardless of local work.
+
+### Personal files are not source conflicts
+
+Workspace-root `xrb-plugins.json`, `xrb-panel.json`, panel-owned `config/` and user `projects/` are local user data.
+Update leaves their working copies and deliberate deletions exactly as they are, even if incoming commits edit,
+add or remove the same paths. Existing staged user-data entries are preserved too. The locally present generated
+workspace `pnpm-lock.yaml` is kept rather than silently regenerated; explicit package preparation owns reconciling
+the workspace dependency graph. Core's curated dependency lock remains source and uses frozen installation.
+
+When incoming defaults differ, Update succeeds and names the skipped paths. Inspect them with
+`git show <captured-commit>:<path>` (the job output supplies the commit/path), then explicitly adopt wanted settings
+through the panel. Never replace personal settings blindly, merge JSON automatically or commit credentials to make
+Update work. Incoming project changes never replace the person's local project tree.
+
+Normally Update uses plain `git merge --ff-only` with autostash disabled and untracked/ignored-file protection.
+That command cannot preserve dirty tracked settings when upstream edits them, so only that case uses a journaled,
+index-aware source checkout: protected working paths are excluded, and the branch advances to the exact fetched
+commit without a merge commit. The journal is under Git metadata (`xrb-update-checkout`), separately from build
+resume markers. Interrupted transactions retry from checked recorded state; an outside index/ref writer or unknown
+Git lock is preserved and reported, never forced away.
+
+### Repository-owner tracking cleanup
+
+The shared workspace template ignores personal panel/plugin settings and transient write files, but deliberately
+keeps authored project sources and curated dependency locks versionable. Ignore status is not the updater's safety
+mechanism and does not untrack an existing file. In a separately approved private-repository task, the owner should:
+
+- Stop tracking personal `xrb-plugins.json` and `xrb-panel.json`; add anchored ignores and their write lock/temp patterns.
+  Keep any reviewed shared defaults in manifests or a separate example file, not personal settings.
+- Ignore `/projects/Unsorted/`, `/projects/unsorted/` and `/projects/.gitkeep` when these are installation-only paths;
+  retain deliberately authored/versioned projects and opt local projects into version control explicitly.
+- For a dynamic panel-managed dependency graph, keep a regenerable root lock local, optionally with a separate
+  versioned seed and documented explicit regeneration. For a curated graph, keep its lock versioned and isolate
+  user-project package preparation. Neither choice changes core's frozen-lock policy.
+- Back up and verify affected local files/projects before any tracking-removal migration, then preserve/restore
+  and verify the personal copies. A deletion commit alone is not a safe migration for older clients. Work only
+  in the owner's assigned task clone, not the person's live checkout. New Update already protects these paths
+  through such a removal, so tracking cleanup is not a prerequisite for safe Update.
 
 Loaded plugin services are not a prerequisite for Git recovery: stale JS, missing runtimes and restart-required
 service discovery do not veto either repository's attempt. Active plugin mutation/consumption, settings writes,

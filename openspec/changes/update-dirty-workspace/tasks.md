@@ -2,10 +2,10 @@
 
 ## 1. Local work and user data survive Update
 
-- [ ] 1.1 Replace blanket dirty refusals with fresh-history equality and Git-safe source fast-forwards; targeted temporary-repository tests cover current dirty/untracked state, non-overlapping staged/unstaged edits, source overlap and untracked source overwrite, while existing history/upstream refusals remain covered.
-- [ ] 1.2 Implement the protected user-data index transaction for workspace settings, config, projects and the locally present generated lock; disposable fixtures prove local bytes/deletions/staging survive upstream add/edit/delete collisions, HEAD reaches the captured commit, no stash/reset/force occurs, and interrupted/ref-raced transactions retain safe recovery.
-- [ ] 1.3 Add skipped-default inspection/adoption notices and remove dirty-only blocking tooltips; fixtures reproduce modified pnpm-lock.yaml and xrb-plugins.json plus untracked projects/.gitkeep and projects/Unsorted/, both current and behind, including simultaneous upstream settings/lock changes.
-- [ ] 1.4 Add installation-local settings and transient-write ignores to templates/workspace/.gitignore and update README.md, docs/private-workspace.md and template guidance; focused checks prove settings are ignored without indiscriminately hiding authored projects or curated locks, and documentation includes the exact separately owned private migration handoff.
+- [x] 1.1 Replace blanket dirty refusals with fresh-history equality and Git-safe source fast-forwards; targeted temporary-repository tests cover current dirty/untracked state, non-overlapping staged/unstaged edits, source overlap and untracked source overwrite, while existing history/upstream refusals remain covered.
+- [x] 1.2 Implement the protected user-data index transaction for workspace settings, config, projects and the locally present generated lock; disposable fixtures prove local bytes/deletions/staging survive upstream add/edit/delete collisions, HEAD reaches the captured commit, no stash/reset/force occurs, and interrupted/ref-raced transactions retain safe recovery.
+- [x] 1.3 Add skipped-default inspection/adoption notices and remove dirty-only blocking tooltips; fixtures reproduce modified pnpm-lock.yaml and xrb-plugins.json plus untracked projects/.gitkeep and projects/Unsorted/, both current and behind, including simultaneous upstream settings/lock changes.
+- [x] 1.4 Add installation-local settings and transient-write ignores to templates/workspace/.gitignore and update README.md, docs/private-workspace.md and template guidance; focused checks prove settings are ignored without indiscriminately hiding authored projects or curated locks, and documentation includes the exact separately owned private migration handoff.
 
 ## 2. Successful repositories complete independent follow-up
 

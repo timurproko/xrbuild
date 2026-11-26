@@ -46,7 +46,7 @@ for (const role of ['core', 'workspace'] as const) for (const state of ['dirty',
   test(`partial failure: ${role} ${state} is preserved while the other repository updates`, async t => {
     const f = await setup(t), unsafe = f[role], other = role === 'core' ? f.workspace : f.core;
     const nextOther = await other.publish();
-    if (state !== 'ahead') await unsafe.publish('other.txt');
+    if (state !== 'ahead') await unsafe.publish(state === 'untracked' ? 'new.txt' : ['dirty', 'staged'].includes(state) ? 'shared.txt' : 'other.txt');
     if (['dirty', 'staged', 'ahead', 'diverged'].includes(state)) {
       await fs.writeFile(path.join(unsafe.checkout, 'shared.txt'), 'local\n');
       if (state === 'staged') git(unsafe.checkout, 'add', '.');
@@ -100,7 +100,8 @@ test('regression: repeated jobs retain the activation warning until a new proces
     console.log(JSON.stringify({restartRequired:result.restartRequired,state:result.state}));`;
   const fresh = await promisify(execFile)(process.execPath, ['--input-type=module', '--eval', script], { timeout: 60_000 });
   assert.deepEqual(JSON.parse(fresh.stdout), { restartRequired: false, state: 'up-to-date' });
-  await fs.writeFile(path.join(f.workspace.checkout, 'local.txt'), 'local work\n');
+  await f.workspace.publish('shared.txt', 'new remote\n');
+  await fs.writeFile(path.join(f.workspace.checkout, 'shared.txt'), 'local work\n');
   const failed = jobs.start('update', null, 'update', ctx => runUpdate(f.workspace.checkout, ctx, { ...f.deps }));
   await jobs.wait(failed); assert.equal(failed.state, 'failed');
   assert.equal((failed.result as UpdateResult).restartRequired, true); assert.match(failed.lines.at(-1)!, /Restart required/);
