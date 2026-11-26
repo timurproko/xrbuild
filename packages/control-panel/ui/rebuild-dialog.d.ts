@@ -2,7 +2,7 @@ export interface RebuildJob {
   id?:number;
   kind?:string;
   step?:string|null;
-  result?:{state?:string;summary?:string;restartRequired?:boolean}|null;
+  result?:{state?:string;summary?:string;restartRequired?:boolean;restart?:boolean}|null;
   state:'running'|'done'|'failed';
   error?:string|null;
   lines?:string[];
@@ -20,6 +20,7 @@ export interface RebuildPresentation {
 export interface RebuildProgressController {
   element:HTMLDialogElement;
   setViewJob(callback:((job:RebuildJob)=>void)|undefined):void;
+  setRecovery(callbacks:{retry?:()=>unknown;restart?:()=>unknown}):void;
   render(job:RebuildJob|null,error?:string):RebuildPresentation;
   show(job?:RebuildJob|null,error?:string):void;
   close():void;
@@ -28,9 +29,10 @@ export interface RebuildProgressController {
 export const REBUILD_AUTOCLOSE_KEY:string;
 export function rebuildPresentation(job:RebuildJob|null,error?:string):RebuildPresentation;
 export function rebuildProgressDialog(options?:{document?:Document;storage?:Storage|null;container?:HTMLElement;idPrefix?:string;onViewJob?:(job:RebuildJob)=>void}):RebuildProgressController;
-export interface JobInPlaceOptions {onJob?:(job:RebuildJob)=>void;onViewJob?:(job:RebuildJob)=>void;onComplete?:(job:RebuildJob)=>void}
+export interface JobInPlaceOptions {onRetry?:()=>unknown;onJob?:(job:RebuildJob)=>void;onViewJob?:(job:RebuildJob)=>void;onComplete?:(job:RebuildJob)=>void}
 export const UPDATE_STEPS:readonly Readonly<{id:'check'|'fetch'|'lfs'|'pull'|'setup'|'rebuild';title:string;message:string}>[];
 export function rebuildHostInPlace(origin?:string,options?:JobInPlaceOptions):Promise<RebuildJob|null>;
 export function updateInPlace(origin?:string,options?:JobInPlaceOptions):Promise<RebuildJob|null>;
+export function followStartedJobInPlace(origin:string,job:RebuildJob,options?:JobInPlaceOptions):Promise<RebuildJob|null>;
 export interface UpdateRepoStatus {role:'core'|'workspace';available:boolean;reason:string|null;branch:string|null;upstream:string|null;ahead:number;behind:number;dirty:number;checkedMs:number|null;unfinished:boolean;sameAsCore?:boolean}
 export function updateTooltip(status:{core?:UpdateRepoStatus|null;workspace?:UpdateRepoStatus|null}|null,now?:number):string;

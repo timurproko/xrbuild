@@ -50,6 +50,15 @@ test('shared capture exclusion blocks competing tools, setup and app preparation
     const project = { id: 'sample', dir: 'unused', manifest: { kind: 'app', name: 'Sample', version: '0.1.0' } } as any;
     await assert.rejects(app.panel.run(project, 'built'), /owns capture/);
     await assert.rejects(app.panel.preview(project, 'built', false, 'token', { clientPort: 1234 }), /owns capture/);
+    // Prepared launches skip their own busy-job check, but must still respect capture ownership.
+    const panel = app.panel as unknown as { refuseIfBusy(id: string): void };
+    const refuseIfBusy = panel.refuseIfBusy;
+    panel.refuseIfBusy = () => assert.fail('A prepared launch must not reject its own job');
+    const prepared = { line() {}, async run() {} }, bundled = { ...project, readOnly: true };
+    try {
+      await assert.rejects(app.panel.run(bundled, 'built', undefined, undefined, undefined, prepared), /owns capture/);
+      await assert.rejects(app.panel.preview(bundled, 'built', false, 'token', { clientPort: 1234 }, prepared), /owns capture/);
+    } finally { panel.refuseIfBusy = refuseIfBusy; }
     release(); release(); const next = app.panel.acquireCapture('Other'); next();
   });
 });
