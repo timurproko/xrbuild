@@ -23,7 +23,7 @@ test('provider autosaves quietly, preserves failed choices, refreshes missing ch
   try {
     await withBrowser(async ({ navigate, evaluate, send }) => {
       await send('Network.enable'); await send('Network.setBlockedURLs', { urls: ['https://*'] });
-      await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.captureCalls=0;window.sourceWrites=0;window.failSource=false;const original=fetch;window.fetch=(url,options)=>{if(url==='/api/hands'&&options?.method==='PUT'){sourceWrites++;if(failSource)return Promise.reject(Error('Offline'));}return original(url,options)};if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw Error('forbidden')};` });
+      await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.captureCalls=0;window.sourceWrites=0;window.failSource=false;const original=fetch;window.fetch=async(url,options)=>{if(url==='/api/hands'&&options?.method==='PUT'){sourceWrites++;if(failSource)throw Error('Offline');}const response=await original(url,options);if(url==='/api/hands'&&options?.method==='GET'&&window.pauseRead){window.pauseRead=false;await new Promise(resolve=>window.releaseRead=resolve);}return response;};if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw Error('forbidden')};` });
       await navigate(`http://127.0.0.1:${port}/hands/`, `document.querySelector('#hands-provider')?.value==='core/simulated'`);
       assert.equal(await evaluate(`document.querySelector('#hands-postprocessing-root').hidden`), true);
       assert.equal(await evaluate(`!!document.querySelector('[id^="hands-record"],#hands-save,#hands-reload,#hands-availability,#hands-session-status')`), false);
@@ -39,7 +39,18 @@ test('provider autosaves quietly, preserves failed choices, refreshes missing ch
       await evaluate(`failSource=false;document.querySelector('#hands-source-retry').click()`);
       await until(evaluate, `document.querySelector('#hands-message').hidden && !document.querySelector('#hands-provider').disabled`);
       assert.equal((await readHandsState(core, workspace)).provider?.id, 'simulated');
-      const state = await readHandsState(core, workspace);
+      await evaluate('window.pauseRead=true'); await choose('core/webxr');
+      await until(evaluate, `!!window.releaseRead`);
+      let state = await readHandsState(core, workspace);
+      await saveHandsState(core, workspace, null, state.revision);
+      await evaluate('window.releaseRead()');
+      await until(evaluate, `!document.querySelector('#hands-source-discard').hidden`);
+      assert.equal((await readHandsState(core, workspace)).provider, null, 'a concurrent source choice is never overwritten');
+      assert.equal(await evaluate(`document.querySelector('#hands-provider').value`), 'core/webxr', 'the failed intention remains visible');
+      assert.match(await evaluate(`document.querySelector('#hands-message').textContent`), /Saved: No provider/);
+      await evaluate(`document.querySelector('#hands-source-discard').click()`);
+      await until(evaluate, `document.querySelector('#hands-provider').value===''`);
+      state = await readHandsState(core, workspace);
       await saveHandsState(core, workspace, { owner: 'workspace:missing', id: 'absent' }, state.revision);
       await until(evaluate, `document.querySelector('#hands-provider').value==='workspace:missing/absent'`);
       assert.match(await evaluate(`document.querySelector('#hands-provider').selectedOptions[0].textContent`), /missing/);

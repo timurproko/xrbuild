@@ -1,11 +1,13 @@
-import { handsEditorRevisions } from './hands-editor-revisions.js';
+import { commitHandsFields } from './hands-commits.js';
 import { renderField, setFieldError, installNumberSteppers, enhanceHelpText } from './design-system.js';
 
 export const linearToHex = rgb => '#' + rgb.map(v => Math.round(255 * (v <= .0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - .055)).toString(16).padStart(2, '0')).join('');
 export const hexToLinear = hex => [1, 3, 5].map(i => { const v = parseInt(hex.slice(i, i + 2), 16) / 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
+const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const set = (profile, key, value) => { const parts = key.split('.'); if (parts.length === 2) profile[parts[0]][parts[1]] = structuredClone(value); else profile[key] = structuredClone(value); };
 let mounts = 0;
-/** All state/listeners/queries belong to root. Move root into a future side-panel slot unchanged. */
-export function mountHandAdjustments(root, { load, apply }) {
+/** Root-scoped editor. Only finished values enter the serialized revision-safe save path. */
+export function mountHandAdjustments(root, { load, apply, serialize = operation => operation() }) {
   const prefix = `hands-adjustments-${++mounts}`;
   const number = (key, label, min, max, step, hint = '', range = false) => renderField(label,
     `<input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required>${range ? `<input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">` : ''}`, { hint });
@@ -25,104 +27,155 @@ export function mountHandAdjustments(root, { load, apply }) {
       ${toggle('showPinchGrabIndicator', 'Pinch / grab indicator')}
       <div class="xrb-field-grid">${number('appearance.indicatorDiameterMm', 'Indicator diameter (mm)', 1, 60, 1)}${colour('indicatorColorLinear', 'Indicator colour')}${number('appearance.indicatorOpacity', 'Indicator opacity', 0, 1, .01)}</div>
     </section>
-    <div class="xrb-button-row"><button type="submit" data-action="apply" disabled>Apply</button><button type="button" data-action="reload" hidden>Reload</button></div>
-    <p data-status role="status" aria-live="polite"></p>
+    <div class="xrb-stack" data-recovery hidden><p class="field-error" data-status role="alert"></p><div class="xrb-button-row"><button type="button" class="small" data-action="retry">Retry</button><button type="button" class="small" data-action="discard" hidden>Use saved</button></div></div>
   </form>`;
-  const form = root.querySelector('form'), status = root.querySelector('[data-status]'), applyButton = root.querySelector('[data-action="apply"]'), reload = root.querySelector('[data-action="reload"]');
-  const fields = [...root.querySelectorAll('[data-field]')];
-  let state = null, draft = null, dirty = false, stale = false, busy = false, disposed = false, retryDelivery = false;
-  const revisions = handsEditorRevisions();
-  let deliveryEpoch = 0;
+  const form = root.querySelector('form'), status = root.querySelector('[data-status]'), recovery = root.querySelector('[data-recovery]');
+  const retry = root.querySelector('[data-action="retry"]'), discard = root.querySelector('[data-action="discard"]');
+  const fields = [...root.querySelectorAll('[data-field]')], edits = new Map();
+  let state = null, busy = false, disposed = false, failure = null, conflict = null, retryDelivery = false, version = 0, deliveryEpoch = 0, inFlight = null;
   const disposers = [installNumberSteppers(root), enhanceHelpText(root)];
-  const read = key => key.startsWith('appearance.') ? draft.appearance[key.slice(11)] ?? state.appearanceDefaults[key.slice(11)] : key.startsWith('offsetMm.') ? draft.offsetMm[key.slice(9)] : draft[key];
+  const read = (data, key) => key.startsWith('appearance.') ? data.profile.appearance[key.slice(11)] ?? data.appearanceDefaults[key.slice(11)] : key.startsWith('offsetMm.') ? data.profile.offsetMm[key.slice(9)] : data.profile[key];
   function buttons() {
-    applyButton.disabled = !state || (!dirty && !retryDelivery) || stale || busy;
-    applyButton.textContent = retryDelivery && !dirty ? 'Retry Apply' : 'Apply';
-    reload.hidden = !stale; reload.disabled = busy; root.dataset.dirty = String(dirty);
+    root.dataset.dirty = String(edits.size > 0);
+    root.dataset.saving = String(busy);
+    const text = failure ?? (retryDelivery ? "Couldn't apply to the running app. Retry or rebuild/relaunch." : '');
+    status.textContent = text; recovery.hidden = !text;
+    retry.disabled = busy; discard.disabled = busy; discard.hidden = !conflict;
   }
   function render() {
     for (const field of fields) {
-      field.disabled = !state || busy;
-      if (!draft) continue;
-      const value = read(field.dataset.field);
+      field.disabled = !state;
+      if (!state || edits.has(field.dataset.field)) continue;
+      const value = read(state, field.dataset.field);
       if (field.type === 'checkbox') field.checked = value;
       else field.value = field.type === 'color' ? linearToHex(value) : String(value);
       setFieldError(field);
     }
-    for (const swatch of root.querySelectorAll('[data-colour]')) { swatch.disabled = !state || busy; if (draft) swatch.style.backgroundColor = linearToHex(read(swatch.dataset.colour)); }
-    for (const range of root.querySelectorAll('[data-range]')) { range.value = draft?.[range.dataset.range] ?? 1; range.disabled = !state || busy; }
-    for (const reset of root.querySelectorAll('[data-reset]')) reset.disabled = !state || busy;
+    for (const swatch of root.querySelectorAll('[data-colour]')) {
+      swatch.disabled = !state;
+      if (state) swatch.style.backgroundColor = linearToHex(edits.get(swatch.dataset.colour)?.value ?? read(state, swatch.dataset.colour));
+    }
+    for (const range of root.querySelectorAll('[data-range]')) {
+      range.disabled = !state;
+      if (state) range.value = edits.get(range.dataset.range)?.value ?? read(state, range.dataset.range);
+    }
+    for (const reset of root.querySelectorAll('[data-reset]')) reset.disabled = !state;
     buttons();
   }
-  function refresh(next, { discard = false, review = revisions.reviewToken() } = {}) {
-    if (disposed) return;
-    if (busy || dirty && !discard) { markStale(undefined, next.revision); return; }
-    revisions.incorporate(next.revision, review); deliveryEpoch++;
-    state = next; draft = structuredClone(next.profile); dirty = false; stale = revisions.stale;
-    retryDelivery = next.deliveryState === 'failed';
-    status.textContent = stale ? 'Hands settings changed. Reload to review them.' : next.delivery ?? ''; render();
+  function refresh(next, { discard: discardEdits = false } = {}) {
+    if (disposed || busy) return;
+    deliveryEpoch++;
+    if (discardEdits) { edits.clear(); failure = conflict = null; }
+    const changed = next.revision !== state?.revision;
+    state = next; retryDelivery = next.deliveryState === 'failed';
+    if (changed || discardEdits) render(); else buttons();
   }
-  function markStale(message = 'Hands settings changed. Reload to review them.', revision) {
-    if (!revisions.changed(revision)) return;
-    deliveryEpoch++; stale = true; status.textContent = message; buttons();
-  }
-  const change = event => {
-    if (!draft || busy) return;
-    const field = event.target.closest('[data-field],[data-range]'); if (!field || !root.contains(field)) return;
+  function edit(field) {
+    if (!state) return;
     const key = field.dataset.field ?? field.dataset.range;
     let value = field.type === 'checkbox' ? field.checked : field.type === 'color' ? hexToLinear(field.value) : field.valueAsNumber;
-    // Never quantize an untouched linear colour through its 8-bit picker display.
-    if (field.type === 'color' && field.value.toLowerCase() === linearToHex(read(key)).toLowerCase()) return;
-    if (key.startsWith('appearance.')) draft.appearance[key.slice(11)] = value;
-    else if (key.startsWith('offsetMm.')) draft.offsetMm[key.slice(9)] = value;
-    else draft[key] = value;
-    dirty = true;
-    if (field.type === 'color') root.querySelector(`[data-colour="${key}"]`).style.backgroundColor = field.value;
+    const previous = edits.get(key), sent = inFlight?.get(key);
+    const base = sent && sent.version === previous?.version ? sent.value : previous?.base ?? sent?.value ?? read(state, key);
+    // Opening, cancelling or returning a colour preview to its initial swatch preserves exact linear values.
+    if (field.type === 'color' && field.value.toLowerCase() === linearToHex(base).toLowerCase()) value = structuredClone(base);
     if (key === 'sizeFactor') {
-      root.querySelector('[data-range="sizeFactor"]').value = value;
-      root.querySelector('[data-field="sizeFactor"]').value = value;
+      if (field.type === 'range') root.querySelector('[data-field="sizeFactor"]').value = field.value;
+      else if (Number.isFinite(value)) root.querySelector('[data-range="sizeFactor"]').value = value;
     }
-    status.textContent = 'Not applied'; setFieldError(field); buttons();
-  };
-  const click = async event => {
-    const swatch = event.target.closest('[data-colour]');
-    if (swatch && state && !busy) { event.preventDefault(); root.querySelector(`[data-field="${swatch.dataset.colour}"]`).click(); }
-    const reset = event.target.closest('[data-reset]');
-    if (reset && draft && !busy) {
-      if (reset.dataset.reset === 'geometry') { draft.offsetMm = { x: 0, y: 0, z: 0 }; draft.sizeFactor = 1; }
-      else draft.appearance = {};
-      dirty = true; status.textContent = 'Not applied'; render();
+    if (previous && equal(value, previous.value)) return key;
+    if (!sent && equal(value, base) && equal(read(state, key), base)) {
+      edits.delete(key); setFieldError(field);
+      if (field.type === 'color') root.querySelector(`[data-colour="${key}"]`).style.backgroundColor = field.value;
+      buttons(); return key;
     }
-    if (event.target === reload) {
-      const review = revisions.reviewToken();
-      try { refresh(await load(), { discard: true, review }); } catch (error) { status.textContent = error.message; }
-    }
-  };
-  const submit = async event => {
-    event.preventDefault(); if (!state || (!dirty && !retryDelivery) || stale || busy || !form.reportValidity()) return;
-    busy = true; deliveryEpoch++; status.textContent = 'Saving…'; render();
+    edits.set(key, { value, base, committed: false, version: ++version });
+    if (field.type === 'color') root.querySelector(`[data-colour="${key}"]`).style.backgroundColor = field.value;
+    setFieldError(field); buttons(); return key;
+  }
+  function commit(field) {
+    const key = edit(field), change = edits.get(key);
+    if (!change) return;
+    const canonical = fields.find(f => f.dataset.field === key);
+    if (!canonical.checkValidity()) { setFieldError(canonical, canonical.validationMessage); return; }
+    change.committed = true;
+    if (!conflict) { failure = null; void flush(); }
+  }
+  async function flush(deliveryOnly = false) {
+    if (!state || busy || disposed || conflict) return;
+    const sent = new Map([...edits].filter(([, edit]) => edit.committed));
+    if (!sent.size && !deliveryOnly) return;
+    const base = structuredClone(state), changes = {};
+    for (const [key, edit] of sent) { set(base.profile, key, edit.base); changes[key] = edit.value; }
+    busy = true; inFlight = sent; deliveryEpoch++; buttons();
+    let success = false;
     try {
-      const result = await apply({ profile: draft, revision: state.revision, registryRevision: state.registryRevision });
+      const result = await serialize(() => commitHandsFields({ base, changes, load, read,
+        save: (current, patch) => {
+          if (disposed) throw new Error('Page closed.');
+          const profile = structuredClone(current.profile);
+          for (const [key, value] of Object.entries(patch)) set(profile, key, value);
+          return apply({ profile, revision: current.revision, registryRevision: current.registryRevision });
+        } }));
       if (disposed) return;
-      revisions.incorporate(result.revision); deliveryEpoch++;
-      state = { ...state, ...result }; draft = structuredClone(result.profile); dirty = false; stale = revisions.stale;
-      retryDelivery = result.deliveryState === 'failed';
-      status.textContent = stale ? 'Hands settings changed. Reload to review them.' : result.delivery;
+      state = result; failure = conflict = null; retryDelivery = result.deliveryState === 'failed';
+      for (const [key, edit] of sent) if (edits.get(key)?.version === edit.version) edits.delete(key);
+      success = true;
     } catch (error) {
       if (disposed) return;
-      status.textContent = error.message;
+      conflict = error.current ? error : null;
+      if (conflict) {
+        const values = error.fields.map(key => `${fields.find(f => f.dataset.field === key)?.getAttribute('aria-label') ?? key}: ${JSON.stringify(read(error.current, key))}`).join(', ');
+        failure = `Changed elsewhere. Saved ${values}. Retry your value or use saved.`;
+      } else failure = `Couldn't save adjustments. ${error.message.replace(/;?\s*reload before (saving|applying)/ig, '')}`;
       const field = fields.find(f => error.message.includes(f.dataset.field)); if (field) setFieldError(field, error.message);
-      if (/changed|reload|conflict/i.test(error.message)) stale = true;
-    } finally { busy = false; if (!disposed) { // Keep server field errors until the next edit.
-      for (const field of fields) field.disabled = !state;
-      for (const range of root.querySelectorAll('[data-range]')) range.disabled = !state;
-      for (const swatch of root.querySelectorAll('[data-colour]')) swatch.disabled = !state;
-      for (const reset of root.querySelectorAll('[data-reset]')) reset.disabled = !state;
-      buttons();
-    } }
+    } finally {
+      busy = false; inFlight = null; deliveryEpoch++;
+      if (!disposed) { render(); if (success && [...edits.values()].some(edit => edit.committed)) void flush(); }
+    }
+  }
+  const input = event => { const field = event.target.closest('[data-field],[data-range]'); if (field && root.contains(field)) edit(field); };
+  const change = event => { const field = event.target.closest('[data-field],[data-range]'); if (field && root.contains(field)) commit(field); };
+  const keydown = event => { if (event.key === 'Enter' && event.target.matches('[data-field]')) { event.preventDefault(); commit(event.target); } };
+  const submit = event => event.preventDefault();
+  const click = event => {
+    const swatch = event.target.closest('[data-colour]');
+    if (swatch && state) { event.preventDefault(); root.querySelector(`[data-field="${swatch.dataset.colour}"]`).click(); }
+    const reset = event.target.closest('[data-reset]');
+    if (reset && state) {
+      for (const field of fields) {
+        const key = field.dataset.field, appearance = key.startsWith('appearance.');
+        if (appearance !== (reset.dataset.reset === 'appearance')) continue;
+        const value = appearance ? state.appearanceDefaults[key.slice(11)] : key === 'sizeFactor' ? 1 : 0;
+        const previous = edits.get(key), sent = inFlight?.get(key);
+        const base = sent && sent.version === previous?.version ? sent.value : previous?.base ?? sent?.value ?? read(state, key);
+        edits.set(key, { value, base, committed: true, version: ++version });
+        if (field.type === 'checkbox') field.checked = value; else field.value = field.type === 'color' ? linearToHex(value) : String(value);
+        setFieldError(field);
+      }
+      render(); if (!conflict) { failure = null; void flush(); }
+    }
+    if (event.target === retry && !busy) {
+      if (conflict) {
+        // The displayed saved values were explicitly reviewed. A newer unseen change still conflicts.
+        for (const key of conflict.fields) if (edits.has(key)) edits.get(key).base = read(conflict.current, key);
+        conflict = null;
+      }
+      failure = null; void flush(retryDelivery);
+    }
+    if (event.target === discard && conflict && !busy) {
+      const current = conflict.current;
+      for (const key of conflict.fields) edits.delete(key);
+      failure = conflict = null; refresh(current); render(); void flush();
+    }
   };
-  form.addEventListener('input', change); form.addEventListener('change', change); form.addEventListener('submit', submit); root.addEventListener('click', click);
+  const beforeunload = event => { if (edits.size || busy) { event.preventDefault(); event.returnValue = ''; } };
+  addEventListener('beforeunload', beforeunload);
+  form.addEventListener('input', input); form.addEventListener('change', change); form.addEventListener('keydown', keydown); form.addEventListener('submit', submit); root.addEventListener('click', click);
   render();
-  return { refresh, markStale, reviewToken: () => revisions.reviewToken(), get dirty() { return dirty; }, get revision() { return state?.revision; }, get deliveryEpoch() { return deliveryEpoch; }, updateDelivery(text, deliveryState, revision, epoch) { if (epoch === deliveryEpoch && revision === state?.revision && !dirty && !stale && !busy) { status.textContent = text; retryDelivery = deliveryState === 'failed'; buttons(); } },
-    dispose() { disposed = true; form.removeEventListener('input', change); form.removeEventListener('change', change); form.removeEventListener('submit', submit); root.removeEventListener('click', click); disposers.reverse().forEach(fn => fn()); root.replaceChildren(); } };
+  return { refresh, markStale() { void load().then(refresh).catch(error => { failure = error.message; buttons(); }); }, reviewToken: () => undefined,
+    get dirty() { return edits.size > 0; }, get revision() { return state?.revision; }, get deliveryEpoch() { return deliveryEpoch; },
+    updateDelivery(_text, deliveryState, revision, epoch) {
+      if (epoch === deliveryEpoch && revision === state?.revision && !edits.size && !busy) { retryDelivery = deliveryState === 'failed'; buttons(); }
+    },
+    dispose() { disposed = true; removeEventListener('beforeunload', beforeunload); form.removeEventListener('input', input); form.removeEventListener('change', change); form.removeEventListener('keydown', keydown); form.removeEventListener('submit', submit); root.removeEventListener('click', click); disposers.reverse().forEach(fn => fn()); root.replaceChildren(); } };
 }

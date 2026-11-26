@@ -49,7 +49,7 @@ test('Hands mounts its selector once, preserves drafts, saves next-run only and 
       assert.deepEqual((state.raw.postprocessing as any).settings['workspace:example/surface'].values, { quality: 'low', iterations: 4, normals: false });
       assert.equal(await evaluate(`document.querySelector('#hands-provider').value`), 'core/simulated');
       assert.equal(await evaluate(`document.querySelector('#hands-postprocessing-root').hidden`), false);
-      assert.equal(await evaluate(`document.querySelector('[data-field="sizeFactor"]').value`), '0.9');
+      assert.equal(await evaluate(`document.querySelector('[data-field="sizeFactor"]').valueAsNumber`), 0.9);
       assert.match(await evaluate(`document.querySelector('[data-mesh-message]').textContent`), /Saved.*next desktop run/);
       // Capture the real production mount in the page-owned slot, without injecting or moving controls.
       if (process.env.XRB_PROOF_DIR) {

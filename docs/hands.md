@@ -12,7 +12,7 @@ Synthetic remains an ordinary installed provider choice, never a fallback.
 
 ## Post-processing
 
-Post-processing appears below Skeleton provider only when at least one mesh plugin is installed; otherwise its entire root is hidden, including its heading and empty state, without clearing stored settings. When visible, the selector offers None or an installed mesh plugin, with its settings and status underneath. Save affects the next desktop app run, not the current one; it does not save source or adjustment drafts. Selection/settings share the global Hands profile. The current desktop run's plugin/status is shown separately from the saved choice.
+Post-processing appears below Skeleton provider only when at least one mesh plugin is installed; otherwise its entire root is hidden, including its heading and empty state, without clearing stored settings. When visible, the selector offers None or an installed mesh plugin, with its settings and status underneath. Save affects the next desktop app run, not the current one; it does not save unfinished adjustment inputs. Selection/settings share the global Hands profile. The current desktop run's plugin/status is shown separately from the saved choice.
 
 A selected plugin adds only a mesh from the final processed skeleton, never changes input/gestures/interaction, and runs only for desktop apps launched from this panel. Missing, late or failed output uses the skeleton visibly. Browser previews, published web builds and offline packages remain skeleton-only. No actual mesh processor or model is bundled by this mechanism; see [plugin setup and contract](hand-mesh-plugins.md).
 
@@ -32,7 +32,7 @@ placement is deferred. The recorder integration object uses detached nodes, pres
 component without exposing recording actions or loading the legacy recording tool module.
 
 The page exports `handsPage` from `ui/hands.js`: `view`, `snapshot`, `request`, and `recorder`.
-`snapshot` is the editor's revision-bound base, not the running session's profile authority. While `view.active`
+`snapshot` is the latest incorporated revision-bound editor snapshot, not the running session's profile authority. While `view.active`
 the session component owns ordered SDK profile updates; saved-file polling changes only idle preview.
 `view.profile` returns a cloned validated applied profile. Start must reject `recorder.replaying` (including async
 replay setup). Never derive recording provenance from unsaved controls or acknowledge a profile merely reaching disk.
@@ -65,7 +65,7 @@ storage operations use `/api/hands/tools/`. No device/model/inference/fusion mod
 ## Data
 
 Global source, adjustments and mesh selection/settings belong to workspace `config/hands/profile.json`.
-The existing right-side component owns both groups, resets, Apply and revision/delivery handling;
+The existing right-side component owns both standard direct-panel groups, independent immediate resets, committed-edit saves and revision/delivery handling;
 see [global adjustment behaviour](hand-adjustments.md).
 Legacy pose CSV remains in `.xrb/hand-tracking/recordings/`; optional calibration/preferences remain in
 `config/plugins/input-hands/preferences.json`. Exports and models stay in their existing locations.

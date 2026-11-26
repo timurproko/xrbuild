@@ -17,10 +17,10 @@ Each group corresponds to the same-order Implementation outcome in the draft PR.
 
 ## 3. Committed adjustments save and deliver with retry and conflict safety
 
-- [ ] 3.1 Separate input drafts from finished-edit commits for sliders, numeric fields/steppers, switches and colours; remove Apply/routine Reload/success prose and auto-commit each section reset; verify no intermediate or duplicate writes and exact untouched colours in targeted tests.
-- [ ] 3.2 Serialize/queue local finished edits with source writes, refresh clean editors automatically and reconcile only unrelated external changes; verify same-field conflicts retain pending intentions and require explicit review/retry rather than overwriting newer profiles.
-- [ ] 3.3 Retain POST `/api/hands/apply`, live-session-only profile ownership, geometry release/filter resets and revision/epoch fences; update focused own-notification, stale-poll, older-hash, pending/late-ack and retry regression tests.
-- [ ] 3.4 Show short inline save/delivery errors and working retries without another edit, document new semantics in `docs/hand-adjustments.md` and `docs/hands.md`, and capture isolated real-browser completed edits plus failure/retry/conflict states.
+- [x] 3.1 Separate input drafts from finished-edit commits for sliders, numeric fields/steppers, switches and colours; remove Apply/routine Reload/success prose and auto-commit each section reset; verify no intermediate or duplicate writes and exact untouched colours in targeted tests.
+- [x] 3.2 Serialize/queue local finished edits with source writes, refresh clean editors automatically and reconcile only unrelated external changes; verify same-field conflicts retain pending intentions and require explicit review/retry rather than overwriting newer profiles.
+- [x] 3.3 Retain POST `/api/hands/apply`, live-session-only profile ownership, geometry release/filter resets and revision/epoch fences; update focused own-notification, stale-poll, older-hash, pending/late-ack and retry regression tests.
+- [x] 3.4 Show short inline save/delivery errors and working retries without another edit, document new semantics in `docs/hand-adjustments.md` and `docs/hands.md`, and capture isolated real-browser completed edits plus failure/retry/conflict states.
 
 ## 4. Compatible Hands display label in Apps
 
