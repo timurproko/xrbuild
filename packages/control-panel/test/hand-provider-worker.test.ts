@@ -53,10 +53,14 @@ test('headless worker loads a test-built ABI DLL, copies its frame and shuts dow
   } finally { await session.stop(); }
 });
 test('worker preserves create/start failure reasons and never substitutes synthetic input', { skip: !worker || !dll, timeout: 20000 }, async () => {
-  for (const config of [{ failCreate: true }, { failStart: true }]) {
-    const session = await start('session-test', config, path.resolve(dll!));
-    try { const failed = await session.waitFor(event => event.phase === 'failed'); assert.match(failed.reason, /create failed on request|test failure on request/); assert.equal(session.events.some(event => event.phase === 'running'), false); }
-    finally { await session.stop(); }
+  for (const deferControlReader of [false, true]) for (const config of [{ failCreate: true }, { failStart: true }]) {
+    const session = await start('session-test', config, path.resolve(dll!), { deferControlReader });
+    try {
+      const failed = await session.waitFor(event => event.phase === 'failed');
+      assert.match(failed.reason, config.failCreate ? /create failed on request/ : /test failure on request/);
+      assert.equal(session.events.some(event => event.phase === 'running'), false);
+      await session.stop(); assert.equal(session.child.exitCode, 4);
+    } finally { await session.stop(); }
   }
 });
 test('empty detections remain empty and malformed frames fail rather than becoming generated hands', { skip: !worker || !dll, timeout: 15000 }, async () => {

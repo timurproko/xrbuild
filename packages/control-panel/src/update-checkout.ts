@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { GitRunner } from './update.ts';
+import { ownProcessBirth, recordedOwnerAlive } from './process-owner.ts';
 
 export const CHECKOUT_JOURNAL = 'xrb-update-checkout';
 interface Entry { mode: string; oid: string; file: string }
@@ -72,11 +73,10 @@ async function durableWrite(file: string, text: string) {
   const handle = await fs.open(file, 'wx');
   try { await handle.writeFile(text); await handle.sync(); } finally { await handle.close(); }
 }
-const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code !== 'ESRCH'; } };
 const identity = async (file: string) => { const stat = await fs.lstat(file, { bigint: true }); return `${stat.dev}:${stat.ino}`; };
 const sameIdentity = async (file: string, id: string) => await exists(file) && await identity(file) === id;
-const leasePattern = /^lease-(\d+)-[a-f0-9-]+\.index$/;
-const scratchPattern = /^(?:lease|working|recovery)-\d+-[a-f0-9-]+\.index(?:\.lock)?$/;
+const leasePattern = /^lease-(\d+)-(?:p(\d+)-)?[a-f0-9-]+\.index$/;
+const scratchPattern = /^(?:lease|working|recovery)-\d+-(?:p\d+-)?[a-f0-9-]+\.index(?:\.lock)?$/;
 const fixedFiles = new Set(['journal.json', 'journal.next', 'original.index', 'working.index', 'final.index', 'projected.index', 'projection.index', 'recovery.index', 'owner.json']);
 async function ownedDirectory(root: string) {
   const stat = await fs.lstat(root);
@@ -96,7 +96,7 @@ async function recoverLock(root: string, index: string) {
   for (const name of await fs.readdir(root)) {
     const match = leasePattern.exec(name);
     if (match && await identity(path.join(root, name)) === lockId) {
-      if (alive(Number(match[1]))) throw new Error('Git index lock is active; retry Update when the previous command finishes');
+      if (await recordedOwnerAlive(Number(match[1]), match[2])) throw new Error('Git index lock is active; retry Update when the previous command finishes');
       await fs.unlink(`${index}.lock`); return;
     }
   }
@@ -104,7 +104,7 @@ async function recoverLock(root: string, index: string) {
   if (await exists(path.join(root, 'owner.json'))) {
     const owner = JSON.parse(await fs.readFile(path.join(root, 'owner.json'), 'utf8')) as { pid: number; token: string; inode: string; device: string };
     const bytes = await fs.readFile(`${index}.lock`), final = path.join(root, 'final.index');
-    if (Number.isInteger(owner.pid) && owner.pid > 0 && `${owner.device}:${owner.inode}` === lockId && !alive(owner.pid)
+    if (Number.isInteger(owner.pid) && owner.pid > 0 && `${owner.device}:${owner.inode}` === lockId && !await recordedOwnerAlive(owner.pid)
       && (bytes.toString() === owner.token || await exists(final) && bytes.equals(await fs.readFile(final)))) {
       await fs.unlink(`${index}.lock`); return;
     }
@@ -113,7 +113,8 @@ async function recoverLock(root: string, index: string) {
 }
 async function acquireLock(root: string, index: string, source: string) {
   await recoverLock(root, index);
-  const file = path.join(root, `lease-${process.pid}-${randomUUID()}.index`);
+  const birth = await ownProcessBirth();
+  const file = path.join(root, `lease-${process.pid}-${birth ? `p${birth}-` : ''}${randomUUID()}.index`);
   await fs.copyFile(source, file, fs.constants.COPYFILE_EXCL);
   const handle = await fs.open(file, 'r+'); try { await handle.sync(); } finally { await handle.close(); }
   const id = await identity(file);
@@ -140,8 +141,8 @@ async function scavenge(root: string, index: string) {
   const prefix = `${path.basename(root)}.`;
   for (const name of await fs.readdir(path.dirname(root))) {
     if (!name.startsWith(prefix)) continue;
-    const match = /\.(prepare|done)-(\d+)-[a-zA-Z0-9-]+$/.exec(name);
-    if (!match || match[1] === 'prepare' && alive(Number(match[2]))) continue;
+    const match = /\.(prepare|done)-(\d+)-(?:p(\d+)-)?[a-zA-Z0-9-]+$/.exec(name);
+    if (!match || match[1] === 'prepare' && await recordedOwnerAlive(Number(match[2]), match[3])) continue;
     await removeRetired(path.join(path.dirname(root), name), index);
   }
 }
@@ -294,7 +295,8 @@ export async function checkoutFetchedCommit(dir: string, options: CheckoutOption
   line('Checkout: protected-data fast-forward; incoming defaults are not written over local user data.');
   const { index, root } = await transactionPaths(dir, git);
   await regular(index);
-  const prep = await fs.mkdtemp(`${root}.prepare-${process.pid}-`);
+  const birth = await ownProcessBirth();
+  const prep = await fs.mkdtemp(`${root}.prepare-${process.pid}-${birth ? `p${birth}-` : ''}`);
   try {
     const original = path.join(prep, 'original.index'), final = path.join(prep, 'final.index');
     await fs.copyFile(index, original);

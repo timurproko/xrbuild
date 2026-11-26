@@ -108,7 +108,9 @@ commit without a merge commit.
 
 That special case publishes one immutable prepared journal directory under Git metadata (`xrb-update-checkout`),
 separately from build resume markers. It has no mutable checkout/ready phase or owner-token file writes. A complete
-index snapshot and its PID-named ownership file acquire the index lock atomically; worktree progress is checked
+index snapshot and its ownership file acquire the index lock atomically. New Windows/Linux records bind the PID to
+its OS process creation identity, so a reused PID does not strand a dead writer's lock or preparation. Unknown
+identities and legacy PID-only records conservatively preserve an apparently live owner. Worktree progress is checked
 against the recorded old/new snapshots. Completion atomically retires the directory before cleanup. The next Update
 rolls back abandoned preparation and finishes or cleans interrupted publications automatically, including legacy
 `journal.next` files. Outside source/index/ref edits and unknown foreign locks are still preserved, never forced away.

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
-import { once } from 'node:events';
+import { once, EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import childProcess from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
 import { test } from 'node:test';
 import { JobRunner } from '../src/jobs.ts';
 import { Panel } from '../src/panel.ts';
@@ -104,4 +107,40 @@ test('timeout and explicit cancellation stop the Git network-helper tree silentl
     const work=remoteGit(['ls-remote','origin','HEAD'],f.core.checkout,controller.signal);
     setTimeout(()=>controller.abort(),150);assert.notEqual((await work).code,0);
   } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+for(const mode of ['live','exited','error'] as const) test(`cancelled Git drains after exit even when inherited pipes never close (${mode})`, {timeout:10000}, async t=>{
+  const alreadyExited=mode==='exited';
+  const child=Object.assign(new EventEmitter(),{pid:2147483000,stdout:new PassThrough(),stderr:new PassThrough(),kill(){child.emit('exit',1);return true;}});
+  const killer=new EventEmitter();let treeKills=0,settled=false;
+  t.mock.method(childProcess,'spawn',((command:string)=>{
+    if(command==='git')return child;
+    assert.equal(command,'taskkill');treeKills++;return killer;
+  }) as typeof childProcess.spawn);
+  if(process.platform!=='win32')t.mock.method(process,'kill',((pid:number)=>{assert.equal(pid,-child.pid);if(mode!=='error')child.kill();return true;}) as typeof process.kill);
+  syncBuiltinESMExports();
+  t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();child.stdout.destroy();child.stderr.destroy();});
+  const controller=new AbortController(),work=remoteGit(['ls-remote','origin','HEAD'],'.',controller.signal);
+  void work.then(()=>{settled=true;});
+  if(alreadyExited)child.emit('exit',0);
+  controller.abort();
+  if(mode==='error'){
+    child.emit('error',new Error('termination not yet confirmed'));
+    if(process.platform==='win32')killer.emit('close',0);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(settled,false,'an error is not proof that a started process has exited');
+    child.emit('exit',1);
+  }else if(!alreadyExited){
+    child.emit('exit',1);
+    if(process.platform==='win32'){
+      await new Promise(resolve=>setImmediate(resolve));assert.equal(settled,false,'admission must wait for tree cleanup');
+      killer.emit('close',0);
+    }
+  }
+  let timeout:ReturnType<typeof setTimeout>;
+  const limit=new Promise<never>((_resolve,reject)=>{timeout=setTimeout(()=>reject(new Error('Git cancellation waited for inherited pipe EOF')),1000);});
+  t.after(()=>clearTimeout(timeout));
+  const result=await Promise.race([work,limit]);
+  assert.notEqual(result.code,0);assert.equal(child.stdout.destroyed,true);assert.equal(child.stderr.destroyed,true);
+  assert.equal(treeKills,process.platform==='win32'&&!alreadyExited?1:0,'never signal an exited/reusable PID');
 });

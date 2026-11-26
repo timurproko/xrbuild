@@ -10,9 +10,10 @@ import { fixture, git, ENV } from './helpers/update-fixture.ts';
 const points = ['prepare', 'partial-manifest', 'manifest-synced', 'publish-before', 'publish-after', 'lease-before', 'lease-after',
   'source-before', 'source-after', 'ref-before', 'ref-after', 'index-before', 'index-after', 'retire-before', 'retire-after', 'cleanup',
   'legacy-initial-next', 'legacy-initial-partial', 'legacy-ready-next', 'legacy-ready-partial'];
+const reusePoints = ['win32', 'linux'].includes(process.platform) ? ['prepare-reused-pid', 'ref-before-reused-pid'] : [];
 
 test('every protected-checkout publication resumes or rolls back without Git metadata surgery', { concurrency: 2 }, async t => {
-  const cases = ['file-edit', 'file-to-directory', 'directory-to-file'].flatMap(layout => points.map(point => ({ layout, point })));
+  const cases = ['file-edit', 'file-to-directory', 'directory-to-file'].flatMap(layout => [...points, ...reusePoints].map(point => ({ layout, point })));
   await Promise.all(cases.map(({ layout, point }) => t.test(`${layout}: ${point}`, async t => {
     const f = await fixture(t), dir = f.workspace.checkout;
     if (layout === 'directory-to-file') {
@@ -37,7 +38,7 @@ test('every protected-checkout publication resumes or rolls back without Git met
     const script = `import fs from 'node:fs/promises';
       import {checkoutFetchedCommit} from ${JSON.stringify(new URL('../src/update-checkout.ts', import.meta.url).href)};
       import {runGit} from ${JSON.stringify(new URL('../src/update.ts', import.meta.url).href)};
-      const point=${JSON.stringify(point)},dir=${JSON.stringify(dir)},root=${JSON.stringify(path.join(dir, '.git', CHECKOUT_JOURNAL))};
+      const point=${JSON.stringify(point.replace('-reused-pid', ''))},dir=${JSON.stringify(dir)},root=${JSON.stringify(path.join(dir, '.git', CHECKOUT_JOURNAL))};
       const exit=()=>process.exit(88),rename=fs.rename.bind(fs),link=fs.link.bind(fs),open=fs.open.bind(fs),mkdir=fs.mkdtemp.bind(fs),rm=fs.rm.bind(fs);
       const legacy=async(initial,partial)=>{const file=root+'/journal.json',value={...JSON.parse(await fs.readFile(file,'utf8')),version:1,phase:'checkout'};
         await fs.writeFile(file,JSON.stringify(value));
@@ -71,6 +72,15 @@ test('every protected-checkout publication resumes or rolls back without Git met
         if(source&&point==='source-after'||ref&&point==='ref-after')exit();return value;};
       await checkoutFetchedCommit(dir,{git,workspace:true,before:${JSON.stringify(before)},target:${JSON.stringify(target)},branch:'main',line(){},ensureUnchanged:async()=>{}});`;
     await assert.rejects(promisify(execFile)(process.execPath, ['--input-type=module', '--eval', script], { env: ENV, timeout: 60000 }), error => (error as { code: number }).code === 88);
+    if (point.endsWith('-reused-pid')) {
+      // Deterministically model PID reuse: the recorded PID is live again, but its OS birth differs.
+      // Keep the actual lock inode/bytes and the exited writer's generation. Never remove a lock.
+      const gitDir = path.join(dir, '.git');
+      const parent = point.startsWith('prepare') ? gitDir : path.join(gitDir, CHECKOUT_JOURNAL);
+      const name = (await fs.readdir(parent)).find(name => point.startsWith('prepare') ? name.includes('.prepare-') : name.startsWith('lease-'))!;
+      assert.match(name, /-\d+-p\d+-/);
+      await fs.rename(path.join(parent, name), path.join(parent, name.replace(/-(\d+)-p/, `-${process.pid}-p`)));
+    }
     // No deleting journal.next, locks or index files in the test: the next run must handle every on-disk state itself.
     for (let retry = 0; retry < 2; retry++) {
       await resumeProtectedCheckout(dir, f.runner, f.ctx.line);
