@@ -24,6 +24,15 @@ export class HandMeshRun {
   private timers = new Set<ReturnType<typeof setTimeout>>();
   private lastSequence = -1;
   private lastRequest = 0;
+  private appStartedAtLeastOnce = false;
+  private connectTimeoutMs: number;
+  private startupTimeoutMs: number;
+  /** The host has spawned; allow its document/SDK to load before diagnosing an old client. */
+  appStarted(): void {
+    if (this.closed || this.appStartedAtLeastOnce) return;
+    this.appStartedAtLeastOnce = true;
+    this.later(() => { if (!this.epoch) this.fail('rebuild/relaunch the app to connect mesh drawing'); }, this.connectTimeoutMs);
+  }
   private watchConsumer() {
     this.later(() => {
       if (this.closed) return;
@@ -33,8 +42,10 @@ export class HandMeshRun {
   }
   private changed: (status: string) => void;
   private origins: () => string[];
-  constructor(origins: () => string[], changed: (status: string) => void = () => {}) {
+  constructor(origins: () => string[], changed: (status: string) => void = () => {}, timings: { startupMs?: number; connectMs?: number } = {}) {
     this.origins = origins; this.changed = changed;
+    this.startupTimeoutMs = timings.startupMs ?? 90000;
+    this.connectTimeoutMs = timings.connectMs ?? 30000;
     this.server = http.createServer((req, res) => { void this.request(req, res).catch(() => { if (!res.headersSent) res.writeHead(400); res.end(); }); });
     this.server.requestTimeout = 3000; this.server.headersTimeout = 3000;
   }
@@ -60,6 +71,8 @@ export class HandMeshRun {
     child.stdin.write(meshPacket({ type: 'start', version: 1, owner: plugin.owner, id: plugin.id, settingsVersion: plugin.declaration.settingsVersion, settings: values,
       limits: { hands: 2, vertices: 16384, triangles: 32768, bytes: MESH_MAX_BYTES }, ownerLoss: 'exit-on-stdin-end' }));
     this.later(() => { if (!this.ready) this.fail('sidecar ready timeout'); }, 10000);
+    // Covers dev preparation plus host/document loading, even if no app-start notification arrives.
+    this.later(() => { if (!this.epoch) this.fail('app startup timeout before mesh connection'); }, this.startupTimeoutMs);
     return this.descriptor;
   }
   private reply(work: Work | null, bytes?: Uint8Array) {
@@ -88,7 +101,6 @@ export class HandMeshRun {
         const { meta } = readMeshPacket(packet);
         if (meta.type === 'ready' && meta.version === 1 && !this.ready) {
           this.ready = true; this.setStatus('Ready; app mesh not started'); this.pump();
-          this.later(() => { if (!this.epoch) this.fail('rebuild/relaunch the app to connect mesh drawing'); }, 3000);
           continue;
         }
         const result = decodeMeshResult(packet), work = this.current;

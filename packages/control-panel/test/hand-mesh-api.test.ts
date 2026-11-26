@@ -16,13 +16,13 @@ import { PanelFrame } from '../../sdk/src/stereo.ts';
 import { decodeMessage, type HandsMessage } from '../../sdk/src/protocol.ts';
 import { handsMessage } from '../../sdk/test/fixtures.ts';
 
-test('mesh API persists next-run choice independently, pins runtime metadata and missing plugin fails open', async t => {
+test('mesh survives delayed managed dev startup, pins next-run choices and missing plugins fail open', async t => {
   const parent = path.resolve(process.env.XRB_TEST_ROOT ?? '.artifacts'); await fs.mkdir(parent, { recursive: true });
   const root = await fs.mkdtemp(path.join(parent, 'mesh-api-')), core = path.join(root, 'core'), workspace = path.join(root, 'user');
   const write = async (file: string, value: unknown) => { await fs.mkdir(path.dirname(file), { recursive: true }); await fs.writeFile(file, typeof value === 'string' ? value : JSON.stringify(value)); };
   const dir = path.join(workspace, 'projects/unsorted/example');
   await write(path.join(core, 'native/host/build/Release/xrb-host.exe'), 'fake host; run intercepted');
-  await write(path.join(dir, 'xrb-project.json'), { name: 'Example', kind: 'app', inputs: ['hand'], entry: 'dist' }); await write(path.join(dir, 'dist/index.html'), '<html>example</html>');
+  await write(path.join(dir, 'xrb-project.json'), { name: 'Example', kind: 'app', inputs: ['hand'], entry: 'dist', scripts: { dev: 'vite' } }); await write(path.join(dir, 'dist/index.html'), '<html>example</html>');
   const plugin = path.join(workspace, 'plugins/example');
   await write(path.join(plugin, 'xrb-plugin.json'), { title: 'Example', type: 'plugin', version: '1.0.0', handMesh: { version: 1, id: 'surface', label: 'Example surface', program: 'missing-runtime.exe', args: [], settingsVersion: 1,
     settings: [{ key: 'quality', label: 'Quality', type: 'number', min: 1, max: 3, default: 2 }] } });
@@ -46,13 +46,23 @@ test('mesh API persists next-run choice independently, pins runtime metadata and
   t.mock.method(HandMeshRun.prototype, 'start', function (plugin, settings) {
     return start.call(this, { ...plugin, program: process.execPath, declaration: { ...plugin.declaration, args: [fileURLToPath(new URL('./fixtures/hand-mesh-sidecar.mjs', import.meta.url))] } }, settings);
   });
-  let config: any;
+  let config: any, delayedStart = false;
+  panel.ensureDevInstalled = async () => {}; // No install/Vite/host: only the real fake mesh child runs.
   panel.runner.start = async (request: any) => {
     config = JSON.parse(await fs.readFile(request.hostArgs.find((v: string) => v.startsWith('--config=')).slice(9), 'utf8'));
+    if (!delayedStart) {
+      delayedStart = true; assert.equal(request.mode, 'dev');
+      panel.runner.s = { ...panel.runner.s, phase: 'starting', projectId: 'example' }; panel.runner.emit('state', panel.runner.state());
+      for (let i = 0; i < 200 && panel.meshRun.status === 'Starting'; i++) await new Promise(resolve => setTimeout(resolve, 10));
+      assert.match(panel.meshRun.status, /Ready/);
+      // Regression: Vite/host startup can outlast three seconds AFTER a healthy child says ready.
+      await new Promise(resolve => setTimeout(resolve, 3200));
+      assert.match(panel.meshRun.status, /Ready/, 'processor readiness must not retire an endpoint before the app starts');
+    }
     panel.runner.s = { ...panel.runner.s, phase: 'running', projectId: 'example' }; panel.runner.emit('state', panel.runner.state());
   };
   const project = (await readProject(dir, 'example', 'unsorted'))!;
-  await panel.run(project, 'built'); assert.equal(config.input, 'simulated'); assert.equal(config.handMeshRuntime.version, 1);
+  await panel.run(project, 'dev'); assert.equal(config.input, 'simulated'); assert.equal(config.handMeshRuntime.version, 1);
   const fetcher = (url: any, init: any) => fetch(url, { ...init, headers: { ...init.headers, origin: 'https://app.local' } });
   const client = new HandMeshClient(config.handMeshRuntime, fetcher as typeof fetch), input = new HandInput({ smoothing: false, prediction: false }), visual = new HandVisual(), mapping = new PanelFrame();
   t.after(() => { client.close(); visual.disposeMeshes(); });

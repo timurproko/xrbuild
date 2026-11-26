@@ -38,9 +38,14 @@ test('Hands mounts its selector once, preserves drafts, saves next-run only and 
       await choose('workspace:example/surface');
       assert.equal(await evaluate(`document.querySelectorAll('[data-mesh-field]').length`), 3);
       await evaluate(`const quality=document.querySelector('[data-mesh-field="quality"]');quality.value='low';quality.dispatchEvent(new Event('change',{bubbles:true}));const n=document.querySelector('[data-mesh-field="iterations"]');n.value='4';n.dispatchEvent(new Event('input',{bubbles:true}));const normals=document.querySelector('[data-mesh-field="normals"]');normals.checked=false;normals.dispatchEvent(new Event('change',{bubbles:true}));`);
-      const save = async () => { await evaluate(`document.querySelector('[data-mesh-save]').click()`); await sleep(150); };
+      const save = async () => {
+        await evaluate(`document.querySelector('[data-mesh-save]').click()`);
+        for (let i = 0; i < 100; i++) { if (await evaluate(`!document.querySelector('[data-mesh-selector]').disabled`)) return; await sleep(20); }
+        assert.fail('mesh Save did not finish');
+      };
       await save(); let state = await readHandsState(core, workspace);
       assert.deepEqual(state.provider, { owner: 'core', id: 'simulated' }); assert.equal(state.profile.sizeFactor, 1);
+      assert.ok(state.raw.postprocessing, await evaluate(`document.querySelector('[data-mesh-message]').textContent`));
       assert.deepEqual((state.raw.postprocessing as any).settings['workspace:example/surface'].values, { quality: 'low', iterations: 4, normals: false });
       assert.equal(await evaluate(`document.querySelector('#hands-provider').value`), 'core/webxr');
       assert.equal(await evaluate(`document.querySelector('[data-field="sizeFactor"]').value`), '0.9');
@@ -76,4 +81,62 @@ test('Hands mounts its selector once, preserves drafts, saves next-run only and 
       assert.equal(await evaluate('meshReads'), stopped, 'page teardown stops the mounted selector polling');
     });
   } finally { await app.close(); await fs.rm(root, { recursive: true, force: true }); }
+});
+
+test('delayed mesh Save locks every setting and does not accept or claim a newer busy edit', { skip: !process.env.XRB_TEST_BROWSER, timeout: 30000 }, async () => {
+  const parent = path.resolve(process.env.XRB_TEST_ROOT ?? '.artifacts'); await fs.mkdir(parent, { recursive: true });
+  const workspace = await fs.mkdtemp(path.join(parent, 'mesh-save-race-')), port = await freePort();
+  const app = createServer({ repo: path.resolve(import.meta.dirname, '../../..'), workspace, port });
+  app.panel.nativeProviders = async () => ({ providers: [], rejected: [], error: null });
+  app.server.listen(port, '127.0.0.1'); await once(app.server, 'listening');
+  try {
+    await withBrowser(async ({ navigate, evaluate, send }) => {
+      await send('Network.enable'); await send('Network.setBlockedURLs', { urls: ['https://*'] });
+      await navigate(`http://127.0.0.1:${port}/hands/`, `!!document.querySelector('[data-mesh-selector]')`);
+      await evaluate(`(async()=>{
+        const {mountHandsPostprocessing}=await import('/hands-postprocessing.js');
+        const root=document.createElement('div');root.id='mesh-save-race';document.body.append(root);
+        const plugin={owner:'workspace:fixture',id:'mesh',label:'Fixture',available:true,reason:'Not started',declaration:{settingsVersion:1,settings:[
+          {key:'quality',label:'Quality',type:'select',default:'low',options:[{value:'low',label:'Low'},{value:'mid',label:'Mid'}]},
+          {key:'iterations',label:'Iterations',type:'number',min:1,max:4,default:2},
+          {key:'normals',label:'Normals',type:'boolean',default:true}
+        ]}};
+        const snapshot={plugins:[plugin],revision:'a'.repeat(64),registryRevision:'registry',choice:{version:1,selected:null,settings:{}},running:false};
+        window.saveFixture={requests:[],resolve:null};
+        saveFixture.component=mountHandsPostprocessing(root,{pollMs:0,load:async()=>snapshot,save:body=>{
+          saveFixture.requests.push(structuredClone(body));return new Promise(resolve=>{saveFixture.resolve=()=>resolve({revision:String.fromCharCode(97+saveFixture.requests.length).repeat(64),choice:{version:1,selected:body.selected,settings:{'workspace:fixture/mesh':{version:1,values:{quality:'low',iterations:2,normals:true,...body.values}}}}})});
+        }});
+        await new Promise(resolve=>setTimeout(resolve,0));
+        const selector=root.querySelector('[data-mesh-selector]');selector.value='workspace:fixture/mesh';selector.dispatchEvent(new Event('change',{bubbles:true}));
+        root.querySelector('[data-mesh-save]').click();
+      })()`);
+      assert.equal(await evaluate(`Array.from(document.querySelectorAll('#mesh-save-race input, #mesh-save-race select, #mesh-save-race button')).every(e=>e.disabled)`), true, 'settings and numeric stepper buttons lock with the selector');
+      await evaluate(`(()=>{
+        const root=document.querySelector('#mesh-save-race');
+        const quality=root.querySelector('[data-mesh-field="quality"]');quality.value='mid';quality.dispatchEvent(new Event('change',{bubbles:true}));
+        const iterations=root.querySelector('[data-mesh-field="iterations"]');iterations.value='4';iterations.dispatchEvent(new Event('input',{bubbles:true}));
+        const normals=root.querySelector('[data-mesh-field="normals"]');normals.checked=false;normals.dispatchEvent(new Event('change',{bubbles:true}));
+        const selector=root.querySelector('[data-mesh-selector]');selector.value='';selector.dispatchEvent(new Event('change',{bubbles:true}));
+        saveFixture.resolve();
+      })()`);
+      await sleep(20);
+      const state = await evaluate(`(()=>{const root=document.querySelector('#mesh-save-race');return{
+        sent:saveFixture.requests[0].values,quality:root.querySelector('[data-mesh-field="quality"]').value,
+        iterations:root.querySelector('[data-mesh-field="iterations"]').value,normals:root.querySelector('[data-mesh-field="normals"]').checked,
+        selected:root.querySelector('[data-mesh-selector]').value,dirty:root.dataset.dirty,saveDisabled:root.querySelector('[data-mesh-save]').disabled,
+        fieldsEnabled:Array.from(root.querySelectorAll('[data-mesh-field], [data-number-step]')).every(e=>!e.disabled),message:root.querySelector('[data-mesh-message]').textContent
+      }})()`);
+      assert.deepEqual(state.sent, {}); assert.equal(state.quality, 'low'); assert.equal(state.iterations, '2'); assert.equal(state.normals, true);
+      assert.equal(state.selected, 'workspace:fixture/mesh'); assert.equal(state.dirty, 'false'); assert.equal(state.saveDisabled, true); assert.equal(state.fieldsEnabled, true); assert.match(state.message, /Saved/);
+      // A real edit after Save completes is a new unsaved draft and can be saved normally.
+      await evaluate(`(()=>{const root=document.querySelector('#mesh-save-race'),field=root.querySelector('[data-mesh-field="quality"]');field.value='mid';field.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      assert.equal(await evaluate(`document.querySelector('#mesh-save-race').dataset.dirty`), 'true');
+      assert.equal(await evaluate(`document.querySelector('#mesh-save-race [data-mesh-save]').disabled`), false);
+      await evaluate(`document.querySelector('#mesh-save-race [data-mesh-save]').click();saveFixture.resolve()`); await sleep(20);
+      assert.equal(await evaluate(`saveFixture.requests[1].values.quality`), 'mid');
+      assert.equal(await evaluate(`document.querySelector('#mesh-save-race [data-mesh-field="quality"]').value`), 'mid');
+      assert.equal(await evaluate(`document.querySelector('#mesh-save-race').dataset.dirty`), 'false');
+      await evaluate(`saveFixture.component.dispose();dispatchEvent(new Event('pagehide'))`);
+    });
+  } finally { await app.close(); await fs.rm(workspace, { recursive: true, force: true }); }
 });

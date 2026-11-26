@@ -1673,6 +1673,8 @@ export class Panel {
         cameraAvailable: (selection.inputs ?? []).some((name) => !BUILTIN_PROVIDERS.has(name)),
         hostArgs: [`--title=${m.name}`, `--camera-projection=${flat ? 'orthographic' : 'perspective'}`, ...(await this.hostArgs(p, m, desktop, nativeSelection)), ...(flat && selection.display !== 'desktop' ? ['--view=2d'] : [])],
       });
+      // start() includes dev-server preparation; sidecar readiness must not start the SDK deadline.
+      this.meshRun?.appStarted();
     } catch (e) {
       this.nativeHandPolicy = null; this.setLiveHands(null); await this.stopMesh();
       const last = this.runner.state().last;

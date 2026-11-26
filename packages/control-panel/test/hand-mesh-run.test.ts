@@ -17,8 +17,8 @@ const plugin = (mode = 'normal', delay = 0, vertices = 2859) => ({ owner: 'works
     { key: 'delay', label: 'Delay', type: 'number', min: 0, max: 500, default: delay },
     { key: 'vertices', label: 'Vertices', type: 'number', min: 3, max: 2859, default: vertices },
   ] }) });
-async function start(t: any, mode = 'normal', delay = 0) {
-  const run = new HandMeshRun(() => ['https://app.local']); t.after(() => run.stop());
+async function start(t: any, mode = 'normal', delay = 0, timings: { startupMs?: number; connectMs?: number } = {}) {
+  const run = new HandMeshRun(() => ['https://app.local'], () => {}, timings); t.after(() => run.stop());
   const descriptor = await run.start(plugin(mode, delay), {});
   const request = (route: string, body = frame(), token = descriptor.token, origin = 'https://app.local') => fetch(descriptor.url + route, { method: 'POST', headers: { origin, authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   for (let i = 0; i < 200 && run.status === 'Starting'; i++) await wait(10);
@@ -57,9 +57,15 @@ test('missing runtime and an old client degrade without making startup wait', as
   assert.ok(descriptor.token);
   for (let i = 0; i < 100 && !missing.status.startsWith('Skeleton fallback'); i++) await wait(10);
   assert.match(missing.status, /Skeleton fallback/); await missing.stop();
-  const old = await start(t);
-  await wait(3100);
+  const old = await start(t, 'normal', 0, { connectMs: 50 });
+  old.run.appStarted(); await wait(80);
   assert.match(old.run.status, /rebuild\/relaunch/);
+});
+test('unattached startup remains bounded even without an owning app-start signal', async t => {
+  const f = await start(t, 'normal', 0, { startupMs: 1500 });
+  for (let i = 0; i < 200 && !f.run.status.startsWith('Skeleton fallback'); i++) await wait(10);
+  assert.match(f.run.status, /app startup timeout/);
+  await assert.rejects(f.request('/connect'));
 });
 test('owner process death closes the private pipe and the real child exits', async t => {
   const parent = path.resolve(process.env.XRB_TEST_ROOT ?? '.artifacts'); await fs.mkdir(parent, { recursive: true });

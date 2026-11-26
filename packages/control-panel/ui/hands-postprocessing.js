@@ -23,7 +23,9 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   const plugin = () => snapshot?.plugins.find(p => key(p) === selected);
   const buttons = () => {
     button.disabled = !snapshot || !!snapshot.problem || !dirty || busy || revisions.stale || !!selected && !plugin()?.available;
-    reload.disabled = busy; select.disabled = busy; root.dataset.dirty = String(dirty);
+    reload.disabled = busy; select.disabled = busy;
+    for (const control of fields.querySelectorAll('input, select, button')) control.disabled = busy;
+    root.dataset.dirty = String(dirty);
   };
   function renderFields() {
     stepperDispose();
@@ -72,19 +74,24 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     try { const data = await load(); if (!disposed && generation === reads && !busy) refresh(data, { discard }); }
     catch (e) { if (!disposed && generation === reads) message.textContent = e.message; }
   }
-  const change = () => { selected = select.value; dirty = true; renderFields(); };
+  const change = () => {
+    if (busy || disposed) { select.value = selected; return; }
+    selected = select.value; dirty = true; renderFields();
+  };
   const input = event => {
+    if (busy || disposed) return;
     const f = plugin()?.declaration.settings.find(f => f.key === event.target.dataset.meshField); if (!f) return;
     drafts[selected] ??= {}; drafts[selected][f.key] = f.type === 'boolean' ? event.target.checked : f.type === 'number' ? event.target.valueAsNumber : event.target.value;
     dirty = true; buttons();
   };
   const submit = async event => {
     event.preventDefault(); if (button.disabled || !form.reportValidity()) return;
-    busy = true; reads++; buttons(); const p = plugin();
+    busy = true; reads++; buttons(); const p = plugin(), values = { ...(drafts[selected] ?? {}) };
     try {
-      const result = await save({ selected: p ? { owner: p.owner, id: p.id } : null, values: drafts[selected] ?? {}, revision: snapshot.revision, registryRevision: snapshot.registryRevision });
+      const result = await save({ selected: p ? { owner: p.owner, id: p.id } : null, values, revision: snapshot.revision, registryRevision: snapshot.registryRevision });
       if (disposed) return;
       snapshot = { ...snapshot, revision: result.revision, choice: result.choice }; revisions.incorporate(result.revision); dirty = false;
+      renderFields(); // Restore the submitted snapshot even after a synthetic event on a disabled input.
       message.textContent = revisions.stale ? 'Saved; another change needs Reload/review.' : 'Saved. Applies on next desktop run.';
     } catch (e) { if (!disposed) message.textContent = `${e.message} Reload to review; your draft is preserved.`; }
     finally { busy = false; if (!disposed) buttons(); }
