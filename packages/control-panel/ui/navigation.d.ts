@@ -16,6 +16,6 @@ export function isReplacementPanel(previous:{pid?:number;instanceId?:string}|nul
 export function replaceActiveDocument(target?:{href:string;replace(url:string):void}):void;
 export function restartPanelInPlace(origin?:string):Promise<void>;
 export function rebuildHostInPlace(origin?:string):Promise<void>;
-export function updateWorkspaceInPlace(origin?:string):Promise<void>;
+export function updateInPlace(origin?:string):Promise<void>;
 export function menuKeyboard(event:KeyboardEvent,menu:HTMLElement,close:()=>void):void;
 export function mountToolNavigation(button:HTMLElement,menu:HTMLElement,options:{origin:string;tools:readonly ToolLink[];current:string;maintenance?:boolean;discover?:boolean}):()=>void;

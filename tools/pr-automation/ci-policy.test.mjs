@@ -72,6 +72,16 @@ test('fast PR checks remain path-selected and the required check accepts only in
   }
 });
 
+test('Node CI prepares the pinned Corepack manager before timed fixtures', () => {
+  const node = job('node');
+  const bootstrap = node.indexOf('- run: corepack install');
+  const suites = node.indexOf('- run: pnpm -r --no-bail --if-present test');
+  assert.ok(bootstrap >= 0 && bootstrap < suites, 'populate the separate Corepack cache before running tests');
+  const root = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+  const embedded = JSON.parse(readFileSync(new URL('../../embedded/package.json', import.meta.url), 'utf8'));
+  assert.equal(root.packageManager, embedded.packageManager, 'one bootstrap covers the pinned embedded manager');
+});
+
 test('public embedded contracts select frozen typechecked/compiler checks without private credentials or devices', () => {
   const changes = job('changes');
   const pattern = output => {

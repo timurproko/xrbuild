@@ -4,7 +4,7 @@ import { SettingsWriter } from './settings-writer.js';
 import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
 import {requestedNavigation,menuKeyboard,renderNavigationMenu,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
-import {rebuildHostInPlace,updateWorkspaceInPlace} from './rebuild-dialog.js';
+import {rebuildHostInPlace,updateInPlace,updateTooltip} from './rebuild-dialog.js';
 import {enhanceHelpText,iconSvg,installDropdowns,installIcons,installNumberSteppers,installTabs,installTooltips,openFloating,renderField,resumeAnimations,setFieldError,setPageIdentity,setRevealed,stabilizePanelHeight,transitionPanelHeight,updateRebuildChip,updateRestartChip} from './design-system.js';
 import {exposedProviderInputs,runtimeProviderInputs} from './provider-choice.js';
 import {bumpPackageVersion, nextPublicationVersion} from './package-version.js';
@@ -409,16 +409,16 @@ const loadPlugins = async () => {
   renderHost();
   if (state.page === 'settings') renderGlobalSettings();
 };
-// Update workspace status. It never fetches: "behind" is as of the last fetch, which only Update itself runs.
-const loadWorkspaceUpdate = async () => {
-  // While an update runs its own Git commands, the panel leaves the clone alone; the job's end refreshes the status.
-  if ([...state.jobs.values()].some((job) => job.kind === 'workspace-update' && (job.state === 'running' || job.state === 'queued'))) return;
-  state.workspaceUpdate = await api('GET', '/api/workspace/update').catch(() => null);
-  renderWorkspaceUpdate();
+// Update status of the core and the workspace. It never fetches: "behind" is as of the last fetch, which only Update itself runs.
+const loadUpdate = async () => {
+  // While an update runs its own Git commands, the panel leaves the clones alone; the job's end refreshes the status.
+  if ([...state.jobs.values()].some((job) => job.kind === 'update' && (job.state === 'running' || job.state === 'queued'))) return;
+  state.update = await api('GET', '/api/update').catch(() => null);
+  renderUpdate();
 };
 const loadHost = async () => {
   state.host = await api('GET', '/api/host');
-  void loadWorkspaceUpdate();
+  void loadUpdate();
   // The host's providers change only with a rebuild: refreshed here, after one.
   await loadPlugins();
   renderRunLog();
@@ -2369,23 +2369,22 @@ function renderHost() {
   rebuildDot.hidden = !needsRebuild;
 }
 
-/** The "behind origin" hint and the Update workspace menu item, from a status that never fetches. */
-function renderWorkspaceUpdate() {
-  const status = state.workspaceUpdate, chip = $('#workspace-chip'), item = $('#workspace-update');
-  const remote = status?.upstream?.split('/')[0] || 'origin';
-  const checked = status?.checkedMs ? `Remote last checked ${ago(status.checkedMs)}` : 'Remote not checked yet';
-  const behind = !!status?.available && status.behind > 0, unfinished = !!status?.available && !!status.unfinished;
+/** The "workspace behind" hint and the Update menu item, from a status that never fetches. */
+function renderUpdate() {
+  const status = state.update, workspace = status?.workspace, chip = $('#update-chip'), item = $('#panel-update');
+  const remote = workspace?.upstream?.split('/')[0] || 'origin';
+  const checked = workspace?.checkedMs ? `Remote last checked ${ago(workspace.checkedMs)}` : 'Remote not checked yet';
+  const behind = !!workspace?.available && workspace.behind > 0, unfinished = !!workspace?.available && !!workspace.unfinished;
   if (chip) {
     chip.hidden = !behind && !unfinished;
-    chip.textContent = behind ? `workspace behind ${remote} by ${status.behind}` : unfinished ? 'workspace update unfinished' : '';
-    chip.title = behind ? `${checked}. Choose Update workspace to fetch, pull and rebuild.`
-      : unfinished ? 'An earlier update pulled new commits but its rebuild did not succeed. Choose Update workspace to finish it.' : '';
+    chip.textContent = behind ? `workspace behind ${remote} by ${workspace.behind}` : unfinished ? 'workspace update unfinished' : '';
+    chip.title = behind ? `${checked}. Choose Update to fetch, pull and rebuild the workspace.`
+      : unfinished ? 'An earlier update pulled new workspace commits but its rebuild did not succeed. Choose Update to finish it.' : '';
   }
   if (item) {
-    if (status && !status.available) item.setAttribute('aria-disabled', 'true'); else item.removeAttribute('aria-disabled');
-    item.title = !status ? '' : !status.available ? status.reason ?? ''
-      : status.behind ? `Behind ${remote} by ${status.behind}. ${checked}.` : status.unfinished ? 'The last update did not finish: run it again.'
-      : `Up to date with ${remote} at the last check. ${checked}.`;
+    // This version updates the workspace: the item is available when the workspace can be updated.
+    if (workspace && !workspace.available) item.setAttribute('aria-disabled', 'true'); else item.removeAttribute('aria-disabled');
+    item.title = updateTooltip(status);
   }
 }
 
@@ -3528,7 +3527,7 @@ window.addEventListener('xrb-theme-change', () => {
 let navigationTools=[];
 function renderPanelNavigation(){
   renderNavigationMenu($('#panel-menu'),{origin:location.origin,tools:navigationTools,current:state.page,indicators:true});
-  if(state.host)renderHost();if(state.panel)renderPanelFreshness();renderWorkspaceUpdate();
+  if(state.host)renderHost();if(state.panel)renderPanelFreshness();renderUpdate();
 }
 renderPanelNavigation();
 
@@ -3553,7 +3552,7 @@ $('#panel-menu').addEventListener('click',event=>{
   const item=event.target.closest('[data-navigation]');if(!item)return;const id=item.dataset.navigation;
   if(id==='rebuild'||id==='restart'||id==='update')event.preventDefault();
   if(id==='rebuild')void rebuildHost();else if(id==='restart')void restartPanel().catch(report);
-  else if(id==='update'&&item.getAttribute('aria-disabled')!=='true')void updateWorkspace();
+  else if(id==='update'&&item.getAttribute('aria-disabled')!=='true')void updateBoth();
 });
 $('#panel-menu').addEventListener('keydown',e=>menuKeyboard(e,$('#panel-menu'),()=>{closeMenu();$('#panel-menu-button').focus();}));
 $('#panel-menu-button').addEventListener('keydown',e=>{if(['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();if($('#panel-menu').hidden)$('#panel-menu-button').click();$('#panel-menu [role="menuitem"]')?.focus();}});
@@ -3658,9 +3657,9 @@ async function rebuildHost() {
     onComplete: () => loadHost().then(() => renderDetail()).catch(report),
   });
 }
-async function updateWorkspace() {
+async function updateBoth() {
   closeMenu();
-  await updateWorkspaceInPlace(location.origin, {
+  await updateInPlace(location.origin, {
     onJob(job) {
       const previous = state.jobs.get(job.id);
       state.jobs.set(job.id, { ...job, lines: job.lines ?? previous?.lines ?? [] });
@@ -3777,7 +3776,7 @@ function connect() {
         void finishPackageSetup(j).catch(report);
       }
     }
-    if (j.state !== 'running' && (j.kind === 'host-rebuild' || j.kind === 'workspace-update')) loadHost().then(() => renderDetail()).catch(report);
+    if (j.state !== 'running' && (j.kind === 'host-rebuild' || j.kind === 'update')) loadHost().then(() => renderDetail()).catch(report);
   });
   on('job-line', ({ id, text }) => {
     const j = state.jobs.get(id);
@@ -3829,7 +3828,7 @@ connect();
 // A maintenance link is an explicit one-shot action; shared tool navigation normally handles it in place.
 if(navigationRequest.maintenance){
   if(navigationRequest.maintenance==='rebuild')$('#host-rebuild').click();
-  else if(navigationRequest.maintenance==='update')$('#workspace-update').click();
+  else if(navigationRequest.maintenance==='update')$('#panel-update').click();
   else $('#panel-restart').click();
 }
 setInterval(() => { renderProjects(); loadHost().catch(() => {}); loadPanelFreshness().catch(() => {}); }, 30000);
