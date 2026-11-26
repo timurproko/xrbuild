@@ -43,6 +43,8 @@ export interface Job {
   publication: JobPublication | null;
   release: JobRelease | null;
   result: unknown;
+  /** Update workspace's current step (its last `step <id>` line), kept because /api/jobs sends only the last lines. */
+  step?: string | null;
   lines: string[];
 }
 
@@ -215,6 +217,7 @@ export class JobRunner extends EventEmitter {
     const line = (raw: string) => {
       const text = stripAnsi(raw);  // tools like vite colour their output even into a pipe
       job.lines.push(text);
+      if (kind === 'workspace-update' && /^step [a-z]+$/.test(text)) job.step = text.slice('step '.length);
       if (job.lines.length > MAX_LINES) job.lines.splice(0, job.lines.length - MAX_LINES);
       this.emit('line', job, text);
     };

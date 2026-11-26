@@ -5,9 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { test, type TestContext } from 'node:test';
 import { JobRunner, type JobContext } from '../src/jobs.ts';
+import { rebuildPresentation } from '../ui/rebuild-dialog.js';
 import { freePort } from '../src/host-runner.ts';
 import { createServer } from '../src/server.ts';
-import { overwrittenFiles, runGit, updateWorkspace, workspaceUpdateStatus, WorkspaceUpdateError, type GitRunner } from '../src/workspace-update.ts';
+import { lfsProgressFilter, overwrittenFiles, rebuiltPluginNames, runGit, updateWorkspace, workspaceUpdateStatus, WorkspaceUpdateError, type GitRunner } from '../src/workspace-update.ts';
 
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.invalid', GIT_TERMINAL_PROMPT: '0' };
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, env: ENV, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -28,11 +29,18 @@ async function fixture(t: TestContext, lfs: { code: number } = { code: 0 }) {
     await fs.writeFile(path.join(publisher, file), text);
     git(publisher, 'commit', '-qam', `change ${file}`); git(publisher, 'push', '-q', 'origin', 'HEAD:main');
   };
-  const calls: string[][] = [];
+  const calls: string[][] = [], lfsEnv: Array<NodeJS.ProcessEnv | undefined> = [];
   const stub: GitRunner = async (args, cwd, opts) => {
     calls.push(args);
     if (args[0] === 'lfs') {
-      opts?.onLine?.(args[1] === 'pull' ? 'Downloading LFS objects: 100% (1/1)' : 'git-lfs/3.0.0 (stub)');
+      if (args[1] !== 'pull') opts?.onLine?.('git-lfs/3.0.0 (stub)');
+      else {
+        // Like forced Git LFS progress: one update per chunk, then 100 % repeated as the last bytes land.
+        lfsEnv.push(opts?.env);
+        for (let p = 0; p <= 100; p++) opts?.onLine?.(`Downloading LFS objects: ${p}% (${p === 100 ? 1 : 0}/1), ${p} MB | 10 MB/s`);
+        opts?.onLine?.('Downloading LFS objects: 100% (1/1), 100 MB | 10 MB/s');
+        opts?.onLine?.('Downloading LFS objects: 100% (1/1), 100 MB | 10 MB/s, done.');
+      }
       return { code: args[1] === 'pull' ? lfs.code : 0, output: '' };
     }
     return runGit(args, cwd, { ...opts, env: { ...ENV, ...opts?.env } });
@@ -42,7 +50,7 @@ async function fixture(t: TestContext, lfs: { code: number } = { code: 0 }) {
   const rebuilds: boolean[] = [];
   const deps = { git: stub, coreHostCurrent: async () => true, rebuild: async (pluginsOnly: boolean) => { rebuilds.push(pluginsOnly); return ['tracker']; } };
   const head = () => git(workspace, 'rev-parse', 'HEAD');
-  return { root, remote, publisher, workspace, publish, calls, lines, ctx, rebuilds, deps, head };
+  return { root, remote, publisher, workspace, publish, calls, lfsEnv, lines, ctx, rebuilds, deps, head };
 }
 
 const rejectsAt = async (promise: Promise<unknown>, step: string, pattern: RegExp) => {
@@ -64,7 +72,10 @@ test('fast-forwards, pulls LFS content, then rebuilds plugins and reports the co
   assert.match(result.summary, new RegExp(`Updated ${before.slice(0, 7)} → ${result.to.slice(0, 7)} \\(3 commits\\)\\. Rebuilt: tracker\\.`));
   assert.equal(await fs.readFile(path.join(f.workspace, 'shared.txt'), 'utf8'), 'three\n');
   assert.deepEqual(f.lines.filter((l) => l.startsWith('step ')), ['step check', 'step fetch', 'step pull', 'step lfs', 'step rebuild']);
-  assert.ok(f.lines.includes('Downloading LFS objects: 100% (1/1)'), 'LFS progress is streamed');
+  assert.equal(f.lfsEnv[0]?.GIT_LFS_FORCE_PROGRESS, '1', 'LFS progress is forced although the output is not a terminal');
+  const progress = f.lines.filter((l) => l.startsWith('Downloading LFS objects:'));
+  assert.equal(progress.length, 21, 'one progress line per 5 % and 100 % once');
+  assert.equal(progress.at(-1), 'Downloading LFS objects: 100% (1/1), 100 MB | 10 MB/s');
   assert.ok(f.calls.some((args) => args.join(' ') === 'pull --ff-only --no-rebase'));
   for (const args of f.calls) assert.ok(!['stash', 'merge', 'rebase', 'reset', 'checkout', 'clean'].includes(args[0]!), `never runs git ${args[0]}`);
 });
@@ -252,4 +263,33 @@ test('POST workspace/update refuses a workspace that is not a clone, with the re
   const refused = await f.request('POST', '/api/workspace/update');
   assert.equal(refused.status, 409); assert.equal(refused.data.error, 'The workspace is not a Git clone.');
   assert.equal(f.server.panel.jobs.list().length, 0);
+});
+
+test('a long LFS or build step keeps its step in the dialog although /api/jobs sends only the last lines', async () => {
+  const jobs = new JobRunner(); let release!: () => void;
+  const job = jobs.start('workspace-update', null, 'update workspace', (ctx) => {
+    for (const step of ['check', 'fetch', 'pull', 'lfs', 'rebuild']) ctx.line(`step ${step}`);
+    ctx.line('plugin tracker');
+    for (let i = 0; i < 250; i++) ctx.line(`cmake output ${i}`);
+    return new Promise<void>((resolve) => { release = resolve; });
+  });
+  const listed = jobs.list().find((j) => j.id === job.id)!;
+  assert.ok(!listed.lines.some((l) => l.startsWith('step ')), 'the visible tail has no step line');
+  assert.equal(listed.step, 'rebuild');
+  const shown = rebuildPresentation(listed);
+  assert.equal(shown.step, 'rebuild'); assert.equal(shown.message, 'Step 5 of 5, Rebuild: Rebuilding plugins…');
+  release(); await jobs.wait(job);
+  const other = jobs.start('web-build', null, 'build', async (ctx) => { ctx.line('step one'); });
+  await jobs.wait(other);
+  assert.equal(other.step, undefined, 'only workspace updates track steps');
+});
+
+test('rebuilt plugins are named by plugin, not by their runtime subproject', () => {
+  assert.deepEqual(rebuiltPluginNames([{ dir: 'foo' }, { dir: 'foo/runtime' }, { dir: 'bar/runtime' }]), ['foo', 'bar']);
+});
+
+test('LFS progress keeps other lines and restarts its throttle for a new meter', () => {
+  const out: string[] = [], keep = lfsProgressFilter((l) => out.push(l));
+  for (const l of ['Downloading LFS objects: 0% (0/2)', 'Downloading LFS objects: 3% (0/2)', 'Downloading LFS objects: 5% (0/2)', 'error: smudge failed', 'Checking out LFS objects: 1% (0/2)']) keep(l);
+  assert.deepEqual(out, ['Downloading LFS objects: 0% (0/2)', 'Downloading LFS objects: 5% (0/2)', 'error: smudge failed', 'Checking out LFS objects: 1% (0/2)']);
 });

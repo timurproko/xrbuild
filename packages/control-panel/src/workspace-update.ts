@@ -112,6 +112,26 @@ export interface WorkspaceUpdateDeps {
 }
 
 const TAIL = 12;
+
+/** Plugin ids from rebuilt native projects: a plugin's `<id>/runtime` subproject is the same plugin. */
+export function rebuiltPluginNames(plugins: ReadonlyArray<{ dir: string }>): string[] {
+  return [...new Set(plugins.map((plugin) => plugin.dir.split('/')[0]!))];
+}
+
+/**
+ * Git LFS writes a progress update per chunk (each carriage return becomes a line). Keep one line per 5 % of progress,
+ * and every other line as it is, so the job output stays readable.
+ */
+export function lfsProgressFilter(onLine: (line: string) => void): (line: string) => void {
+  let last = -1, label = '';
+  return (line) => {
+    const progress = /^(.*?):\s+(\d{1,3})%/.exec(line);
+    if (!progress) { onLine(line); return; }
+    const percent = Number(progress[2]);
+    if (progress[1] !== label) { label = progress[1]!; last = -1; }
+    if ((percent === 100 && last !== 100) || last < 0 || percent >= last + 5) { last = percent; onLine(line); }
+  };
+}
 const tail = (output: string) => output.split('\n').filter((l) => l.trim()).slice(-TAIL).join('\n');
 const short = (sha: string) => sha.slice(0, 7);
 
@@ -132,7 +152,7 @@ export async function updateWorkspace(workspace: string, ctx: JobContext, deps: 
   const git = deps.git ?? runGit;
   const step = (id: WorkspaceUpdateStep) => ctx.line(`step ${id}`);
   const quiet = (args: string[]) => git(args, workspace);
-  const loud = (args: string[], env?: NodeJS.ProcessEnv) => { ctx.line(`> git ${args.join(' ')}`); return git(args, workspace, { onLine: ctx.line, env }); };
+  const loud = (args: string[], env?: NodeJS.ProcessEnv, onLine: (line: string) => void = ctx.line) => { ctx.line(`> git ${args.join(' ')}`); return git(args, workspace, { onLine, env }); };
 
   step('check');
   const status = await workspaceUpdateStatus(workspace, git);
@@ -167,7 +187,8 @@ export async function updateWorkspace(workspace: string, ctx: JobContext, deps: 
   ctx.line(`updated ${moved}`);
 
   step('lfs');
-  const lfs = await loud(['lfs', 'pull']);
+  // Git LFS shows no progress when its output is not a terminal unless forced.
+  const lfs = await loud(['lfs', 'pull'], { GIT_LFS_FORCE_PROGRESS: '1' }, lfsProgressFilter(ctx.line));
   if (lfs.code !== 0) throw new WorkspaceUpdateError('lfs', `Updated ${moved}, but LFS files are missing: run Update again. Nothing was rebuilt.\n${tail(lfs.output)}`);
 
   step('rebuild');

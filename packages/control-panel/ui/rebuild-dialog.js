@@ -29,7 +29,8 @@ export const UPDATE_STEPS = Object.freeze([
 ]);
 
 function updatePresentation(job, error, running, failed, phase) {
-  const latest = [...(job?.lines ?? [])].reverse().find((line) => line.startsWith('step '))?.slice('step '.length);
+  // The job carries its current step: /api/jobs sends only the last lines, which long LFS or build output fills.
+  const latest = job?.step ?? [...(job?.lines ?? [])].reverse().find((line) => line.startsWith('step '))?.slice('step '.length);
   const at = Math.max(0, UPDATE_STEPS.findIndex((step) => step.id === latest)), step = UPDATE_STEPS[at];
   const upToDate = job?.result?.state === 'up-to-date';
   const doing = step.id === 'rebuild' ? `Rebuilding ${phase ? phase.slice('plugin '.length) : 'plugins'}` : step.message;
@@ -146,7 +147,7 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
 }
 
 /** Starts one maintenance job from a menu and follows it in the shared progress dialog. */
-async function followJobInPlace(origin, route, placeholder, options, label) {
+async function followJobInPlace(origin, route, placeholder, options, label, setupAction = 'Rebuild') {
   const safe = safePanelOrigin(origin);
   if (!safe) throw new Error('Invalid local panel origin');
   const defaultViewJob = (job) => {
@@ -157,7 +158,7 @@ async function followJobInPlace(origin, route, placeholder, options, label) {
   const progress = rebuildProgressDialog({onViewJob: options.onViewJob ?? defaultViewJob});
   let started;
   try {
-    if (!await desktopSetupBeforeRebuild(safe, {progress,onJob:options.onJob})) return null;
+    if (!await desktopSetupBeforeRebuild(safe, {progress,onJob:options.onJob,action:setupAction})) return null;
     progress.show(placeholder);
     const response = await fetch(new URL(route, safe), {method: 'POST'});
     const body = await response.json().catch(() => ({}));
@@ -200,5 +201,5 @@ export function rebuildHostInPlace(origin = globalThis.location?.origin, options
 
 /** Update workspace: fast-forward the workspace, pull LFS content, rebuild. Git refusals arrive as the job error. */
 export function updateWorkspaceInPlace(origin = globalThis.location?.origin, options = {}) {
-  return followJobInPlace(origin, '/api/workspace/update', {kind: 'workspace-update', state: 'running', lines: []}, options, 'Update');
+  return followJobInPlace(origin, '/api/workspace/update', {kind: 'workspace-update', state: 'running', lines: []}, options, 'Update', 'Update');
 }

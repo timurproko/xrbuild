@@ -33,7 +33,7 @@ import { PluginConfigConflict, PluginConfigInvalid, readUserPluginConfigState, w
 import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, discoverProjectCatalog, containedPath, type PluginCatalog } from './extension-catalog.ts';
 import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
 import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
-import { updateWorkspace, workspaceUpdateStatus, type WorkspaceUpdateDeps } from './workspace-update.ts';
+import { rebuiltPluginNames, updateWorkspace, workspaceUpdateStatus, type WorkspaceUpdateDeps } from './workspace-update.ts';
 import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatus, type BuildTarget, type IdentityField, type PackagerDiscovery, type PackagerSetupStatus, type RoleSelection } from './packagers.ts';
 import { PackageList } from './packages.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
@@ -1834,7 +1834,7 @@ export class Panel {
           rebuild: async (pluginsOnly, context) => {
             const tools = await this.desktopSetup.deps.tools();
             const freshness = await rebuildHost(this.repo, this.workspace, context, { cmake: tools.cmake ?? undefined, generator: tools.generator, pluginsOnly });
-            return freshness.plugins.map(plugin => path.basename(plugin.dir));
+            return rebuiltPluginNames(freshness.plugins);
           },
           ...this.workspaceUpdateDeps,
         }))));

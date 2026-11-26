@@ -1,6 +1,7 @@
 export interface RebuildJob {
   id?:number;
   kind?:string;
+  step?:string|null;
   result?:{state?:string;summary?:string;restartRequired?:boolean}|null;
   state:'running'|'done'|'failed';
   error?:string|null;

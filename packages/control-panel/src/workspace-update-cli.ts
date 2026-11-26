@@ -8,7 +8,7 @@ import path from 'node:path';
 import { REPO, WORKSPACE, workspaceFromArgs } from './env.ts';
 import { rebuildHost, resolvedHostFreshness } from './host-build.ts';
 import { runProcess, type JobContext } from './jobs.ts';
-import { updateWorkspace } from './workspace-update.ts';
+import { rebuiltPluginNames, updateWorkspace } from './workspace-update.ts';
 
 const args = process.argv.slice(2);
 const workspace = workspaceFromArgs(args) ?? WORKSPACE;
@@ -27,7 +27,7 @@ try {
       const core = await resolvedHostFreshness(REPO, workspace, true);
       return core.exists && !core.outdated;
     },
-    rebuild: async (pluginsOnly, context) => (await rebuildHost(REPO, workspace, context, { pluginsOnly })).plugins.map((plugin) => path.basename(plugin.dir)),
+    rebuild: async (pluginsOnly, context) => rebuiltPluginNames((await rebuildHost(REPO, workspace, context, { pluginsOnly })).plugins),
   });
 } catch (e) {
   console.error(`update failed: ${(e as Error).message}`);

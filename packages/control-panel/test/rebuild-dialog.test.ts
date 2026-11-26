@@ -49,6 +49,10 @@ test('the behind hint and the update menu item read a status that never fetches'
   assert.match(app,/item\.setAttribute\('aria-disabled', 'true'\)/);
   assert.match(app,/api\('GET', '\/api\/workspace\/update'\)/);
   assert.doesNotMatch(app,/api\('POST', '\/api\/workspace\/update'\)/,'only the explicit menu action starts an update');
+  const [dialog,setup]=await Promise.all(['rebuild-dialog.js','desktop-setup.js'].map(file=>fs.readFile(path.join(ui,file),'utf8')));
+  assert.match(dialog,/'\/api\/workspace\/update', \{kind: 'workspace-update', state: 'running', lines: \[\]\}, options, 'Update', 'Update'\)/);
+  assert.match(setup,/action === 'Update' \? 'Install missing prerequisites, then update the workspace and rebuild\.'/);
+  assert.match(setup,/data-desktop-build>\$\{action === 'Update' \? 'Update' : 'Rebuild'\}<\/button>/);
 });
 
 test('setup action descriptions use sentence capitalization without changing job metadata',()=>{
