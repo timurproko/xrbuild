@@ -10,4 +10,8 @@ Connect, select two distinct serials and exact profiles, choose **Manual targets
 
 The minimal native port validates authenticated loopback transport, serial/profile, frame planes, run/sequence and clock messages. Static point sampling shares calibrated geometry with the retained algorithms but imports no hand reconstruction engine. Native services require explicitly prepared public service dependencies as well as an explicitly built/staged bridge; neither is installed on navigation.
 
+## Marker
+
+Choose **Marker** before Start. Keep the cameras fixed and show a single flat, matte, depth-visible tag36h11 marker (with its white border) to both cameras. Move the marker slowly, not the cameras. The previews outline native detections; the status shows paired groups and rejection reasons. Twelve paired groups over at least 1.8 seconds yield eight fit and four later held-out groups. Weak/missing observations do not stop capture or erase recent accepted evidence. **Cancel** stops both owned streams; no result is saved automatically. Inspect quality before saving. Native depth scale and relative-pose repeatability do not establish independent physical accuracy or synchronized exposure.
+
 Existing results remain in the selected workspace's `config/plugins/input-hands/preferences.json`, key `handtracking.fusion-calibrations.v1`. No migration or deletion is performed. Global Hands profile and projects are separate.

@@ -31,6 +31,7 @@ export class CameraCalibration {
   private automatic = new AutomaticMarkerCalibration();
   private fitting = false;
   private method: 'manual' | 'marker' = 'marker';
+  private markerIssue = '';
   private current: Partial<Record<Side, Current>> = {};
   private targets = new Map<string, Target>();
   private sources: Partial<Record<Side, Calibration>> = {};
@@ -38,7 +39,7 @@ export class CameraCalibration {
   constructor(ports: { a: CalibrationPort; b: CalibrationPort }, storage: Storage, now = () => performance.now()) {
     this.ports = ports; this.storage = storage; this.now = now;
   }
-  snapshot() { return { phase: this.phase, result: this.result, targets: this.targets.size, entries: [...this.targets.values()].map(({ id, use, a, b }) => ({ id, use, a: !!a, b: !!b })), marker: this.automatic.snapshot(this.now()) }; }
+  snapshot() { return { phase: this.phase, result: this.result, targets: this.targets.size, entries: [...this.targets.values()].map(({ id, use, a, b }) => ({ id, use, a: !!a, b: !!b })), marker: { ...this.automatic.snapshot(this.now()), issue: this.markerIssue } }; }
   invalidateResult(): void { this.revision++; this.result = null; }
   removeTarget(id: string): void { this.revision++; this.targets.delete(id); this.result = null; }
   async start(choices: { a: CameraChoice; b: CameraChoice }, method: 'manual' | 'marker' = 'marker'): Promise<void> {
@@ -48,7 +49,7 @@ export class CameraCalibration {
     if (this.targets.size) throw new Error('Clear the manual draft before starting another capture.');
     this.method = method;
     this.selection = structuredClone(choices);
-    const generation = ++this.generation; this.phase = 'starting'; this.current = {}; this.automatic.reset(); this.result = null;
+    const generation = ++this.generation; this.phase = 'starting'; this.current = {}; this.automatic.reset(); this.markerIssue = ''; this.result = null;
     const work = Promise.allSettled((['a', 'b'] as const).map(side => this.ports[side].start({ ...choices[side], markers: method === 'marker', handInference: false })));
     this.startWork = work;
     try { const results = await work; const failed = results.find((value): value is PromiseRejectedResult => value.status === 'rejected'); if (failed) throw failed.reason; if (generation === this.generation) this.phase = 'running'; }
@@ -75,11 +76,15 @@ export class CameraCalibration {
     if (this.phase !== 'running') return;
     if (value.calibration.serial !== this.selection?.[side].serial || profileKey(value.calibration.color) !== this.selection?.[side].profile) throw new Error('Calibration source/profile changed.');
     this.current[side] = value;
-    if (this.method !== 'marker' || !value.packet.meta.marker) return;
-    this.automatic.push(side, automaticMarkerObservation(value.packet, value.calibration, value.receivedPageMs, value.pageOriginMs));
+    if (this.method !== 'marker') return;
+    try {
+      const observation = automaticMarkerObservation(value.packet, value.calibration, value.receivedPageMs, value.pageOriginMs);
+      this.automatic.push(side, observation); this.markerIssue = '';
+    } catch (error) { this.automatic.missing(side, (error as Error).message); return; }
     if (!this.fitting && !this.result && !this.targets.size && this.automatic.snapshot(this.now()).ready) {
       const generation = this.generation, revision = this.revision; this.fitting = true;
-      try { const result = await this.automatic.fit(this.now()); if (generation === this.generation && revision === this.revision && result.spatialQualified) this.result = result; }
+      try { const result = await this.automatic.fit(this.now()); if (generation === this.generation && revision === this.revision) this.result = result; }
+      catch (error) { if (generation === this.generation && revision === this.revision) this.markerIssue = (error as Error).message; }
       finally { if (generation === this.generation) this.fitting = false; }
     }
   }

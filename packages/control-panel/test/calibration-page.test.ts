@@ -67,6 +67,32 @@ test('Calibration browser opens passively in existing panel styles', { skip: !pr
   }));
 });
 
+test('marker UI shows progress and quality without inference, cancellation releases both ports', { skip: !process.env.XRB_TEST_BROWSER }, async () => {
+  const sources = inputFixture().sources;
+  await fixture(false, async base => withBrowser(async browser => {
+    await browser.navigate(base + '/calibration/', "document.querySelector('#calibration-root')?.hidden === false");
+    await browser.evaluate(`(async()=>{
+      const {mountCalibration}=await import('/calibration/tools/calibration-browser.mjs');const {encodePacket,framePacket}=await import('/calibration/tools/src/live/rgbd/protocol.ts');
+      const old=document.getElementById('calibration-root'),root=old.cloneNode(true);old.replaceWith(root);const sources=${JSON.stringify(sources)},base=${JSON.stringify(plane().meta)};window.__now=1000;window.__ports={};window.__calls=[];
+      window.__dispose=await mountCalibration(root,{capture:{available:true},now:()=>window.__now,request:async(_url,options)=>{window.__calls.push(JSON.parse(options.body));return{id:'fake',cameras:[{},{}]};},createCamera:(side,callbacks)=>window.__ports[side]={callbacks,async connect(){},async start(choice){window.__calls.push(choice);},async stop(){window.__calls.push({stop:side});},disconnect(){},snapshot(){return{devices:Object.values(sources).map(cal=>({...cal,supportsBaseline:true,profiles:[cal.color,cal.depth]}))};}},onController:c=>window.__controller=c});
+      window.__frame=async(n,detected=true)=>{window.__now=1000+n*220;const depth=new Uint8Array(640*480*2),view=new DataView(depth.buffer);for(let i=0;i<640*480;i++)view.setUint16(i*2,1000,true);const meta=structuredClone(base);meta.sequence=n+1;for(const key of ['color','depth','alignedDepth']){meta[key].number=n+1;meta[key].timestampMs=1000+n*220;}meta.marker={version:1,family:'tag36h11',detector:'apriltag-3.4.5',colorFrame:n+1,detections:detected?[{id:42,hamming:0,margin:30,corners:[{x:290+n,y:210},{x:350+n,y:210},{x:350+n,y:270},{x:290+n,y:270}]}]:[]};for(const side of ['a','b'])await window.__ports[side].callbacks.frame({packet:framePacket(encodePacket(meta,new Uint8Array(640*480*3),depth,depth).buffer),calibration:sources[side],receivedPageMs:window.__now,pageOriginMs:100000});};
+    })()`);
+    await browser.evaluate("document.getElementById('cal-connect').click()");await new Promise(r=>setTimeout(r,30));
+    await browser.evaluate("for(const [side,serial]of [['a','fixture-camera-a'],['b','fixture-camera-b']]){const s=document.getElementById('cal-camera-'+side);s.value=serial;s.dispatchEvent(new Event('change'));}document.getElementById('cal-method').value='marker';document.getElementById('cal-method').dispatchEvent(new Event('change'));");
+    await browser.evaluate("document.getElementById('cal-start').click()");await new Promise(r=>setTimeout(r,30));
+    await browser.evaluate('window.__frame(0,false)');assert.match(await browser.evaluate("document.getElementById('cal-capture-status').textContent"), /0\/12.*Place marker/);
+    assert.equal(await browser.evaluate("document.getElementById('cal-stop').textContent"), 'Cancel');
+    for(let n=0;n<12;n++)await browser.evaluate(`window.__frame(${n})`);
+    assert.equal(await browser.evaluate('window.__controller.snapshot().result?.spatialQualified'),true);
+    assert.match(await browser.evaluate("document.getElementById('cal-quality').textContent"),/Physical accuracy and timing unverified/);
+    assert.equal(await browser.evaluate('window.__calls.filter(v=>v.handInference===false&&v.markers===true).length'),2);
+    const shot=await browser.send('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(parent,'calibration-marker-software.png'),Buffer.from(shot.data,'base64'));
+    await browser.evaluate("document.getElementById('cal-stop').click()");await new Promise(r=>setTimeout(r,30));
+    assert.equal(await browser.evaluate('window.__calls.filter(v=>v.stop).length'),2);
+    await browser.evaluate('window.__dispose()');
+  }));
+});
+
 test('manual UI completes fit and held-out probes using injected native ports only', { skip: !process.env.XRB_TEST_BROWSER }, async () => {
   const input = inputFixture({ rotationRowMajor: [1,0,0,0,1,0,0,0,1], translationMeters: { x:0,y:0,z:0 } });
   await fixture(false, async (base, root) => withBrowser(async browser => {

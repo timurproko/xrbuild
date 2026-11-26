@@ -15,9 +15,9 @@
 
 ## 3. Marker collection and qualified result review
 
-- [ ] 3.1 Bind the retained marker collector to explicit marker capture and two previews without hand models; cover duration/pairing/held-out/repeatability acceptance and rejection with fake native marker/depth packets.
-- [ ] 3.2 Expose compact progress, reasons, qualified/provisional review and Cancel/Stop; test late-fit fencing, no automatic persistence/provider application and no dependency on marker detection for manual-only capture where supported.
-- [ ] 3.3 Document marker operation and exercise collection/review/cancel UI using injected ports, preserving the existing qualification policy and physical-unverified wording.
+- [x] 3.1 Bind the retained marker collector to explicit marker capture and two previews without hand models; cover duration/pairing/held-out/repeatability acceptance and rejection with fake native marker/depth packets.
+- [x] 3.2 Expose compact progress, reasons, qualified/provisional review and Cancel/Stop; test late-fit fencing, no automatic persistence/provider application and no dependency on marker detection for manual-only capture where supported.
+- [x] 3.3 Document marker operation and exercise collection/review/cancel UI using injected ports, preserving the existing qualification policy and physical-unverified wording.
 
 ## 4. Compatible saved results and stable provider contract
 

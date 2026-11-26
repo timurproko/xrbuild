@@ -23,7 +23,9 @@ export async function mountCalibration(root, { capture, request = calibrationReq
     el('cal-start').disabled = !lease || connecting || work || active || !el('cal-camera-a').value || !el('cal-camera-b').value || el('cal-camera-a').value === el('cal-camera-b').value;
     el('cal-stop').disabled = !lease && !connecting && !active;
     for (const id of ['cal-camera-a', 'cal-camera-b', 'cal-profile-a', 'cal-profile-b', 'cal-method']) el(id).disabled = active || connecting;
-    el('cal-manual').hidden = el('cal-method').value !== 'manual';
+    const marker = el('cal-method').value === 'marker';
+    el('cal-manual').hidden = marker; el('cal-marker-help').hidden = !marker;
+    el('cal-stop').textContent = marker && active && !state.result ? 'Cancel' : 'Stop';
     el('cal-fit').disabled = work || state.entries.filter(entry => entry.a && entry.b && entry.use === 'fit').length < 6;
     el('cal-save').disabled = true;
     el('cal-export').disabled = !state.result || work;
@@ -32,6 +34,7 @@ export async function mountCalibration(root, { capture, request = calibrationReq
     el('cal-remove').disabled = work || !state.targets;
     if (state.result !== lastResult) {
       lastResult = state.result;
+      if (state.result && marker && state.phase === 'running') dirty = true;
       if (!state.result) { el('cal-quality').textContent = 'No result.'; el('cal-result').hidden = true; }
       else {
         const result = state.result, mm = value => value == null ? '—' : (value * 1000).toFixed(1);
@@ -40,7 +43,7 @@ export async function mountCalibration(root, { capture, request = calibrationReq
         el('cal-result').hidden = false;
       }
     }
-    if (active) el('cal-capture-status').textContent = state.phase === 'running' ? `Running · ${state.targets} targets` : `${state.phase}…`;
+    if (active) el('cal-capture-status').textContent = state.phase !== 'running' ? `${state.phase}…` : marker ? state.result ? 'Measurement complete. Stop cameras when finished.' : `${state.marker.paired}/12 pairs · ${state.marker.issue || state.marker.reason}` : `Running · ${state.targets} targets`;
   };
   const release = async value => { if (value) await api({ action: 'disconnect', id: value.id }); };
   const stop = async () => {
@@ -62,7 +65,12 @@ export async function mountCalibration(root, { capture, request = calibrationReq
     canvas.width = packet.width; canvas.height = packet.height;
     const image = ctx.createImageData(packet.width, packet.height), rgb = new Uint8Array(packet.buffer, packet.rgbOffset, packet.rgbBytes);
     for (let i = 0, j = 0; i < rgb.length; i += 3, j += 4) { image.data[j] = rgb[i]; image.data[j + 1] = rgb[i + 1]; image.data[j + 2] = rgb[i + 2]; image.data[j + 3] = 255; }
-    ctx.putImageData(image, 0, 0); render();
+    ctx.putImageData(image, 0, 0);
+    if (el('cal-method').value === 'marker') {
+      ctx.strokeStyle = getComputedStyle(root).getPropertyValue('--accent').trim() || '#008aff'; ctx.lineWidth = 2;
+      for (const detection of packet.meta.marker?.detections || []) { ctx.beginPath(); detection.corners.forEach((point, i) => i ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)); ctx.closePath(); ctx.stroke(); }
+    }
+    render();
   }, failed });
   const on = (id, type, fn) => el(id).addEventListener(type, () => { void Promise.resolve().then(fn).catch(error); }, { signal: events.signal });
   const clear = () => { controller.clearTargets(); dirty = false; render(); };
