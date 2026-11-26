@@ -333,6 +333,10 @@ export class Panel {
     return native && this.nativeRebuildNeeded();
   }
 
+  private async actionProjectLock<T>(p: Project, ctx: JobContext | undefined, work: () => Promise<T>): Promise<T> {
+    return ctx ? withEmbeddedProjectLock(this.repo, this.projects, p, work, release => this.holdProjectRun(release)) : work();
+  }
+
   private async nativeRebuildNeeded(): Promise<boolean> {
     if (!await fs.access(path.join(this.repo, 'native/host/CMakeLists.txt')).then(() => true, () => false)) return false;
     const fresh = await resolvedHostFreshness(this.repo, this.workspace);
@@ -342,19 +346,16 @@ export class Panel {
   private async prepareRebuild(ctx: JobContext, native: boolean, force = false): Promise<void> {
     const services = await embeddedServiceReadiness(this.repo, this.workspace);
     const buildNative = native && (force || await this.nativeRebuildNeeded());
-    if (!services.needsBuild && !buildNative) {
-      if (this.servicesPending) throw this.servicesRefusal();
-      return;
-    }
+    if (!services.needsBuild && !buildNative && !this.servicesPending) return;
     if (this.preparingRebuild || this.pluginConsumers || this.runner.busy || this.preparingNativeRun || this.preparingPreview || this.settingsWrites.size || this.jobs.active().length > 1)
       throw new Error('Stop apps and other jobs, then retry Rebuild.');
     this.preparingRebuild = true;
     try {
-      if (services.needsBuild) {
+      if (services.needsBuild || this.servicesPending) {
         ctx.line('Rebuild: preparing application components…');
         this.changingPlugins = true;
         try {
-          await this.rebuildDeps.setupServices(this.repo, this.workspace, ctx);
+          if (services.needsBuild) await this.rebuildDeps.setupServices(this.repo, this.workspace, ctx);
           await this.refreshPluginServices();
           this.hub.send('plugins-changed', {}); this.hub.send('projects-changed', {});
         } finally { this.changingPlugins = false; }
@@ -1322,6 +1323,7 @@ export class Panel {
   async packageBuild(p: Project, body: { version?: string; confirm?: string[] }): Promise<Job> {
     if (this.changingPlugins || this.preparingRebuild) throw this.servicesRefusal('Plugin services are changing; retry after the update');
     if (await this.preparationNeeded(buildTargetOf(this.manifestOf(p)) !== 'webxr')) {
+      p = await this.prepareProject(p);
       return this.startJob('package', p.id, `build package: ${p.manifest?.name ?? p.id}`, async ctx => {
         await this.prepareRebuild(ctx, buildTargetOf(this.manifestOf(p)) !== 'webxr');
         return this.withPluginServices(async () => {
@@ -1796,17 +1798,29 @@ export class Panel {
         if (p.readOnly) validateRunOverrides(Object.fromEntries(Object.entries({ flat, fullscreen, monitor }).filter(([, value]) => value !== undefined)));
         if (mode !== 'dev' && mode !== 'built') throw new HttpError(400, 'standalone preview mode must be built or dev');
         const runMode: RunMode = mode;
-        if (runMode === 'built' && p.origin === 'bundled' && (!p.readOnly || !(await requireProjectOutput(this.repo, this.workspace, p).catch(() => null)))) {
-          const done = await this.jobs.wait(this.webBuild(p));
-          if (done.state === 'failed') throw new HttpError(409, done.error ?? 'Project build failed');
-          p = await this.reloadPreparedProject(p);
-        }
         const previewToken = typeof token === 'string' && /^[a-zA-Z0-9-]{16,80}$/.test(token) ? token : randomUUID();
         const screen = Number.isInteger(monitor) && monitor! >= 0 && monitor! <= 255 ? monitor! : 0;
-        const url = await this.preview(p, runMode, p.readOnly && flat === undefined ? undefined : flat === true, previewToken, {
-          fullscreen: p.readOnly && fullscreen === undefined ? undefined : fullscreen === true,
-          monitor: p.readOnly && monitor === undefined ? undefined : screen, clientPort: req.socket.remotePort ?? 0,
+        const launch = (ctx?: JobContext) => this.actionProjectLock(p, ctx, async () => {
+          if (runMode === 'built' && p.origin === 'bundled' && (!p.readOnly || !(await requireProjectOutput(this.repo, this.workspace, p).catch(() => null)))) {
+            if (ctx) {
+              p = await this.prepareProject(p);
+              await this.ensureBrowserBuild(p, this.editableManifest(p), ctx);
+            } else {
+              const done = await this.jobs.wait(this.webBuild(p));
+              if (done.state === 'failed') throw new HttpError(409, done.error ?? 'Project build failed');
+            }
+            p = await this.reloadPreparedProject(p);
+          }
+          return this.preview(p, runMode, p.readOnly && flat === undefined ? undefined : flat === true, previewToken, {
+            fullscreen: p.readOnly && fullscreen === undefined ? undefined : fullscreen === true,
+            monitor: p.readOnly && monitor === undefined ? undefined : screen, clientPort: req.socket.remotePort ?? 0,
+          }, ctx);
         });
+        if (await this.preparationNeeded()) {
+          const job = this.startJob('preview-run', p.id, `prepare and run: ${p.manifest?.name ?? p.id}`, async ctx => ({ url: await launch(ctx) }));
+          sendJson(res, 202, jobSummary(job)); return true;
+        }
+        const url = await launch();
         sendJson(res, typeof url === 'string' ? 200 : 202, typeof url === 'string' ? { url, fullscreen: this.previewProjection?.fullscreen ?? false, monitor: this.previewProjection?.monitor ?? 0 } : jobSummary(url));
         return true;
       }
@@ -1816,7 +1830,7 @@ export class Panel {
         if (p.readOnly) validateRunOverrides(Object.fromEntries(Object.entries({ flat, cameraView, fullscreen, monitor }).filter(([, value]) => value !== undefined)));
         const runMode = mode === 'dev' ? 'dev' : 'built';
         const screen = Number.isInteger(monitor) && monitor! >= 0 && monitor! <= 255 ? monitor! : 0;
-        const launch = async (ctx?: JobContext) => {
+        const launch = (ctx?: JobContext) => this.actionProjectLock(p, ctx, async () => {
           if (runMode === 'built' && (!p.readOnly || !(await requireProjectOutput(this.repo, this.workspace, p).catch(() => null)))) {
             if (ctx) {
               p = await this.prepareProject(p);
@@ -1829,7 +1843,7 @@ export class Panel {
           }
           return this.run(p, runMode, p.readOnly && flat === undefined ? undefined : flat === true, p.readOnly && cameraView === undefined ? undefined : cameraView === true,
             { fullscreen: p.readOnly && fullscreen === undefined ? undefined : fullscreen === true, monitor: p.readOnly && monitor === undefined ? undefined : screen }, ctx);
-        };
+        });
         if (await this.preparationNeeded(true)) {
           if (await this.desktopSetup.isBusy()) throw new HttpError(409, 'Wait for desktop setup to finish before running.');
           const job = this.startJob('run', p.id, `prepare and run: ${p.manifest?.name ?? p.id}`, async ctx => { await launch(ctx); return { launched: true }; });

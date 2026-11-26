@@ -9,5 +9,5 @@
 
 ## 2. Update native rebuilds reuse the desktop-validated CMake and generator
 
-- [ ] 2.1 Probe validated tools inside the fresh rebuild subprocess and forward both selections; competing fake executables cover host and plugin command selection without real builds.
-- [ ] 2.2 Audit Update's production build call chain for the same defect and fix only matching occurrences; record entry points inspected and targeted regression results.
+- [x] 2.1 Probe validated tools inside the fresh rebuild subprocess and forward both selections; competing fake executables cover host and plugin command selection without real builds.
+- [x] 2.2 Audit Update's production build call chain for the same defect and fix only matching occurrences; record entry points inspected and targeted regression results.

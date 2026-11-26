@@ -56,15 +56,16 @@ async function components(t: TestContext) {
     fail(value: boolean) { fail = value; }, counts: () => ({ installs, nativeBuilds, launches }) };
 }
 
-for (const action of ['rebuild', 'run', 'build', 'package', 'preview']) test(`${action} recovers changed service inputs in its own logged job without restart`, async t => {
+for (const origin of ['workspace', 'bundled']) for (const action of ['rebuild', 'run', 'build', 'package', 'preview']) test(`${origin} ${action} recovers changed service inputs in its own logged job without restart`, async t => {
   const f = await components(t);
   await f.change();
   assert.equal((await f.request('/api/host', 'GET')).body.componentsNeedRebuild, true);
-  const project = path.join(f.user, 'projects/unsorted/demo'); await fs.mkdir(project, { recursive: true });
-  await fs.writeFile(path.join(project, 'xrb-project.json'), JSON.stringify({ name: 'Demo', kind: 'app', entry: '.', ...(action === 'package' || action === 'preview' ? { target: 'webxr' } : {}) }));
-  await fs.writeFile(path.join(project, 'index.html'), '<html><head></head><body>demo</body></html>');
+  const project = origin === 'bundled' ? path.join(f.core, 'embedded/projects/core/demo') : path.join(f.user, 'projects/unsorted/demo');
+  await fs.mkdir(path.join(project, 'dist'), { recursive: true });
+  await fs.writeFile(path.join(project, 'xrb-project.json'), JSON.stringify({ name: 'Demo', kind: 'app', entry: 'dist', ...(action === 'package' || action === 'preview' ? { target: 'webxr' } : {}) }));
+  await fs.writeFile(path.join(project, 'dist/index.html'), '<html><head></head><body>demo</body></html>');
   (f.server.panel as unknown as { preparePreview: () => Promise<string> }).preparePreview = async () => 'http://127.0.0.1/fixture';
-  const response = await f.request(action === 'rebuild' ? '/api/host/rebuild' : `/api/projects/demo/${action === 'build' ? 'build-web' : action}`, 'POST', { mode: 'built' });
+  const response = await f.request(action === 'rebuild' ? '/api/host/rebuild' : `/api/projects/${origin === 'bundled' ? 'bundled%3Ademo' : 'demo'}/${action === 'build' ? 'build-web' : action}`, 'POST', { mode: 'built' });
   assert.equal(response.status, 202, JSON.stringify(response.body));
   const done = await f.server.panel.jobs.wait(f.server.panel.jobs.get(response.body.id)!);
   assert.equal(done.state, 'done', done.lines.join('\n'));
@@ -76,6 +77,33 @@ for (const action of ['rebuild', 'run', 'build', 'package', 'preview']) test(`${
   assert.equal((await f.request('/api/host', 'GET')).body.componentsNeedRebuild, false);
   assert.equal(f.counts().launches, action === 'run' ? 1 : 0);
   assert.equal(f.counts().nativeBuilds, action === 'rebuild' ? 1 : 0);
+});
+
+test('Rebuild reloads a generation already prepared by a fresh process without installing again', async t => {
+  const f = await components(t); await f.change();
+  await setupEmbeddedServices(f.core, f.user, f.ctx);
+  const before = f.counts().installs;
+  const started = await f.request('/api/host/rebuild');
+  const done = await f.server.panel.jobs.wait(f.server.panel.jobs.get(started.body.id)!);
+  assert.equal(done.state, 'done', done.lines.join('\n'));
+  assert.equal(f.counts().installs, before);
+  assert.equal(f.server.panel.publishers.found[0]!.publisher.label, 'after');
+});
+
+test('Run rebuilds missing native output before launching in the same job', async t => {
+  const f = await components(t);
+  const source = path.join(f.core, 'native/host'); await fs.mkdir(source, { recursive: true });
+  await fs.writeFile(path.join(source, 'CMakeLists.txt'), 'project(fixture)');
+  const project = path.join(f.user, 'projects/unsorted/demo'); await fs.mkdir(path.join(project, 'dist'), { recursive: true });
+  await fs.writeFile(path.join(project, 'xrb-project.json'), JSON.stringify({ name: 'Demo', kind: 'app', entry: 'dist' }));
+  await fs.writeFile(path.join(project, 'dist/index.html'), '<html><head></head><body>demo</body></html>');
+  const started = await f.request('/api/projects/demo/run', 'POST', { mode: 'built' });
+  assert.equal(started.status, 202);
+  const done = await f.server.panel.jobs.wait(f.server.panel.jobs.get(started.body.id)!);
+  assert.equal(done.state, 'done', done.lines.join('\n'));
+  assert.equal(f.counts().nativeBuilds, 1); assert.equal(f.counts().launches, 1);
+  assert.equal(f.server.panel.jobs.list().length, 1);
+  assert.ok(done.lines.some(line => line.includes('compiling the host')));
 });
 
 test('failed preparation retains output and retries without deleting old generations', async t => {

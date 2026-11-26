@@ -82,7 +82,7 @@ export function rebuildPresentation(job, error = '') {
       ...updatePresentation(job, error, running, failed, phase),
       output: job.lines?.length ? job.lines.slice(-20).join('\n') : error ? error : 'Waiting for output…',
       running,
-      succeeded: !running && !failed,
+      succeeded: !running && !failed && !job?.result?.restartRequired,
       viewJobDisabled: job.id == null,
     };
   }
@@ -171,7 +171,7 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
       output.scrollTop = output.scrollHeight;
       actions.classList.toggle('is-building', presentation.running);
       view.disabled = presentation.viewJobDisabled;
-      restart.hidden = presentation.running || !recovery.restart || !(job?.result?.restart || job?.result?.restartRequired);
+      restart.hidden = presentation.running || job?.kind === 'desktop-setup' || !recovery.restart || !(job?.result?.restart || job?.result?.restartRequired);
       retry.hidden = presentation.running || !recovery.retry || !restart.hidden || presentation.succeeded;
       if (presentation.succeeded && autoclose.checked && dialog.open) dialog.close();
       return presentation;

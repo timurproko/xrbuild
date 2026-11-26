@@ -35,6 +35,8 @@ test('update presentation follows its steps and reports Git refusals and the res
   const summary='Core: 1111111 → 2222222. Workspace: 3333333 → 4444444. Restart required; Update did not restart the panel.';
   const done=rebuildPresentation({id:7,kind:'update',state:'done',lines:['step rebuild'],result:{state:'updated',summary}});
   assert.equal(done.title,'Updated');assert.equal(done.message,summary);assert.equal(done.succeeded,true);
+  const needsRestart=rebuildPresentation({id:7,kind:'update',state:'done',result:{restartRequired:true,summary},lines:[]});
+  assert.equal(needsRestart.title,'Restart required');assert.equal(needsRestart.succeeded,false,'autoclose must not hide the Restart control');
   const current=rebuildPresentation({id:7,kind:'update',state:'done',lines:['step fetch'],result:{state:'up-to-date',summary:'Workspace already up to date (1111111). Nothing was rebuilt.'}});
   assert.equal(current.title,'Already up to date','success refers to both repositories after fresh fetches');
   const notStarted=rebuildPresentation({kind:'update',state:'running',lines:[]},'The workspace is not a Git clone.');

@@ -76,7 +76,7 @@ export async function embeddedServiceReadiness(core: string, workspace: string):
     || typeof saved.inputs !== 'string' || !/^[a-f0-9]{64}$/.test(saved.inputs)) throw new Error('Application component state is invalid or belongs to another source; preserve it for recovery before retrying Rebuild');
   if (saved.status === 'failed' || saved.status === 'building') return { root: null, installed: true, needsBuild: true };
   if (saved.status !== 'complete' || typeof saved.runtime !== 'string' || !/^build\/embedded\/e-[a-f0-9]{20}\/w-[a-zA-Z0-9]{6}\/workspace$/.test(saved.runtime)
-    || typeof saved.output !== 'string' || !/^[a-f0-9]{64}$/.test(saved.output)) throw new Error('Embedded service setup is incomplete, failed or belongs to another source');
+    || typeof saved.output !== 'string' || !/^[a-f0-9]{64}$/.test(saved.output)) throw new Error('Application component state is incomplete or belongs to another source; inspect preserved state before retrying Rebuild');
   const expected = canonicalFuturePath(path.join(workspace, 'build', 'embedded', path.basename(state)));
   const runtime = await containedPath(canonicalFuturePath(workspace), saved.runtime);
   if (!withinRoot(expected, runtime) || await installedFingerprint(runtime) !== saved.output) throw new Error('Installed application component output changed or is unsafe; inspect preserved files before retrying Rebuild');
