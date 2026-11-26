@@ -58,6 +58,11 @@ class Server {
  public:
   // Called on a reader thread for every binary message from a page.
   std::function<void(const uint8_t* data, size_t size)> onMessage;
+  // Optional headless-session mode: no credentials in URL, exact browser Origin, first-message
+  // authentication, one receiver and consumption-acknowledged newest-frame delivery.
+  std::string sessionToken, sessionOrigin;
+  uint8_t sessionFrameType = 21;
+  std::function<void()> onDisconnect;
 
   ~Server();
   // Binds 127.0.0.1 on a free port and starts accepting. Returns false on failure.

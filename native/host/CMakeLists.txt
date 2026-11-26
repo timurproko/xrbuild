@@ -48,7 +48,7 @@ add_dependencies(xrb-host libcef_dll_wrapper)
 target_link_libraries(xrb-host PRIVATE
   libcef_lib libcef_dll_wrapper ${CEF_STANDARD_LIBS}
   d3d11 dxgi d3dcompiler ws2_32 bcrypt windowscodecs ole32 dxgi advapi32)
-add_dependencies(xrb-host xrb-acquisition xrb-provider-session)
+add_dependencies(xrb-host xrb-acquisition xrb-provider-session xrb-provider-supervisor)
 # GUI subsystem (entry still main()): a console exe opens a terminal window for itself and for
 # every CEF sub-process (same exe) when a station agent starts it. Logs go to the log file.
 set_target_properties(xrb-host PROPERTIES LINK_FLAGS "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup")

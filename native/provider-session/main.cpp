@@ -18,12 +18,17 @@ bool readControl(json* out) {
 void event(const json& data) { std::cout << "@provider " << data.dump(-1, ' ', false, json::error_handler_t::replace) << std::endl; }
 }
 int main(int argc, char** argv) {
+  SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
   if (argc == 2 && std::string(argv[1]) == "--version") { std::cout << "xrb-provider-session 1\n"; return 0; }
   json bootstrap;
   if (!readControl(&bootstrap) || bootstrap.value("version", 0) != 1 || !bootstrap.contains("runtimeName") || !bootstrap["runtimeName"].is_string() ||
       !bootstrap.contains("config") || !bootstrap["config"].is_object() || !bootstrap.contains("parentPid") || !bootstrap["parentPid"].is_number_unsigned()) return 2;
   const auto name = bootstrap["runtimeName"].get<std::string>();
   if (name.empty() || name.size() > 64 || name == "none") return 2;
+  for (const char* key : {"token", "epoch"}) if (!bootstrap.contains(key) || !bootstrap[key].is_string() || bootstrap[key].get<std::string>().size() != 64 || bootstrap[key].get<std::string>().find_first_not_of("0123456789abcdef") != std::string::npos) return 2;
+  if (!bootstrap.contains("origin") || !bootstrap["origin"].is_string()) return 2;
+  const auto origin = bootstrap["origin"].get<std::string>(), epoch = bootstrap["epoch"].get<std::string>();
+  if (!origin.starts_with("http://127.0.0.1:") || origin.size() > 64 || origin.find_first_of("\r\n/?#", 7) != std::string::npos) return 2;
   const uint64_t pid = bootstrap["parentPid"].get<uint64_t>();
   if (!pid || pid > MAXDWORD) return 2;
   HANDLE parent = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, DWORD(pid));
@@ -89,17 +94,40 @@ int main(int argc, char** argv) {
     }
     if (!quit && input.api->start(input.self) != 0) fail(input.error().empty() ? "Provider failed to start" : input.error());
   }
+  channel::Server transport;
+  transport.sessionToken = bootstrap["token"].get<std::string>(); transport.sessionOrigin = origin;
+  transport.onDisconnect = [&] { quit = true; };
+  transport.onMessage = [&](const uint8_t* data, size_t size) {
+    if (size == 9 && data[0] == 111) {
+      double p0 = 0; memcpy(&p0, data + 1, 8);
+      if (!std::isfinite(p0) || p0 < 0) { quit = true; return; }
+      const double clocks[3] = {p0, channel::hostTimeMs(), channel::hostTimeMs()};
+      transport.publish(static_cast<channel::MessageType>(22), clocks, sizeof(clocks));
+    } else quit = true; // Frames-only peers cannot control acquisition or arbitrary channel messages.
+  };
+  if (!quit && !transport.start()) fail("Cannot start authenticated loopback hand transport");
+  if (!quit) event({{"phase", "running"}, {"url", transport.url()}, {"pid", GetCurrentProcessId()}});
   starting = false;
-  uint64_t last = 0; double reported = 0;
+  const auto connectedBy = GetTickCount64() + 5000;
+  uint64_t last = 0, sent = 0; double reported = 0;
   while (!quit) {
     const auto snapshot = frames.newest();
     if (snapshot.sequence >= 0xffffffffu) { fail("Provider frame sequence exhausted; start a new session"); break; }
+    if (!transport.clientCount() && GetTickCount64() > connectedBy) { fail("Hands page did not connect before the session deadline"); break; }
+    if (channel::hostTimeMs() - (snapshot.sequence ? snapshot.publicationMs : channel::hostTimeMs() - double(GetTickCount64() - begun)) > 10000) { fail("Provider stopped delivering valid frames"); break; }
+    if (snapshot.sequence != sent && transport.clientCount()) {
+      std::vector<uint8_t> payload(72 + snapshot.packet.size());
+      memcpy(payload.data(), epoch.data(), 64); memcpy(payload.data() + 64, &snapshot.sequence, 8);
+      memcpy(payload.data() + 72, snapshot.packet.data(), snapshot.packet.size());
+      transport.publish(static_cast<channel::MessageType>(21), payload.data(), payload.size()); sent = snapshot.sequence;
+    }
     if (snapshot.sequence != last || channel::hostTimeMs() - reported >= 1000) {
       event({{"phase", "running"}, {"sequence", snapshot.sequence}, {"hands", snapshot.count}, {"captureTimeMs", snapshot.captureMs}, {"publicationTimeMs", snapshot.publicationMs}});
       last = snapshot.sequence; reported = channel::hostTimeMs();
     }
     Sleep(20);
   }
+  transport.stop();
   if (input) { input.api->stop(input.self); input.reset(); }
   catalog.unload();
   lease.release(); // stop promised callback quiescence; destroy has completed.

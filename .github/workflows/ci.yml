@@ -160,8 +160,9 @@ jobs:
       - run: cmake --build .artifacts/provider-session --config Release
       - run: .artifacts/provider-session/Release/acquisition-tests.exe
       - run: .artifacts/provider-session/Release/provider-frame-tests.exe
-      - run: node --test packages/control-panel/test/hand-provider-worker.test.ts packages/control-panel/test/hand-session-selection.test.ts
+      - run: node --test packages/control-panel/test/hand-provider-worker.test.ts packages/control-panel/test/hand-session-selection.test.ts packages/control-panel/test/hand-worker-transport.test.ts
         env:
+          XRB_TEST_PROVIDER_SUPERVISOR: ${{ github.workspace }}/.artifacts/provider-session/Release/xrb-provider-supervisor.exe
           XRB_TEST_PROVIDER_WORKER: ${{ github.workspace }}/.artifacts/provider-session/Release/xrb-provider-session-test.exe
           XRB_TEST_PROVIDER_DLL: ${{ github.workspace }}/.artifacts/provider-session/Release/xrb_session_test.dll
       - run: node --test packages/control-panel/test/hand-acquisition.test.ts

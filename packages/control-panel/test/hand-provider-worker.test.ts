@@ -17,7 +17,7 @@ async function start(runtimeName: string, config: object, pluginPath?: string, t
   child.on('error', value => { error = value; updates.emit('event'); });
   child.on('close', () => { closed = true; lines.flush(); updates.emit('event'); });
   child.stdin.on('error', () => {});
-  child.stdin.write(JSON.stringify({ version: 1, parentPid: process.pid, runtimeName, pluginPath, config, testScope: randomBytes(32).toString('hex'), ...testOptions }) + '\n');
+  child.stdin.write(JSON.stringify({ version: 1, parentPid: process.pid, runtimeName, pluginPath, config, testScope: randomBytes(32).toString('hex'), token: randomBytes(32).toString('hex'), epoch: randomBytes(32).toString('hex'), origin: 'http://127.0.0.1:33333', ...testOptions }) + '\n');
   async function waitFor(check: (event: any) => boolean) {
     const deadline = Date.now() + 8000;
     while (!events.some(check)) {
