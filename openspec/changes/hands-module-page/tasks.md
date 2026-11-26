@@ -23,9 +23,9 @@ Approved scope: Hands with Record only; Calibration extraction is the immediatel
 
 ## 4. Recording compatibility and live-recording seam
 
-- [ ] 4.1 Extract CSV/RGB/RGB-D/paired recording storage/read/playback without analysis engines; verify old files list/import/read/export/seek/play with original provenance and no camera/inference/fusion startup.
-- [ ] 4.2 Mount recording list and ordinary playback in Record; verify real Play/Pause survives fixture removal, legacy spaces are labelled and not transformed twice.
-- [ ] 4.3 Agree producer/format through the live-provider PR and provide its recording subscription seam; verify absent producer says recording needs a live session, with no fake Start action or frames and independent legacy readers.
+- [x] 4.1 Extract CSV/RGB/RGB-D/paired recording storage/read/playback without analysis engines; verify old files list/import/read/export/seek/play with original provenance and no camera/inference/fusion startup.
+- [x] 4.2 Mount recording list and ordinary playback in Record; verify real Play/Pause survives fixture removal, legacy spaces are labelled and not transformed twice.
+- [x] 4.3 Agree producer/format through the live-provider PR and provide its recording subscription seam; verify absent producer says recording needs a live session, with no fake Start action or frames and independent legacy readers.
 
 ## 5. Obsolete-code removal and isolated acceptance
 

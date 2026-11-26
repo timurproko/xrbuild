@@ -1,5 +1,6 @@
 import { mountToolNavigation } from './navigation.js';
 import { mountHandsShell } from './hands-shell.js';
+import { mountProviderRecorder } from './hands-recorder.js';
 const $ = id => document.getElementById(id), key = p => p ? `${p.owner}/${p.id}` : '';
 let snapshot = null, view = null, adjustments = null, tools = null, disposed = false, profileKey = '';
 function message(text = '') { $('hands-message').textContent = text; $('hands-message').hidden = !text; }
@@ -16,7 +17,7 @@ function availability() {
   $('hands-save').disabled = !snapshot || !!missing || !source || !source.available;
 }
 async function applyViewProfile(data) {
-  if (!data.profile || !view) return;
+  if (!data.profile || !view || view.replaying) return;
   const next = JSON.stringify(data.profile); if (next === profileKey) return;
   try { if (await view.setProfile(data.profile)) profileKey = next; }
   catch (error) { message(`Saved profile; view unavailable: ${error.message}`); }
@@ -66,21 +67,37 @@ try {
   const { createHandsView } = await import('./hands-view.js');
   view = createHandsView({ canvas: $('hands-canvas'), viewport: $('hands-viewport'),
     onMetrics: metrics => {
-      $('hands-render-fps').textContent = metrics.renderFps.toFixed(1);
-      $('hands-tracking-fps').textContent = metrics.trackingFps === null ? '—' : metrics.trackingFps.toFixed(1);
+      const render = metrics.renderFps.toFixed(1), tracking = metrics.trackingFps === null ? '—' : metrics.trackingFps.toFixed(1);
+      if ($('hands-render-fps').textContent !== render) $('hands-render-fps').textContent = render;
+      if ($('hands-tracking-fps').textContent !== tracking) $('hands-tracking-fps').textContent = tracking;
     },
     onStatus: status => {
-      $('hands-view-empty').hidden = status.phase === 'replay' || status.phase === 'running' && status.hands > 0;
-      $('hands-view-empty').firstElementChild.textContent = status.phase === 'running' ? 'No hands detected.' : 'No live hand session.';
+      const hidden = status.phase === 'replay' || status.phase === 'running' && status.hands > 0;
+      if ($('hands-view-empty').hidden !== hidden) $('hands-view-empty').hidden = hidden;
+      const text = status.phase === 'running' ? 'No hands detected.' : 'No live hand session.';
+      if ($('hands-view-empty').firstElementChild.textContent !== text) $('hands-view-empty').firstElementChild.textContent = text;
       if (status.phase === 'idle') $('hands-tracking-fps').textContent = '—';
     },
   });
 } catch (error) { $('hands-view-error').hidden = false; $('hands-view-error').textContent = `3D view unavailable: ${error.message}`; }
 // Stable host object for the separately delivered session and recorder components. No producer here.
-export const handsPage = { get view() { return view; }, get snapshot() { return snapshot; }, request };
+const recorder = mountProviderRecorder({ actions: $('hands-recording-actions'), status: $('hands-recording-status'), view,
+  restoreProfile: () => { profileKey = ''; return snapshot ? applyViewProfile(snapshot) : Promise.resolve(); } });
+export const handsPage = { get view() { return view; }, get snapshot() { return snapshot; }, recorder, request };
+async function mountRecordingTools() {
+  const root = $('hands-recordings-root');
+  try {
+    const status = await request('GET', null, '/api/hands/tools'); if (disposed) return;
+    if (!status.available) { root.firstElementChild.textContent = status.reason; return; }
+    if (status.module !== '/hands/tools/browser.mjs') throw new Error('Invalid recording component.');
+    const module = await import(status.module); if (disposed) return;
+    tools = module.mountHandsTools({ root, view });
+  } catch (error) { if (!disposed) root.textContent = `Recording tools unavailable: ${error.message}`; }
+}
+void mountRecordingTools();
 const events = new EventSource('/api/events');
 events.addEventListener('hands-changed', () => { message('Hands settings changed. Reload to review.'); adjustments?.markStale(); });
 events.addEventListener('plugins-changed', () => { message('Provider availability changed. Reload before saving.'); });
 const deliveryTimer = setInterval(() => { if (snapshot) void request('GET').then(data => { if (!disposed) { adjustments?.updateDelivery(data.delivery); void applyViewProfile(data); } }).catch(() => {}); }, 1000);
-addEventListener('pagehide', () => { disposed = true; clearInterval(deliveryTimer); events.close(); tools?.dispose(); adjustments?.dispose(); navigation?.(); disposeShell(); view?.dispose(); }, { once: true });
+addEventListener('pagehide', () => { disposed = true; clearInterval(deliveryTimer); events.close(); recorder.dispose(); tools?.dispose(); adjustments?.dispose(); navigation?.(); disposeShell(); view?.dispose(); }, { once: true });
 await load();

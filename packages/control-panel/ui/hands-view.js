@@ -21,7 +21,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   const axes = new THREE.AxesHelper(.09); axes.visible = false; scene.add(axes);
   const panel = new PanelFrame(), input = new HandInput(), ingress = new HandFrameIngress(input, 'native'), visual = new HandVisual(), interaction = new Interactor();
   scene.add(visual);
-  let currentHands = [], sceneHands = [], profile = null, profileRequest = 0;
+  let currentHands = [], sceneHands = [], profile = null, profileRequest = 0, recordedSession = false;
   const legacy = new THREE.Group(); scene.add(legacy);
   function clearHands() { currentHands = []; sceneHands = []; interaction.update([], 1); visual.update([], panel); }
   const stream = createHandStream({ ingress, clear: clearHands });
@@ -63,9 +63,10 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   frameId = requestAnimationFrame(render);
   return {
     setProfile,
-    beginSession(options) { clearLegacy(); const accepted = stream.beginSession(options); if (accepted) onStatus({ phase: 'running', hands: 0 }); return accepted; },
-    pushFrame(value) { const accepted = stream.pushFrame(value); if (accepted) onStatus({ phase: 'running', hands: value.frame.hands.length }); return accepted; },
-    clearSession() { stream.clearSession(); onStatus({ phase: 'idle', hands: null }); },
+    beginSession(options) { clearLegacy(); const accepted = stream.beginSession(options); if (accepted) { recordedSession = options.mode === 'replay'; onStatus({ phase: recordedSession ? 'replay' : 'running', hands: 0 }); } return accepted; },
+    pushFrame(value) { const accepted = stream.pushFrame(value); if (accepted) onStatus({ phase: recordedSession ? 'replay' : 'running', hands: value.frame.hands.length }); return accepted; },
+    clearSession() { stream.clearSession(); recordedSession = false; onStatus({ phase: 'idle', hands: null }); },
+    get replaying() { return recordedSession; },
     get active() { return stream.active; },
     get currentHands() { return currentHands; },
     get sceneHands() { return sceneHands; },
