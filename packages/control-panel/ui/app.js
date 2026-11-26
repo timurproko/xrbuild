@@ -6,7 +6,7 @@ import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatf
 import {requestedNavigation,menuKeyboard,renderNavigationMenu,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
 import {rebuildHostInPlace,updateInPlace,updateTooltip} from './rebuild-dialog.js';
 import {enhanceHelpText,iconSvg,installDropdowns,installIcons,installNumberSteppers,installTabs,installTooltips,openFloating,renderField,resumeAnimations,setFieldError,setPageIdentity,setRevealed,stabilizePanelHeight,transitionPanelHeight,updateRebuildChip,updateRestartChip} from './design-system.js';
-import {exposedProviderInputs,runtimeProviderInputs} from './provider-choice.js';
+import {logicalInputNames} from './provider-choice.js';
 import {bumpPackageVersion, nextPublicationVersion} from './package-version.js';
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -1156,20 +1156,11 @@ const isHeadset = (m) => m?.target === 'webxr';
  * A name the project uses but the host lacks stays selectable (marked missing), so nothing is lost.
  */
 function inputField(m) {
-  const deferred = new Set(['replay', 'simulated', 'calibrated']),isDeferred=name=>deferred.has(String(name).toLowerCase());
-  const providers = (state.plugins?.providers ?? []).filter((p) => p.role === 'input' && p.name !== 'none' && !isDeferred(p.name));
-  const values = exposedProviderInputs(m.inputs ?? ['mouse', 'keyboard', ...(m.input && m.input !== 'none' ? [m.input] : [])],providers).filter((name) => !isDeferred(name));
-  const disabled = new Set((state.plugins?.disabled ?? []).filter((p) => p.role === 'input').map((p) => p.name));
-  const selectable = providers.filter((provider) => !provider.hidden);
-  const names = [...new Set([...selectable.map((p) => p.name), ...values.filter((v) => v !== 'mouse' && v !== 'keyboard')])].filter((n) => !disabled.has(n));
-  const labels = { mouse: 'Mouse', keyboard: 'Keyboard' };
-  for (const p of providers) if (!p.builtin) {
-    const managed=state.managedPlugins.find(plugin=>plugin.providers?.some(provider=>provider.role==='input'&&provider.name===p.name));
-    const label=p.label||managed?.title||p.description?.match(/^(.+?)\s+[—–]\s+/)?.[1]||p.description?.split(' ')[0]||p.name;
-    labels[p.name]=p.hidden&&values.includes(p.name)?`${label} (unavailable)`:label;
-  }
-  return field('Input', 'inputs', values, { options: ['mouse', 'keyboard', ...names.filter((n) => n !== 'mouse' && n !== 'keyboard').sort()],
-    optionLabels: labels, multiple: true, raw: true });
+  const values = logicalInputNames(m.inputs ?? ['mouse', 'keyboard', ...(m.input && m.input !== 'none' ? [m.input] : [])]);
+  const context = isHeadset(m) ? 'webxr' : 'native';
+  const available = (state.plugins?.handProviders ?? []).some(p => p.available && p.transport === context);
+  return field('Input', 'inputs', values, { options: ['mouse', 'keyboard', ...(available || values.includes('hand') ? ['hand'] : [])],
+    optionLabels: { mouse: 'Mouse', keyboard: 'Keyboard', hand: available ? 'Hand' : 'Hand (unavailable)' }, multiple: true, raw: true });
 }
 
 /** Drag a platform tab before or after another to reorder the tabs; the order is saved for the workspace. */
@@ -2231,7 +2222,7 @@ async function saveSettings(p, form, changedName) {
     };
   }
   if (changedName === 'inputs') {
-    m.inputs = runtimeProviderInputs(JSON.parse(get('inputs')),state.plugins?.providers);
+    m.inputs = logicalInputNames(JSON.parse(get('inputs')));
     delete m.input;  // Migrate the legacy single provider on the first settings edit.
   }
   for (const [k, v] of form.entries()) {

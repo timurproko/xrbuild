@@ -36,6 +36,9 @@ import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './
 import { rebuiltPluginNames, runUpdate, updateStatus, type UpdateDeps, type UpdateStatus } from './update.ts';
 import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatus, type BuildTarget, type IdentityField, type PackagerDiscovery, type PackagerSetupStatus, type RoleSelection } from './packagers.ts';
 import { PackageList } from './packages.ts';
+import { discoverHandProviders, sameHandProvider, handRegistry, handProviderKey, type HandProviderKey } from './hand-providers.ts';
+import { isNativeLauncherDocument } from '../../sdk/src/launch-context.ts';
+import { readHandsState, saveHandsState, selectedHandProvider, validHandProviderKey, prepareHandInput, resolveHandInput, type HandContext } from './hands-state.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
 import { archiveProject, readLayout, removeEmptyProjectSection, unarchiveProject } from './layout.ts';
 import { discoverPublishers, normalizeReleaseCatalog, publicationUrl, publisherFor, publisherUnconfigured, releaseIdProblem, type PublicationCard, type PublicationIdentity, type Publisher, type PublisherDiscovery, type PublisherReleaseCatalog, type PublisherStatus } from './publishers.ts';
@@ -205,6 +208,10 @@ export async function packageGraphReady(root: string): Promise<boolean> {
 
 export class Panel {
   readonly jobs = new JobRunner();
+  private activeHandSource: HandProviderKey | null = null;
+  private nativeHandPolicy: 'off' | 'native' | null = null;
+  private handRuntimeStates = new Map<string, string>();
+  private savingHands = false;
   private preparingNativeRun = false;
   private preparingPreview = false;
   private changingPlugins = false;
@@ -260,7 +267,9 @@ export class Panel {
   onQuit: () => void = () => {};
   onRestart: () => void = () => {};
   launchBrowser: typeof launchPreviewBrowser = launchPreviewBrowser;
-  private previewProjection: { route: string; token: string; session: string; fullscreen: boolean; monitor: number; projection: 'perspective' | 'orthographic' } | null = null;
+  /** Metadata probe injection for device-free fixtures. */
+  nativeProviders: typeof listProviders = listProviders;
+  private previewProjection: { route: string; token: string; session: string; fullscreen: boolean; monitor: number; projection: 'perspective' | 'orthographic'; projectId: string; handPolicy: 'off' | 'webxr' } | null = null;
 
   constructor(repo: string, workspace: string, hub: EventHub, projects = workspace, bootstrapPackageLock = false) {
     assertUserRoot(repo, workspace);
@@ -280,16 +289,20 @@ export class Panel {
     });
     this.jobs.on('line', (j: Job, text: string) => hub.send('job-line', { id: j.id, text }));
     this.runner.on('state', (s) => {
+      if (s.phase === 'idle') this.nativeHandPolicy = null;
       hub.send('run', s);
       hub.send('projects-changed', { projectId: s.projectId });
     });
-    this.runner.on('status', (s) => hub.send('status', s));
+    this.runner.on('status', (s) => {
+      if (this.activeHandSource && s?.handState) this.handRuntimeStates.set(handProviderKey(this.activeHandSource), s.handState);
+      hub.send('status', s);
+    });
     this.runner.on('log', (text) => hub.send('run-log', text));
   }
 
   private async withPluginServices<T>(work: () => Promise<T>): Promise<T> {
     await this.synchronizePluginServices(true);
-    if (this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending) throw this.servicesRefusal('Plugin services are changing; retry after the update');
+    if (this.savingHands || this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending) throw this.servicesRefusal('Plugin services are changing; retry after the update');
     this.pluginConsumers++;
     try { return await work(); } finally { this.pluginConsumers--; }
   }
@@ -302,7 +315,7 @@ export class Panel {
   }
 
   private async withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
-    if (this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
+    if (this.savingHands || this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop running apps and jobs and wait for launch/settings preparation before changing plugins');
     this.changingPlugins = true;
     try { return await work(); } finally { this.changingPlugins = false; }
@@ -470,11 +483,11 @@ export class Panel {
     await saveManifest(p.dir, next, p.manifestMtimeMs);
   }
 
-  /** Disabled plugins stay in the manifest, but runs and packages use available alternatives. */
-  private async effectiveSelection(m: Manifest): Promise<RoleSelection> {
+  /** Disabled display/platform legacy fallbacks; Hand always resolves its one selected source without substitution. */
+  private async effectiveSelection(m: Manifest, context: HandContext): Promise<RoleSelection & { handPolicy: 'off' | 'native' | 'webxr'; handSource: HandProviderKey | null }> {
     const catalog = await resolvePluginCatalog(this.workspace, this.repo, true), prefs = catalog.prefs;
     const disabled = new Set(prefs.disabled);
-    const all = await listProviders(this.repo, this.workspace, true);
+    const all = await this.nativeProviders(this.repo, this.workspace, true);
     for (const provider of all.providers) {
       if (provider.path && catalog.selected.some(plugin => !pluginEnabled(plugin, prefs) && pluginOwnsPath(plugin, provider.path!)))
         disabled.add(provider.name);
@@ -485,16 +498,56 @@ export class Panel {
         if (folder.startsWith(prefix)) disabled.add(folder.slice(prefix.length));
     }
     const selected = selectionOf(m);
-    const inputs = (selected.inputs ?? []).filter((name) => !disabled.has(name));
-    return { ...selected, input: inputs.find((name) => name !== 'mouse' && name !== 'keyboard') ?? 'none', inputs,
+    const hands = await prepareHandInput(this.repo, this.workspace, await discoverHandProviders(this.repo, this.workspace, this.nativeProviders), selected.inputs ?? [], context);
+    return { ...selected, input: hands.input, inputs: hands.inputs, handPolicy: hands.policy, handSource: hands.source ? { owner: hands.source.owner, id: hands.source.id } : null,
       display: disabled.has(selected.display) ? 'desktop' : selected.display,
       platform: disabled.has(selected.platform) ? '' : selected.platform };
+  }
+
+  /** Read-only HTML/launcher preview policy. No provider is started or settings written. */
+  async browserHandPolicy(m: Manifest): Promise<'off' | 'webxr'> {
+    if (!selectionOf(m).inputs?.includes('hand')) return 'off';
+    const resolved = resolveHandInput(selectionOf(m).inputs ?? [], await readHandsState(this.repo, this.workspace), await discoverHandProviders(this.repo, this.workspace, this.nativeProviders), 'webxr');
+    return resolved.policy === 'off' ? 'off' : 'webxr';
+  }
+
+  /** Managed documents keep their launch decision; unscoped previews use effective personal inputs. */
+  async previewHandPolicy(p: Project, url: URL): Promise<'off' | 'native' | 'webxr'> {
+    const scope = url.searchParams, active = this.previewProjection;
+    if (active?.projectId === p.id && active.handPolicy !== undefined
+      && scope.get('xrb-preview-token') === active.token && scope.get('xrb-preview-session') === active.session
+      && scope.get('xrb-preview-route') === active.route) return active.handPolicy;
+    const effective = p.readOnly ? withRunSettings(p, await readProjectRunSettings(this.repo, this.workspace, p)) : p;
+    const m = this.manifestOf(effective);
+    if (!selectionOf(m).inputs?.includes('hand')) return 'off';
+    const nativeActive = this.runner.busy && this.nativeHandPolicy !== null;
+    if (isNativeLauncherDocument(url.href, new URL(this.panelUrl ?? url.origin).origin, nativeActive)) {
+      if (nativeActive) {
+        if (this.nativeHandPolicy === 'off') throw new HttpError(409, 'This native host started without Hand; restart the Launcher with Hand enabled');
+        return 'native'; // Reuse the host's captured source, never open or resolve another one mid-run.
+      }
+      // A read-only native Launcher link can be inspected without a host; it never starts capture.
+      const resolved = resolveHandInput(selectionOf(m).inputs ?? [], await readHandsState(this.repo, this.workspace), await discoverHandProviders(this.repo, this.workspace, this.nativeProviders), 'native');
+      return resolved.policy === 'off' ? 'off' : 'native';
+    }
+    return this.browserHandPolicy(m);
+  }
+
+  private async publicationApp(p: Project, m: Manifest, policy: 'off' | 'native' | 'webxr'): Promise<string> {
+    const root = path.join(this.workspace, 'build', 'publication-inputs');
+    assertWritablePath(this.repo, this.workspace, root); await fs.mkdir(root, { recursive: true });
+    const generation = await fs.mkdtemp(path.join(root, 'p-'));
+    const staged = await stagePackagerInputs({ app: p.workingRoot ? (await effectiveProjectOutput(this.repo, this.workspace, p)).entry : this.entryOf(p, m),
+      runtimeDir: '', plugins: [], selection: { input: 'none', inputs: [], display: 'desktop', platform: '' }, handPolicy: policy,
+      projectName: m.name, identity: {}, out: path.join(generation, 'out'), workDir: path.join(generation, 'work'), log: () => {},
+    }, path.join(generation, 'inputs'), this.entryOf(p, m) === p.dir);
+    return staged.app;
   }
 
   private async runtimeConfig(m: Manifest, selection: RoleSelection, desktop?: { fullscreen: boolean; monitor: number }): Promise<RoleSelection & { plugins: Record<string, unknown> }> {
     const plugins = structuredClone(m.plugins ?? {}) as Record<string, unknown>;
     const catalog = await resolvePluginCatalog(this.workspace, this.repo), prefs = catalog.prefs;
-    const providers = await listProviders(this.repo, this.workspace);
+    const providers = await this.nativeProviders(this.repo, this.workspace);
     const chosen = new Set([...selection.inputs ?? [], selection.display, selection.platform]);
     for (const provider of providers.providers.filter((p) => !p.builtin && p.path && chosen.has(p.name))) {
       const plugin = catalog.selected.find(plugin => pluginOwnsPath(plugin, provider.path!));
@@ -516,15 +569,16 @@ export class Panel {
    */
   async hostArgs(p: Project, m: Manifest, desktop?: { fullscreen: boolean; monitor: number }, effective?: RoleSelection): Promise<string[]> {
     const h = m.host ?? {};
+    if (h.args?.some(arg => /^--(?:input|config)=/.test(arg))) throw new HttpError(409, 'Choose the hand provider in Hands, not host input/config arguments');
     if (p.readOnly && h.args?.length) throw new HttpError(409, 'Prepare embedded working state before using custom host arguments');
     const key = projectStateKey(this.repo, p);
     const state = path.join(this.workspace, 'build', 'project-state', key);
     const config = path.join(state, `${this.instanceId}.json`);
     assertWritablePath(this.repo, this.workspace, config);
     await fs.mkdir(state, { recursive: true });
-    const selection = effective ?? await this.effectiveSelection(m);
+    const selection = effective ?? await this.effectiveSelection(m, 'native');
     await fs.writeFile(config, JSON.stringify(await this.runtimeConfig(m, selection, desktop), null, 2));
-    const providers = await listProviders(this.repo, this.workspace);
+    const providers = await this.nativeProviders(this.repo, this.workspace);
     if (providers.unsafe || providers.error && (await resolvedPluginBinDirs(this.repo, this.workspace)).length)
       throw new HttpError(409, providers.error ?? 'Native provider discovery is unsafe');
     const args: string[] = [`--config=${config}`, ...(providers.pluginBins ?? []).map((d) => `--plugin-dir=${d}`)];
@@ -685,7 +739,7 @@ export class Panel {
 
   /** Built plugins by the name they report (`xrb-host --list-plugins`) -> the folder holding their files. */
   async pluginDirs(): Promise<Record<string, string>> {
-    const list = await listProviders(this.repo, this.workspace);
+    const list = await this.nativeProviders(this.repo, this.workspace, false);
     if (list.unsafe) throw new HttpError(409, list.error ?? 'Native provider discovery is unsafe');
     return Object.fromEntries(list.providers.filter((p) => !p.builtin && p.path).map((p) => [p.name, path.dirname(p.path!)]));
   }
@@ -699,7 +753,8 @@ export class Panel {
   /** All workspace plugins, including disabled and packager-only plugins. */
   async managedPlugins() {
     const catalog = await resolvePluginCatalog(this.workspace, this.repo, true), prefs = catalog.prefs;
-    const providers = await listProviders(this.repo, this.workspace, true);
+    const providers = await this.nativeProviders(this.repo, this.workspace, false);
+    const presentation = await this.nativeProviders(this.repo, this.workspace, true);
     const freshness = (await resolvedHostFreshness(this.repo, this.workspace)).plugins;
     const sourceRevision = await this.pluginSourceRevision(catalog);
     const plugins = await Promise.all(catalog.plugins.map(async (plugin) => {
@@ -708,7 +763,8 @@ export class Panel {
       const selected = catalog.selected.some(item => item.key === plugin.key);
       let problem = selected ? plugin.nativeProblem : 'Plugin origin is conflicting or not selected';
       const id = plugin.origin === 'workspace' && !catalog.plugins.some(item => item.id === plugin.id && item.origin !== plugin.origin) ? plugin.id : plugin.key;
-      const ownProviders = providers.providers.filter((p) => p.path && pluginOwnsPath(plugin, p.path));
+      const listed = pluginEnabled(plugin, prefs) ? providers : presentation;
+      const ownProviders = listed.providers.filter((p) => p.path && pluginOwnsPath(plugin, p.path));
       const presentedProviders = ownProviders.map((provider) => {
         const presentedName = meta.panelProviderNames?.[provider.name] ?? provider.name;
         return { name: presentedName, role: provider.role, version: provider.version, ...(presentedName !== provider.name ? { runtimeName: provider.name } : {}),
@@ -716,7 +772,7 @@ export class Panel {
       });
       const native = freshness.filter((p) => p.key === plugin.key);
       problem ??= native.find(p => p.problem)?.problem ?? null;
-      if (providers.blockedBins?.includes(plugin.binaryRoot)) problem ??= 'Native provider conflict or invalid DLL; see provider diagnostics';
+      if (pluginEnabled(plugin, prefs) && providers.blockedBins?.includes(plugin.binaryRoot)) problem ??= 'Native provider conflict or invalid DLL; see provider diagnostics';
       const packagerDecls = await Promise.all((await pluginPackageDirs(plugin)).map(async (dir) => {
         const decl = await fs.readFile(path.join(dir, 'package.json'), 'utf8').catch(() => '{}');
         try {
@@ -981,7 +1037,7 @@ export class Panel {
     if (unconfigured) throw new HttpError(409, unconfigured, { configuration: true });
     const errors = publisher.validate(identity);
     if (errors.length) throw new HttpError(400, errors.map((e) => e.message).join('; '), { errors });
-    const entry = this.entryOf(p, m);
+    const selection = await this.effectiveSelection(m, 'webxr');
     const build = async (ctx: JobContext) => {
       if (m.scripts?.build) {
         ctx.line('Building current source before publishing.');
@@ -992,7 +1048,7 @@ export class Panel {
       if (body.version !== undefined) throw new HttpError(409, `publisher "${publisher.name}" has no versioned release support`);
       return this.startJob('publication', p.id, `build and publish (${publisher.name}): ${m.name}`, async (ctx) => {
         await build(ctx);
-        return publisher.publish({ app: p.workingRoot ? (await effectiveProjectOutput(this.repo, this.workspace, p)).entry : entry, publication: identity, card: await this.cardOf(p, m), log: ctx.line });
+        return publisher.publish({ app: await this.publicationApp(p, m, selection.handPolicy), publication: identity, card: await this.cardOf(p, m), log: ctx.line });
       }, 'publish', snapshot);
     }
     const version = body.version;
@@ -1009,7 +1065,7 @@ export class Panel {
     const release = { version: version as string, expectedRevision: catalog.revision };
     return this.startJob('publication', p.id, `build and ${operation} ${version} (${publisher.name}): ${m.name}`, async (ctx) => {
       await build(ctx);
-      return releases.publish({ app: p.workingRoot ? (await effectiveProjectOutput(this.repo, this.workspace, p)).entry : entry, publication: identity, version: release.version, expectedRevision: release.expectedRevision, card: await this.cardOf(p, m), log: ctx.line });
+      return releases.publish({ app: await this.publicationApp(p, m, selection.handPolicy), publication: identity, version: release.version, expectedRevision: release.expectedRevision, card: await this.cardOf(p, m), log: ctx.line });
     }, operation, snapshot, release);
   }
 
@@ -1179,7 +1235,7 @@ export class Panel {
     // A headset package carries only the web app: no host, no native plugins.
     const headset = buildTargetOf(m) === 'webxr';
     let runtimeDir = '', pluginDirs: Record<string, string> = {}, plugins: string[] = [];
-    const selection = headset ? selectionOf(m) : await this.effectiveSelection(m);
+    const selection = await this.effectiveSelection(m, headset ? 'webxr' : 'native');
     if (!headset) {
       const fresh = await resolvedHostFreshness(this.repo, this.workspace);
       if (!fresh.exists) throw new HttpError(409, fresh.hostProblem ?? 'xrb-host.exe is not built: rebuild the host first');
@@ -1214,7 +1270,7 @@ export class Panel {
       assertWritablePath(this.repo, this.workspace, inputRoot); await fs.mkdir(inputRoot, { recursive: true });
       const inputGeneration = await fs.mkdtemp(path.join(inputRoot, 'p-'));
       const staged = await stagePackagerInputs({
-        app: p.workingRoot ? (await effectiveProjectOutput(this.repo, this.workspace, p)).entry : entry, runtimeDir, ...(headset ? {} : { pluginDirs }), plugins, selection, projectName: m.name, identity, config, launchUrl,
+        app: p.workingRoot ? (await effectiveProjectOutput(this.repo, this.workspace, p)).entry : entry, runtimeDir, ...(headset ? {} : { pluginDirs }), plugins, selection, handPolicy: selection.handPolicy, projectName: m.name, identity, config, launchUrl,
         icon: packageIcon, iconColor: m.iconColor,
         out: path.join(this.workspace, 'builds', packaging.channel), workDir: path.join(this.workspace, 'build', packaging.channel), log: (msg) => ctx.line(msg),
       }, path.join(inputGeneration, 'inputs'), path.resolve(entry) === path.resolve(p.dir));
@@ -1333,10 +1389,13 @@ export class Panel {
     const cursor = (await readAppSettings(this.workspace)).cursor;
     const session = randomUUID();
     const projection = flat ? 'orthographic' : 'perspective';
-    const mouseEnabled = (await this.effectiveSelection(m)).inputs?.includes('mouse') ?? true;
+    const selection = await this.effectiveSelection(m, 'webxr');
+    const mouseEnabled = selection.inputs?.includes('mouse') ?? true;
+    this.activeHandSource = selection.handSource;
     // Settings/provider reads yielded: another request may have reserved the runner meanwhile.
     if (this.runner.busy) throw new HttpError(409, 'stop the running app first');
-    this.previewProjection = { route, token, session, fullscreen: browser.fullscreen, monitor: browser.monitor, projection };
+    this.previewProjection = { route, token, session, fullscreen: browser.fullscreen, monitor: browser.monitor, projection,
+      projectId: p.id, handPolicy: selection.handPolicy === 'off' ? 'off' : 'webxr' };
     let href = '';
     try {
       await this.runner.startPreview({ projectId: p.id, projectDir: p.dir, devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, flat }, mode, async (devUrl) => {
@@ -1348,6 +1407,7 @@ export class Panel {
         url.searchParams.set('xrb-project', p.id);
         url.searchParams.set('xrb-camera', projection);
         url.searchParams.set('xrb-mouse', mouseEnabled ? '1' : '0');
+        url.searchParams.set('xrb-hand', selection.handPolicy);
         url.searchParams.set('xrb-cursor', cursor);
         url.searchParams.set('xrb-preview-session', session);
         url.searchParams.set('xrb-preview-fullscreen', browser.fullscreen ? '1' : '0');
@@ -1404,7 +1464,8 @@ export class Panel {
     const fresh = await resolvedHostFreshness(this.repo, this.workspace);
     if (!fresh.exists) throw new HttpError(409, fresh.hostProblem ?? 'xrb-host.exe is not built: rebuild the host first');
     if (this.runner.busy) throw new HttpError(409, `${this.runner.projectId} is running: stop it first`);
-    const selection = await this.effectiveSelection(m);
+    const selection = await this.effectiveSelection(m, 'native');
+    this.activeHandSource = selection.handSource;
     const chosen = [...selection.inputs ?? [], selection.display, selection.platform].filter((n) => n && !BUILTIN_PROVIDERS.has(n));
     const missing = await this.missingPlugins(chosen);
     if (missing.length) throw new HttpError(409, `plugin ${missing.join(', ')} is not built in the workspace: rebuild the host first`, { needsRebuild: true });
@@ -1413,16 +1474,18 @@ export class Panel {
     }
     const attemptedAt = Date.now();
     const cursor = (await readAppSettings(this.workspace)).cursor;
+    this.nativeHandPolicy = selection.handPolicy === 'off' ? 'off' : 'native';
     try {
       await this.runner.start({
         projectId: p.id, mode, hostExe: fresh.exe, projectDir: p.dir, entryDir: bundledOutput?.entry ?? this.entryOf(p, m),
         builtUrl: mode === 'built' && this.panelUrl
-          ? `https://app.local/index.html?xrb-panel=${encodeURIComponent(this.panelUrl)}&xrb-project=${encodeURIComponent(p.id)}&xrb-mouse=${selection.inputs?.includes('mouse') ? '1' : '0'}&xrb-cursor=${cursor}` : undefined,
-        devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, panelUrl: this.panelUrl ?? undefined, mouseEnabled: selection.inputs?.includes('mouse') ?? true, cursor, flat, switchView: selection.display !== 'desktop', cameraView,
+          ? `https://app.local/index.html?xrb-panel=${encodeURIComponent(this.panelUrl)}&xrb-project=${encodeURIComponent(p.id)}&xrb-mouse=${selection.inputs?.includes('mouse') ? '1' : '0'}&xrb-cursor=${cursor}&xrb-hand=${selection.handPolicy}` : undefined,
+        devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, panelUrl: this.panelUrl ?? undefined, mouseEnabled: selection.inputs?.includes('mouse') ?? true, handPolicy: selection.handPolicy, cursor, flat, switchView: selection.display !== 'desktop', cameraView,
         cameraAvailable: (selection.inputs ?? []).some((name) => !BUILTIN_PROVIDERS.has(name)),
         hostArgs: [`--title=${m.name}`, `--camera-projection=${flat ? 'orthographic' : 'perspective'}`, ...(await this.hostArgs(p, m, desktop, selection)), ...(flat && selection.display !== 'desktop' ? ['--view=2d'] : [])],
       });
     } catch (e) {
+      this.nativeHandPolicy = null;
       const last = this.runner.state().last;
       const output = last?.projectId === p.id && last.endedMs >= attemptedAt ? last.lines : null;
       throw new HttpError(400, (e as Error).message, output?.length ? output.join('\n') : undefined);
@@ -1439,7 +1502,7 @@ export class Panel {
 
   /** Refuses with the first specific cause; `details.reason` lets the UI offer Restart when only a restart helps. */
   private refuseIfLaunchBlocked(p: Project, state: LaunchState): void {
-    const blocked = launchBlocker({ ...state, settingsSaving: this.settingsWrites.has(p.id) });
+    const blocked = launchBlocker({ ...state, settingsSaving: this.savingHands || this.settingsWrites.has(p.id) });
     if (blocked) throw new HttpError(409, blocked.message, { reason: blocked.reason, restart: blocked.restart });
   }
 
@@ -1729,6 +1792,30 @@ export class Panel {
       return true;
     }
     switch (key) {
+      case 'GET hands': {
+        const registry = await discoverHandProviders(this.repo, this.workspace, this.nativeProviders);
+        const state = await readHandsState(this.repo, this.workspace);
+        const selected = selectedHandProvider(state, registry, 'native');
+        sendJson(res, 200, { ...registry, providers: registry.providers.map(p => ({ ...p, runtimeState: this.handRuntimeStates.get(handProviderKey(p)) ?? null })), registryRevision: registry.revision, selected: selected.key, initial: selected.initial, revision: state.revision,
+          choiceRequired: !selected.key, applies: 'next-launch' });
+        return true;
+      }
+      case 'PUT hands': {
+        if (this.savingHands || this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.changingPlugins || this.jobs.active().length)
+          throw new HttpError(409, 'Wait for launch, package or provider preparation before saving Hands');
+        this.savingHands = true;
+        try {
+          const body = await readJson<{ provider?: unknown; revision?: string; registryRevision?: string }>(req);
+          const registry = await discoverHandProviders(this.repo, this.workspace, this.nativeProviders);
+          if (body.registryRevision !== registry.revision) throw new HttpError(409, 'Hand providers changed; reload before saving');
+          if (body.provider !== null && (!validHandProviderKey(body.provider) || !registry.providers.some(p => p.available && sameHandProvider(p, body.provider as import('./hand-providers.ts').HandProviderKey))))
+            throw new HttpError(400, 'Choose an installed enabled hand provider');
+          const saved = await saveHandsState(this.repo, this.workspace, body.provider, body.revision);
+          this.hub.send('hands-changed', {});
+          sendJson(res, 200, { revision: saved.revision, selected: saved.provider });
+        } finally { this.savingHands = false; }
+        return true;
+      }
       case 'GET jobs':
         sendJson(res, 200, { jobs: this.jobs.list() });
         return true;
@@ -1768,7 +1855,7 @@ export class Panel {
             screenName: provider.role === 'display' ? meta.screenName : undefined,
             displayMode: provider.role === 'display' ? meta.displayMode : undefined };
         };
-        const all = await listProviders(this.repo, this.workspace, true);
+        const all = await this.nativeProviders(this.repo, this.workspace, true);
         const disabled = all.providers.filter((p) => p.path && catalog.selected.some(plugin => !pluginEnabled(plugin, prefs) && pluginOwnsPath(plugin, p.path!))).map(presentProvider);
         const disabledNames: Array<{ name: string; role: string }> = [];
         for (const id of prefs.disabled) {
@@ -1781,9 +1868,9 @@ export class Panel {
         if (prefs.disabled.length) for (const plugin of await this.managedPlugins()) {
           if (!plugin.enabled && plugin.packager) disabledNames.push({ name: plugin.name, role: 'platform' });
         }
-        const available = await listProviders(this.repo, this.workspace);
+        const available = await this.nativeProviders(this.repo, this.workspace, false);
         const providers = available.providers.map(presentProvider);
-        sendJson(res, 200, { ...available, providers,
+        sendJson(res, 200, { ...available, providers, handProviders: handRegistry(catalog, available, all).providers,
           disabled: [...new Map([...disabled.map(({ name, role }) => ({ name, role })), ...disabledNames]
             .map((provider) => [`${provider.role}:${provider.name}`, provider])).values()],
           packagers: platformsFor(this.packagers, 'host'), headsetPlatforms: platformsFor(this.packagers, 'webxr'), standaloneTargets,

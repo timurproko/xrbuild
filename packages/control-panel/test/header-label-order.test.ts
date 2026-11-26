@@ -21,7 +21,7 @@ test('maintenance menu has one immutable order used for corresponding header lab
   const menu = navigationItems('http://localhost:5180', [{ id: 'tool', label: 'Tool', route: '/tool/' }]);
   assert.deepEqual(MAINTENANCE_ACTIONS.map(item => item.id), ['restart', 'rebuild', 'update']);
   assert.deepEqual(menu.slice(-3).map(item => item.id), MAINTENANCE_ACTIONS.map(item => item.id));
-  assert.deepEqual(menu.map(item => item.label ?? 'separator'), ['Apps', 'Tool', 'Plugins', 'Settings', 'separator', 'Restart', 'Rebuild', 'Update']);
+  assert.deepEqual(menu.map(item => item.label ?? 'separator'), ['Apps', 'Hands', 'Tool', 'Plugins', 'Settings', 'separator', 'Restart', 'Rebuild', 'Update']);
   // One action updates both repositories: the item is named exactly "Update", never "Update workspace".
   assert.equal(MAINTENANCE_ACTIONS.find(item => item.id === 'update')?.label, 'Update');
   assert.ok(Object.isFrozen(MAINTENANCE_ACTIONS));assert.ok(MAINTENANCE_ACTIONS.every(Object.isFrozen));

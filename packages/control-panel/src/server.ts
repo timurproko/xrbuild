@@ -43,6 +43,7 @@ import { assertEditableProject, assertUserRoot, assertWritablePath } from './pro
 import { projectRunSettingsFile, readProjectRunSettings, withRunSettings } from './project-run-settings.ts';
 import { publicationCard } from './publication.ts';
 import { ManagedTools } from './managed-tools.ts';
+import { handPolicyDocument } from './hand-policy-document.ts';
 import { listMonitors } from './monitors.ts';
 import { applyLayout, readLayout, validateLayout, type Layout } from './layout.ts';
 import { createProject, createProjectWorkspace, createWorkspace, isWorkspace, ProjectRefused, writeEditorConfig } from './workspace.ts';
@@ -378,6 +379,12 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
         const asset = await projectPath(owner, relative);
         if ((await fs.stat(asset)).isDirectory()) await projectFile(owner, `${relative}/index.html`);
       }
+      if ((!file || file === 'index.html') && !url.searchParams.has('xrb-icon')) {
+        const document = await projectFile({ ...p, dir: entry }, 'index.html');
+        const policy = await panel.previewHandPolicy(p, url);
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+        res.end(handPolicyDocument(await fs.readFile(document, 'utf8'), policy)); return;
+      }
       return serveStatic(res, entry, file);
     }
     if (method === 'GET' && url.pathname === '/vendor/three.module.js') {
@@ -392,6 +399,12 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       return;
     }
     if (parts[0] !== 'api') {
+      if (['/hands', '/hands/', '/hand-tracking', '/hand-tracking/'].includes(url.pathname)) {
+        if (!['GET', 'HEAD'].includes(method)) throw new HttpError(405, 'method not allowed');
+        if (url.pathname !== '/hands/') { res.writeHead(302, { location: `/hands/${url.search}`, 'cache-control': 'no-store' }); res.end(); return; }
+        if (method === 'HEAD') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(); return; }
+        return serveStatic(res, uiDir, 'hands.html');
+      }
       if (['/design', '/design/', '/design-system.html'].includes(url.pathname)) {
         if (!['GET','HEAD'].includes(method)) throw new HttpError(405, 'method not allowed');
         if (url.pathname !== '/design') { res.writeHead(302, {location:`/design${url.search}`, 'cache-control':'no-store'}); res.end(); return; }

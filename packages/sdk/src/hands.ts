@@ -222,6 +222,18 @@ export class HandInput {
     return this.tracks.size;
   }
 
+  /** End a source/session immediately, without coasting retired hands through the dropout grace. */
+  reset(now: number): void {
+    for (const track of this.tracks.values()) {
+      const hand = this.view(track, now);
+      if (track.pinching) this.emit({ type: 'pinchend', hand });
+      if (track.grabbing) this.emit({ type: 'grabend', hand });
+      this.emit({ type: 'lost', hand });
+    }
+    this.tracks.clear();
+    this.newestCapture = -Infinity;
+  }
+
   /**
    * 'window' prediction velocity: the newest frame-to-frame velocity, limited per axis to its
    * low-passed value (noise spikes do not pass) and zero when the two disagree in sign (a stop or

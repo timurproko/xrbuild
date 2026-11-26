@@ -26,9 +26,10 @@ import { appLaunchContextFromLocation, appResumeProjectionFromLocation, type Cam
 import { loadReturnOverlay } from './return-overlay.ts';
 import type { ReturnControl } from './return-control.ts';
 import { PointerEmulation } from './pointer.ts';
-import { ALL_CAPABILITIES, type HandCapabilities, type PagePerformance, type PlatformInfo, type StatusMessage, type Vec3 } from './protocol.ts';
+import { type HandCapabilities, type PagePerformance, type PlatformInfo, type StatusMessage, type Vec3 } from './protocol.ts';
 import { toSceneHand, type SceneHand } from './scene-hands.ts';
 import { nominalEyes, panelCropPlanes, StereoRenderer, type AppCamera, type EyePair, type PanelMapping } from './stereo.ts';
+import { HandFrameIngress, handSourcePolicy } from './hand-source.ts';
 import { detectXrMode, eyesInPanel, headOf, rigMatrix, virtualDisplay, VirtualPanel, wantsAutoEnter, XrHands, type XrFrameLike, type XrMode, type XrOptions, type XrSessionLike, type XrSystemLike } from './webxr.ts';
 
 export * from './protocol.ts';
@@ -169,6 +170,9 @@ export class Xrb {
   private readonly xrOptions: XrOptions;
   private readonly xrPanel: VirtualPanel;
   private readonly xrHands = new XrHands();
+  private readonly handIngress: HandFrameIngress;
+  private readonly managedHandPolicy: boolean;
+  private handProblemNotice: HTMLElement | null = null;
   /** parent of the XR camera: reference space -> scene, so the virtual panel lands where the mapping puts the panel */
   private readonly xrRig = new THREE.Object3D();
   private readonly xrCamera = new THREE.PerspectiveCamera();
@@ -179,6 +183,7 @@ export class Xrb {
     this.renderer = renderer;
     this.host = getHostInfo();
     const launch = new URLSearchParams(globalThis.location?.search ?? '');
+    this.managedHandPolicy = launch.has('xrb-hand') || (globalThis as { __XRB_HAND_POLICY__?: unknown }).__XRB_HAND_POLICY__ !== undefined;
     this.mouseEnabled = options.mouse !== false && this.host?.mouseEnabled !== false && launch.get('xrb-mouse') !== '0';
     this.cursorStyle = resolveCursorStyle(launch.get('xrb-cursor') ?? options.cursor);
     this.cursorObject = new MouseCursor({ style: this.cursorStyle });
@@ -203,9 +208,10 @@ export class Xrb {
     this.displayLatencyMs = options.displayLatencyMs ?? 8;
     this.channel = this.host ? new HostChannel(this.host) : null;
     this.hands = new HandInput(options.hands);
+    this.handIngress = new HandFrameIngress(this.hands, handSourcePolicy(!!this.host, globalThis.location?.search ?? '', (globalThis as { __XRB_HAND_POLICY__?: unknown }).__XRB_HAND_POLICY__));
     this.interaction = new Interactor(options.interaction);
     this.channel?.onHands((m) => {
-      this.hands.push(m, this.channel!.hostToPage(m.captureTimeMs));
+      if (this.disposed || !this.handIngress.push('native', m, this.channel!.hostToPage(m.captureTimeMs))) return;
       this.deliveryMs.push(this.host!.hostNow() - m.captureTimeMs);
       if (this.deliveryMs.length > 60) this.deliveryMs.shift();
     });
@@ -261,7 +267,11 @@ export class Xrb {
   async enterXR(): Promise<void> {
     const xr = navigatorXr();
     if (!xr || !this.xrMode || this.presenting) return;
-    const session = await xr.requestSession(this.xrMode, { optionalFeatures: ['hand-tracking'] });
+    let session: XrSessionLike;
+    try { session = await xr.requestSession(this.xrMode, { optionalFeatures: this.handIngress.policy === 'webxr' ? ['hand-tracking'] : [] }); }
+    catch (error) { this.showHandProblem(`Hand provider failed: ${(error as Error).message}`); throw error; }
+    if (this.disposed) { await session.end(); return; }
+    this.handProblemNotice?.remove(); this.handProblemNotice = null;
     this.renderer.xr.enabled = true;
     this.renderer.xr.setReferenceSpaceType('local');
     this.xrPanel.reset();
@@ -291,7 +301,8 @@ export class Xrb {
   private async detectXr(): Promise<void> {
     const xr = navigatorXr();
     this.xrMode = await detectXrMode(xr, this.xrOptions.mode);
-    if (!this.xrMode) return;
+    if (this.disposed) return;
+    if (!this.xrMode) { this.showHandProblem('Hand unavailable: WebXR is not supported in this browser.'); return; }
     if (this.xrOptions.button !== false && typeof document !== 'undefined') this.addXrButton();
     // An installed immersive app starts without a page to tap: its launch is the gesture. A browser that
     // navigated here from a session grants the next one too ('sessiongranted').
@@ -299,6 +310,17 @@ export class Xrb {
     xr?.addEventListener?.('sessiongranted', enter);
     const search = (globalThis as { location?: { search?: string } }).location?.search ?? '';
     if (this.xrOptions.autoEnter ?? wantsAutoEnter(search)) enter();
+  }
+
+  private showHandProblem(message: string): void {
+    if (!this.managedHandPolicy || this.handIngress.policy !== 'webxr' || this.disposed || typeof document === 'undefined') return;
+    if (!this.handProblemNotice) {
+      this.handProblemNotice = document.createElement('p');
+      this.handProblemNotice.setAttribute('role', 'status');
+      Object.assign(this.handProblemNotice.style, { position: 'fixed', bottom: '64px', left: '16px', right: '16px', zIndex: '2147483647', padding: '12px', color: '#fff', background: '#20242bee', font: '14px system-ui' });
+      document.body.append(this.handProblemNotice);
+    }
+    this.handProblemNotice.textContent = message;
   }
 
   private addXrButton(): void {
@@ -316,6 +338,10 @@ export class Xrb {
   }
 
   private xrEnded(): void {
+    this.handIngress.reset();
+    this.pointer?.reset();
+    this.currentHands = []; this.sceneHands = [];
+    this.interaction.update([], this.metre);
     this.renderer.xr.enabled = false;
     if (this.xrButton) this.xrButton.style.display = '';
     this.setSize();
@@ -414,10 +440,10 @@ export class Xrb {
 
   /**
    * What the input provider tracks natively (from its newest hand frame). Gestures work either way: without
-   * pinch or grab the SDK computes them from the keypoints. All true until the first frame and in a browser.
+   * pinch or grab the SDK computes them from the keypoints. All true until the first frame.
    */
   get handCapabilities(): HandCapabilities {
-    return this.channel?.hands?.capabilities ?? ALL_CAPABILITIES;
+    return this.handIngress.capabilities;
   }
 
   /**
@@ -597,7 +623,7 @@ export class Xrb {
     }
     if (!this.xrPanel.anchored) return;
     if (pose) this.currentEyes = eyesInPanel(pose, this.xrPanel);
-    this.hands.push(this.xrHands.read(frame, space, this.xrPanel, now), now);
+    if (!this.disposed) this.handIngress.push('webxr', this.xrHands.read(frame, space, this.xrPanel, now), now);
   }
 
   /** Both eyes through the headset; the XR camera's parent puts the virtual panel where the mapping puts the panel. */
@@ -702,15 +728,21 @@ export class Xrb {
 
   dispose(): void {
     this.disposed = true;
+    this.handIngress.close();
+    this.pointer?.reset();
+    this.currentHands = []; this.sceneHands = [];
+    this.interaction.update([], this.metre);
     this.unbindMouse?.();
     this.restoreCursor();
     this.disposeShell();
     this.cursorObject.removeFromParent();
+    this.handsObject.removeFromParent();
     this.returnControl?.dispose();
     this.resumeCover?.remove();
     this.resumeCover = null;
     this.channel?.close();
     this.xrButton?.remove();
+    this.handProblemNotice?.remove();
     void this.exitXR();
   }
 }
@@ -906,6 +938,8 @@ export interface XrbAppFrame {
 
 export interface XrbAppOptions {
   scene?: THREE.Scene;
+  /** Attach the provider-independent SDK skeleton automatically (default true). Does not gate input/interaction. */
+  handVisual?: boolean;
   projection?: CameraProjection;
   camera?: ManagedCameraOptions;
   xrb?: XrbOptions;
@@ -937,6 +971,7 @@ export class XrbAppRuntime {
     this.xrb = createXrb(renderer, options.xrb);
     this.xrb.bindMouse();
     this.scene.add(this.xrb.cursorObject);
+    if (options.handVisual !== false) this.scene.add(this.xrb.handsObject);
     this.offView = this.xrb.onView(this.onResize);
     this.offProjection = this.xrb.onProjection((projection) => this.setProjection(projection));
     this.offPreviewProjection = subscribePreviewProjection((projection) => this.setProjection(projection));

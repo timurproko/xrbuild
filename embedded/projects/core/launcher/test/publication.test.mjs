@@ -39,7 +39,8 @@ test('the production build contains website and headset launch assets', async ()
   assert.match(main, /xrb\.enterXR/);
   assert.match(main, /appLaunchUrl\(this\.app\.launchUrl, \{ returnUrl: location\.href, projection: app\.projection \}\)/,
     'navigation carries the managed projection, including loopback preview updates without a host');
-  assert.match(main, /scene\.add\(xrb\.handsObject, xrb\.cursorObject\)/, 'the launcher uses the same spatial cursor as managed apps');
+  assert.doesNotMatch(main, /scene\.add\(xrb\.handsObject/, 'managed apps receive standard hands and cursor without app attachment boilerplate');
+  assert.doesNotMatch(main, /runtimeName|handCapabilities|nativePinch|nativeGrab/, 'hand-provider differences belong to the common SDK, not the launcher');
   assert.match(main, /title\.position\.set\(0, 0\.001,[\s\S]*description\.position\.set\(0, -0\.018,[\s\S]*this\.launch\.position\.set\(0, -0\.055,/,
     'card descriptions stay grouped with their titles instead of the Open button');
   assert.match(main, /app\.defaultIcon3d[\s\S]*fitIcon\(new THREE\.Mesh[\s\S]*SphereGeometry[\s\S]*MeshStandardMaterial/,

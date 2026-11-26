@@ -722,13 +722,14 @@ test('saves settings, refuses invalid ones per field and stale ones', async () =
   assert.equal(stale.status, 409);
 });
 
-test('saves multiple input methods and rejects duplicate providers', async () => {
+test('saves logical input methods from old provider names and rejects duplicate methods', async () => {
   const p = (await request('GET', '/api/projects/demo')).json;
   const manifest = { ...p.manifest, inputs: ['mouse', 'keyboard', 'tracker', 'simulated'] };
   delete manifest.input;
   const ok = await request('PUT', '/api/projects/demo/manifest', { body: JSON.stringify({ manifest, mtimeMs: p.manifestMtimeMs }) });
   assert.equal(ok.status, 200);
-  assert.deepEqual(ok.json.manifest.inputs, manifest.inputs);
+  assert.deepEqual(ok.json.manifest.inputs, ['mouse', 'keyboard', 'hand']);
+  assert.deepEqual(ok.json.manifest.plugins, manifest.plugins);
   const invalid = await request('PUT', '/api/projects/demo/manifest', { body: JSON.stringify({ manifest: { ...manifest, inputs: ['mouse', 'mouse'] }, mtimeMs: ok.json.manifestMtimeMs }) });
   assert.equal(invalid.status, 400);
   assert.deepEqual(invalid.json.fields.map((f: any) => f.field), ['inputs']);
@@ -975,7 +976,13 @@ test('a run is refused while a selected plugin is not built in the workspace', a
   const p = (await import('../src/projects.ts')).discoverProjects(repo).then((ps) => ps.find((x) => x.id === 'needs-plugin')!);
   const fake = Object.create(panel.panel, { repo: { value: repo } });  // a "core" with a built host exe
   await write('native/host/build/Release/xrb-host.exe', 'exe');
-  await assert.rejects(fake.run(await p, 'built'), /plugin some-tracker is not built in the workspace: rebuild the host first/);
+  const { readHandsState, saveHandsState } = await import('../src/hands-state.ts');
+  const profile = path.join(repo, 'config/hands/profile.json');
+  const before = await fs.readFile(profile).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
+  try {
+    await saveHandsState(repo, repo, { owner: 'workspace:some-tracker', id: 'some-tracker' }, (await readHandsState(repo, repo)).revision);
+    await assert.rejects(fake.run(await p, 'built'), /Selected hand provider workspace:some-tracker\/some-tracker is missing/);
+  } finally { if (before) await fs.writeFile(profile, before); else await fs.rm(profile, { force: true }); }
 });
 
 test('manages installed workspace plugins without deleting files', async () => {
@@ -1214,9 +1221,10 @@ test('native Run reaches the host runner, while a WebXR Run must open the browse
     assert.equal(started?.mode, 'built');
     assert.ok(started?.hostExe.endsWith('xrb-host.exe'));
     assert.ok(started?.hostArgs.includes('--title=native-run'));
-    assert.equal(started?.builtUrl, `https://app.local/index.html?xrb-panel=${encodeURIComponent(`http://127.0.0.1:${port}/`)}&xrb-project=native-run&xrb-mouse=1&xrb-cursor=ring-dot`,
+    assert.equal(started?.builtUrl, `https://app.local/index.html?xrb-panel=${encodeURIComponent(`http://127.0.0.1:${port}/`)}&xrb-project=native-run&xrb-mouse=1&xrb-cursor=ring-dot&xrb-hand=off`,
       'panel native runs carry workspace and Mouse selection while still serving the built app at app.local');
     assert.equal(started?.mouseEnabled, true);
+    assert.equal(started?.handPolicy, 'off');
   } finally { runner.start = originalStart; panel.panel.repo = originalCore; }
 });
 

@@ -1,14 +1,10 @@
-import assert from'node:assert/strict';
-import test from'node:test';
-import {exposedProviderInputs,runtimeProviderInputs} from'../ui/provider-choice.js';
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { logicalInputNames } from '../ui/provider-choice.js';
 
-const providers=[
-  {role:'input',name:'direct-input'},
-  {role:'input',name:'canonical-input',runtimeName:'legacy'},
-];
-
-test('provider choices expose canonical IDs while preserving runtime IDs in project manifests',()=>{
-  assert.deepEqual(exposedProviderInputs(['mouse','legacy','direct-input'],providers),['mouse','canonical-input','direct-input']);
-  assert.deepEqual(runtimeProviderInputs(['mouse','canonical-input','direct-input'],providers),['mouse','legacy','direct-input']);
-  assert.deepEqual(runtimeProviderInputs(exposedProviderInputs(['legacy'],providers),providers),['legacy']);
+test('input choices expose only Mouse, Keyboard and Hand, collapsing all saved provider names', () => {
+  assert.deepEqual(logicalInputNames(['mouse', 'tracker', 'another', 'simulated', 'replay', 'keyboard']), ['mouse', 'hand', 'keyboard']);
+  assert.deepEqual(logicalInputNames(['unknown-provider']), ['hand']);
+  assert.deepEqual(logicalInputNames(['none', '', 'mouse', 'mouse']), ['mouse']);
+  assert.deepEqual(logicalInputNames([]), []);
 });

@@ -5,7 +5,7 @@ export const MAINTENANCE_ACTIONS:readonly Readonly<{id:'restart'|'rebuild'|'upda
 export function orderMaintenanceLabels(header:HTMLElement,order?:readonly string[]):void;
 export interface NavigationItem {id?:string;label?:string;href?:string;separator?:boolean;current:boolean}
 export function panelOrigin(value:unknown):string|null;
-export function panelDestination(origin:string,page:'projects'|'plugins'|'settings'|'design-system'|'rebuild'|'restart'|'update'):string;
+export function panelDestination(origin:string,page:'projects'|'plugins'|'settings'|'hands'|'design-system'|'rebuild'|'restart'|'update'):string;
 export function toolDestination(url:string,origin:string,passPanelOrigin?:boolean):string;
 export function managedToolDestination(route:string,origin:string):string;
 export function shouldReportNavigationError(error:unknown,panelFreshness:{outdated?:boolean}|null|undefined):boolean;
@@ -18,4 +18,4 @@ export function restartPanelInPlace(origin?:string):Promise<void>;
 export function rebuildHostInPlace(origin?:string):Promise<void>;
 export function updateInPlace(origin?:string):Promise<void>;
 export function menuKeyboard(event:KeyboardEvent,menu:HTMLElement,close:()=>void):void;
-export function mountToolNavigation(button:HTMLElement,menu:HTMLElement,options:{origin:string;tools:readonly ToolLink[];current:string;maintenance?:boolean;discover?:boolean}):()=>void;
+export function mountToolNavigation(button:HTMLElement,menu:HTMLElement,options:{origin:string;tools?:readonly ToolLink[];current:string;maintenance?:boolean;discover?:boolean}):()=>void;

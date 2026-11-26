@@ -26,8 +26,7 @@ const app = createXrbApp(renderer, {
   },
   autoStart: false,
 });
-const { xrb } = app;
-scene.add(xrb.handsObject);
+const { xrb } = app; // The managed SDK attaches provider-independent hands automatically.
 
 // The board is 0.597 x 0.336 m. Keep symmetric rows and room for the SDK return control.
 const pill = new Button({ title: 'Button (pill)', shape: 'pill', text: 'Press' });

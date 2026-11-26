@@ -56,7 +56,7 @@ const app = createXrbApp(renderer, {
   camera: { position: [0, 0, 6], near: 0.05, far: 100 },
   autoStart: false,
 });
-scene.add(app.xrb.handsObject);                                // optional hand skeleton
+// Managed apps attach hands and the cursor automatically; no provider-specific wiring.
 new OrbitControls(app.camera, renderer.domElement);           // works with pinch-drag too
 app.setFrame(() => { /* update app objects here */ });
 app.start();                                                   // runtime owns resize and rendering
@@ -138,6 +138,39 @@ For a fixed placement use `{ mode: 'world', center, scale, quaternion }`
 (`scale` = scene units per metre).
 
 ## Hands
+
+### One provider-independent app API
+
+Enable **Hand** in the app's Input settings; choose its source once in **Hands**. Apps use the same
+`xrb.currentHands`, `xrb.sceneHands`, gesture events, `xrb.interaction` targets and standard drawing for native,
+WebXR and synthetic sources. App code never names, detects or branches on a concrete hand provider, and needs
+no changes when the source is switched. Providers may supply native pinch/grab/palm; the SDK derives missing
+gestures and scene-space palm data from the skeleton through this same API.
+
+`createXrbApp()` attaches the hand visual automatically, including fresh projects; `handVisual: false` opts out
+of drawing only, not input or interaction. Existing explicit attachment is harmless but unnecessary. The lower-level
+`createXrb()` has no scene and therefore still leaves scene attachment to its caller. Hand visibility follows data;
+enabling Hand does not invent application-specific interaction targets for arbitrary meshes.
+
+Managed applications select logical Hand; the panel's core **Hands** page owns one workspace-wide source choice.
+Old concrete provider input names simply mean Hand. No provider acquisition/filtering/calibration code changes:
+“raw” is the provider's result as published, including any native pinch/grab/palm capabilities. Missing/failed
+sources are visible and never silently replaced. Input/source changes apply on the next launch.
+
+Native/dev launch context and checked package/publication snapshots supply bounded `off/native/webxr` source policy.
+WebXR frames cannot bypass managed Hand-off policy or add a second source to native input. Browser preview with
+a native-only selected source reports incompatibility; this release builds no native-to-browser bridge. Standalone
+SDK use without managed context keeps its normal host/WebXR defaults. Launcher context carries source policy
+without changing return-URL trust. Local native Launcher destinations (including nested returns and dev runs)
+retain the active host's captured source, while destinations without Hand still suppress frames. The native
+execution marker is limited to the owning panel's local previews; published output keeps its checked browser
+policy. Normal SDK-consuming rebuilds are needed to acquire this SDK logic.
+
+Both ingress paths pass canonical frames through `hand-source.ts`'s identity `prepareHandFrame` stage before
+`HandInput` filtering/gestures. Future Hands layers attach there: position/size must affect interaction as well as
+drawing, while appearance attaches to processed hands and must not change touching. No layer loader, transform,
+profile controls or live laboratory is implemented here. Source/session disposal releases retired hands and pointer
+presses without waiting through dropout grace. Binary HANDS v1/v2 and recording layouts remain unchanged.
 
 - `xrb.currentHands`: tracked hands for this frame, smoothed (One Euro filter) and predicted to
   display time. Keypoints are in panel metres, in the common 21-point hand landmark order (`KP.INDEX_TIP` = 8, ...).

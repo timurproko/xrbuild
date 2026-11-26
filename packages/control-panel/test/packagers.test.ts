@@ -11,6 +11,7 @@ import { discoverPackagers, platformsFor, targetOf, validSetupStatus } from '../
 import { savePluginPrefs } from '../src/plugin-manager.ts';
 import { buildTargetOf, discoverAll, ManifestConflictError, saveManifest, validateManifest } from '../src/projects.ts';
 import { describeProject } from '../src/server.ts';
+import { readHandsState, saveHandsState } from '../src/hands-state.ts';
 
 const FAKE_PACKAGER = `
 import fs from 'node:fs/promises';
@@ -167,14 +168,18 @@ test('the build job runs the packager with the app, identity, selection and the 
   assert.deepEqual(m.plugins.fake, { code: 'D1', version: '1.0.1', lastPackaged: '1.0.0' }, 'version raised after the package');
 });
 
-test('a package includes every selected input plugin alongside the platform plugin', async () => {
+test('a package resolves old multiple input names to only the global Hand source alongside the platform', async () => {
   const { repo, panel, projects } = await fixture(true);
   projects.demo.manifest!.inputs = ['mouse', 'tracker-a', 'simulated', 'tracker-b'];
   for (const name of ['tracker-a', 'tracker-b']) {
     const dir = path.join(repo, 'plugins', name, 'bin');
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(path.join(dir, `${name}.dll`), 'dll');
+    await fs.writeFile(path.join(dir, '../xrb-plugin.json'), JSON.stringify({ title: name, type: 'input', version: '1.0.0' }));
   }
+  projects.demo.manifest!.plugins = { ...projects.demo.manifest!.plugins, 'tracker-a': { gain: 1 }, 'tracker-b': { gain: 7 } };
+  panel.nativeProviders = async () => ({ providers: ['tracker-a', 'tracker-b'].map(name => ({ name, role: 'input' as const, builtin: false, path: path.join(repo, 'plugins', name, 'bin', `${name}.dll`), description: '', version: '1' })), error: null, rejected: [] });
+  await saveHandsState(panel.repo, repo, { owner: 'workspace:tracker-b', id: 'tracker-b' }, (await readHandsState(panel.repo, repo)).revision);
   panel.pluginDirs = async () => ({
     fake: path.join(repo, 'plugins', 'platform-fake', 'bin'),
     'tracker-a': path.join(repo, 'plugins', 'tracker-a', 'bin'),
@@ -183,8 +188,11 @@ test('a package includes every selected input plugin alongside the platform plug
   const job = await panel.packageBuild(projects.demo, {});
   assert.equal((await finished(panel, job.id)).state, 'done');
   const out = JSON.parse(await fs.readFile(path.join(repo, 'builds', 'fake', 'D1.pkg'), 'utf8'));
-  assert.deepEqual(out.plugins, ['tracker-a', 'tracker-b', 'fake']);
-  assert.deepEqual(out.selection.inputs, ['mouse', 'tracker-a', 'simulated', 'tracker-b']);
+  assert.deepEqual(out.plugins, ['tracker-b', 'fake']);
+  assert.deepEqual(out.selection.inputs, ['mouse', 'tracker-b']);
+  assert.deepEqual(out.config.plugins['tracker-b'], { gain: 7 });
+  assert.equal(out.config.plugins['tracker-a'], undefined);
+  assert.deepEqual(projects.demo.manifest!.inputs, ['mouse', 'tracker-a', 'simulated', 'tracker-b'], 'resolution does not rewrite the caller manifest');
 });
 
 test('disabling a platform hides packaging without changing its project selection', async () => {

@@ -4,14 +4,16 @@
   "version": "0.1.0",
   "name": "Hands",
   "description": "Hand tracking provider and diagnostics.",
+  "handProviders": [
+    { "version": 1, "id": "hand-tracking", "transport": "native", "runtimeName": "hand-tracking", "purpose": "synthetic" }
+  ],
   "glyph": "👋",
   "panel": {
     "tools": [
       {
         "id": "hand-tracking",
-        "label": "Hands",
-        "route": "/hands/",
-        "aliases": ["/hand-tracking/"],
+        "label": "Acquisition diagnostics",
+        "route": "/hands-diagnostics/",
         "module": "tool.mjs",
         "independentView": true,
         "endpoints": ["/__handtracking/", "/__xrbuild/"]

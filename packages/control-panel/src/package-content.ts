@@ -151,7 +151,7 @@ export async function stagedContentFingerprint(root: string): Promise<string> {
 export function portableHostConfig(o: { plugins: string[]; selection: { input: string; inputs?: string[]; display: string; platform: string }; config?: { input: string; inputs?: string[]; display: string; platform: string; plugins: Record<string, unknown> } }) {
   if (!o.config) throw new Error('the desktop package needs the effective host configuration');
   const selection = o.selection, selected = new Set([selection.input, ...(selection.inputs ?? []), selection.display, selection.platform].filter(Boolean));
-  for (const id of selected) if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id)) throw new Error('Invalid package provider identity');
+  for (const id of selected) if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(id)) throw new Error('Invalid package provider identity');
   const builtins = new Set(['desktop', 'none', 'replay', 'simulated', 'mouse', 'keyboard']);
   const expected = [...selected].filter(id => !builtins.has(id)).sort();
   if (JSON.stringify([...new Set(o.plugins)].sort()) !== JSON.stringify(expected) || new Set(o.plugins).size !== o.plugins.length) throw new Error('Packaged plugins must exactly match selected providers');

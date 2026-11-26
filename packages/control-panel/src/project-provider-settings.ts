@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import { listProviders, type ProviderList } from './host-build.ts';
 import { resolvePluginCatalog, pluginOwnsPath, pluginPreferenceValues } from './extension-catalog.ts';
 import { effectiveSettings, validateSettings, type PluginSetting, type SettingValue } from './plugin-manager.ts';
+import { handRegistry } from './hand-providers.ts';
+import { readHandsState, resolveHandInput } from './hands-state.ts';
 import { selectionOf, type Project } from './projects.ts';
 
 export interface ProviderRunOverride { owner: string; schema: string; values: Record<string, SettingValue> }
@@ -18,6 +20,12 @@ export async function providerRunSchemas(core: string, workspace: string, p: Pro
   const [catalog, providers] = await Promise.all([resolvePluginCatalog(workspace, core), (options.probe ?? listProviders)(core, workspace)]);
   if (providers.unsafe) return [];
   const selected = selectedRunProviders(p, values), schemas: ProviderRunSchema[] = [];
+  if (selected.has('hand')) {
+    const state = await readHandsState(core, workspace);
+    // Settings discovery stays available before a source is chosen; launch reports the actionable error.
+    try { for (const name of resolveHandInput(['hand'], state, handRegistry(catalog, providers), 'native').inputs) selected.add(name); }
+    catch { /* No usable hand schema until the global source is available. */ }
+  }
   for (const provider of providers.providers) {
     if (provider.builtin || !provider.path || !selected.has(provider.name)) continue;
     const owners = catalog.selected.filter(plugin => pluginOwnsPath(plugin, provider.path!));

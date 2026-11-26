@@ -26,6 +26,7 @@ export function panelDestination(origin,page) {
   const u=new URL(safe);if(page==='projects')u.pathname='/';
   else if(page==='plugins')u.pathname='/plugins/';
   else if(page==='settings')u.pathname='/settings/';
+  else if(page==='hands')u.pathname='/hands/';
   else if(page==='design-system')u.pathname='/design';
   else if(['rebuild','restart','update'].includes(page))u.searchParams.set('maintenance',page);
   else throw new Error('Unknown panel destination');return u.href;
@@ -37,7 +38,7 @@ export function toolDestination(url,origin,passPanelOrigin=true) {
 }
 export function managedToolDestination(route,origin) {
   const safe=panelOrigin(origin);
-  if(!safe||typeof route!=='string'||!/^\/(?:[a-z][a-z0-9-]*\/)+$/.test(route)||['/api/','/plugins/','/settings/','/preview/','/vendor/','/sdk/','/design-system/','/design/'].some(prefix=>route.startsWith(prefix)))throw new Error('Invalid managed tool destination');
+  if(!safe||typeof route!=='string'||!/^\/(?:[a-z][a-z0-9-]*\/)+$/.test(route)||['/hands/','/hand-tracking/','/api/','/plugins/','/settings/','/preview/','/vendor/','/sdk/','/design-system/','/design/'].some(prefix=>route.startsWith(prefix)))throw new Error('Invalid managed tool destination');
   return new URL(route,safe).href;
 }
 /** A stale panel already has one actionable state: restart to load its newer code. */
@@ -54,7 +55,8 @@ export function requestedNavigation(url) {
 export function navigationItems(origin,tools=[],current='projects',{maintenance=true}={}) {
   const design=tools.some(tool=>tool.id==='design-system');
   return [{id:'projects',label:'Apps',href:panelDestination(origin,'projects')},
-    ...tools.filter(tool=>tool.id!=='design-system').map(t=>({id:t.id,label:t.label,href:t.route?managedToolDestination(t.route,origin):toolDestination(t.url,origin,t.passPanelOrigin!==false)})),
+    {id:'hands',label:'Hands',href:panelDestination(origin,'hands')},
+    ...tools.filter(tool=>tool.id!=='design-system'&&tool.id!=='hands').map(t=>({id:t.id,label:t.label,href:t.route?managedToolDestination(t.route,origin):toolDestination(t.url,origin,t.passPanelOrigin!==false)})),
     {id:'plugins',label:'Plugins',href:panelDestination(origin,'plugins')},
     {id:'settings',label:'Settings',href:panelDestination(origin,'settings')},
     ...(design?[{id:'design-system',label:'Design',href:panelDestination(origin,'design-system')}]:[]),

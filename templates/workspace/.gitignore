@@ -14,5 +14,7 @@ third_party/
 config/plugins/
 # Personal bundled project settings are scoped to this installation and user.
 config/projects/
+# Hands source choice is installation-local user state.
+config/hands/
 # Written by the panel for editors: maps the SDK to the core on this machine.
 jsconfig.json

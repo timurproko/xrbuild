@@ -6,7 +6,7 @@ export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, 
 
 /** Opt-in real-browser checks use isolated profiles and only worktree-local scratch. */
 export async function withBrowser(run: (browser: { send(method: string, params?: object): Promise<any>; evaluate(expression: string): Promise<any>; navigate(url: string, ready: string): Promise<void> }) => Promise<void>) {
-  const artifacts = path.resolve(import.meta.dirname, '../../../.artifacts');
+  const artifacts = process.env.XRB_TEST_ROOT ?? path.resolve(import.meta.dirname, '../../../.artifacts');
   await mkdir(artifacts, { recursive: true });
   const profile = await mkdtemp(path.join(artifacts, 'shell-browser-'));
   const processHandle = spawn(process.env.XRB_TEST_BROWSER!, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });

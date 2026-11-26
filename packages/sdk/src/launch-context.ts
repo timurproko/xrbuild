@@ -64,6 +64,39 @@ function trustedReturnOrigin(target: URL, page: URL): boolean {
   return target.protocol === 'http:' && LOOPBACK.has(target.hostname.toLowerCase());
 }
 
+function nativeRootMatches(root: URL, panelOrigin: string, allowDev: boolean): boolean {
+  const source = root.searchParams.get('xrb-hand'), panel = root.searchParams.get('xrb-panel');
+  if (root.href.length > 8192 || !panel || !['native', 'off'].includes(source ?? '')) return false;
+  const local = new URL(panel);
+  if (local.origin !== panelOrigin || local.protocol !== 'http:' || !LOOPBACK.has(local.hostname.toLowerCase()) || !local.port
+    || local.username || local.password || local.pathname !== '/' || local.search || local.hash) return false;
+  return root.origin === NATIVE_APP_ORIGIN || allowDev && HTTP.has(root.protocol) && LOOPBACK.has(root.hostname.toLowerCase())
+    && !root.searchParams.has('xrb-launch') && !root.searchParams.has('xrb-preview-token');
+}
+/** Validates native Launcher metadata for a local document, not permission to start capture or mutate state.
+ * Dev roots require an active native run; return-chain traversal supports previously built SDK callers.
+ */
+export function isNativeLauncherDocument(href: string, panelOrigin: string, nativeDevActive = false): boolean {
+  try {
+    let page = new URL(href);
+    if (page.origin !== panelOrigin || !page.pathname.startsWith('/preview/')) return false;
+    const root = page.searchParams.get('xrb-native-root');
+    if (root !== null) {
+      if (root.length > 8192 || !(appLaunchContext(page.href) || page.searchParams.get('xrb-resume') === '1')) return false;
+      return nativeRootMatches(new URL(root), panelOrigin, nativeDevActive);
+    }
+    for (let depth = 0; depth < 8; depth++) {
+      const context = appLaunchContext(page.href);
+      if (!context) return false;
+      const parent = new URL(context.returnUrl);
+      if (nativeRootMatches(parent, panelOrigin, nativeDevActive)) return true;
+      if (parent.origin !== panelOrigin) return false;
+      page = parent;
+    }
+  } catch { /* Invalid or foreign launch context is not a native hand-off. */ }
+  return false;
+}
+
 /** Reads the bounded, versioned context attached by an XR Build launcher. */
 export function appLaunchContext(href = typeof location === 'undefined' ? '' : location.href): AppLaunchContext | null {
   try {
@@ -113,12 +146,21 @@ export function appLaunchUrl(launchHref: string | URL, context: AppLaunchContext
   launch.searchParams.set('xrb-launch', '1');
   launch.searchParams.set('xrb-return', target.href);
   copyPreviewScope(launch, target);
+  launch.searchParams.delete('xrb-native-root');
+  try {
+    const root = new URL(target.searchParams.get('xrb-native-root') ?? target.href);
+    const panel = new URL(root.searchParams.get('xrb-panel') ?? '');
+    if (launch.origin === panel.origin && launch.pathname.startsWith('/preview/') && root.href.length <= 8192
+      && nativeRootMatches(root, panel.origin, true)) launch.searchParams.set('xrb-native-root', root.href);
+  } catch { /* Only same-panel previews receive the native execution marker. */ }
   for (const key of ['xrb-preview-session', 'xrb-preview-fullscreen']) {
     launch.searchParams.delete(key);
     if (launch.searchParams.has('xrb-preview-token') && target.searchParams.has(key)) launch.searchParams.set(key, target.searchParams.get(key)!);
   }
   const cursor = target.searchParams.get('xrb-cursor');
   if (cursor === 'system' || cursor === 'ring' || cursor === 'ring-dot') launch.searchParams.set('xrb-cursor', cursor);
+  const hand = target.searchParams.get('xrb-hand');
+  if (!launch.searchParams.has('xrb-hand') && (hand === 'off' || hand === 'native' || hand === 'webxr')) launch.searchParams.set('xrb-hand', hand);
   const mouse = target.searchParams.get('xrb-mouse');
   if (mouse === '0' || mouse === '1') launch.searchParams.set('xrb-mouse', mouse);
   if (context.projection === 'perspective' || context.projection === 'orthographic') launch.searchParams.set('xrb-camera', context.projection);

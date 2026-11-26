@@ -37,7 +37,7 @@ const app = createXrbApp(renderer, {
   autoStart: false,
 });
 const { xrb, camera } = app;
-scene.add(xrb.handsObject, xrb.cursorObject);
+// The managed SDK attaches the common hand visual and cursor; no provider wiring belongs here.
 
 const interfaceRoot = new THREE.Group();
 const revealStartedAt = performance.now();

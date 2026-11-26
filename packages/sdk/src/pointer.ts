@@ -112,6 +112,13 @@ export class PointerEmulation {
     }
   }
 
+  /** Cancel a retired hand source without synthesizing a click. */
+  reset(): void {
+    if (this.state.down) this.release(false);
+    this.state.handId = null;
+    this.state.inside = false;
+  }
+
   private release(click: boolean): void {
     const target = this.downTarget;
     this.state.down = false;

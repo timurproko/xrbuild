@@ -417,6 +417,56 @@ implemented; actual promoted adapters and full product/license/distribution acce
 Local acceptance creates/extracts a real public-core desktop ZIP and probes the extracted host's built-in providers without
 activating a device. This does not claim production app display/hardware or redistribution/license acceptance.
 
+## Hand skeleton provider declarations
+
+An input plugin can declare up to eight `handProviders` in `xrb-plugin.json`:
+
+```json
+{ "handProviders": [{ "version": 1, "id": "tracker", "transport": "native", "runtimeName": "tracker", "purpose": "tracked" }] }
+```
+
+IDs and runtime names are distinct bounded lowercase names; purpose is `tracked`, `synthetic` or `replay`,
+with an optional label (otherwise the plugin title). A native declaration must resolve to that selected owner's
+validated input binary. It reuses the existing 21-point panel-metre `XrbInputApi`/`XrbHandFrame` contract,
+including optional native gestures; no ABI or recording format changes. Undeclared validated native inputs
+receive equivalent descriptors, so metadata-only updates can ship independently. Their existing native IDs are
+preserved exactly (including capitals, underscores and dots, up to the native query's 128-character bound) in
+profiles and package selections; new authored declaration IDs retain their stricter lowercase metadata schema. Core WebXR, simulated and
+replay sources use the same registry. Source identity is owner-qualified, never a label or discovery order.
+Discovery is metadata-only and never calls input creation/start. A declaration without a valid owned binary
+remains unavailable rather than borrowing another plugin's provider. Availability and native-name conflicts use
+only enabled selected plugins; optional all-plugin probes describe disabled rows but cannot invalidate an enabled
+source. The Hands picker, Input dropdown, plugin manager and runtime settings use that same usable set.
+
+### Global Hands selection
+
+`<selected-workspace>/config/hands/profile.json` is Hands-owned user state, shared by all project repositories
+using that integration workspace. `GET /api/hands` is read-only; `PUT /api/hands` requires the profile `revision`,
+`registryRevision` and `provider: {owner,id}` (or explicit null). Writes are bounded, revision-checked, locked and atomic;
+invalid/linked/foreign state is preserved and reported. Unknown fields survive. Source changes affect the next
+launch, not an existing app's acquisition. With no record, exactly one installed enabled real source compatible
+with the execution context is displayed as the initial selection and pinned on explicit launch/save. Zero or
+several real sources require a choice; synthetic/replay sources never become automatic defaults. Once saved,
+a missing/failed source stays selected and unavailable, never replaced. Installed does not mean a device is
+connected: idle providers are not started, and replay still requires a configured recording. The picker is not
+a live viewer; offsets, skeleton size/appearance and the live laboratory are subsequent changes. Browser preview
+documents use effective personal run inputs and a token/session/project-bound policy snapshot for an active run;
+later source/settings changes do not rewrite that launch decision. Local Launcher hand-offs validate native
+context against this panel, retain the running host's captured policy through nested launch/return and dev
+navigation, and still suppress input for destinations without Hand. A bare native query hint does not change
+ordinary browser resolution. Publication always resolves in the browser
+context, independently of the app's selected desktop/headset package target. New combined
+workspace templates ignore `config/hands/`; existing workspace ignore files are not rewritten automatically.
+
+Application `inputs` contain only `mouse`, `keyboard` and `hand`. Every historical concrete hand-provider
+name (including unknown names or several sources) reads as one Hand and launches the global source; there
+is no per-app source assignment or adoption phase. Discovery/run do not rewrite manifests. The next settings
+Save canonicalizes inputs and saved platform input choices, removes singular `input`, and retains all
+`plugins.<provider>` configuration. Those settings still reach that provider when it is globally selected.
+Embedded personal run records and working manifests follow the same logical-input rules; installed sources
+remain immutable. Reverting to an older core after a settings Save may require restoring the old manifest's
+concrete input from version control; old per-app provider parity is intentionally not retained.
+
 ## Native builds and providers
 
 ### Host cache and runtime selection

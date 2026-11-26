@@ -6,7 +6,7 @@ import { canonicalFuturePath } from './plugin-artifacts.ts';
 import { assertWritablePath } from './project-access.ts';
 import { projectFile } from './embedded-projects.ts';
 import { HttpError } from './http.ts';
-import { MANIFEST, selectionOf, type Manifest, type Project } from './projects.ts';
+import { MANIFEST, logicalInputs, selectionOf, type Manifest, type Project } from './projects.ts';
 import { providerRunSchemas, applyProviderRunOverrides, selectedRunProviders, privateRunField, type ProviderRunOverride, type ProviderRunSchema, type ProviderSettingsOptions } from './project-provider-settings.ts';
 
 export interface ProjectRunValues {
@@ -108,8 +108,10 @@ export async function readProjectRunSettings(core: string, workspace: string, p:
       overrides = validateRunOverrides(saved.overrides);
     }
     const defaults = defaultsOf(manifest);
-    const values = { ...defaults, ...overrides }, schemas = await providerRunSchemas(core, workspace, p, values, options);
-    applyProviderRunOverrides(overrides.providerSettings, schemas, selectedRunProviders(p, values));
+    const values = { ...defaults, ...overrides };
+    values.inputs = logicalInputs(values.inputs);
+    const schemas = await providerRunSchemas(core, workspace, p, values, options);
+    applyProviderRunOverrides(overrides.providerSettings, schemas, new Set([...selectedRunProviders(p, values), ...schemas.map(s => s.provider)]));
     const revision = digest(`${JSON.stringify(manifest)}\0${p.manifestMtimeMs}\0${bytes ? digest(bytes) : 'missing'}\0${JSON.stringify(schemas.map(schema => [schema.provider, schema.owner, schema.schema, schema.defaults]))}`);
     return { revision, defaults, overrides, values, ...(schemas.length ? { providerSchemas: schemas } : {}) };
   } catch {
@@ -121,9 +123,10 @@ export async function readProjectRunSettings(core: string, workspace: string, p:
 export async function saveProjectRunSettings(core: string, workspace: string, p: Project, overrides: unknown, expectedRevision: unknown, options: ProviderSettingsOptions = {}): Promise<ProjectRunSettings> {
   requireBundled(p);
   const valid = validateRunOverrides(overrides);
+  if (valid.inputs) valid.inputs = logicalInputs(valid.inputs);
   const schemas = await providerRunSchemas(core, workspace, p, { ...defaultsOf(p.manifest!), ...valid }, options);
   const schemaIdentity = JSON.stringify(schemas.map(schema => [schema.provider, schema.owner, schema.schema, schema.defaults]));
-  try { applyProviderRunOverrides(valid.providerSettings, schemas, selectedRunProviders(p, { ...defaultsOf(p.manifest!), ...valid })); }
+  try { applyProviderRunOverrides(valid.providerSettings, schemas, new Set([...selectedRunProviders(p, { ...defaultsOf(p.manifest!), ...valid }), ...schemas.map(s => s.provider)])); }
   catch { throw new HttpError(400, 'Personal provider settings do not match the selected source/schema'); }
   if (typeof expectedRevision !== 'string' || !/^[a-f0-9]{64}$/.test(expectedRevision)) throw new HttpError(400, 'The current run-settings revision is required');
   if ((await readProjectRunSettings(core, workspace, p, options)).revision !== expectedRevision) throw new HttpError(409, 'Run settings changed; reload before saving');
@@ -156,7 +159,7 @@ export async function saveProjectRunSettings(core: string, workspace: string, p:
 }
 
 export function withRunSettings(p: Project, settings: ProjectRunSettings): Project {
-  const m = requireBundled(p), selected = selectedRunProviders(p, settings.values);
+  const m = requireBundled(p), selected = new Set([...selectedRunProviders(p, settings.values), ...(settings.providerSchemas ?? []).map(s => s.provider)]);
   const plugins = { ...m.plugins };
   for (const [provider, record] of Object.entries(settings.values.providerSettings ?? {})) if (selected.has(provider)) plugins[provider] = { ...plugins[provider], ...record.values };
   return { ...p, manifest: { ...m, inputs: [...settings.values.inputs], display: settings.values.display,
