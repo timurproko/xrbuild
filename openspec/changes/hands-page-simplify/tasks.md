@@ -4,11 +4,11 @@ Each group corresponds to the same-order Implementation outcome in the draft PR.
 
 ## 1. Minimal source sidebar with safe automatic selection saves
 
-- [ ] 1.1 Remove source Save/Reload and routine status/history/guidance elements while retaining `hands-provider`, the top live-control slot, public view/snapshot/request interfaces and active-session ownership; verify focused Hands page/picker tests.
-- [ ] 1.2 Save provider selection silently on change with revision/registry protection, automatic clean refresh, bounded unrelated-change reconciliation and inline failure/conflict retry; verify concurrent source/adjustment writes and pending-selection retention tests.
-- [ ] 1.3 Hide the complete post-processing root when no plugin is installed, without clearing a missing stored choice; verify empty, installed and plugin-change cases in focused post-processing/browser tests.
-- [ ] 1.4 Unmount Record and legacy recording tools without deleting recorder/readers/routes/data, update `docs/hands.md` and recording UI assertions, and verify retained recorder tests plus no recording UI/import startup.
-- [ ] 1.5 Capture isolated real-browser Hands sidebar views without and with an installed plugin; verify no person's state was used and retain screenshots outside the checkout in the task folder.
+- [x] 1.1 Remove source Save/Reload and routine status/history/guidance elements while retaining `hands-provider`, the top live-control slot, public view/snapshot/request interfaces and active-session ownership; verify focused Hands page/picker tests.
+- [x] 1.2 Save provider selection silently on change with revision/registry protection, automatic clean refresh, bounded unrelated-change reconciliation and inline failure/conflict retry; verify concurrent source/adjustment writes and pending-selection retention tests.
+- [x] 1.3 Hide the complete post-processing root when no plugin is installed, without clearing a missing stored choice; verify empty, installed and plugin-change cases in focused post-processing/browser tests.
+- [x] 1.4 Unmount Record and legacy recording tools without deleting recorder/readers/routes/data, update `docs/hands.md` and recording UI assertions, and verify retained recorder tests plus no recording UI/import startup.
+- [x] 1.5 Capture isolated real-browser Hands sidebar views without and with an installed plugin; verify no person's state was used and retain screenshots outside the checkout in the task folder.
 
 ## 2. Standard direct adjustment sections
 

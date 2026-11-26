@@ -2,24 +2,36 @@ import { mountToolNavigation } from './navigation.js';
 import { mountHandsShell } from './hands-shell.js';
 import { mountProviderRecorder } from './hands-recorder.js';
 import { mountHandsPostprocessing } from './hands-postprocessing.js';
-import { handsEditorRevisions } from './hands-editor-revisions.js';
+import { handsWriteQueue, commitHandsFields } from './hands-commits.js';
 const $ = id => document.getElementById(id), key = p => p ? `${p.owner}/${p.id}` : '';
-let snapshot = null, view = null, adjustments = null, tools = null, disposed = false, profileKey = '', profileGeneration = 0, writes = 0;
-const pickerRevisions = handsEditorRevisions(), changedMessage = 'Hands settings changed. Reload to review them.';
-const beginWrite = () => { writes++; profileGeneration++; };
+let snapshot = null, view = null, adjustments = null, disposed = false, profileKey = '', profileGeneration = 0, writes = 0, readGeneration = 0;
+let sourceEdit = null, sourceConflict = null, sourceBusy = false;
+const enqueue = handsWriteQueue();
+const beginWrite = () => { writes++; profileGeneration++; readGeneration++; };
 const endWrite = () => { writes--; profileGeneration++; };
 function message(text = '') { $('hands-message').textContent = text; $('hands-message').hidden = !text; }
 async function request(method, body, endpoint = '/api/hands') {
   const res = await fetch(endpoint, { method, cache: 'no-store', ...(body ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
-  const data = await res.json(); if (!res.ok) throw new Error(data.error ?? 'Hands request failed'); return data;
+  const data = await res.json(); if (!res.ok) { const error = new Error(data.error ?? 'Hands request failed'); error.status = res.status; throw error; } return data;
 }
-function availability() {
-  const source = snapshot?.providers.find(p => key(p) === $('hands-provider').value), missing = $('hands-provider').value && !source;
-  $('hands-availability').textContent = source ? `${source.purpose} · ${source.reason}${snapshot.initial && key(snapshot.selected) === key(source) ? ' · Initial default' : ''}`
-    : missing ? 'Selected provider is missing.' : snapshot?.providers.length ? 'Choose a provider.' : 'No providers available.';
-  $('hands-previous-session').hidden = !source?.runtimeState;
-  $('hands-previous-session').textContent = source?.runtimeState ? `Previous app session: ${source.runtimeState}` : '';
-  $('hands-save').disabled = !snapshot || !!missing || !!source && !source.available;
+function renderSource() {
+  if (!snapshot) return;
+  const select = $('hands-provider'), selected = sourceEdit?.value ?? key(snapshot.selected);
+  const missing = selected && !snapshot.providers.some(p => key(p) === selected);
+  const options = [null, ...snapshot.providers, ...(missing ? [{ owner: selected.split('/')[0], id: selected.split('/')[1], label: `${selected} (missing)`, available: false }] : [])];
+  const signature = JSON.stringify(options);
+  if (select.dataset.options !== signature) {
+    select.replaceChildren();
+    for (const p of options) {
+      const option = document.createElement('option'); option.value = key(p);
+      option.textContent = p ? `${p.label}${p.available ? '' : ' (unavailable)'}` : 'Choose a provider';
+      option.disabled = !!p && !p.available; select.append(option);
+    }
+    select.dataset.options = signature;
+  }
+  select.value = selected; select.disabled = sourceBusy;
+  $('hands-source-recovery').hidden = !sourceEdit || sourceBusy || !$('hands-message').textContent;
+  $('hands-source-discard').hidden = !sourceConflict;
 }
 async function applyViewProfile(data, generation = profileGeneration) {
   if (!data.profile || !view || view.active || view.replaying || recorder.replaying || generation !== profileGeneration) return;
@@ -33,51 +45,56 @@ async function mountAdjustments(data) {
   if (disposed) return;
   adjustments = mountHandAdjustments($('hands-adjustments-root'), {
     load: () => request('GET'),
-    apply: async body => {
+    apply: body => enqueue(async () => {
       beginWrite();
       try {
         const result = await request('POST', body, '/api/hands/apply');
-        // Only rebase a source editor which reviewed this exact Apply base.
-        if (snapshot?.revision === body.revision) {
-          snapshot.revision = result.revision; snapshot.profile = result.profile; pickerRevisions.incorporate(result.revision);
-          if (!pickerRevisions.stale && $('hands-message').textContent === changedMessage) message();
-        } else message('Source settings changed. Reload to review the current selection.');
-        await applyViewProfile(result); return result;
+        snapshot = { ...snapshot, ...result }; renderSource(); await applyViewProfile(result); return result;
       } finally { endWrite(); }
-    },
+    }),
   });
 }
 async function load(discard = false) {
-  const generation = profileGeneration, pickerReview = pickerRevisions.reviewToken(), adjustmentReview = adjustments?.reviewToken();
-  $('hands-save').disabled = true;
+  const read = ++readGeneration, generation = profileGeneration, epoch = adjustments?.deliveryEpoch;
   try {
-    const data = await request('GET'); if (disposed) return; snapshot = data; pickerRevisions.incorporate(data.revision, pickerReview);
-    const select = $('hands-provider'); select.replaceChildren();
-    const missing = snapshot.selected && !snapshot.providers.some(p => key(p) === key(snapshot.selected));
-    for (const p of [null, ...snapshot.providers, ...(missing ? [{ ...snapshot.selected, label: `${key(snapshot.selected)} (missing)`, available: false }] : [])]) {
-      const option = document.createElement('option'); option.value = key(p);
-      option.textContent = p ? `${p.label}${p.available ? '' : ' (unavailable)'}` : 'Choose a provider';
-      option.disabled = !!p && !p.available && key(p) !== key(snapshot.selected); select.append(option);
-    }
-    select.value = key(snapshot.selected); availability(); message(pickerRevisions.stale ? changedMessage : '');
-    await mountAdjustments(data); adjustments?.refresh(data, { discard, review: adjustmentReview });
-    if (pickerRevisions.stale) adjustments?.markStale();
+    const data = await request('GET'); if (disposed || read !== readGeneration || writes) return;
+    snapshot = data; renderSource();
+    await mountAdjustments(data); if (disposed || read !== readGeneration) return;
+    adjustments?.refresh(data, { discard });
+    adjustments?.updateDelivery(data.delivery, data.deliveryState, data.revision, epoch);
     await applyViewProfile(data, generation);
-  } catch (error) { snapshot = null; message(error.message); }
+  } catch (error) { if (!disposed && read === readGeneration) { message(error.message); $('hands-source-recovery').hidden = false; } }
 }
-$('hands-provider').addEventListener('change', availability);
-$('hands-reload').addEventListener('click', () => void load(true));
-$('hands-form').addEventListener('submit', async event => {
-  event.preventDefault(); if (!snapshot) return;
-  const source = snapshot.providers.find(p => key(p) === $('hands-provider').value);
-  if (source ? !source.available : !!$('hands-provider').value) return;
-  $('hands-save').disabled = true; beginWrite();
+async function saveSource(review = false) {
+  if (!sourceEdit || sourceBusy) return;
+  if (review && sourceConflict) sourceEdit.base = sourceConflict;
+  const edit = sourceEdit; sourceBusy = true; message(); renderSource();
   try {
-    await request('PUT', { provider: source ? { owner: source.owner, id: source.id } : null, revision: snapshot.revision, registryRevision: snapshot.registryRevision });
-    await load(); message('Saved for next launch.');
-  } catch (error) { message(`${error.message} Reload to review the current selection.`); }
-  finally { endWrite(); }
+    const result = await enqueue(async () => {
+      beginWrite();
+      try {
+        return await commitHandsFields({ base: edit.base, changes: { selected: edit.value }, load: () => request('GET'), read: data => key(data.selected),
+          save: (current, changes) => request('PUT', { provider: changes.selected ? { owner: changes.selected.split('/')[0], id: changes.selected.split('/')[1] } : null, revision: current.revision, registryRevision: current.registryRevision }) });
+      } finally { endWrite(); }
+    });
+    if (disposed) return;
+    snapshot = result; sourceEdit = sourceConflict = null; message();
+  } catch (error) {
+    if (disposed) return;
+    sourceConflict = error.current ?? null;
+    const saved = sourceConflict ? sourceConflict.providers.find(p => key(p) === key(sourceConflict.selected))?.label ?? (key(sourceConflict.selected) || 'No provider') : '';
+    message(sourceConflict ? `Changed elsewhere. Saved: ${saved}. Retry your choice or use saved.` : `Couldn't save provider. ${error.message}`);
+  } finally { sourceBusy = false; if (!disposed) { renderSource(); void load(); } }
+}
+$('hands-provider').addEventListener('change', () => {
+  if (!snapshot || sourceBusy) return;
+  const value = $('hands-provider').value;
+  if (value && !snapshot.providers.some(p => key(p) === value && p.available)) { renderSource(); return; }
+  sourceEdit = { base: snapshot, value }; sourceConflict = null; void saveSource();
 });
+$('hands-form').addEventListener('submit', event => event.preventDefault());
+$('hands-source-retry').addEventListener('click', () => { if (sourceEdit) void saveSource(true); else { message(); void load(); } });
+$('hands-source-discard').addEventListener('click', () => { sourceEdit = sourceConflict = null; message(); void load(true); });
 const navigation = mountToolNavigation($('hands-menu-button'), $('hands-menu'), { origin: location.origin, current: 'hands' });
 const disposeShell = mountHandsShell({ resetView: () => view?.resetView(), setViewOptions: options => view?.setViewOptions(options) });
 const postprocessing = mountHandsPostprocessing($('hands-postprocessing-root'));
@@ -100,50 +117,13 @@ try {
     },
   });
 } catch (error) { $('hands-view-error').hidden = false; $('hands-view-error').textContent = `3D view unavailable: ${error.message}`; }
-// Stable host object for the separately delivered session and recorder components. No producer here.
-const recorder = mountProviderRecorder({ actions: $('hands-recording-actions'), status: $('hands-recording-status'), view,
+// Retain the recorder integration API, but no recorder nodes enter the page and legacy tools are not loaded.
+const recorder = mountProviderRecorder({ actions: document.createElement('div'), status: document.createElement('p'), view,
   restoreProfile: async () => { profileKey = ''; const generation = profileGeneration; try { await applyViewProfile(await request('GET'), generation); } catch (error) { message(error.message); } } });
 export const handsPage = { get view() { return view; }, get snapshot() { return snapshot; }, recorder, request };
-async function mountRecordingTools() {
-  const root = $('hands-recordings-root');
-  try {
-    const status = await request('GET', null, '/api/hands/tools'); if (disposed) return;
-    if (!status.available) { root.firstElementChild.textContent = status.reason; return; }
-    if (status.module !== '/hands/tools/browser.mjs') throw new Error('Invalid recording component.');
-    const module = await import(status.module); if (disposed) return;
-    const toolsView = view ? Object.create(view) : null;
-    if (toolsView) Object.defineProperty(toolsView, 'active', { get: () => view.active || recorder.replaying });
-    tools = module.mountHandsTools({ root, view: toolsView });
-  } catch (error) { if (!disposed) root.textContent = `Recording tools unavailable: ${error.message}`; }
-}
-void mountRecordingTools();
 const events = new EventSource('/api/events');
-let noticeRead = 0;
-events.addEventListener('hands-changed', async event => {
-  profileGeneration++;
-  let revision; try { revision = JSON.parse(event.data).revision; } catch { /* Unversioned notices require review. */ }
-  if (typeof revision === 'string' && revision === snapshot?.revision && revision === adjustments?.revision) return;
-  const read = ++noticeRead;
-  try {
-    let stable = false;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const epoch = adjustments?.deliveryEpoch, current = await request('GET');
-      if (disposed || read !== noticeRead) return;
-      if (epoch !== adjustments?.deliveryEpoch) continue;
-      revision = current.revision; stable = true; break;
-    }
-    if (!stable) revision = undefined;
-  } catch { revision = undefined; }
-  if (disposed || read !== noticeRead) return;
-  if (pickerRevisions.changed(revision)) message(changedMessage);
-  adjustments?.markStale(undefined, revision);
-});
-events.addEventListener('plugins-changed', () => { message('Provider availability changed. Reload before saving.'); });
-let deliveryRead = 0;
-const deliveryTimer = setInterval(() => {
-  if (!snapshot || writes) return;
-  const generation = profileGeneration, read = ++deliveryRead, epoch = adjustments?.deliveryEpoch;
-  void request('GET').then(data => { if (!disposed && !writes && read === deliveryRead && generation === profileGeneration) { adjustments?.updateDelivery(data.delivery, data.deliveryState, data.revision, epoch); void applyViewProfile(data, generation); } }).catch(() => {});
-}, 1000);
-addEventListener('pagehide', () => { disposed = true; clearInterval(deliveryTimer); events.close(); recorder.dispose(); tools?.dispose(); adjustments?.dispose(); postprocessing.dispose(); navigation?.(); disposeShell(); view?.dispose(); }, { once: true });
+events.addEventListener('hands-changed', () => { profileGeneration++; void load(); });
+events.addEventListener('plugins-changed', () => { void load(); });
+const deliveryTimer = setInterval(() => { if (!writes) void load(); }, 1000);
+addEventListener('pagehide', () => { disposed = true; readGeneration++; clearInterval(deliveryTimer); events.close(); recorder.dispose(); adjustments?.dispose(); postprocessing.dispose(); navigation?.(); disposeShell(); view?.dispose(); }, { once: true });
 await load();

@@ -33,7 +33,7 @@ test('Hands mounts its selector once, preserves drafts, saves next-run only and 
       assert.equal(await evaluate(`document.querySelector('#hands-view-error').hidden`), true, 'the real SDK viewer import graph still loads');
       for (let i = 0; i < 50; i++) { if (await evaluate(`document.querySelector('[data-mesh-selector]').options.length===2`)) break; await sleep(20); }
       assert.equal(await fs.readFile(path.join(workspace, 'config/hands/profile.json'), 'utf8'), initial, 'passive mount does not create/change state');
-      await evaluate(`document.querySelector('#hands-provider').value='core/webxr';const size=document.querySelector('[data-field="sizeFactor"]');size.value='.9';size.dispatchEvent(new Event('input',{bubbles:true}));`);
+      await evaluate(`const size=document.querySelector('[data-field="sizeFactor"]');size.value='.9';size.dispatchEvent(new Event('input',{bubbles:true}));`);
       const choose = (value: string) => evaluate(`(()=>{const e=document.querySelector('[data-mesh-selector]');e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       await choose('workspace:example/surface');
       assert.equal(await evaluate(`document.querySelectorAll('[data-mesh-field]').length`), 3);
@@ -47,7 +47,8 @@ test('Hands mounts its selector once, preserves drafts, saves next-run only and 
       assert.deepEqual(state.provider, { owner: 'core', id: 'simulated' }); assert.equal(state.profile.sizeFactor, 1);
       assert.ok(state.raw.postprocessing, await evaluate(`document.querySelector('[data-mesh-message]').textContent`));
       assert.deepEqual((state.raw.postprocessing as any).settings['workspace:example/surface'].values, { quality: 'low', iterations: 4, normals: false });
-      assert.equal(await evaluate(`document.querySelector('#hands-provider').value`), 'core/webxr');
+      assert.equal(await evaluate(`document.querySelector('#hands-provider').value`), 'core/simulated');
+      assert.equal(await evaluate(`document.querySelector('#hands-postprocessing-root').hidden`), false);
       assert.equal(await evaluate(`document.querySelector('[data-field="sizeFactor"]').value`), '0.9');
       assert.match(await evaluate(`document.querySelector('[data-mesh-message]').textContent`), /Saved.*next desktop run/);
       // Capture the real production mount in the page-owned slot, without injecting or moving controls.
@@ -73,7 +74,7 @@ test('Hands mounts its selector once, preserves drafts, saves next-run only and 
       assert.equal(await evaluate(`document.querySelector('[data-mesh-selector]').value`), 'workspace:example/surface');
       assert.match(await evaluate(`document.querySelector('[data-mesh-readiness]').textContent`), /missing/);
       await choose(''); await save();
-      assert.equal(await evaluate(`document.querySelector('[data-mesh-empty]').hidden`), false);
+      assert.equal(await evaluate(`document.querySelector('#hands-postprocessing-root').hidden`), true);
       assert.match(await evaluate(`document.querySelector('#hands-postprocessing-root').textContent`), /not browser previews, published web builds or offline packages/);
       assert.equal(await evaluate('captureCalls'), 0); assert.equal(app.panel.runner.state().phase, 'idle');
       await evaluate(`dispatchEvent(new Event('pagehide'))`);

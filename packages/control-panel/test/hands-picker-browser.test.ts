@@ -1,50 +1,50 @@
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { once } from 'node:events';
 import test from 'node:test';
+import { createServer } from '../src/server.ts';
+import { freePort } from '../src/host-runner.ts';
+import { readHandsState, saveHandsState } from '../src/hands-state.ts';
 import { withBrowser, sleep } from './browser-fixture.ts';
 
-// Mock metadata only. The browser cannot acquire devices and no native host is started.
-test('Hands picker shows initial/missing/empty states, saves revisioned choices and handles conflicts', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async () => {
-  let selected: { owner: string; id: string } | null = { owner: 'workspace:example', id: 'tracker' }, conflict = false, saves = 0;
-  const providers = [{ owner: 'workspace:example', id: 'tracker', label: 'Example real source', purpose: 'tracked', available: true, reason: 'Not started; device availability checked at launch' }];
-  const root = path.resolve(import.meta.dirname, '../ui');
-  const server = createServer(async (req, res) => {
-    if (req.url === '/api/hands') {
-      if (req.method === 'PUT') { saves++; if (conflict) { res.writeHead(409); res.end(JSON.stringify({ error: 'Hands profile changed' })); return; } }
-      res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ providers, selected, initial: true, revision: 'state', registryRevision: 'registry' })); return;
-    }
-    if (req.url === '/api/events') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(); return; }
-    if (req.url === '/api/navigation') { res.end(JSON.stringify({ tools: [] })); return; }
-    try {
-      const name = req.url === '/hands/' ? 'hands.html' : req.url!.slice(1);
-      if (!/^[a-z-]+\.(html|js|css)$/.test(name)) throw new Error('not found');
-      res.setHeader('content-type', name.endsWith('.js') ? 'application/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html');
-      res.end(await fs.readFile(path.join(root, name)));
-    } catch { res.writeHead(404); res.end(); }
-  });
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+async function until(evaluate: (s: string) => Promise<any>, expression: string) {
+  for (let i = 0; i < 150; i++) { if (await evaluate(expression)) return; await sleep(30); }
+  assert.fail(expression);
+}
+// Fake provider metadata only; no device or native host is started.
+test('provider autosaves quietly, preserves failed choices, refreshes missing choices and hides empty tools', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async () => {
+  const parent = path.resolve(process.env.XRB_TEST_ROOT ?? '.artifacts'); await fs.mkdir(parent, { recursive: true });
+  const workspace = await fs.mkdtemp(path.join(parent, 'hands-picker-')), core = path.resolve(import.meta.dirname, '../../..'), port = await freePort();
+  await saveHandsState(core, workspace, { owner: 'core', id: 'simulated' }, (await readHandsState(core, workspace)).revision);
+  const app = createServer({ repo: core, workspace, port });
+  app.panel.nativeProviders = async () => ({ providers: [{ name: 'simulated', role: 'input', builtin: true, path: null, version: '1', description: 'metadata only' }], error: null, rejected: [] });
+  app.server.listen(port, '127.0.0.1'); await once(app.server, 'listening');
   try {
-    const port = (server.address() as { port: number }).port;
     await withBrowser(async ({ navigate, evaluate, send }) => {
-      await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.captureCalls=0;if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw Error('forbidden')};` });
-      await navigate(`http://127.0.0.1:${port}/hands/`, `document.querySelector('#hands-provider')?.value==='workspace:example/tracker'`);
-      assert.match(await evaluate(`document.querySelector('#hands-availability').textContent`), /Initial default/);
-      assert.equal(await evaluate(`!!document.querySelector('canvas')`), true);
-      await evaluate(`document.querySelector('#hands-save').click()`); await sleep(150);
-      assert.equal(saves, 1); assert.match(await evaluate(`document.querySelector('#hands-message').textContent`), /Saved/);
-      conflict = true;
-      await evaluate(`document.querySelector('#hands-save').click()`); await sleep(150);
-      assert.match(await evaluate(`document.querySelector('#hands-message').textContent`), /Reload/);
-      selected = { owner: 'workspace:missing', id: 'absent' };
-      await evaluate(`document.querySelector('#hands-reload').click()`); await sleep(150);
-      assert.match(await evaluate(`document.querySelector('#hands-availability').textContent`), /missing/);
-      assert.equal(await evaluate(`document.querySelector('#hands-save').disabled`), true);
-      selected = null; providers.length = 0;
-      await evaluate(`document.querySelector('#hands-reload').click()`); await sleep(150);
-      assert.match(await evaluate(`document.querySelector('#hands-availability').textContent`), /No providers available/);
+      await send('Network.enable'); await send('Network.setBlockedURLs', { urls: ['https://*'] });
+      await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.captureCalls=0;window.sourceWrites=0;window.failSource=false;const original=fetch;window.fetch=(url,options)=>{if(url==='/api/hands'&&options?.method==='PUT'){sourceWrites++;if(failSource)return Promise.reject(Error('Offline'));}return original(url,options)};if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw Error('forbidden')};` });
+      await navigate(`http://127.0.0.1:${port}/hands/`, `document.querySelector('#hands-provider')?.value==='core/simulated'`);
+      assert.equal(await evaluate(`document.querySelector('#hands-postprocessing-root').hidden`), true);
+      assert.equal(await evaluate(`!!document.querySelector('[id^="hands-record"],#hands-save,#hands-reload,#hands-availability,#hands-session-status')`), false);
+      const choose = (value: string) => evaluate(`(()=>{const e=document.querySelector('#hands-provider');e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await choose('core/webxr');
+      await until(evaluate, `!document.querySelector('#hands-provider').disabled && sourceWrites===1`);
+      assert.deepEqual((await readHandsState(core, workspace)).provider, { owner: 'core', id: 'webxr' });
+      assert.equal(await evaluate(`document.querySelector('#hands-message').hidden`), true);
+      await evaluate('failSource=true'); await choose('core/simulated');
+      await until(evaluate, `!document.querySelector('#hands-source-recovery').hidden`);
+      assert.equal(await evaluate(`document.querySelector('#hands-provider').value`), 'core/simulated');
+      assert.equal((await readHandsState(core, workspace)).provider?.id, 'webxr');
+      await evaluate(`failSource=false;document.querySelector('#hands-source-retry').click()`);
+      await until(evaluate, `document.querySelector('#hands-message').hidden && !document.querySelector('#hands-provider').disabled`);
+      assert.equal((await readHandsState(core, workspace)).provider?.id, 'simulated');
+      const state = await readHandsState(core, workspace);
+      await saveHandsState(core, workspace, { owner: 'workspace:missing', id: 'absent' }, state.revision);
+      await until(evaluate, `document.querySelector('#hands-provider').value==='workspace:missing/absent'`);
+      assert.match(await evaluate(`document.querySelector('#hands-provider').selectedOptions[0].textContent`), /missing/);
       assert.equal(await evaluate('captureCalls'), 0);
+      assert.equal(app.panel.runner.state().phase, 'idle');
     });
-  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+  } finally { await app.close(); await fs.rm(workspace, { recursive: true, force: true }); }
 });
