@@ -8,7 +8,8 @@ The top slot above the provider is reserved for separately delivered live contro
 
 The former diagnostic and legacy hand-tracking page routes are removed (404, no redirects).
 There is no generated preview, local fixture, fixture interaction target or laboratory navigation.
-Synthetic remains an ordinary installed provider choice, never a fallback.
+Synthetic remains an ordinary installed provider choice, never a fallback. In Apps, the Input option is labelled
+Hands (or Hands (unavailable)); its saved value remains `hand`, so existing app settings stay compatible.
 
 ## Post-processing
 

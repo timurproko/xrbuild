@@ -24,8 +24,8 @@ Each group corresponds to the same-order Implementation outcome in the draft PR.
 
 ## 4. Compatible Hands display label in Apps
 
-- [ ] 4.1 Rename only the `hand` option's display mapping to Hands and Hands (unavailable), leaving stored values/provider resolution unchanged; verify option, selected-summary and persistence compatibility in targeted Apps tests.
-- [ ] 4.2 Capture the Apps Input dropdown in an isolated real browser, then stop every disposable server/app/browser started for this change; verify teardown and report exact files, changed/removed ids and exports for the live-provider worker.
+- [x] 4.1 Rename only the `hand` option's display mapping to Hands and Hands (unavailable), leaving stored values/provider resolution unchanged; verify option, selected-summary and persistence compatibility in targeted Apps tests.
+- [x] 4.2 Capture the Apps Input dropdown in an isolated real browser, then stop every disposable server/app/browser started for this change; verify teardown and report exact files, changed/removed ids and exports for the live-provider worker.
 
 ## Workflow follow-up
 
