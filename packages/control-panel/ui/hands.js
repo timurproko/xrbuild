@@ -103,7 +103,14 @@ try {
 // Stable host object for the separately delivered session and recorder components. No producer here.
 const recorder = mountProviderRecorder({ actions: $('hands-recording-actions'), status: $('hands-recording-status'), view,
   restoreProfile: async () => { profileKey = ''; const generation = profileGeneration; try { await applyViewProfile(await request('GET'), generation); } catch (error) { message(error.message); } } });
-export const handsPage = { get view() { return view; }, get snapshot() { return snapshot; }, recorder, request };
+const { createHandsSession } = await import('./hands-session.js');
+const { createProviderFormat } = await import('./hands-provider-format.js');
+const { decodeMessage } = await import('/sdk/protocol.js');
+const { handProfile } = await import('/sdk/hand-profile.js');
+const session = createHandsSession({ view, replaying: () => recorder.replaying, decode: decodeMessage });
+const recordingFormat = createProviderFormat({ decode: decodeMessage, normalize: handProfile });
+// Raw recording hooks only. The simplified page deliberately has no recorder UI.
+export const handsPage = { get view() { return view; }, get snapshot() { return snapshot; }, recorder, session, recordingFormat, request };
 async function mountRecordingTools() {
   const root = $('hands-recordings-root');
   try {
@@ -145,5 +152,5 @@ const deliveryTimer = setInterval(() => {
   const generation = profileGeneration, read = ++deliveryRead, epoch = adjustments?.deliveryEpoch;
   void request('GET').then(data => { if (!disposed && !writes && read === deliveryRead && generation === profileGeneration) { adjustments?.updateDelivery(data.delivery, data.deliveryState, data.revision, epoch); void applyViewProfile(data, generation); } }).catch(() => {});
 }, 1000);
-addEventListener('pagehide', () => { disposed = true; clearInterval(deliveryTimer); events.close(); recorder.dispose(); tools?.dispose(); adjustments?.dispose(); postprocessing.dispose(); navigation?.(); disposeShell(); view?.dispose(); }, { once: true });
+addEventListener('pagehide', () => { disposed = true; clearInterval(deliveryTimer); events.close(); session.dispose(); recorder.dispose(); tools?.dispose(); adjustments?.dispose(); postprocessing.dispose(); navigation?.(); disposeShell(); view?.dispose(); }, { once: true });
 await load();

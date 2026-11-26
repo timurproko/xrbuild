@@ -28,11 +28,11 @@ Each numbered group corresponds to one PR Implementation outcome, in the same or
 
 ## 4. Live frames and profile Apply through the existing SDK view
 
-- [ ] 4.1 Connect the authenticated session client to PR 51's neutral viewport adapter after initial PR 50 profile readiness; parity tests feed equivalent frames/clocks through app and Hands and compare processed coordinates, capabilities, gestures and standard visuals.
-- [ ] 4.2 Reuse the single ingress geometry stage and app-default filters, prediction, gestures and scene mapping without raw diagnostic options or visual transforms; tests assert exactly-once offset/wrist-size and unchanged identity/default behavior.
-- [ ] 4.3 Deliver full applied profiles with session-bound ordered acknowledgements and accurate per-target delivery status; tests cover appearance-only hold preservation, geometry release/reset, initial gate, dirty drafts, source retention, failed delivery and old-session replies.
-- [ ] 4.4 Clear ingress/filter/visual/interaction/pointer state on explicit no-hands, stale stream, clock reset, failure, Stop and disposal; held-pinch/drag regressions assert release without click and no resurrection by late frames. Document the adapter/profile contract and safety boundaries.
-- [ ] 4.5 Agree provider-stream v1 through comments on PRs 51 and 53, expose immutable pre-adjustment raw frames/provenance to its recorder, and supply bounded format/validation/replay helpers; round-trip tests preserve native packets and a nonidentity replay profile is applied once.
+- [x] 4.1 Connect the authenticated session client to PR 51's neutral viewport adapter after initial PR 50 profile readiness; parity tests feed equivalent frames/clocks through app and Hands and compare processed coordinates, capabilities, gestures and standard visuals.
+- [x] 4.2 Reuse the single ingress geometry stage and app-default filters, prediction, gestures and scene mapping without raw diagnostic options or visual transforms; tests assert exactly-once offset/wrist-size and unchanged identity/default behavior.
+- [x] 4.3 Deliver full applied profiles with session-bound ordered acknowledgements and accurate per-target delivery status; tests cover appearance-only hold preservation, geometry release/reset, initial gate, dirty drafts, source retention, failed delivery and old-session replies.
+- [x] 4.4 Clear ingress/filter/visual/interaction/pointer state on explicit no-hands, stale stream, clock reset, failure, Stop and disposal; held-pinch/drag regressions assert release without click and no resurrection by late frames. Document the adapter/profile contract and safety boundaries.
+- [x] 4.5 Agree provider-stream v1 through comments on PRs 51 and 53, expose immutable pre-adjustment raw frames/provenance to its recorder, and supply bounded format/validation/replay helpers; round-trip tests preserve native packets and a nonidentity replay profile is applied once.
 
 ## 5. Explicit live Hands controls, measured status and real-hand targets
 

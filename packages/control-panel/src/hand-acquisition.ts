@@ -50,10 +50,10 @@ export async function reserveHandAcquisition(exe: string, label: string, options
   child.on('error', () => { phase = 'failed'; reason = 'Hand acquisition helper is unavailable. Rebuild the host before running Hand.'; notify(); });
   child.on('close', () => { ended = true; output.flush(); notify(); });
   async function wait(expected: string, timeout: number) {
-    const deadline = Date.now() + timeout;
+    const deadline = performance.now() + timeout;
     while (phase !== expected) {
       if (ended || phase === 'failed' || phase === 'busy') throw new Error(reason || 'Hand acquisition reservation ended before handoff');
-      const left = deadline - Date.now();
+      const left = deadline - performance.now();
       if (left <= 0) throw new Error('Hand acquisition reservation timed out; no competing provider was started');
       await new Promise<void>(resolve => { const timer = setTimeout(() => { wake = null; resolve(); }, left); wake = () => { clearTimeout(timer); resolve(); }; });
     }

@@ -31,6 +31,7 @@ export function createHandStream({ ingress, clear = () => {}, now = () => perfor
       const at = now(); times = times.filter(t => at - t <= 1000);
       return { trackingFps: epoch && accepted ? times.length : null, handCount: lastFrame?.hands.length ?? null, frameAgeMs: lastFrame ? Math.max(0, at - capture) : null };
     },
+    tick() { if (lastFrame && now() - capture > 250) { ingress.reset(now()); clear(); lastFrame = null; } },
     clearHands() { ingress.reset(now()); clear(); lastFrame = null; },
     clearSession() { epoch = null; reset(); },
     dispose() { if (closed) return; closed = true; epoch = null; ready = false; reset(); ingress.close(now()); },

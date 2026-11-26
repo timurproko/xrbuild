@@ -13,7 +13,7 @@ export function createProviderRecording({ producer, format, onComplete = () => {
   const unsubscribeFrames = producer.subscribeRawFrames(event => {
     if (!active || disposed) return;
     if (event.epoch !== document.epoch) { finish('Session changed.'); return; }
-    if (!Number.isSafeInteger(event.sequence) || event.sequence <= sequence || !Number.isFinite(event.captureTimeMs) || !Number.isFinite(event.publishTimeMs) || event.publishTimeMs < event.captureTimeMs || !(event.packet instanceof Uint8Array) || event.packet.byteLength > 4096) { finish('Invalid session sample.'); return; }
+    if (!Number.isSafeInteger(event.sequence) || event.sequence <= sequence || !Number.isFinite(event.captureTimeMs) || !Number.isFinite(event.publishTimeMs) || event.publishTimeMs < event.captureTimeMs || !(event.packet instanceof Uint8Array) || event.packet.byteLength > 128 * 1024) { finish('Invalid session sample.'); return; }
     if (first !== null && event.captureTimeMs < document.samples.at(-1).captureTimeMs) { finish('Capture clock changed.'); return; }
     const sample = { sequence: event.sequence, captureTimeMs: event.captureTimeMs, publishTimeMs: event.publishTimeMs, packet: base64(event.packet) };
     first ??= sample.captureTimeMs;
@@ -97,6 +97,7 @@ export function mountProviderRecorder({ actions, status, view, restoreProfile = 
       replayView.clearSession = () => { view.clearSession(); void restoreProfile(); };
       const stop = await documentFormat.replay(document, { view: replayView }); if (disposed) { stop?.(); return; }
       stopReplay = stop; say('Recorded hand session.'); refresh();
+      stop?.done?.then(() => { if (!disposed && stopReplay === stop) { stopReplay = null; say('Replay ended.'); refresh(); } });
     } catch (error) { if (view?.replaying && !stopReplay) { view.clearSession(); void restoreProfile(); } say(error.message); }
     finally { replayBusy = false; refresh(); }
   }, { signal });

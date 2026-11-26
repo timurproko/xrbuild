@@ -21,7 +21,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   const axes = new THREE.AxesHelper(.09); axes.visible = false; scene.add(axes);
   const panel = new PanelFrame(), input = new HandInput(), ingress = new HandFrameIngress(input, 'native'), visual = new HandVisual(), interaction = new Interactor();
   scene.add(visual);
-  let currentHands = [], sceneHands = [], profile = null, profileRequest = 0, recordedSession = false;
+  let currentHands = [], sceneHands = [], profile = null, profileRequest = 0, recordedSession = false, pendingProfile = null;
   const legacy = new THREE.Group(); scene.add(legacy);
   function clearHands() { currentHands = []; sceneHands = []; interaction.update([], 1); visual.update([], panel); }
   const stream = createHandStream({ ingress, clear: clearHands });
@@ -37,8 +37,12 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     if (closed || request !== profileRequest || !isCurrent()) return false;
     guard();
     if (!('profile' in ingress) || typeof visual.applyAppearance !== 'function') throw new Error('Rebuild the SDK to apply hand adjustments.');
-    if (profile && !api.sameHandGeometry(profile, next)) { ingress.reset(performance.now()); clearHands(); }
-    ingress.profile = next; visual.applyAppearance(next.appearance); profile = next; stream.setReady(true); return true;
+    pendingProfile?.resolve(false);
+    return new Promise(resolve => { pendingProfile = { resolve, apply() {
+      if (closed || request !== profileRequest || !isCurrent() || !allowed()) { resolve(false); return; }
+      if (profile && !api.sameHandGeometry(profile, next)) { ingress.reset(performance.now()); clearHands(); }
+      ingress.profile = next; visual.applyAppearance(next.appearance); profile = next; stream.setReady(true); resolve(true);
+    } }; });
   }
   function theme() {
     const css = getComputedStyle(document.documentElement);
@@ -55,7 +59,9 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   let frameId, closed = false, ticks = 0, start = performance.now();
   function render(now) {
     if (closed) return;
+    if (pendingProfile) { const pending = pendingProfile; pendingProfile = null; pending.apply(); }
     controls.update();
+    stream.tick();
     panel.update({ mode: 'world', center: new THREE.Vector3(), scale: 1 }, camera);
     currentHands = stream.active ? input.sample(now) : [];
     sceneHands = currentHands.map(hand => toSceneHand(hand, panel));
@@ -69,7 +75,8 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     setProfile,
     beginSession(options) { if (stream.active && recordedSession !== (options.mode === 'replay')) return false; const accepted = stream.beginSession(options); if (accepted) { clearLegacy(); recordedSession = options.mode === 'replay'; onStatus({ phase: recordedSession ? 'replay' : 'running', hands: 0 }); } return accepted; },
     pushFrame(value) { const accepted = stream.pushFrame(value); if (accepted) onStatus({ phase: recordedSession ? 'replay' : 'running', hands: value.frame.hands.length }); return accepted; },
-    clearSession() { stream.clearSession(); recordedSession = false; onStatus({ phase: 'idle', hands: null }); },
+    clearHands() { stream.clearHands(); },
+    clearSession() { pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; stream.clearSession(); recordedSession = false; onStatus({ phase: 'idle', hands: null }); },
     get replaying() { return recordedSession; },
     get active() { return stream.active; },
     get profile() { return profile ? structuredClone(profile) : null; },
@@ -90,7 +97,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     resetView,
     setViewOptions(options) { grid.visible = options.includes('grid'); axes.visible = options.includes('axes'); },
     dispose() {
-      if (closed) return; closed = true; profileRequest++; stream.dispose(); clearLegacy(); cancelAnimationFrame(frameId); resize.disconnect(); observer.disconnect(); system.removeEventListener('change', theme); controls.dispose();
+      if (closed) return; closed = true; pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; stream.dispose(); clearLegacy(); cancelAnimationFrame(frameId); resize.disconnect(); observer.disconnect(); system.removeEventListener('change', theme); controls.dispose();
       scene.traverse(object => { object.geometry?.dispose(); for (const material of object.material ? Array.isArray(object.material) ? object.material : [object.material] : []) material.dispose(); });
       renderer.renderLists.dispose(); renderer.dispose();
     },

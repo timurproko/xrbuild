@@ -34,7 +34,7 @@ export class HandSessions {
   private deps: SessionDependencies;
   constructor(deps: SessionDependencies) {
     this.deps = deps;
-    this.timer = setInterval(() => { const s = this.current; if (s && this.busy && Date.now() - s.heartbeat > (deps.heartbeatMs ?? 5000)) void this.stop(s, 'Owning Hands page heartbeat expired'); }, 100);
+    this.timer = setInterval(() => { const s = this.current; if (s && this.busy && performance.now() - s.heartbeat > (deps.heartbeatMs ?? 5000)) void this.stop(s, 'Owning Hands page heartbeat expired'); }, 100);
     this.timer.unref();
   }
   get busy() { return !!this.current && (!this.current.ended || this.current.preparing); }
@@ -55,19 +55,20 @@ export class HandSessions {
     const action = new URL(req.url!, this.deps.origin()).pathname.replace('/api/hands/session', '');
     if (this.closed) throw new HttpError(503, 'Hands sessions are shutting down');
     if (action === '/bootstrap' && req.method === 'POST') {
-      for (const [key, expiry] of this.pages) if (expiry < Date.now() && key !== this.current?.owner) this.pages.delete(key);
+      for (const [key, expiry] of this.pages) if (expiry < performance.now() && key !== this.current?.owner) this.pages.delete(key);
       if (this.pages.size >= 32) throw new HttpError(429, 'Too many Hands pages');
-      const capability = secret(); this.pages.set(capability, Date.now() + 60000);
+      const capability = secret(); this.pages.set(capability, performance.now() + 60000);
       return sendJson(res, 200, { capability, ...this.status() });
     }
     const owner = String(req.headers.authorization ?? '').replace(/^Bearer /, '');
-    if (!this.pages.has(owner) || this.pages.get(owner)! < Date.now()) throw new HttpError(403, 'Hands page capability is missing or expired');
-    this.pages.set(owner, Date.now() + 60000);
+    if (!this.pages.has(owner) || this.pages.get(owner)! < performance.now()) throw new HttpError(403, 'Hands page capability is missing or expired');
+    this.pages.set(owner, performance.now() + 60000);
     if (!action && req.method === 'GET') return sendJson(res, 200, this.status(owner));
     if (req.method !== 'POST') throw new HttpError(405, 'Hands operation not allowed');
     let body: Record<string, unknown>;
     try { body = JSON.parse((await readBody(req, 16384)).toString()); } catch (e) { if (e instanceof HttpError) throw e; throw new HttpError(400, 'Invalid Hands session body'); }
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'Invalid Hands session body');
+    if (action === '/status') return sendJson(res, 200, this.status(owner));
     if (!action) {
       if (!validHandProviderKey(body.provider) || typeof body.revision !== 'string' || typeof body.registryRevision !== 'string') throw new HttpError(400, 'Saved provider and revisions required');
       const result = await this.start(owner, body as unknown as SessionSelectionRequest);
@@ -76,7 +77,7 @@ export class HandSessions {
     const s = this.current;
     if (!s || s.owner !== owner || body.sessionId !== s.id) throw new HttpError(403, 'This page does not own that Hands session');
     if (action === '/stop') { await this.stop(s); return sendJson(res, 200, this.status(owner)); }
-    if (action === '/heartbeat') { if (this.busy && !s.cancelled) s.heartbeat = Date.now(); return sendJson(res, 200, this.status(owner)); }
+    if (action === '/heartbeat') { if (this.busy && !s.cancelled) s.heartbeat = performance.now(); return sendJson(res, 200, this.status(owner)); }
     if (action === '/ack') { if (!s.cancelled && this.busy) s.live?.acknowledge(body.profile); return sendJson(res, 200, this.status(owner)); }
     throw new HttpError(404, 'Unknown Hands operation');
   }
@@ -84,7 +85,7 @@ export class HandSessions {
     if ((this.deps.platform ?? process.platform) !== 'win32') throw new HttpError(409, 'Standalone native Hands sessions currently support Windows x64 only. WebXR requires an explicit app XR session.');
     if (this.busy) throw new HttpError(409, 'A Hands session owns acquisition. Stop it in its owning page first.');
     const release = this.deps.acquire();
-    const s: Running = { id: randomUUID(), epoch: secret(), owner, token: secret(), phase: 'starting', reason: '', heartbeat: Date.now(), ended: false, cancelled: false, preparing: true, release };
+    const s: Running = { id: randomUUID(), epoch: secret(), owner, token: secret(), phase: 'starting', reason: '', heartbeat: performance.now(), ended: false, cancelled: false, preparing: true, release };
     this.current = s;
     let reservation: Awaited<ReturnType<typeof reserveHandAcquisition>> | null = null;
     try {
@@ -95,7 +96,7 @@ export class HandSessions {
       reservation = await (this.deps.reserve ?? reserveHandAcquisition)(prepared.helperExe, 'Hands provider session', { checkLegacyHost: true, ...(this.deps.testScope ? { testScope: this.deps.testScope } : {}) });
       if (s.cancelled || this.closed) throw new Error('Hands Start cancelled');
       const child = (this.deps.spawn ?? spawn)(path.join(path.dirname(prepared.workerExe), 'xrb-provider-supervisor.exe'), [prepared.workerExe, String(process.pid)], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }) as ChildProcessWithoutNullStreams;
-      s.child = child; let buffer = '', handoff: Promise<void> | null = null;
+      s.child = child; const observer = s.token, ticket = reservation.ticket; let buffer = '', handoff: Promise<void> | null = null;
       child.stdin.on('error', () => {}); child.stderr.resume();
       child.on('error', () => { s.reason = 'Provider supervisor is unavailable. Rebuild the host.'; });
       child.on('close', () => { void (async () => {
@@ -123,7 +124,7 @@ export class HandSessions {
             if (event.phase === 'acquiring' && Number.isSafeInteger(event.pid) && !handoff) {
               s.pid = event.pid; handoff = reservation!.handoff(event.pid); handoff.catch(() => { s.reason = 'Native acquisition handoff failed'; void this.stop(s, s.reason); });
             }
-            if (event.phase === 'failed' && !s.cancelled) { s.reason = String(event.reason || 'Provider failed').slice(0, 1024).replaceAll(s.token, '[redacted]').replaceAll(reservation!.ticket, '[redacted]'); void this.stop(s, s.reason); }
+            if (event.phase === 'failed') { s.reason = String(event.reason || 'Provider failed').replaceAll(observer, '[redacted]').replaceAll(ticket, '[redacted]').slice(0, 1024); if (!s.cancelled) void this.stop(s, s.reason); }
             if (event.phase === 'running' && typeof event.url === 'string' && !s.cancelled) {
               const endpoint = new URL(event.url);
               if (endpoint.protocol !== 'ws:' || endpoint.hostname !== '127.0.0.1' || endpoint.pathname !== '/hands' || endpoint.search || endpoint.hash || endpoint.username || endpoint.password || !endpoint.port) throw new Error();
@@ -136,8 +137,8 @@ export class HandSessions {
       const bootstrap = { version: 1, runtimeName: prepared.runtimeName, pluginPath: prepared.pluginPath, config: prepared.config, parentPid: process.pid, token: s.token, epoch: s.epoch, origin: this.deps.origin(), ticket: reservation.ticket, ...(this.deps.testScope ? { testScope: this.deps.testScope } : {}) };
       const serialized = JSON.stringify(bootstrap); if (Buffer.byteLength(serialized) > 16384) throw new Error('Provider configuration exceeds the bounded bootstrap');
       child.stdin.write(serialized + '\n');
-      const deadline = Date.now() + 30000;
-      while (!s.url) { if (s.cancelled || s.ended || s.reason || Date.now() > deadline) throw new Error(s.reason || 'Provider Start cancelled or timed out'); await pause(10); }
+      const deadline = performance.now() + 30000;
+      while (!s.url) { if (s.cancelled || s.ended || s.reason || performance.now() > deadline) throw new Error(s.reason || 'Provider Start cancelled or timed out'); await pause(10); }
       if (handoff) await handoff;
       if (s.cancelled || s.ended) throw new Error(s.reason || 'Hands Start cancelled');
       s.phase = 'running';
@@ -152,16 +153,16 @@ export class HandSessions {
     if (s.stop) return s.stop;
     s.cancelled = true; s.token = ''; s.live?.close(); s.reason ||= reason; s.phase = 'stopping';
     return s.stop = (async () => {
-      const preparingBy = Date.now() + 31000;
-      while (s.preparing && !s.child && Date.now() < preparingBy) await pause(20);
+      const preparingBy = performance.now() + 31000;
+      while (s.preparing && !s.child && performance.now() < preparingBy) await pause(20);
       if (s.preparing && !s.child) { s.phase = 'failed'; s.reason = 'Hands preparation has not drained; wait before reacquisition'; return; }
       if (s.child && !s.ended) {
         s.child.stdin.end('{"stop":true}\n');
-        const deadline = Date.now() + 6000;
-        while (!s.ended && Date.now() < deadline) await pause(20);
+        const deadline = performance.now() + 6000;
+        while (!s.ended && performance.now() < deadline) await pause(20);
         if (!s.ended) s.child.kill(); // Only our launcher; closing its job contains only our worker.
-        const killedBy = Date.now() + 2000;
-        while (!s.ended && Date.now() < killedBy) await pause(20);
+        const killedBy = performance.now() + 2000;
+        while (!s.ended && performance.now() < killedBy) await pause(20);
         if (!s.ended) { s.phase = 'failed'; s.reason = 'Cannot verify worker death; restart the panel before reacquisition'; return; }
       }
       // During asynchronous preparation, Start's cancellation check must drain before ownership is free.

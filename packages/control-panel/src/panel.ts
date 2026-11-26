@@ -349,6 +349,13 @@ export class Panel {
     this.runner.on('log', (text) => hub.send('run-log', text));
   }
 
+  private handsDelivery() {
+    const targets = [this.runner.busy && this.liveHands ? { target: 'App', delivery: this.liveHands.delivery, state: this.liveHands.deliveryState } : null,
+      this.handSessions.live ? { target: 'Hands', delivery: this.handSessions.live.delivery, state: this.handSessions.live.deliveryState } : null].filter((v): v is NonNullable<typeof v> => !!v);
+    const deliveryState = targets.some(t => t.state === 'failed') ? 'failed' : targets.some(t => t.state === 'pending') ? 'pending' : targets.length ? 'applied' : 'saved';
+    return { delivery: targets.length > 1 ? targets.map(t => `${t.target}: ${t.delivery}`).join('; ') : targets[0]?.delivery ?? 'Saved for next launch', deliveryState, targets };
+  }
+
   private setLiveHands(live: LiveHands | null): void {
     if (this.liveHands === live) return;
     this.liveHands?.close(); this.nativeHandObserver?.close(); this.nativeHandObserver = null; this.liveHands = live;
@@ -2071,7 +2078,7 @@ export class Panel {
         const state = await readHandsState(this.repo, this.workspace);
         const selected = selectedHandProvider(state, registry, 'native');
         sendJson(res, 200, { ...registry, providers: registry.providers.map(p => ({ ...p, runtimeState: this.handRuntimeStates.get(handProviderKey(p)) ?? null })), registryRevision: registry.revision, selected: selected.key, initial: selected.initial, revision: state.revision,
-          choiceRequired: !selected.key, applies: 'next-launch', profile: state.profile, appearanceDefaults: HAND_APPEARANCE_DEFAULTS, delivery: this.liveHands?.delivery ?? 'Saved for next launch', deliveryState: this.liveHands?.deliveryState ?? 'saved' });
+          choiceRequired: !selected.key, applies: 'next-launch', profile: state.profile, appearanceDefaults: HAND_APPEARANCE_DEFAULTS, ...this.handsDelivery() });
         return true;
       }
       case 'POST hands/apply': {
@@ -2089,6 +2096,7 @@ export class Panel {
           }
           if (!body.profile) throw new HttpError(400, 'Hands adjustment profile required');
           const saved = await saveHandAdjustments(this.repo, this.workspace, body.profile, body.revision, initial);
+          this.handSessions.live?.update(saved.profile, saved.revision);
           const live = this.liveHands;
           if (live && this.runner.busy) {
             live.update(saved.profile, saved.revision);
@@ -2102,8 +2110,7 @@ export class Panel {
             }
           }
           this.hub.send('hands-changed', { revision: saved.revision });
-          const active = this.liveHands === live && this.runner.busy ? live : null;
-          sendJson(res, 200, { revision: saved.revision, profile: saved.profile, delivery: active?.delivery ?? 'Saved for next launch', deliveryState: active?.deliveryState ?? 'saved' });
+          sendJson(res, 200, { revision: saved.revision, profile: saved.profile, ...this.handsDelivery() });
         } finally { this.savingHands = false; }
         return true;
       }

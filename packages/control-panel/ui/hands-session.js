@@ -5,20 +5,29 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
   const raw = new Set(), lifecycle = new Set();
   const notify = value => { onStatus(value); for (const listener of lifecycle) listener(value); };
   async function request(action = '', body) {
-    const response = await fetcher('/api/hands/session' + action, { method: body ? 'POST' : 'GET', cache: 'no-store', headers: { 'x-xrb-hands': '1', ...(body ? { 'content-type': 'application/json' } : {}), ...(capability ? { authorization: `Bearer ${capability}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const response = await fetcher('/api/hands/session' + action, { method: body ? 'POST' : 'GET', cache: 'no-store', mode: 'same-origin', redirect: 'error', headers: { 'x-xrb-hands': '1', ...(body ? { 'content-type': 'application/json' } : {}), ...(capability ? { authorization: `Bearer ${capability}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const value = await response.json(); if (!response.ok) throw new Error(value.error || 'Hands session request failed'); return value;
   }
   async function bootstrap() { if (!capability) { const b = await request('/bootstrap', {}); if (disposed) return; capability = b.capability; } }
   function retire(s, reason = '') {
     if (!s || current !== s || s.retired) return;
-    s.retired = true; s.pending = null; clearInterval(s.heartbeat); clearInterval(s.pingTimer); clearTimeout(s.syncTimer); s.socket?.close(); view.clearSession();
-    notify({ phase: reason ? 'failed' : 'stopped', reason, epoch: s.epoch, sessionId: s.sessionId });
+    s.retired = true; s.pending = null; clearInterval(s.heartbeat); clearInterval(s.pingTimer); clearTimeout(s.syncTimer); clearTimeout(s.freshness); s.socket?.close(); view.clearSession();
+    for (const listener of lifecycle) listener({ phase: 'retired', reason, epoch: s.epoch, sessionId: s.sessionId });
+    onStatus({ phase: reason ? 'failed' : 'stopping', reason, epoch: s.epoch, sessionId: s.sessionId });
   }
   async function stop(reason = '') {
     generation++; const s = current; if (!s) return;
+    if (s.stopPromise) return s.stopPromise;
     retire(s, reason);
-    try { if (!s.sessionId) { const status = await request(); if (status.owns) s.sessionId = status.sessionId; } if (s.sessionId) await request('/stop', { sessionId: s.sessionId }); } catch (error) { if (!disposed) onStatus({ phase: 'failed', reason: error.message }); }
-    if (current === s) current = null;
+    return s.stopPromise = (async () => {
+      try {
+        if (!s.sessionId) { const status = await request('/status', {}); if (status.owns) s.sessionId = status.sessionId; }
+        const result = s.sessionId ? await request('/stop', { sessionId: s.sessionId }) : null;
+        const failure = result?.reason || reason;
+        if (!disposed) notify({ phase: failure ? 'failed' : 'stopped', reason: failure, epoch: s.epoch, sessionId: s.sessionId });
+      } catch (error) { if (!disposed) onStatus({ phase: 'failed', reason: error.message }); }
+      if (current === s) current = null;
+    })();
   }
   async function applyProfile(s, envelope) {
     if (!envelope || s.retired || current !== s || envelope.runId !== s.sessionId || envelope.sequence <= s.profileSequence) return;
@@ -42,10 +51,10 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
     s.heartbeat = setInterval(async () => {
       if (s.retired || polling) return; polling = true;
       try {
-        let status = await request();
+        let status = await request('/status', {});
         if (status.owns) { s.sessionId ??= status.sessionId; status = await request('/heartbeat', { sessionId: s.sessionId }); }
         if (s.sessionId && (!status.owns || status.sessionId !== s.sessionId || ['failed', 'stopped'].includes(status.phase))) { void stop(status.reason || 'Provider session ended'); return; }
-        if (status.profile && s.socket) await applyProfile(s, status.profile);
+        if (status.profile && s.sessionId) await applyProfile(s, status.profile);
       } catch (error) { void stop(error.message); } finally { polling = false; }
     }, 1000);
     try {
@@ -70,7 +79,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
   }
   function tick() {
     const s = current;
-    if (s && !s.retired) {
+    if (s && !s.retired && s.socket) {
       if (s.pending && s.clock.mapping) {
         const event = s.pending; s.pending = null;
         try {
@@ -81,6 +90,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
             for (const listener of raw) listener({ ...sample, packet: sample.packet.slice(), frame: structuredClone(sample.frame) });
             if (view.pushFrame({ epoch: s.epoch, sequence: event.sequence, frame: event.frame, capturePageMs: mapped })) {
               s.dropped += Math.max(0, event.sequence - (s.lastSequence ?? event.sequence) - 1); s.lastSequence = event.sequence; s.accepted++; s.invalidStreak = 0; s.lastFresh = now(); s.capture = mapped; s.hands = event.frame.hands.length; s.reportedHz = event.frame.trackingHz; s.times.push(now()); s.stale = false;
+              clearTimeout(s.freshness); s.freshness = setTimeout(() => { if (!s.retired && current === s) { s.stale = true; view.clearHands(); notify({ phase: 'stalled', epoch: s.epoch, sessionId: s.sessionId, trackingFps: null, frameAgeMs: null }); } }, SESSION_BOUNDS.age);
             } else s.rejected++;
           } else { s.rejected++; view.clearHands(); if (++s.invalidStreak >= 3) throw new Error('Repeated stale or invalid provider captures'); }
           const ack = new ArrayBuffer(5), v = new DataView(ack); v.setUint8(0, 110); v.setUint32(1, event.transportSequence, true); s.socket.send(ack);
@@ -100,7 +110,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
   raf = frame(tick);
   return {
     start, stop,
-    async status() { await bootstrap(); return request(); },
+    async status() { await bootstrap(); return request('/status', {}); },
     get active() { return !!current && !current.retired; },
     recordingSource() { const s = current; return s && !s.retired && s.accepted && view.profile ? { kind: 'xrbuild-hand-session', version: 1, source: { owner: s.source.owner, id: s.source.id, ...(s.source.version ? { version: s.source.version } : {}) }, sessionId: s.sessionId, epoch: s.epoch, profile: view.profile, frameSpace: 'panel-metres', processing: 'provider-published', globalAdjustmentsApplied: false, clockDomain: 'windows-qpc-ms', axes: 'x-right,y-up,z-viewer' } : null; },
     subscribeRawFrames(listener) { raw.add(listener); return () => raw.delete(listener); },
