@@ -14,8 +14,8 @@
 
 ## 3. Background app saves leave Run in place
 
-- [ ] 3.1 Remove pending/success save text and present concise accessible failures outside the action layout, preserving write ordering and safe retries; pass focused SettingsWriter/settings-save tests.
-- [ ] 3.2 Capture pending, success and failed Display/Input/platform saves in an isolated browser; assert Run geometry stays stable and failure feedback remains readable at desktop and narrow widths.
+- [x] 3.1 Remove pending/success save text and present concise accessible failures outside the action layout, preserving write ordering and safe retries; pass focused SettingsWriter/settings-save tests.
+- [x] 3.2 Capture pending, success and failed Display/Input/platform saves in an isolated browser; assert Run geometry stays stable and failure feedback remains readable at desktop and narrow widths.
 
 ## 4. Shared maintenance dialogs copy complete job logs
 

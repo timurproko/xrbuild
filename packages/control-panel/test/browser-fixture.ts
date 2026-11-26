@@ -22,13 +22,20 @@ export async function withBrowser(run: (browser: { send(method: string, params?:
     const target = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json() as { webSocketDebuggerUrl: string };
     socket = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise(resolve => socket!.addEventListener('open', resolve, { once: true }));
-    let id = 0;
+    let id = 0, closing = false;
     const pending = new Map<number, { resolve: (value: any) => void; reject: (error: unknown) => void }>();
     socket.addEventListener('message', event => {
       const message = JSON.parse(String(event.data)), entry = pending.get(message.id);
       if (!entry) return;
       pending.delete(message.id);
       if (message.error) entry.reject(message.error); else entry.resolve(message.result);
+    });
+    // Chrome may close the transport before replying to Browser.close.
+    socket.addEventListener('close', () => {
+      for (const entry of pending.values()) {
+        if (closing) entry.resolve({}); else entry.reject(new Error('Browser connection closed'));
+      }
+      pending.clear();
     });
     const send = (method: string, params: object = {}) => new Promise<any>((resolve, reject) => {
       const key = ++id, timeout = setTimeout(() => { pending.delete(key); reject(new Error(`Timed out: ${method}`)); }, 10000);
@@ -48,6 +55,7 @@ export async function withBrowser(run: (browser: { send(method: string, params?:
     };
     await send('Page.enable');
     await run({ send, evaluate, navigate });
+    closing = true;
     await send('Browser.close');
   } finally {
     socket?.close(); processHandle.kill();

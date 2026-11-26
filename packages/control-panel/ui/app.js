@@ -83,16 +83,21 @@ const settingsWriter = new SettingsWriter({
 function renderSettingsStatus() {
   const p = selected(), form = $('#settings');
   if (!p || !form) return;
-  let status = form.querySelector('[data-settings-status]');
-  if (!status) { status = document.createElement('div'); status.dataset.settingsStatus = ''; status.className = 'xrb-stack'; form.append(status); }
+  let status = $('#detail [data-settings-status]');
   const entry = settingsWriter.entry(p.id);
-  if (entry?.error?.data?.fields) showFieldErrors(Object.fromEntries(entry.error.data.fields.map((field) => [field.field, field.message])));
+  // Pending/successful writes have no UI at all. Failure feedback shares the existing
+  // action row's height instead of inserting a block between the form and Run.
+  if (!entry?.error) { status?.remove(); return; }
+  const actions = $('#detail .project-actions');
+  if (!actions) return;
+  if (!status) { status = document.createElement('div'); status.dataset.settingsStatus = ''; status.className = 'project-save-status'; actions.append(status); }
   status.replaceChildren();
-  if (!entry?.running && !entry?.error) return;
-  const text = document.createElement('span'); text.className = `xrb-help${entry.error ? ' field-error' : ''}`; text.setAttribute('role', 'status');
-  text.textContent = entry.error ? `Not saved. ${entry.error.message}` : 'Saving settings…'; status.append(text);
-  if (entry.error) for (const [label, run] of [['Retry', async () => { await settingsWriter.retry(p.id); await loadProjects(); }], ['Reload', async () => { settingsWriter.discard(p.id); state.dirty = false; await loadProjects(); renderDetail(true); }]]) {
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'small'; button.textContent = label;
+  const text = document.createElement('span'); text.className = 'xrb-help field-error'; text.setAttribute('role', 'status');
+  const message = String(entry.error.message).replace(/^Not saved[:.]?\s*/i, '');
+  text.textContent = 'Not saved.'; text.title = message;
+  const detail = document.createElement('span'); detail.className = 'xrb-visually-hidden'; detail.textContent = ` ${message}`; text.append(detail);status.append(text);
+  for (const [label, glyph, run] of [['Retry', 'reset', async () => { await settingsWriter.retry(p.id); await loadProjects(); }], ['Reload', 'rewind', async () => { settingsWriter.discard(p.id); state.dirty = false; await loadProjects(); renderDetail(true); }]]) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'xrb-icon-button'; button.innerHTML = iconSvg(glyph);button.setAttribute('aria-label',label);
     button.addEventListener('click', action(run)); status.append(button);
   }
 }
@@ -1728,6 +1733,8 @@ function signalPreviewProjection(p, flat) {
 }
 
 async function startManagedRun(p, mode, flat, request) {
+  while (settingsWriter.entry(p.id)?.running) await settingsWriter.entry(p.id).running;
+  if (settingsWriter.entry(p.id)?.error) { renderSettingsStatus(); return; }
   const previousRun = state.run;
   state.run = { projectId: p.id, mode, flat, phase: 'starting', startedMs: Date.now() };
   renderDetail(true);
