@@ -4,7 +4,7 @@
 
 ### Requirement: Minimal provider picker with availability
 
-Hands SHALL put explicit Start/Stop at the top of the left sidebar above Skeleton provider, retaining only the autosaving provider and optional installed post-processing controls there. Selection SHALL save silently on change, with inline error/retry on failure and retained missing/unavailable identities. Routine availability/session/history prose, Save source, Reload, guidance paragraphs and recording UI SHALL remain absent. Session state SHALL be compact on or beside Start/Stop, in the fps chips and viewport message. Active acquisition SHALL retain its launch source until Stop; calibration, replay and generated substitutes SHALL NOT impersonate live provider input.
+Hands SHALL put Start/Stop atop the left sidebar above the autosaving Skeleton provider and optional installed post-processing controls. State SHALL stay compact in the controls, fps chips and viewport message. Selection SHALL save silently, retain missing identities and offer inline error/retry. Acquisition SHALL keep its launch source until Stop. Routine sidebar prose, Save/Reload, recording UI and generated substitutes SHALL remain absent.
 
 #### Scenario: Saved source unavailable
 - **WHEN** the chosen provider is disabled, missing or failed
@@ -22,6 +22,10 @@ Hands SHALL put explicit Start/Stop at the top of the left sidebar above Skeleto
 - **WHEN** the person starts the saved selected provider and valid session frames arrive
 - **THEN** the viewport shows those actual hands through the shared SDK adapter
 - **AND** before Start it shows no hand, with compact Start guidance confined to the control/viewport rather than sidebar prose or cached app history
+
+#### Scenario: Non-live data is not provider input
+- **WHEN** calibration data or replay is available
+- **THEN** it does not impersonate the selected provider's live hand
 
 #### Scenario: Source Save independent of tools
 - **WHEN** the person selects a provider while an adjustment edit is unfinished
