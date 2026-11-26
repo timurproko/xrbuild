@@ -112,7 +112,6 @@ jobs:
       # --no-bail: every suite reports, not only the first that fails.
       - run: pnpm -r --no-bail --if-present test
         env:
-          COREPACK_ENABLE_NETWORK: '0' # fixtures must reuse the prepared manager, not download it
           XRB_WORKFLOW_HOME: ${{ github.workspace }}/.artifacts/workflow
       # Separate public workspace; frozen installs/builds/tests stay in the job-owned cache.
       - run: pnpm test:embedded --if-present --workspace=.artifacts/embedded-ci
