@@ -10,9 +10,13 @@ import { saveHandsState, readHandsState, saveHandAdjustments } from '../src/hand
 import { HAND_APPEARANCE_DEFAULTS } from '../../sdk/src/hand-profile.ts';
 import { withBrowser, sleep } from './browser-fixture.ts';
 
-test('isolated Hands sections keep drafts, exact colours, independent resets, conflicts and work after reparenting', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async () => {
+async function until(evaluate: (s: string) => Promise<any>, expression: string) {
+  for (let i = 0; i < 200; i++) { if (await evaluate(expression)) return; await sleep(25); }
+  assert.fail(expression);
+}
+test('finished edits autosave, retain exact colours, reset independently, survive reparenting and review conflicts', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async () => {
   const root = await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'adjustment-ui-'));
-  const core = path.join(root, 'core'), workspace = path.join(root, 'workspace'); await fs.mkdir(core);
+  const core = path.resolve(import.meta.dirname, '../../..'), workspace = path.join(root, 'workspace');
   let state = await saveHandsState(core, workspace, { owner: 'core', id: 'simulated' }, (await readHandsState(core, workspace)).revision);
   state = await saveHandAdjustments(core, workspace, { appearance: HAND_APPEARANCE_DEFAULTS }, state.revision);
   const file = path.join(workspace, 'config/hands/profile.json'), bytes = await fs.readFile(file, 'utf8');
@@ -21,47 +25,78 @@ test('isolated Hands sections keep drafts, exact colours, independent resets, co
   app.server.listen(port, '127.0.0.1'); await once(app.server, 'listening');
   try {
     await withBrowser(async ({ navigate, evaluate, send }) => {
-      await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.captureCalls=0;if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw Error('forbidden')};if(navigator.xr)navigator.xr.requestSession=()=>{captureCalls++;throw Error('forbidden')};` });
+      await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.captureCalls=0;window.adjustmentWrites=0;const original=fetch;window.fetch=(url,options)=>{if(url==='/api/hands/apply')adjustmentWrites++;return original(url,options)};if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw Error('forbidden')};if(navigator.xr)navigator.xr.requestSession=()=>{captureCalls++;throw Error('forbidden')};` });
       await navigate(`http://127.0.0.1:${port}/hands/`, `document.querySelector('[data-field="sizeFactor"]')?.value==='1'`);
-      const set = (field: string, value: unknown) => evaluate(`(()=>{const e=document.querySelector('[data-field="${field}"]');${typeof value === 'boolean' ? `e.checked=${value}` : `e.value=${JSON.stringify(String(value))}`};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-      const value = (field: string) => evaluate(`document.querySelector('[data-field="${field}"]').value`);
-      const apply = async () => { await evaluate(`document.querySelector('[data-action="apply"]').click()`); await sleep(250); };
-      assert.equal(await evaluate(`document.querySelectorAll('#hands-adjustments [data-field]').length`), 15);
-      assert.equal(await evaluate(`!!document.querySelector('#hands-form #hands-adjustments')`), false);
-      assert.match(await evaluate(`document.querySelector('#hands-adjustments').textContent`), /Changes where the hand touches/);
-      await evaluate(`const e=document.querySelector('#hands-provider');e.value='core/webxr';e.dispatchEvent(new Event('change',{bubbles:true}));`);
-      await set('offsetMm.x', 40); await set('offsetMm.y', -10); await set('offsetMm.z', 30); await set('sizeFactor', .8);
+      const input = (field: string, value: unknown, commit = false) => evaluate(`(()=>{const e=document.querySelector('[data-field="${field}"]');${typeof value === 'boolean' ? `e.checked=${value}` : `e.value=${JSON.stringify(String(value))}`};e.dispatchEvent(new Event('${commit ? 'change' : 'input'}',{bubbles:true}));})()`);
+      const settled = () => until(evaluate, `document.querySelector('#hands-adjustments-root').dataset.saving==='false' && document.querySelector('#hands-adjustments-root').dataset.dirty==='false'`);
+      const set = async (field: string, value: unknown) => { await input(field, value, true); await settled(); };
+      assert.equal(await evaluate(`document.querySelectorAll('#hands-adjustments-root [data-field]').length`), 15);
+      assert.equal(await evaluate(`!!document.querySelector('#hands-adjustments-root .card,[data-action="apply"],[data-action="reload"]')`), false);
+      await input('offsetMm.x', 40); await sleep(1100);
+      assert.equal(await fs.readFile(file, 'utf8'), bytes, 'unfinished fields never persist, even across a poll');
+      await evaluate(`document.querySelector('[data-field="offsetMm.x"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))`); await settled();
+      await input('offsetMm.x', 40, true); await sleep(100);
+      assert.equal(await evaluate('adjustmentWrites'), 1, 'Enter followed by change is one effective save');
+      await set('offsetMm.y', -10); await set('offsetMm.z', 30);
+      await evaluate(`(()=>{const e=document.querySelector('[data-range="sizeFactor"]');for(const v of ['.95','.9','.8']){e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));}})()`);
+      const beforeSlider = await evaluate('adjustmentWrites'); await sleep(100);
+      assert.equal((await readHandsState(core, workspace)).profile.sizeFactor, 1);
+      await evaluate(`document.querySelector('[data-range="sizeFactor"]').dispatchEvent(new Event('change',{bubbles:true}))`); await settled();
+      assert.equal(await evaluate('adjustmentWrites'), beforeSlider + 1);
       await set('appearance.opacity', .456); await set('appearance.showBones', false);
-      assert.equal(await fs.readFile(file, 'utf8'), bytes, 'drafts never persist or deliver');
-      await apply(); state = await readHandsState(core, workspace);
+      state = await readHandsState(core, workspace);
       assert.deepEqual(state.profile.offsetMm, { x: 40, y: -10, z: 30 }); assert.equal(state.profile.sizeFactor, .8);
       assert.deepEqual(state.profile.appearance.jointColorLinear, [0, .541, 1]); assert.deepEqual(state.profile.appearance.boneColorLinear, [0, .482, 1]);
       assert.equal(state.profile.appearance.opacity, .456); assert.deepEqual(state.provider, { owner: 'core', id: 'simulated' });
-      assert.equal(await evaluate(`document.querySelector('#hands-provider').value`), 'core/webxr', 'adjustment Apply preserves unsaved picker choice');
-      await set('appearance.showJoints', false); await set('appearance.jointDiameterMm', 22); await set('appearance.boneDiameterMm', 12);
-      await set('appearance.showPinchGrabIndicator', false); await set('appearance.indicatorDiameterMm', 40); await set('appearance.indicatorOpacity', .6);
-      for (const key of ['jointColorLinear', 'boneColorLinear', 'indicatorColorLinear']) await set('appearance.' + key, '#ff0000');
-      await apply(); state = await readHandsState(core, workspace);
-      assert.deepEqual(state.profile.appearance.indicatorColorLinear, [1, 0, 0]); assert.equal(state.profile.appearance.showJoints, false);
-      await evaluate(`document.querySelector('[data-reset="appearance"]').click()`);
-      assert.equal(await value('offsetMm.x'), '40'); assert.equal(await value('appearance.opacity'), '0.333');
-      await apply(); state = await readHandsState(core, workspace); assert.deepEqual(state.profile.appearance, {}); assert.equal(state.profile.sizeFactor, .8);
-      await set('appearance.showBones', false); await evaluate(`document.querySelector('[data-reset="geometry"]').click()`);
-      assert.equal(await value('sizeFactor'), '1'); assert.equal(await value('offsetMm.x'), '0'); assert.equal(await evaluate(`document.querySelector('[data-field="appearance.showBones"]').checked`), false);
-      // Move the already-mounted component into a narrow future side-panel slot. No rebuilding or page IDs.
-      await evaluate(`const aside=document.createElement('aside');aside.style.width='340px';document.querySelector('main').append(aside);aside.append(document.querySelector('#hands-adjustments'));`);
-      await apply(); state = await readHandsState(core, workspace); assert.equal(state.profile.sizeFactor, 1); assert.equal(state.profile.appearance.showBones, false);
-      await set('sizeFactor', .9); await saveHandsState(core, workspace, null, state.revision);
-      await apply(); assert.match(await evaluate(`document.querySelector('[data-status]').textContent`), /changed|reload/i);
-      assert.equal(await evaluate(`document.querySelector('[data-action="reload"]').hidden`), false);
-      await evaluate(`document.querySelector('[data-action="reload"]').click()`); await sleep(150); assert.equal(await value('sizeFactor'), '1');
-      assert.equal(await evaluate('captureCalls'), 0); assert.equal(await evaluate(`!!document.querySelector('canvas')`), false);
-      assert.equal(app.panel.runner.state().phase, 'idle'); assert.equal(app.panel.jobs.list().length, 0);
+      for (const [field, value] of Object.entries({ showJoints: false, jointDiameterMm: 22, boneDiameterMm: 12, showPinchGrabIndicator: false, indicatorDiameterMm: 40, indicatorOpacity: .6 })) await set('appearance.' + field, value);
+      const originalColour = await evaluate(`document.querySelector('[data-field="appearance.jointColorLinear"]').value`);
+      const beforeCancel = await evaluate('adjustmentWrites');
+      await input('appearance.jointColorLinear', '#00ff00'); await input('appearance.jointColorLinear', originalColour, true); await settled();
+      assert.equal(await evaluate('adjustmentWrites'), beforeCancel, 'returning a preview to its original swatch does not save or quantize defaults');
+      assert.deepEqual((await readHandsState(core, workspace)).profile.appearance.jointColorLinear, [0, .541, 1]);
+      const beforeColour = (await readHandsState(core, workspace)).revision;
+      await input('appearance.jointColorLinear', '#00ff00'); await input('appearance.jointColorLinear', '#ff0000');
+      assert.equal((await readHandsState(core, workspace)).revision, beforeColour);
+      await set('appearance.jointColorLinear', '#ff0000');
+      for (const key of ['boneColorLinear', 'indicatorColorLinear']) await set('appearance.' + key, '#ff0000');
+      assert.deepEqual((await readHandsState(core, workspace)).profile.appearance.indicatorColorLinear, [1, 0, 0]);
+      await evaluate(`document.querySelector('[data-reset="appearance"]').click()`); await settled();
+      state = await readHandsState(core, workspace); assert.deepEqual(state.profile.appearance, HAND_APPEARANCE_DEFAULTS); assert.equal(state.profile.sizeFactor, .8);
+      await set('appearance.showBones', false); await input('appearance.opacity', .42);
+      await evaluate(`document.querySelector('[data-reset="geometry"]').click()`);
+      await until(evaluate, `document.querySelector('#hands-adjustments-root').dataset.saving==='false'`);
+      state = await readHandsState(core, workspace); assert.equal(state.profile.sizeFactor, 1); assert.equal(state.profile.offsetMm.x, 0); assert.equal(state.profile.appearance.showBones, false);
+      assert.equal(state.profile.appearance.opacity, .333, 'geometry reset never commits the other section unfinished input');
+      assert.equal(await evaluate(`document.querySelector('[data-field="appearance.opacity"]').value`), '0.42');
+      await set('appearance.opacity', .42);
+      await evaluate(`const aside=document.createElement('aside');aside.style.width='340px';document.querySelector('main').append(aside);aside.append(document.querySelector('#hands-adjustments-root'));`);
+      await set('sizeFactor', .9); assert.equal((await readHandsState(core, workspace)).profile.sizeFactor, .9);
+      await input('sizeFactor', .88); state = await readHandsState(core, workspace);
+      await saveHandAdjustments(core, workspace, { ...state.profile, offsetMm: { ...state.profile.offsetMm, x: 17 } }, state.revision);
+      await input('sizeFactor', .88, true); await settled();
+      assert.equal((await readHandsState(core, workspace)).profile.offsetMm.x, 17, 'unrelated external changes survive the automatic rebase');
+      await input('sizeFactor', .85);
+      state = await readHandsState(core, workspace); await saveHandAdjustments(core, workspace, { ...state.profile, sizeFactor: .7 }, state.revision);
+      await input('sizeFactor', .85, true);
+      await until(evaluate, `!document.querySelector('[data-action="discard"]').hidden`);
+      assert.match(await evaluate(`document.querySelector('[data-status]').textContent`), /Saved Size: 0.7/);
+      assert.equal((await readHandsState(core, workspace)).profile.sizeFactor, .7);
+      state = await readHandsState(core, workspace); await saveHandAdjustments(core, workspace, { ...state.profile, sizeFactor: .75 }, state.revision);
+      await evaluate(`document.querySelector('[data-action="retry"]').click()`);
+      await until(evaluate, `/Saved Size: 0.75/.test(document.querySelector('[data-status]').textContent)`);
+      assert.equal((await readHandsState(core, workspace)).profile.sizeFactor, .75, 'Retry cannot overwrite a newer unreviewed same-field change');
+      await evaluate(`document.querySelector('[data-action="retry"]').click()`); await settled();
+      assert.equal((await readHandsState(core, workspace)).profile.sizeFactor, .85);
+      await input('sizeFactor', .9); state = await readHandsState(core, workspace);
+      await saveHandAdjustments(core, workspace, { ...state.profile, sizeFactor: 1.1 }, state.revision); await input('sizeFactor', .9, true);
+      await until(evaluate, `!document.querySelector('[data-action="discard"]').hidden`);
+      await evaluate(`document.querySelector('[data-action="discard"]').click()`); await settled();
+      assert.equal(await evaluate(`document.querySelector('[data-field="sizeFactor"]').value`), '1.1');
+      assert.equal(await evaluate('captureCalls'), 0); assert.equal(app.panel.runner.state().phase, 'idle'); assert.equal(app.panel.jobs.list().length, 0);
       const valid = await readHandsState(core, workspace), invalid = JSON.stringify({ ...valid.raw, sizeFactor: 4 });
       await fs.writeFile(file, invalid);
-      await evaluate(`document.querySelector('#hands-reload').click()`); await sleep(150);
-      assert.match(await evaluate(`document.querySelector('#hands-message').textContent`), /sizeFactor.*0.5..1.5/);
-      assert.equal(await fs.readFile(file, 'utf8'), invalid, 'visible error never overwrites invalid stored state');
+      await until(evaluate, `/sizeFactor/.test(document.querySelector('#hands-message').textContent)`);
+      assert.equal(await fs.readFile(file, 'utf8'), invalid, 'invalid persisted state is never reset by polling');
     });
   } finally { await app.close(); await fs.rm(root, { recursive: true, force: true }); }
 });

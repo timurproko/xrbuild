@@ -2,8 +2,9 @@
 .hands-page { min-height: 100dvh; display: flex; flex-direction: column; }
 #hands-workspace { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr) minmax(var(--sidebar-w), 340px); flex: 1; min-height: 0; }
 .hands-panel { min-width: 0; min-height: 0; margin: 0; display: flex; flex-direction: column; }
-.hands-panel > .xrb-tabs { flex: none; gap: var(--xrb-space-stack); overflow-x: auto; margin-top: 0; }
-.hands-source { margin-bottom: var(--xrb-space-section); }
+.hands-source { overflow: auto; }
+.hands-adjustment-sections { gap: var(--xrb-space-section); }
+#hands-adjustments-root { padding-top: 0; }
 .hands-source p { margin: 0; }
 .hands-panel > .xrb-sidebar-content { flex: 1; min-height: 0; align-content: start; overflow-y: auto; overflow-wrap: anywhere; }
 .hands-viewport { position: relative; min-height: 360px; padding: 0; margin: 0; overflow: hidden; }
