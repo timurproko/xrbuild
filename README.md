@@ -139,13 +139,15 @@ here (`packages/*`, `tools/*`), and in the workspace (the panel runs it there wh
 The core-owned `embedded/` package workspace stays separate. Root `setup:embedded`, `build:embedded` and `test:embedded`
 scripts take an explicit writable `--workspace` and install/build/test fresh snapshots without changing product sources.
 Root tests include that public lane; private packages are never enrolled. Bundled modules include consolidated
-WebXR publisher in `embedded/plugins/publisher-webxr/` and the authored hand implementation/diagnostic in
+WebXR publisher in `embedded/plugins/publisher-webxr/` and the authored hand provider/recording compatibility tools in
 `embedded/plugins/input-hands/`, plus the explicitly configured launcher packager in `embedded/plugins/platform-headset/`.
 Eight product project groups under `embedded/projects/` include the launcher, UI showcase, starter and archived diagnostics.
 Their defaults are desktop/no input, without publication/signing/machine identity. Rebuild uses user cache; editing needs Copy to workspace.
 Publisher has local and explicitly configured production destinations. Optional headset tools and existing signing keys are user-provisioned, never global discoveries or automatic downloads.
 User configuration, certificates, history, hand calibration/preferences and recordings stay in the selected workspace.
-Hand defaults are synthetic; optional models/device runtimes are not shipped or implicitly downloaded/started.
+Hands has no generated preview or automatic source fallback; the optional native Synthetic source is an ordinary provider.
+The core [Hands page](docs/hands.md) keeps recording playback and global settings; camera calibration is extracted separately.
+Optional models/device runtimes are not shipped or implicitly downloaded/started.
 `check:types` validates public production TypeScript with an exact pinned strict no-emit toolchain; `test` runs it first.
 Private and embedded package workspaces stay independently installed and are not enrolled by this check.
 `setup:services` explicitly activates isolated public service dependencies/builds; discovery never installs them.

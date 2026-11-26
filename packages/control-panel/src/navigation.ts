@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { resolvePluginCatalog } from './extension-catalog.ts';
+import { isRetiredHandsTool } from '../ui/hands-routes.js';
 
 export const TOOLS_FILE = 'xrb-tools.json';
 const ID = /^[a-z][a-z0-9-]{0,47}$/;
@@ -26,7 +27,7 @@ const validatePathOwnership = (paths: string[], source: string) => {
 function validateItems(tools: unknown[], source: string, modulePrefix = '', managedOnly = false): ToolLink[] {
   if (tools.length > 12) throw new Error(`${source}: at most 12 tools are supported`);
   const ids = new Set<string>(), ownedPaths: string[] = [];
-  const result = tools.map((item): ToolLink => {
+  const result = tools.filter(item => !isRetiredHandsTool(item)).map((item): ToolLink => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error(`${source}: invalid tool`);
     const tool = item as Record<string, unknown>;
     if (typeof tool.id !== 'string' || !ID.test(tool.id) || ids.has(tool.id) || RESERVED_IDS.has(tool.id))

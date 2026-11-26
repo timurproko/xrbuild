@@ -46,7 +46,7 @@ test('own notifications before and after Apply response preserve clean success a
         await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.ownNotices=0;const ES=window.EventSource;window.EventSource=class extends ES{addEventListener(type,listener,options){return super.addEventListener(type,type==='hands-changed'?e=>setTimeout(()=>{listener(e);window.ownNotices++;},300):listener,options)}};${ordering === 'before' ? `const original=window.fetch;window.fetch=async(...args)=>{const r=await original(...args);if(args[0]==='/api/hands/apply')await new Promise(resolve=>setTimeout(resolve,650));return r;};` : ''}` });
         await navigate(f.base + '/hands/', `document.querySelector('[data-field="sizeFactor"]')?.value==='1'`);
         await evaluate(`(()=>{const x=document.querySelector('[data-field="offsetMm.x"]');x.value='25';x.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-action="apply"]').click()})()`);
-        await until(evaluate, `window.ownNotices>0 && document.querySelector('#hands-adjustments').dataset.dirty==='false'`);
+        await until(evaluate, `window.ownNotices>0 && document.querySelector('#hands-adjustments-root').dataset.dirty==='false'`);
         assert.equal(await evaluate(`document.querySelector('[data-action="reload"]').hidden`), true);
         const status = await evaluate(`document.querySelector('[data-status]').textContent`);
         if (delivery === 'old-native-bundle') assert.match(status, /acknowledged.*[Rr]ebuild\/[Rr]elaunch|acknowledged.*[Rr]etry Apply/);
@@ -98,7 +98,7 @@ test('a foreign save during a delayed own response stays stale until explicit re
       for (let i = 0; i < 100 && (await f.get()).profile.offsetMm.x !== 25; i++) await sleep(10);
       const ownRevision = (await f.get()).revision;
       assert.equal((await f.apply(70)).status, 200);
-      await until(evaluate, `document.querySelector('#hands-adjustments').dataset.dirty==='false'`);
+      await until(evaluate, `document.querySelector('#hands-adjustments-root').dataset.dirty==='false'`);
       await until(evaluate, `!document.querySelector('[data-action="reload"]').hidden`);
       assert.equal(await evaluate(`document.querySelector('[data-action="reload"]').hidden`), false);
       assert.equal(await evaluate(`document.querySelector('[data-action="apply"]').disabled`), true);
@@ -123,7 +123,7 @@ test('browser old-bundle pending becomes actionable failure, unchanged retry and
     await withBrowser(async ({ navigate, evaluate }) => {
       await navigate(f.base + '/hands/', `document.querySelector('[data-field="sizeFactor"]')?.value==='1'`);
       await evaluate(`(()=>{const x=document.querySelector('[data-field="offsetMm.x"]');x.value='25';x.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-action="apply"]').click()})()`);
-      await until(evaluate, `document.querySelector('#hands-adjustments').dataset.dirty==='false' && document.querySelector('[data-status]').textContent==='Applying'`);
+      await until(evaluate, `document.querySelector('#hands-adjustments-root').dataset.dirty==='false' && document.querySelector('[data-status]').textContent==='Applying'`);
       assert.equal(await evaluate(`document.querySelector('[data-action="apply"]').disabled`), true);
       await until(evaluate, `document.querySelector('[data-action="apply"]').textContent==='Retry Apply'`);
       assert.equal(await evaluate(`document.querySelector('[data-action="apply"]').disabled`), false);

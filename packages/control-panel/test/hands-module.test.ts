@@ -16,7 +16,7 @@ test('input presentation has only logical kinds and Hands is always a core desti
   assert.throws(() => validateToolLinks({ tools: [{ id: 'shadow', label: 'Shadow', route: '/hands/', module: 'tool.mjs' }] }), /overlap/);
 });
 
-test('core Hands opens without optional plugins or state creation; old alias redirects without starting tools', async () => {
+test('core Hands opens without optional plugins or state creation; retired routes are not found without starting tools', async () => {
   const root = await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'hands-http-'));
   const core = path.join(root, 'core'), workspace = path.join(root, 'missing');
   await fs.mkdir(core);
@@ -24,9 +24,13 @@ test('core Hands opens without optional plugins or state creation; old alias red
   try {
     const address = app.server.address() as { port: number }, base = `http://127.0.0.1:${address.port}`;
     const html = await fetch(base + '/hands/').then(r => r.text());
-    assert.match(html, /Skeleton provider/); assert.match(html, /No tracking starts here/);
-    const old = await fetch(base + '/hand-tracking/?x=1', { redirect: 'manual' });
-    assert.equal(old.headers.get('location'), '/hands/?x=1');
+    assert.match(html, /Skeleton provider/); assert.match(html, /No live hand session/);
+    for (const route of ['/hand-tracking', '/hand-tracking/', '/hands-diagnostics', '/hands-diagnostics/', '/hands-diagnostics/assets/view.js']) {
+      for (const method of ['GET', 'HEAD']) {
+        const old = await fetch(base + route + '?x=1', { method, redirect: 'manual' });
+        assert.equal(old.status, 404); assert.equal(old.headers.get('location'), null);
+      }
+    }
     const state = await fetch(base + '/api/hands').then(r => r.json());
     assert.equal(state.choiceRequired, true); assert.equal(state.initial, false);
     assert.equal(state.providers.find((p: { id: string }) => p.id === 'webxr').transport, 'webxr');

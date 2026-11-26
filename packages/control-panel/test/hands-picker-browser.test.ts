@@ -31,7 +31,7 @@ test('Hands picker shows initial/missing/empty states, saves revisioned choices 
       await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.captureCalls=0;if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw Error('forbidden')};` });
       await navigate(`http://127.0.0.1:${port}/hands/`, `document.querySelector('#hands-provider')?.value==='workspace:example/tracker'`);
       assert.match(await evaluate(`document.querySelector('#hands-availability').textContent`), /Initial default/);
-      assert.equal(await evaluate(`!!document.querySelector('canvas')`), false);
+      assert.equal(await evaluate(`!!document.querySelector('canvas')`), true);
       await evaluate(`document.querySelector('#hands-save').click()`); await sleep(150);
       assert.equal(saves, 1); assert.match(await evaluate(`document.querySelector('#hands-message').textContent`), /Saved/);
       conflict = true;
@@ -43,7 +43,7 @@ test('Hands picker shows initial/missing/empty states, saves revisioned choices 
       assert.equal(await evaluate(`document.querySelector('#hands-save').disabled`), true);
       selected = null; providers.length = 0;
       await evaluate(`document.querySelector('#hands-reload').click()`); await sleep(150);
-      assert.match(await evaluate(`document.querySelector('#hands-availability').textContent`), /requires a provider choice/);
+      assert.match(await evaluate(`document.querySelector('#hands-availability').textContent`), /No providers available/);
       assert.equal(await evaluate('captureCalls'), 0);
     });
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
