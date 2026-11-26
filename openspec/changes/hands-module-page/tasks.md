@@ -10,16 +10,16 @@ Approved scope: Hands with Record only; Calibration extraction is the immediatel
 
 ## 2. Provider and parallel component integration
 
-- [ ] 2.1 Preserve global source availability/missing-choice/revision-safe Save/Reload/next-launch behavior; verify no fallback, capture on navigation or historical/current status conflation.
-- [ ] 2.2 Implement/document the stable SDK frame/profile adapter and Source Start/Stop slot; verify profile readiness, epoch/sequence fencing, default processing and reset/dispose with fake transports.
+- [x] 2.1 Preserve global source availability/missing-choice/revision-safe Save/Reload/next-launch behavior; verify no fallback, capture on navigation or historical/current status conflation.
+- [x] 2.2 Implement/document the stable SDK frame/profile adapter and Source Start/Stop slot; verify profile readiness, epoch/sequence fencing, default processing and reset/dispose with fake transports.
 - [ ] 2.3 Mount PR 50's delivered Position and size / Appearance component after merge, preserving resets, Apply and independent source drafts; verify conflict/delivery semantics or report an unmerged sequencing dependency without duplication.
-- [ ] 2.4 Provide the separate post-processing selector mount and one-sentence empty state; verify no new loader, fake option or concrete processor implementation here.
+- [x] 2.4 Provide the separate post-processing selector mount and one-sentence empty state; verify no new loader, fake option or concrete processor implementation here.
 
 ## 3. Independent Calibration boundary
 
-- [ ] 3.1 Preserve manual/marker camera calibration and required native capture/geometry/storage code, unwired from Hands; verify no Calibration tab, menu placeholder or acquisition boot remains in the Hands page.
-- [ ] 3.2 Document the separate following Calibration module, route/menu, B-to-A transform, serial/profile/hash binding, validation and downstream-consumer obligations; verify documentation matches existing format validators and no future provider is implemented.
-- [ ] 3.3 Preserve calibration preference keys/results/scalar formats and future-provider browser-landmark/fusion source; verify these files stay readable and no product document imports their old boot path.
+- [x] 3.1 Preserve manual/marker camera calibration and required native capture/geometry/storage code, unwired from Hands; verify no Calibration tab, menu placeholder or acquisition boot remains in the Hands page.
+- [x] 3.2 Document the separate following Calibration module, route/menu, B-to-A transform, serial/profile/hash binding, validation and downstream-consumer obligations; verify documentation matches existing format validators and no future provider is implemented.
+- [x] 3.3 Preserve calibration preference keys/results/scalar formats and future-provider browser-landmark/fusion source; verify these files stay readable and no product document imports their old boot path.
 
 ## 4. Recording compatibility and live-recording seam
 
