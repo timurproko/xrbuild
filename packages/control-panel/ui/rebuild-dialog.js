@@ -19,12 +19,45 @@ function safePanelOrigin(value) {
   } catch { return null; }
 }
 
-/** Update workspace steps, in order, as announced by `step <id>` job lines. */
+const commitCount = (n) => `${n} commit${n === 1 ? '' : 's'}`;
+function agoText(ms, now) {
+  const s = (now - ms) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  const days = Math.floor(s / 86400);
+  if (days < 14) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return `${Math.floor(days / 7)} weeks ago`;
+}
+
+/**
+ * The Update tooltip: one sentence per repository, each with the time of that repository's own last fetch, from
+ * `GET /api/update`. The two remotes are fetched at different times (this version never fetches the core), so one
+ * repository's check never vouches for the other: a core without a fetch time is "not checked yet", never "up to
+ * date". A core that is behind or cannot be updated here says so, and to pull it by hand.
+ */
+export function updateTooltip(status, now = Date.now()) {
+  if (!status) return '';
+  const {core, workspace} = status;
+  const asOf = (repo) => repo.checkedMs ? ` as of ${agoText(repo.checkedMs, now)}` : '';
+  const coreText = !core ? '' : !core.available ? `Core: not updated here. ${core.reason ?? ''}`.trim()
+    : core.behind ? `Core: ${commitCount(core.behind)} behind ${core.upstream}${asOf(core)}, not updated by this version yet; pull it by hand.`
+    : core.checkedMs ? `Core: up to date${asOf(core)}.` : 'Core: not checked yet.';
+  const remote = workspace?.upstream?.split('/')[0] || 'origin';
+  const checked = (repo) => repo.checkedMs ? `, checked ${agoText(repo.checkedMs, now)}` : '';
+  const workspaceText = !workspace ? '' : !workspace.available ? `Workspace: ${workspace.reason ?? 'cannot be updated.'}`
+    : workspace.unfinished ? 'Workspace: the last update did not finish; run Update again.'
+    : workspace.behind ? `Workspace: ${commitCount(workspace.behind)} behind ${remote}${checked(workspace)}.`
+    : workspace.checkedMs ? `Workspace: up to date${checked(workspace)}.` : 'Workspace: not checked yet.';
+  return [coreText, workspaceText].filter(Boolean).join(' ');
+}
+
+/** Update steps, in order, as announced by `step <id>` job lines. */
 export const UPDATE_STEPS = Object.freeze([
-  Object.freeze({id: 'check', title: 'Check', message: 'Checking the workspace'}),
-  Object.freeze({id: 'fetch', title: 'Fetch', message: 'Fetching from the remote'}),
-  Object.freeze({id: 'lfs', title: 'LFS', message: 'Downloading LFS files'}),
-  Object.freeze({id: 'pull', title: 'Pull', message: 'Pulling new commits'}),
+  Object.freeze({id: 'check', title: 'Check', message: 'Checking the core and the workspace'}),
+  Object.freeze({id: 'fetch', title: 'Fetch', message: 'Fetching the workspace from its remote'}),
+  Object.freeze({id: 'lfs', title: 'LFS', message: 'Downloading the workspace\'s LFS files'}),
+  Object.freeze({id: 'pull', title: 'Pull', message: 'Pulling new workspace commits'}),
   Object.freeze({id: 'rebuild', title: 'Rebuild', message: 'Rebuilding'}),
 ]);
 
@@ -36,7 +69,8 @@ function updatePresentation(job, error, running, failed, phase) {
   const doing = step.id === 'rebuild' ? `Rebuilding ${phase ? phase.slice('plugin '.length) : 'plugins'}` : step.message;
   return {
     step: step.id,
-    title: running ? 'Updating workspace' : failed ? 'Update failed' : upToDate ? 'Already up to date' : 'Workspace updated',
+    // Titles name the repository the result is about: this version updates the workspace and only reports the core.
+    title: running ? 'Updating' : failed ? 'Update failed' : upToDate ? 'Workspace already up to date' : 'Workspace updated',
     message: error || (running ? `Step ${at + 1} of ${UPDATE_STEPS.length}, ${step.title}: ${doing}…`
       : failed ? job?.error || `${step.title} failed: see the output below.` : job?.result?.summary || 'The workspace is up to date.'),
   };
@@ -46,7 +80,7 @@ export function rebuildPresentation(job, error = '') {
   const running = !error && (!job || job.state === 'running' || job.state === 'queued');
   const failed = !!error || job?.state === 'failed';
   const setup = job?.kind === 'desktop-setup';
-  if (job?.kind === 'workspace-update') {
+  if (job?.kind === 'update') {
     const phase = [...(job.lines ?? [])].reverse().find((line) => line.startsWith('plugin '));
     return {
       state: running ? 'running' : failed ? 'failed' : 'done',
@@ -199,7 +233,7 @@ export function rebuildHostInPlace(origin = globalThis.location?.origin, options
   return followJobInPlace(origin, '/api/host/rebuild', null, options, 'Rebuild');
 }
 
-/** Update workspace: fast-forward the workspace, pull LFS content, rebuild. Git refusals arrive as the job error. */
-export function updateWorkspaceInPlace(origin = globalThis.location?.origin, options = {}) {
-  return followJobInPlace(origin, '/api/workspace/update', {kind: 'workspace-update', state: 'running', lines: []}, options, 'Update', 'Update');
+/** Update: report the core, fast-forward the workspace, pull LFS content, rebuild. Git refusals arrive as the job error. */
+export function updateInPlace(origin = globalThis.location?.origin, options = {}) {
+  return followJobInPlace(origin, '/api/update', {kind: 'update', state: 'running', lines: []}, options, 'Update', 'Update');
 }
