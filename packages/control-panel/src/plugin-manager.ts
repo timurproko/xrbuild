@@ -6,6 +6,7 @@ import { assertWritablePath } from './project-access.ts';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { MANIFEST, validateManifest, type ProjectKind } from './projects.ts';
+import { handProviderDeclarations, type HandProviderDeclaration } from './hand-provider-contract.ts';
 
 export const PLUGIN_PREFS = 'xrb-plugins.json';
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
@@ -37,7 +38,7 @@ export const PLUGIN_TYPES = ['display', 'input', 'platform', 'publisher', 'plugi
 export type PluginType = typeof PLUGIN_TYPES[number];
 export const PLUGIN_PANEL_TARGETS = ['webxr'] as const;
 export type PluginPanelTarget = typeof PLUGIN_PANEL_TARGETS[number];
-export interface PluginMeta { title?: string; type?: PluginType; version?: string; hidden?: boolean; /** legacy display title */ name?: string; description?: string; settingsDescription?: string; icon?: string; glyph?: string; screenName?: string; displayMode?: string; settings?: PluginSetting[]; panelSettings?: PluginSetting[]; panelTools?: unknown[]; panelTargets?: PluginPanelTarget[]; panelProviderNames?: Record<string, string>; panelHiddenProviders?: string[]; panelSamples?: PluginSample[]; /** User-owned config/plugins/<id>/config.json schema. */ config?: PluginSetting[]; exports?: Record<string, string>; references?: Record<string, { plugin: string; export: string }> }
+export interface PluginMeta { handProviders?: HandProviderDeclaration[]; title?: string; type?: PluginType; version?: string; hidden?: boolean; /** legacy display title */ name?: string; description?: string; settingsDescription?: string; icon?: string; glyph?: string; screenName?: string; displayMode?: string; settings?: PluginSetting[]; panelSettings?: PluginSetting[]; panelTools?: unknown[]; panelTargets?: PluginPanelTarget[]; panelProviderNames?: Record<string, string>; panelHiddenProviders?: string[]; panelSamples?: PluginSample[]; /** User-owned config/plugins/<id>/config.json schema. */ config?: PluginSetting[]; exports?: Record<string, string>; references?: Record<string, { plugin: string; export: string }> }
 export interface PluginPrefs { disabled: string[]; settings: Record<string, Record<string, SettingValue>>; panelSettings: Record<string, Record<string, SettingValue>>; origins?: Record<string, 'bundled' | 'workspace'> }
 const empty = (): PluginPrefs => ({ disabled: [], settings: {}, panelSettings: {} });
 
@@ -283,6 +284,7 @@ export async function pluginMeta(workspace: string, id: string): Promise<PluginM
     glyph: typeof raw.glyph === 'string' ? raw.glyph : undefined,
     screenName: typeof raw.screenName === 'string' ? raw.screenName.trim().slice(0, 100) : undefined,
     displayMode: typeof raw.displayMode === 'string' ? raw.displayMode.trim().slice(0, 32) : undefined,
+    ...(raw.handProviders === undefined ? {} : { handProviders: handProviderDeclarations(raw.handProviders) }),
     panelTools: panelTools as unknown[] | undefined,
     panelSettings,
     panelTargets: panelTargets as PluginPanelTarget[] | undefined,

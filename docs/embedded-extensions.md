@@ -417,6 +417,23 @@ implemented; actual promoted adapters and full product/license/distribution acce
 Local acceptance creates/extracts a real public-core desktop ZIP and probes the extracted host's built-in providers without
 activating a device. This does not claim production app display/hardware or redistribution/license acceptance.
 
+## Hand skeleton provider declarations
+
+An input plugin can declare up to eight `handProviders` in `xrb-plugin.json`:
+
+```json
+{ "handProviders": [{ "version": 1, "id": "tracker", "transport": "native", "runtimeName": "tracker", "purpose": "tracked" }] }
+```
+
+IDs and runtime names are distinct bounded lowercase names; purpose is `tracked`, `synthetic` or `replay`,
+with an optional label (otherwise the plugin title). A native declaration must resolve to that selected owner's
+validated input binary. It reuses the existing 21-point panel-metre `XrbInputApi`/`XrbHandFrame` contract,
+including optional native gestures; no ABI or recording format changes. Undeclared validated native inputs
+receive equivalent descriptors, so metadata-only updates can ship independently. Core WebXR, simulated and
+replay sources use the same registry. Source identity is owner-qualified, never a label or discovery order.
+Discovery is metadata-only and never calls input creation/start. A declaration without a valid owned binary
+remains unavailable rather than borrowing another plugin's provider.
+
 ## Native builds and providers
 
 ### Host cache and runtime selection

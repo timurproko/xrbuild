@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "name": "Hands",
   "description": "Hand tracking provider and diagnostics.",
+  "handProviders": [
+    { "version": 1, "id": "hand-tracking", "transport": "native", "runtimeName": "hand-tracking", "purpose": "synthetic" }
+  ],
   "glyph": "👋",
   "panel": {
     "tools": [

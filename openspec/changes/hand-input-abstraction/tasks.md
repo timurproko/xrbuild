@@ -4,9 +4,9 @@ Implementation is approved with the simplified global input policy. Groups match
 
 ## 1. Origin-aware skeleton registry
 
-- [ ] 1.1 Validate bounded version-one handProviders declarations and normalize owner-qualified descriptors; fixture tests reject duplicate IDs, wrong role/ABI and foreign binary ownership.
-- [ ] 1.2 Adapt undeclared validated native inputs and core simulated/replay/WebXR sources without changing ABI/wire layouts; catalog fixtures cover aliases, disabled/missing/unbuilt sources and context availability without capture or writes.
-- [ ] 1.3 Declare the embedded synthetic source explicitly and document the neutral declaration contract in docs/embedded-extensions.md; public metadata validation passes without private source/runtime access.
+- [x] 1.1 Validate bounded version-one handProviders declarations and normalize owner-qualified descriptors; fixture tests reject duplicate IDs, wrong role/ABI and foreign binary ownership.
+- [x] 1.2 Adapt undeclared validated native inputs and core simulated/replay/WebXR sources without changing ABI/wire layouts; catalog fixtures cover aliases, disabled/missing/unbuilt sources and context availability without capture or writes.
+- [x] 1.3 Declare the embedded synthetic source explicitly and document the neutral declaration contract in docs/embedded-extensions.md; public metadata validation passes without private source/runtime access.
 
 ## 2. Global source state and resolution
 
