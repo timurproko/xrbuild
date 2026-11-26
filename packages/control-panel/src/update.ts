@@ -152,31 +152,33 @@ export async function workspaceUpdateStatus(workspace: string, runner: GitRunner
   return repoUpdateStatus(workspace, { role: 'workspace', lfs: 'required', git: runner, marker: WORKSPACE_MARKER });
 }
 
-export type WorkspaceUpdateStep = 'check' | 'fetch' | 'lfs' | 'pull' | 'rebuild';
-export const STEP_TITLES: Record<WorkspaceUpdateStep, string> = { check: 'Check', fetch: 'Fetch', lfs: 'LFS', pull: 'Pull', rebuild: 'Rebuild' };
+export type UpdateStep = 'check' | 'fetch' | 'lfs' | 'pull' | 'rebuild';
+export const STEP_TITLES: Record<UpdateStep, string> = { check: 'Check', fetch: 'Fetch', lfs: 'LFS', pull: 'Pull', rebuild: 'Rebuild' };
 
 /** A refusal or failure at one step; the message says what happened and what to do. */
-export class WorkspaceUpdateError extends Error {
-  readonly step: WorkspaceUpdateStep;
-  constructor(step: WorkspaceUpdateStep, message: string) {
+export class UpdateError extends Error {
+  readonly step: UpdateStep;
+  constructor(step: UpdateStep, message: string) {
     super(`${STEP_TITLES[step]}: ${message}`);
     this.step = step;
   }
 }
 
-export interface WorkspaceUpdateResult {
+export interface UpdateResult {
   state: 'updated' | 'up-to-date';
   from: string;
   to: string;
   commits: number;
   /** What was rebuilt: `xrb-host` when the core host was, then the plugin folders. */
   rebuilt: string[];
+  /** What the run says about the core: behind or not updatable here. This version never updates the core. */
+  coreNote: string | null;
   summary: string;
 }
 
-export interface WorkspaceUpdateDeps {
+export interface UpdateDeps {
   git?: GitRunner;
-  /** The core checkout the panel runs from; a workspace at the same path is not updated a second time as the workspace. */
+  /** The core checkout the panel runs from: reported read-only, and a workspace at the same path is that one repository. */
   core?: string;
   /** True when the core host is built and current, so only plugins need a rebuild. */
   coreHostCurrent: () => Promise<boolean>;
@@ -255,8 +257,8 @@ export interface FastForwardResult {
 export async function fastForward(dir: string, ctx: JobContext, options: FastForwardOptions): Promise<FastForwardResult> {
   const git = options.git ?? runGit;
   const prefix = options.role === 'core' ? 'Core: ' : '';
-  const fail = (at: WorkspaceUpdateStep, message: string) => new WorkspaceUpdateError(at, `${prefix}${message}`);
-  const step = (id: WorkspaceUpdateStep) => ctx.line(`step ${id}`);
+  const fail = (at: UpdateStep, message: string) => new UpdateError(at, `${prefix}${message}`);
+  const step = (id: UpdateStep) => ctx.line(`step ${id}`);
   const quiet = (args: string[]) => readOnly(git)(args, dir);
   const out = (line: string) => ctx.line(redactRemote(line));
   const loud = (args: string[], env?: NodeJS.ProcessEnv, onLine: (line: string) => void = out) => { ctx.line(`> git ${args.join(' ')}`); return git(args, dir, { onLine, env }); };
@@ -306,39 +308,68 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
   return { from, to, commits, ahead: behind > 0 ? 0 : ahead, pending: !!pending, marker };
 }
 
+export interface UpdateStatus { core: RepoStatus; workspace: RepoStatus }
+
+/** Both repositories of an update, read-only: the core the panel runs from and the selected workspace. */
+export async function updateStatus(core: string, workspace: string, runner: GitRunner = runGit): Promise<UpdateStatus> {
+  const [coreStatus, workspaceStatus] = await Promise.all([coreUpdateStatus(core, runner), workspaceUpdateStatus(workspace, runner, core)]);
+  return { core: coreStatus, workspace: workspaceStatus };
+}
+
 /**
- * The workspace part of Update. The marker from `fastForward` stays until the rebuild succeeds, so running Update
- * again after a failed rebuild finishes it.
+ * What an update says about the core while this version only reports it: that it is behind or cannot be updated
+ * here, and to pull it by hand. Never that it was updated. Null when the core was up to date at its last fetch.
  */
-export async function updateWorkspace(workspace: string, ctx: JobContext, deps: WorkspaceUpdateDeps): Promise<WorkspaceUpdateResult> {
+export function coreNote(core: RepoStatus): string | null {
+  if (!core.available) return `Core: not updated here. ${core.reason}`;
+  if (core.readOnly && core.behind > 0) return `Core: ${core.behind} commit${core.behind === 1 ? '' : 's'} behind ${core.upstream}, not updated by this version yet; pull it by hand.`;
+  return null;
+}
+
+/**
+ * Update. This version reports the core and updates the workspace: check, fetch, LFS, fast-forward, rebuild. The
+ * marker from `fastForward` stays until the rebuild succeeds, so running Update again after a failed rebuild
+ * finishes it. The summary and every failure say what holds for the core; neither ever reports the core as updated.
+ */
+export async function runUpdate(workspace: string, ctx: JobContext, deps: UpdateDeps): Promise<UpdateResult> {
   const git = deps.git ?? runGit;
 
   ctx.line('step check');
   const status = await workspaceUpdateStatus(workspace, git, deps.core);
-  if (!status.available) throw new WorkspaceUpdateError('check', `${status.reason} Nothing changed.`);
-  ctx.line(`workspace ${workspace} on ${status.branch}, tracking ${status.upstream}`);
-
-  const moved = await fastForward(workspace, ctx, { git, role: 'workspace', lfs: 'required', branch: status.branch!, marker: WORKSPACE_MARKER });
-  const { from, to, commits } = moved;
-  if (!commits && !moved.pending) {
-    const summary = `Already up to date (${short(to)}).${moved.ahead ? ` ${moved.ahead} local commit(s) not on the remote.` : ''} Nothing was rebuilt.`;
-    ctx.line(summary);
-    return { state: 'up-to-date', from: to, to, commits: 0, rebuilt: [], summary };
-  }
-  const range = commits ? `${short(from)} → ${short(to)} (${commits} commit${commits === 1 ? '' : 's'})` : short(to);
-  if (commits) ctx.line(`updated ${range}`);
-
-  ctx.line('step rebuild');
-  const pluginsOnly = await deps.coreHostCurrent();
-  let plugins: string[];
+  const core = deps.core ? await coreUpdateStatus(deps.core, git) : null;
+  // A workspace that is the core checkout already says so, and to pull it by hand.
+  const note = core && !status.sameAsCore ? coreNote(core) : null;
+  if (core) ctx.line(`core ${deps.core}: ${note ?? `on ${core.branch}, tracking ${core.upstream}; this version does not update the core`}`);
+  const withNote = (text: string) => note ? `${text} ${note}` : text;
   try {
-    plugins = await deps.rebuild(pluginsOnly, ctx);
+    if (!status.available) throw new UpdateError('check', `${status.reason} Nothing changed.`);
+    ctx.line(`workspace ${workspace} on ${status.branch}, tracking ${status.upstream}`);
+
+    const moved = await fastForward(workspace, ctx, { git, role: 'workspace', lfs: 'required', branch: status.branch!, marker: WORKSPACE_MARKER });
+    const { from, to, commits } = moved;
+    if (!commits && !moved.pending) {
+      const summary = withNote(`Workspace already up to date (${short(to)}).${moved.ahead ? ` ${moved.ahead} local commit(s) not on the remote.` : ''} Nothing was rebuilt.`);
+      ctx.line(summary);
+      return { state: 'up-to-date', from: to, to, commits: 0, rebuilt: [], coreNote: note, summary };
+    }
+    const range = commits ? `${short(from)} → ${short(to)} (${commits} commit${commits === 1 ? '' : 's'})` : short(to);
+    if (commits) ctx.line(`workspace updated ${range}`);
+
+    ctx.line('step rebuild');
+    const pluginsOnly = await deps.coreHostCurrent();
+    let plugins: string[];
+    try {
+      plugins = await deps.rebuild(pluginsOnly, ctx);
+    } catch (e) {
+      throw new UpdateError('rebuild', `${commits ? `Workspace updated ${range}, but the` : 'The'} rebuild failed: ${(e as Error).message}. Fix it and run Update again.`);
+    }
+    if (moved.marker) await fs.rm(moved.marker, { force: true });
+    const rebuilt = [...(pluginsOnly ? [] : ['xrb-host']), ...plugins];
+    const summary = withNote(`${commits ? `Workspace updated ${range}` : `Workspace update finished at ${range}`}. Rebuilt: ${rebuilt.length ? rebuilt.join(', ') : 'nothing'}.`);
+    ctx.line(summary);
+    return { state: 'updated', from, to, commits, rebuilt, coreNote: note, summary };
   } catch (e) {
-    throw new WorkspaceUpdateError('rebuild', `${commits ? `Updated ${range}, but the` : 'The'} rebuild failed: ${(e as Error).message}. Fix it and run Update again.`);
+    if (e instanceof UpdateError) e.message = withNote(e.message);
+    throw e;
   }
-  if (moved.marker) await fs.rm(moved.marker, { force: true });
-  const rebuilt = [...(pluginsOnly ? [] : ['xrb-host']), ...plugins];
-  const summary = `${commits ? `Updated ${range}` : `Finished the update at ${range}`}. Rebuilt: ${rebuilt.length ? rebuilt.join(', ') : 'nothing'}.`;
-  ctx.line(summary);
-  return { state: 'updated', from, to, commits, rebuilt, summary };
 }

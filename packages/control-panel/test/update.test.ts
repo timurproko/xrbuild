@@ -5,10 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { test, type TestContext } from 'node:test';
 import { JobRunner, type JobContext } from '../src/jobs.ts';
-import { rebuildPresentation } from '../ui/rebuild-dialog.js';
+import { rebuildPresentation, updateTooltip } from '../ui/rebuild-dialog.js';
 import { freePort } from '../src/host-runner.ts';
 import { createServer } from '../src/server.ts';
-import { coreUpdateStatus, fastForward, lfsProgressFilter, overwrittenFiles, rebuiltPluginNames, runGit, redactRemote, SAME_AS_CORE, updateWorkspace, workspaceUpdateStatus, WorkspaceUpdateError, type GitRunner } from '../src/workspace-update.ts';
+import { coreNote, coreUpdateStatus, fastForward, lfsProgressFilter, overwrittenFiles, rebuiltPluginNames, runGit, redactRemote, SAME_AS_CORE, runUpdate, workspaceUpdateStatus, UpdateError, type GitRunner } from '../src/update.ts';
 
 const ENV = { ...process.env, GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.invalid', GIT_TERMINAL_PROMPT: '0' };
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, env: ENV, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -55,7 +55,7 @@ async function fixture(t: TestContext, lfs: { code: number } = { code: 0 }) {
 
 const rejectsAt = async (promise: Promise<unknown>, step: string, pattern: RegExp) => {
   await assert.rejects(promise, (e: unknown) => {
-    assert.ok(e instanceof WorkspaceUpdateError, String(e));
+    assert.ok(e instanceof UpdateError, String(e));
     assert.equal(e.step, step);
     assert.match(e.message, pattern);
     return true;
@@ -65,11 +65,11 @@ const rejectsAt = async (promise: Promise<unknown>, step: string, pattern: RegEx
 test('downloads the LFS files of the new commits, fast-forwards, then rebuilds plugins and reports the commits', async (t) => {
   const f = await fixture(t), before = f.head();
   await f.publish('shared.txt', 'two\n'); await f.publish('other.txt', 'two\n'); await f.publish('shared.txt', 'three\n');
-  const result = await updateWorkspace(f.workspace, f.ctx, f.deps);
+  const result = await runUpdate(f.workspace, f.ctx, f.deps);
   assert.equal(result.state, 'updated');
   assert.equal(result.from, before); assert.equal(result.to, f.head()); assert.equal(result.commits, 3);
   assert.deepEqual(result.rebuilt, ['tracker']); assert.deepEqual(f.rebuilds, [true]);
-  assert.match(result.summary, new RegExp(`Updated ${before.slice(0, 7)} → ${result.to.slice(0, 7)} \\(3 commits\\)\\. Rebuilt: tracker\\.`));
+  assert.match(result.summary, new RegExp(`Workspace updated ${before.slice(0, 7)} → ${result.to.slice(0, 7)} \\(3 commits\\)\\. Rebuilt: tracker\\.`));
   assert.equal(await fs.readFile(path.join(f.workspace, 'shared.txt'), 'utf8'), 'three\n');
   assert.deepEqual(f.lines.filter((l) => l.startsWith('step ')), ['step check', 'step fetch', 'step lfs', 'step pull', 'step rebuild']);
   assert.ok(f.calls.some((args) => args.join(' ') === `lfs fetch origin ${result.to}`), 'LFS objects of the fetched upstream commit are fetched, honouring the clone settings');
@@ -93,12 +93,12 @@ test('the remote moving after the LFS download does not move the fast-forward pa
     if (args[0] === 'lfs' && args[1] === 'fetch' && !moved) { moved = true; await f.publish('other.txt', 'two\n'); }
     return f.deps.git(args, cwd, opts);
   }) as GitRunner };
-  const result = await updateWorkspace(f.workspace, f.ctx, deps);
+  const result = await runUpdate(f.workspace, f.ctx, deps);
   assert.ok(moved);
   assert.equal(result.to, fetched); assert.equal(f.head(), fetched); assert.equal(result.commits, 1);
   assert.equal(await fs.readFile(path.join(f.workspace, 'other.txt'), 'utf8'), 'one\n', 'the later commit is not in the workspace');
   assert.equal(f.calls.filter((args) => args[0] === 'fetch').length, 1, 'no second fetch');
-  const next = await updateWorkspace(f.workspace, f.ctx, f.deps);
+  const next = await runUpdate(f.workspace, f.ctx, f.deps);
   assert.equal(next.state, 'updated'); assert.equal(next.commits, 1, 'the next Update brings the newer commit');
   assert.equal(await fs.readFile(path.join(f.workspace, 'other.txt'), 'utf8'), 'two\n');
 });
@@ -106,15 +106,15 @@ test('the remote moving after the LFS download does not move the fast-forward pa
 test('rebuilds the core host too when it is missing or outdated', async (t) => {
   const f = await fixture(t);
   await f.publish('shared.txt', 'two\n');
-  const result = await updateWorkspace(f.workspace, f.ctx, { ...f.deps, coreHostCurrent: async () => false });
+  const result = await runUpdate(f.workspace, f.ctx, { ...f.deps, coreHostCurrent: async () => false });
   assert.deepEqual(f.rebuilds, [false]); assert.deepEqual(result.rebuilt, ['xrb-host', 'tracker']);
 });
 
 test('up to date: reports it, runs no LFS step and does not rebuild', async (t) => {
   const f = await fixture(t);
-  const result = await updateWorkspace(f.workspace, f.ctx, f.deps);
+  const result = await runUpdate(f.workspace, f.ctx, f.deps);
   assert.equal(result.state, 'up-to-date'); assert.equal(result.commits, 0);
-  assert.match(result.summary, /^Already up to date \(\w{7}\)\. Nothing was rebuilt\.$/);
+  assert.match(result.summary, /^Workspace already up to date \(\w{7}\)\. Nothing was rebuilt\.$/);
   assert.deepEqual(f.rebuilds, []);
   assert.ok(!f.calls.some((args) => args[0] === 'merge' || (args[0] === 'lfs' && args[1] !== 'version')), 'no fast-forward and no LFS download');
 });
@@ -123,7 +123,7 @@ test('non-conflicting local changes stay', async (t) => {
   await fs.writeFile(path.join(f.workspace, 'other.txt'), 'local edit\n');
   await fs.writeFile(path.join(f.workspace, 'untracked.txt'), 'mine\n');
   await f.publish('shared.txt', 'two\n');
-  const result = await updateWorkspace(f.workspace, f.ctx, f.deps);
+  const result = await runUpdate(f.workspace, f.ctx, f.deps);
   assert.equal(result.state, 'updated');
   assert.equal(await fs.readFile(path.join(f.workspace, 'other.txt'), 'utf8'), 'local edit\n');
   assert.equal(await fs.readFile(path.join(f.workspace, 'untracked.txt'), 'utf8'), 'mine\n');
@@ -134,7 +134,7 @@ test('conflicting local changes are refused with the file list and nothing chang
   const f = await fixture(t), before = f.head();
   await fs.writeFile(path.join(f.workspace, 'shared.txt'), 'local edit\n');
   await f.publish('shared.txt', 'two\n');
-  await rejectsAt(updateWorkspace(f.workspace, f.ctx, f.deps), 'pull', /Local changes would be overwritten by the update: shared\.txt\. Commit or stash them first/);
+  await rejectsAt(runUpdate(f.workspace, f.ctx, f.deps), 'pull', /Local changes would be overwritten by the update: shared\.txt\. Commit or stash them first/);
   assert.equal(f.head(), before);
   assert.equal(await fs.readFile(path.join(f.workspace, 'shared.txt'), 'utf8'), 'local edit\n');
   assert.equal(git(f.workspace, 'stash', 'list'), '', 'nothing was stashed');
@@ -147,7 +147,7 @@ test('a diverged branch is refused before pulling', async (t) => {
   git(f.workspace, 'commit', '-qam', 'local');
   const local = f.head();
   await f.publish('shared.txt', 'two\n');
-  await rejectsAt(updateWorkspace(f.workspace, f.ctx, f.deps), 'fetch', /1 local commit\(s\) and 1 new remote commit\(s\)\. Merge or rebase by hand/);
+  await rejectsAt(runUpdate(f.workspace, f.ctx, f.deps), 'fetch', /1 local commit\(s\) and 1 new remote commit\(s\)\. Merge or rebase by hand/);
   assert.notEqual(local, before); assert.equal(f.head(), local);
   assert.ok(!f.calls.some((args) => args[0] === 'merge'));
 });
@@ -156,14 +156,14 @@ test('a fetch failure stops with nothing changed', async (t) => {
   const f = await fixture(t), before = f.head();
   await f.publish('shared.txt', 'two\n');
   await fs.rename(f.remote, `${f.remote}.offline`);
-  await rejectsAt(updateWorkspace(f.workspace, f.ctx, f.deps), 'fetch', /Could not reach the remote\. Nothing changed\./);
+  await rejectsAt(runUpdate(f.workspace, f.ctx, f.deps), 'fetch', /Could not reach the remote\. Nothing changed\./);
   assert.equal(f.head(), before); assert.deepEqual(f.rebuilds, []);
 });
 
 test('an LFS failure stops before the pull: nothing changes and no rebuild', async (t) => {
   const f = await fixture(t, { code: 2 }), before = f.head();
   await f.publish('shared.txt', 'two\n');
-  await rejectsAt(updateWorkspace(f.workspace, f.ctx, f.deps), 'lfs', /^LFS: Could not download the LFS files of the new commits: run Update again\. Nothing changed\./);
+  await rejectsAt(runUpdate(f.workspace, f.ctx, f.deps), 'lfs', /^LFS: Could not download the LFS files of the new commits: run Update again\. Nothing changed\./);
   assert.equal(f.head(), before); assert.deepEqual(f.rebuilds, []);
   assert.ok(!f.calls.some((args) => args[0] === 'merge'));
   assert.equal(await fs.readFile(path.join(f.workspace, 'shared.txt'), 'utf8'), 'one\n');
@@ -172,7 +172,7 @@ test('an LFS failure stops before the pull: nothing changes and no rebuild', asy
 test('a rebuild failure names the step and keeps the update', async (t) => {
   const f = await fixture(t);
   await f.publish('shared.txt', 'two\n');
-  await rejectsAt(updateWorkspace(f.workspace, f.ctx, { ...f.deps, rebuild: async () => { throw new Error('cmake exited with 1'); } }), 'rebuild', /but the rebuild failed: cmake exited with 1/);
+  await rejectsAt(runUpdate(f.workspace, f.ctx, { ...f.deps, rebuild: async () => { throw new Error('cmake exited with 1'); } }), 'rebuild', /Workspace updated \w{7} → \w{7} \(1 commit\), but the rebuild failed: cmake exited with 1/);
 });
 
 test('status reports behind and dirty without fetching, and when the remote was last checked', async (t) => {
@@ -198,7 +198,7 @@ test('not a clone, a folder inside another clone, no upstream, a detached HEAD a
   assert.equal((await workspaceUpdateStatus(path.join(f.root, 'missing'), f.deps.git)).available, false);
   git(f.workspace, 'checkout', '-qb', 'topic');
   assert.equal((await workspaceUpdateStatus(f.workspace, f.deps.git)).reason, 'The branch topic has no upstream to update from.');
-  await rejectsAt(updateWorkspace(f.workspace, f.ctx, f.deps), 'check', /no upstream to update from\. Nothing changed\./);
+  await rejectsAt(runUpdate(f.workspace, f.ctx, f.deps), 'check', /no upstream to update from\. Nothing changed\./);
   git(f.workspace, 'checkout', '-q', '--detach');
   assert.match((await workspaceUpdateStatus(f.workspace, f.deps.git)).reason ?? '', /detached HEAD/);
   git(f.workspace, 'checkout', '-q', 'main');
@@ -217,7 +217,7 @@ test('a workspace that is the core checkout is one repository: reported as the c
   // The same folder written differently is still the same repository.
   const spelled = process.platform === 'win32' ? f.workspace.toUpperCase() : `${f.workspace}${path.sep}.`;
   assert.equal((await workspaceUpdateStatus(f.workspace, f.deps.git, spelled)).sameAsCore, true);
-  await rejectsAt(updateWorkspace(f.workspace, f.ctx, { ...f.deps, core: f.workspace }), 'check', /The workspace is the core checkout: it is updated as the core.*Nothing changed\./);
+  await rejectsAt(runUpdate(f.workspace, f.ctx, { ...f.deps, core: f.workspace }), 'check', /The workspace is the core checkout: it is updated as the core.*Nothing changed\./);
   assert.equal(f.head(), before); assert.deepEqual(f.rebuilds, []);
   assert.ok(!f.calls.some((args) => ['fetch', 'merge'].includes(args[0]!) || (args[0] === 'lfs' && args[1] === 'fetch')), 'nothing is fetched or fast-forwarded');
 });
@@ -256,6 +256,45 @@ test('fastForward serves the core too: optional LFS is skipped when the commit t
   await rejectsAt(fastForward(f.workspace, ctx, { git: f.deps.git, role: 'core', lfs: 'optional', branch: 'main', marker: 'xrb-test-update' }), 'fetch', /^Fetch: Core: The branch has 1 local commit\(s\) and 1 new remote commit\(s\)/);
 });
 
+test('while the core is only reported, the result says it is behind and to pull it by hand, and never that it was updated', async (t) => {
+  const f = await fixture(t);
+  // The core: another clone of the same remote, fetched so it knows it is 1 commit behind.
+  const core = path.join(f.root, 'core');
+  git(f.root, 'clone', '-q', f.remote, core);
+  await f.publish('shared.txt', 'two\n');
+  git(core, 'fetch', '-q');
+  const coreHead = git(core, 'rev-parse', 'HEAD');
+  const note = 'Core: 1 commit behind origin/main, not updated by this version yet; pull it by hand.';
+  assert.equal(coreNote(await coreUpdateStatus(core, f.deps.git)), note);
+  const result = await runUpdate(f.workspace, f.ctx, { ...f.deps, core });
+  assert.equal(result.state, 'updated'); assert.equal(result.coreNote, note);
+  assert.match(result.summary, /^Workspace updated \w{7} → \w{7} \(1 commit\)\. Rebuilt: tracker\. Core: 1 commit behind origin\/main, not updated by this version yet; pull it by hand\.$/);
+  assert.equal(git(core, 'rev-parse', 'HEAD'), coreHead, 'the core did not move');
+  const current = await runUpdate(f.workspace, f.ctx, { ...f.deps, core });
+  assert.equal(current.state, 'up-to-date'); assert.match(current.summary, /^Workspace already up to date \(\w{7}\)\. Nothing was rebuilt\. Core: 1 commit behind/);
+  await f.publish('other.txt', 'two\n');
+  await rejectsAt(runUpdate(f.workspace, f.ctx, { ...f.deps, core, rebuild: async () => { throw new Error('cmake exited with 1'); } }), 'rebuild', /Fix it and run Update again\. Core: 1 commit behind origin\/main, not updated by this version yet; pull it by hand\.$/);
+  for (const line of f.lines) assert.doesNotMatch(line, /core updated|updated the core|Core updated/i, 'nothing claims the core was updated');
+  // A core that cannot be updated here says why; one that is up to date adds nothing.
+  assert.equal(coreNote(await coreUpdateStatus(path.join(f.root, 'missing'), f.deps.git)), 'Core: not updated here. The core is not a Git checkout: it updates with a new package.');
+  git(core, 'merge', '-q', '--ff-only', 'origin/main');
+  assert.equal(coreNote(await coreUpdateStatus(core, f.deps.git)), null);
+});
+
+test('the Update tooltip names each repository and when the remote was last checked', () => {
+  const now = Date.now();
+  const repo = { available: true, reason: null, branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0, dirty: 0, checkedMs: now - 5000, unfinished: false };
+  const core = { ...repo, role: 'core' as const, readOnly: true }, workspace = { ...repo, role: 'workspace' as const };
+  assert.equal(updateTooltip({ core, workspace }, now), 'Core: up to date. Workspace: up to date. Remote last checked just now.');
+  assert.equal(updateTooltip({ core: { ...core, behind: 3 }, workspace: { ...workspace, behind: 2, checkedMs: now - 120_000 } }, now),
+    'Core: 3 commits behind origin/main, not updated by this version yet; pull it by hand. Workspace: 2 commits behind origin. Remote last checked 2 min ago.');
+  assert.equal(updateTooltip({ core: { ...core, available: false, reason: 'The core is not on a branch (detached HEAD).' }, workspace: { ...workspace, unfinished: true, checkedMs: null } }, now),
+    'Core: not updated here. The core is not on a branch (detached HEAD). Workspace: the last update did not finish; run Update again. Remote last checked just now.', 'falls back to the core\'s last check');
+  assert.equal(updateTooltip({ core: { ...core, checkedMs: null }, workspace: { ...workspace, available: false, reason: 'The workspace is not a Git clone.', checkedMs: null } }, now),
+    'Core: up to date. Workspace: The workspace is not a Git clone. Remote not checked yet.');
+  assert.equal(updateTooltip(null), '');
+});
+
 test('credentials in remote URLs never reach the job output', async (t) => {
   assert.equal(redactRemote('From https://user:secret@example.invalid/core'), 'From https://[redacted]@example.invalid/core');
   assert.equal(redactRemote('fatal: unable to access https://token123@example.invalid/x/'), 'fatal: unable to access https://[redacted]@example.invalid/x/');
@@ -266,7 +305,7 @@ test('credentials in remote URLs never reach the job output', async (t) => {
     if (args[0] === 'fetch') opts?.onLine?.('From https://user:secret@example.invalid/workspace');
     return f.deps.git(args, cwd, opts);
   };
-  await updateWorkspace(f.workspace, f.ctx, { ...f.deps, git: leaky });
+  await runUpdate(f.workspace, f.ctx, { ...f.deps, git: leaky });
   assert.ok(f.lines.includes('From https://[redacted]@example.invalid/workspace'));
   assert.ok(!f.lines.some((l) => l.includes('secret')));
 });
@@ -293,7 +332,7 @@ async function serverFixture(t: TestContext) {
   const gate = { release: () => {}, wait: Promise.resolve() };
   const hold = () => { gate.wait = new Promise<void>((resolve) => { gate.release = resolve; }); };
   server.panel.desktopSetup = { isBusy: async () => false, deps: { tools: async () => ({ cmake: null, generator: 'test' }) } } as never;
-  server.panel.workspaceUpdateDeps = { git: f.deps.git, coreHostCurrent: async () => true, rebuild: async (pluginsOnly) => { f.rebuilds.push(pluginsOnly); await gate.wait; return ['tracker']; } };
+  server.panel.updateDeps = { git: f.deps.git, coreHostCurrent: async () => true, rebuild: async (pluginsOnly) => { f.rebuilds.push(pluginsOnly); await gate.wait; return ['tracker']; } };
   await new Promise<void>((resolve) => server.server.listen(server.port, '127.0.0.1', resolve));
   t.after(() => server.close());
   const request = async (method: string, route: string) => {
@@ -303,73 +342,74 @@ async function serverFixture(t: TestContext) {
   return { ...f, server, request, hold, gate };
 }
 
-test('GET workspace/update reports status and POST runs the update as a job', async (t) => {
+test('GET update reports both repositories and POST runs the update as a job', async (t) => {
   const f = await serverFixture(t);
   await f.publish('shared.txt', 'two\n');
-  const status = await f.request('GET', '/api/workspace/update');
-  assert.equal(status.status, 200); assert.equal(status.data.available, true); assert.equal(status.data.behind, 0);
-  const started = await f.request('POST', '/api/workspace/update');
-  assert.equal(started.status, 202); assert.equal(started.data.kind, 'workspace-update');
+  const status = await f.request('GET', '/api/update');
+  assert.equal(status.status, 200); assert.equal(status.data.workspace.available, true); assert.equal(status.data.workspace.behind, 0); assert.equal(status.data.updating, false);
+  assert.equal(status.data.core.role, 'core'); assert.equal(status.data.core.readOnly, true); assert.equal(status.data.core.reason, 'The core is not a Git checkout: it updates with a new package.');
+  const started = await f.request('POST', '/api/update');
+  assert.equal(started.status, 202); assert.equal(started.data.kind, 'update');
   const job = await f.server.panel.jobs.wait(f.server.panel.jobs.get(started.data.id)!);
   assert.equal(job.state, 'done', job.error ?? '');
   assert.equal((job.result as { commits: number }).commits, 1);
-  assert.equal((await f.request('GET', '/api/workspace/update')).data.behind, 0);
+  assert.equal((await f.request('GET', '/api/update')).data.workspace.behind, 0);
 });
 
 test('update, rebuild and run never overlap, and a running host refuses the update', async (t) => {
   const f = await serverFixture(t), panel = f.server.panel;
   await f.publish('shared.txt', 'two\n');
   f.hold();
-  const started = await f.request('POST', '/api/workspace/update');
+  const started = await f.request('POST', '/api/update');
   assert.equal(started.status, 202);
   while (!f.rebuilds.length) await new Promise((resolve) => setTimeout(resolve, 20));
   let gitDuringUpdate = 0;
-  const counting = f.server.panel.workspaceUpdateDeps.git!;
-  f.server.panel.workspaceUpdateDeps.git = async (args, cwd, opts) => { gitDuringUpdate++; return counting(args, cwd, opts); };
-  const during = await f.request('GET', '/api/workspace/update');
+  const counting = f.server.panel.updateDeps.git!;
+  f.server.panel.updateDeps.git = async (args, cwd, opts) => { gitDuringUpdate++; return counting(args, cwd, opts); };
+  const during = await f.request('GET', '/api/update');
   assert.equal(during.data.updating, true); assert.equal(gitDuringUpdate, 0, 'status runs no Git beside an active update');
-  f.server.panel.workspaceUpdateDeps.git = counting;
+  f.server.panel.updateDeps.git = counting;
   const rebuild = await f.request('POST', '/api/host/rebuild');
-  assert.equal(rebuild.status, 409); assert.match(rebuild.data.error, /workspace update/);
-  assert.equal((await f.request('POST', '/api/workspace/update')).status, 409);
-  await assert.rejects(panel.run({ id: 'demo', manifest: {} } as never, 'native'), /workspace update to finish/);
+  assert.equal(rebuild.status, 409); assert.match(rebuild.data.error, /wait for the update to finish/);
+  assert.equal((await f.request('POST', '/api/update')).status, 409);
+  await assert.rejects(panel.run({ id: 'demo', manifest: {} } as never, 'native'), /wait for the update to finish/);
   f.gate.release();
   assert.equal((await panel.jobs.wait(panel.jobs.get(started.data.id)!)).state, 'done');
   (panel as unknown as { preparingNativeRun: boolean }).preparingNativeRun = true;
-  const busy = await f.request('POST', '/api/workspace/update');
+  const busy = await f.request('POST', '/api/update');
   assert.equal(busy.status, 409); assert.match(busy.data.error, /stop the running or starting host first/);
 });
 
-test('the job runner keeps a workspace update apart from every other job in both directions', async () => {
-  for (const kind of ['web-build', 'package', 'host-rebuild', 'icon-render', 'publication', 'workspace-update'] as const) for (const reverse of [false, true]) {
+test('the job runner keeps an update apart from every other job in both directions', async () => {
+  for (const kind of ['web-build', 'package', 'host-rebuild', 'icon-render', 'publication', 'update'] as const) for (const reverse of [false, true]) {
     const jobs = new JobRunner(); let release!: () => void;
-    const job = jobs.start(reverse ? kind : 'workspace-update', null, 'active', () => new Promise<void>((resolve) => { release = resolve; }));
-    assert.throws(() => jobs.start(reverse ? 'workspace-update' : kind, null, 'conflict', async () => {}), /workspace update/);
+    const job = jobs.start(reverse ? kind : 'update', null, 'active', () => new Promise<void>((resolve) => { release = resolve; }));
+    assert.throws(() => jobs.start(reverse ? 'update' : kind, null, 'conflict', async () => {}), /an update cannot overlap/);
     release(); await jobs.wait(job);
   }
 });
 
-test('POST workspace/update refuses a workspace that is not a clone, with the reason', async (t) => {
+test('POST update refuses a workspace that is not a clone, with the reason', async (t) => {
   const f = await serverFixture(t);
   await fs.rm(path.join(f.workspace, '.git'), { recursive: true, force: true });
-  const refused = await f.request('POST', '/api/workspace/update');
+  const refused = await f.request('POST', '/api/update');
   assert.equal(refused.status, 409); assert.equal(refused.data.error, 'The workspace is not a Git clone.');
   assert.equal(f.server.panel.jobs.list().length, 0);
 });
 
-test('POST workspace/update refuses a workspace that is the core checkout the panel runs from', async (t) => {
+test('POST update refuses a workspace that is the core checkout the panel runs from', async (t) => {
   const f = await serverFixture(t);
   (f.server.panel as unknown as { repo: string }).repo = f.workspace;
-  const status = await f.request('GET', '/api/workspace/update');
-  assert.equal(status.data.sameAsCore, true); assert.equal(status.data.available, false);
-  const refused = await f.request('POST', '/api/workspace/update');
+  const status = await f.request('GET', '/api/update');
+  assert.equal(status.data.workspace.sameAsCore, true); assert.equal(status.data.workspace.available, false); assert.equal(status.data.core.available, true);
+  const refused = await f.request('POST', '/api/update');
   assert.equal(refused.status, 409); assert.equal(refused.data.error, SAME_AS_CORE);
   assert.equal(f.server.panel.jobs.list().length, 0);
 });
 
 test('a long LFS or build step keeps its step in the dialog although /api/jobs sends only the last lines', async () => {
   const jobs = new JobRunner(); let release!: () => void;
-  const job = jobs.start('workspace-update', null, 'update workspace', (ctx) => {
+  const job = jobs.start('update', null, 'update', (ctx) => {
     for (const step of ['check', 'fetch', 'lfs', 'pull', 'rebuild']) ctx.line(`step ${step}`);
     ctx.line('plugin tracker');
     for (let i = 0; i < 250; i++) ctx.line(`cmake output ${i}`);
@@ -383,7 +423,7 @@ test('a long LFS or build step keeps its step in the dialog although /api/jobs s
   release(); await jobs.wait(job);
   const other = jobs.start('web-build', null, 'build', async (ctx) => { ctx.line('step one'); });
   await jobs.wait(other);
-  assert.equal(other.step, undefined, 'only workspace updates track steps');
+  assert.equal(other.step, undefined, 'only updates track steps');
 });
 
 test('rebuilt plugins are named by plugin, not by their runtime subproject', () => {
@@ -400,32 +440,32 @@ test('running Update again after an LFS failure pulls and rebuilds', async (t) =
   const lfs = { code: 2 };
   const f = await fixture(t, lfs), before = f.head();
   await f.publish('shared.txt', 'two\n');
-  await rejectsAt(updateWorkspace(f.workspace, f.ctx, f.deps), 'lfs', /run Update again\. Nothing changed\./);
+  await rejectsAt(runUpdate(f.workspace, f.ctx, f.deps), 'lfs', /run Update again\. Nothing changed\./);
   const status = await workspaceUpdateStatus(f.workspace, f.deps.git);
   assert.equal(status.behind, 1, 'still behind, so the hint still offers the update'); assert.equal(status.unfinished, false);
   lfs.code = 0;
-  const result = await updateWorkspace(f.workspace, f.ctx, f.deps);
+  const result = await runUpdate(f.workspace, f.ctx, f.deps);
   assert.equal(result.state, 'updated'); assert.deepEqual(f.rebuilds, [true]);
   assert.equal(result.from, before); assert.equal(result.commits, 1);
-  assert.match(result.summary, /^Updated \w{7} → \w{7} \(1 commit\)\. Rebuilt: tracker\.$/);
-  assert.equal((await updateWorkspace(f.workspace, f.ctx, f.deps)).state, 'up-to-date');
+  assert.match(result.summary, /^Workspace updated \w{7} → \w{7} \(1 commit\)\. Rebuilt: tracker\.$/);
+  assert.equal((await runUpdate(f.workspace, f.ctx, f.deps)).state, 'up-to-date');
 });
 test('running Update again after a rebuild failure rebuilds although nothing is behind', async (t) => {
   const f = await fixture(t);
   await f.publish('shared.txt', 'two\n');
   let fail = true;
   const deps = { ...f.deps, rebuild: async (pluginsOnly: boolean) => { f.rebuilds.push(pluginsOnly); if (fail) throw new Error('cmake exited with 1'); return ['tracker']; } };
-  await rejectsAt(updateWorkspace(f.workspace, f.ctx, deps), 'rebuild', /rebuild failed: cmake exited with 1\. Fix it and run Update again\./);
+  await rejectsAt(runUpdate(f.workspace, f.ctx, deps), 'rebuild', /rebuild failed: cmake exited with 1\. Fix it and run Update again\./);
   const unfinished = await workspaceUpdateStatus(f.workspace, f.deps.git);
   assert.equal(unfinished.behind, 0); assert.equal(unfinished.unfinished, true, 'the panel knows the update is unfinished');
   fail = false;
   const lfsFetches = () => f.calls.filter((args) => args[0] === 'lfs' && args[1] === 'fetch').length, fetchesBefore = lfsFetches();
-  const result = await updateWorkspace(f.workspace, f.ctx, deps);
+  const result = await runUpdate(f.workspace, f.ctx, deps);
   assert.equal(result.state, 'updated'); assert.equal(result.commits, 1); assert.equal(f.rebuilds.length, 2);
-  assert.match(result.summary, /^Updated \w{7} → \w{7} \(1 commit\)\. Rebuilt: tracker\.$/);
+  assert.match(result.summary, /^Workspace updated \w{7} → \w{7} \(1 commit\)\. Rebuilt: tracker\.$/);
   assert.equal(lfsFetches(), fetchesBefore, 'finishing the rebuild runs no LFS step');
   assert.equal((await workspaceUpdateStatus(f.workspace, f.deps.git)).unfinished, false);
-  assert.equal((await updateWorkspace(f.workspace, f.ctx, deps)).state, 'up-to-date');
+  assert.equal((await runUpdate(f.workspace, f.ctx, deps)).state, 'up-to-date');
 });
 
 test('the status check does not rewrite the Git index', async (t) => {
@@ -476,7 +516,7 @@ test('real LFS: a locally deleted LFS file survives an update that does not touc
   const f = await lfsFixture(t);
   await fs.rm(path.join(f.workspace, 'a.bin'));
   await f.publish('b.bin', 'second b\n'); await f.publish('note.txt', 'two\n');
-  const result = await updateWorkspace(f.workspace, f.ctx, f.deps);
+  const result = await runUpdate(f.workspace, f.ctx, f.deps);
   assert.equal(result.state, 'updated'); assert.equal(result.commits, 2); assert.deepEqual(f.rebuilds, [true]);
   assert.equal(await fs.stat(path.join(f.workspace, 'a.bin')).then(() => true, () => false), false, 'the local deletion stays');
   assert.equal(git(f.workspace, 'status', '--porcelain'), 'D a.bin');
@@ -486,10 +526,10 @@ test('real LFS: a locally deleted LFS file survives an update that does not touc
 test('real LFS: a clone that excludes LFS files from fetching finishes its update', { skip: LFS_SKIP }, async (t) => {
   const f = await lfsFixture(t, (workspace) => git(workspace, 'config', 'lfs.fetchexclude', 'b.bin'));
   await f.publish('b.bin', 'second b\n'); await f.publish('a.bin', 'second a\n');
-  const result = await updateWorkspace(f.workspace, f.ctx, f.deps);
+  const result = await runUpdate(f.workspace, f.ctx, f.deps);
   assert.equal(result.state, 'updated'); assert.deepEqual(f.rebuilds, [true]);
   assert.equal(await fs.readFile(path.join(f.workspace, 'a.bin'), 'utf8'), 'second a\n');
   assert.match(await fs.readFile(path.join(f.workspace, 'b.bin'), 'utf8'), /^version https:\/\/git-lfs\.github\.com\/spec\/v1/, 'the excluded file stays a pointer');
   assert.equal((await workspaceUpdateStatus(f.workspace, f.deps.git)).unfinished, false, 'no marker is left behind');
-  assert.equal((await updateWorkspace(f.workspace, f.ctx, f.deps)).state, 'up-to-date');
+  assert.equal((await runUpdate(f.workspace, f.ctx, f.deps)).state, 'up-to-date');
 });

@@ -18,14 +18,14 @@
 
 ## 4. One Update action: names and wording
 
-- [ ] 4.1 Job kind `update`, overlap guard and `step` capture in `jobs.ts`
-- [ ] 4.2 `GET`/`POST /api/update` returning `{ core, workspace, updating }` in `panel.ts`
-- [ ] 4.3 Menu label exactly `Update`, `#update-chip` and `updateInPlace` in the UI
-- [ ] 4.4 Tooltip names each repository's state and the last remote check ("Core: up to date. Workspace: up to date. Remote last checked just now."); dialog titles and summaries say Update and name the repository
-- [ ] 4.5 While the core part is read-only, the tooltip and the job result say plainly when the core is behind or cannot be updated here, that this version does not update it yet and to pull it by hand, and never report the core as updated
-- [ ] 4.6 No user-visible text says "Update workspace"; a test asserts the menu label is exactly `Update`
-- [ ] 4.7 `update-cli.ts` behind `pnpm update:repo`, and `docs/private-workspace.md`
-- [ ] 4.8 Existing workspace-update, rebuild-dialog, navigation, header-order and jobs tests ported to the new names
+- [x] 4.1 Job kind `update`, overlap guard and `step` capture in `jobs.ts`
+- [x] 4.2 `GET`/`POST /api/update` returning `{ core, workspace, updating }` in `panel.ts`
+- [x] 4.3 Menu label exactly `Update`, `#update-chip` and `updateInPlace` in the UI
+- [x] 4.4 Tooltip names each repository's state and the last remote check ("Core: up to date. Workspace: up to date. Remote last checked just now."); dialog titles and summaries say Update and name the repository
+- [x] 4.5 While the core part is read-only, the tooltip and the job result say plainly when the core is behind or cannot be updated here, that this version does not update it yet and to pull it by hand, and never report the core as updated
+- [x] 4.6 No user-visible text says "Update workspace"; a test asserts the menu label is exactly `Update`
+- [x] 4.7 `update-cli.ts` behind `pnpm update:repo`, and `docs/private-workspace.md`
+- [x] 4.8 Existing workspace-update, rebuild-dialog, navigation, header-order and jobs tests ported to the new names
 
 ## 5. Spec
 

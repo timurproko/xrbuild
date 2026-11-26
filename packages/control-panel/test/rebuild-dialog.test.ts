@@ -22,37 +22,43 @@ test('rebuild presentation has stable running, success and failure states',()=>{
   assert.equal(startFailure.state,'failed');assert.equal(startFailure.output,'The job could not start.');assert.equal(startFailure.viewJobDisabled,true);
 });
 
-test('workspace update presentation follows its steps and reports Git refusals and the result',()=>{
+test('update presentation follows its steps and reports Git refusals and the result',()=>{
   assert.deepEqual(UPDATE_STEPS.map(step=>step.title),['Check','Fetch','LFS','Pull','Rebuild']);
-  const start=rebuildPresentation({kind:'workspace-update',state:'running',lines:[]});
-  assert.equal(start.title,'Updating workspace');assert.equal(start.step,'check');assert.equal(start.message,'Step 1 of 5, Check: Checking the workspace…');assert.equal(start.viewJobDisabled,true);
-  const lfs=rebuildPresentation({id:7,kind:'workspace-update',state:'running',lines:['step check','step fetch','step lfs','Downloading LFS objects: 40% (2/5)']});
-  assert.equal(lfs.step,'lfs');assert.equal(lfs.message,'Step 3 of 5, LFS: Downloading LFS files…');assert.match(lfs.output,/40% \(2\/5\)/);
-  const plugin=rebuildPresentation({id:7,kind:'workspace-update',state:'running',lines:['step rebuild','plugin tracker']});
+  const start=rebuildPresentation({kind:'update',state:'running',lines:[]});
+  assert.equal(start.title,'Updating');assert.equal(start.step,'check');assert.equal(start.message,'Step 1 of 5, Check: Checking the core and the workspace…');assert.equal(start.viewJobDisabled,true);
+  const lfs=rebuildPresentation({id:7,kind:'update',state:'running',lines:['step check','step fetch','step lfs','Downloading LFS objects: 40% (2/5)']});
+  assert.equal(lfs.step,'lfs');assert.equal(lfs.message,'Step 3 of 5, LFS: Downloading the workspace\'s LFS files…');assert.match(lfs.output,/40% \(2\/5\)/);
+  const plugin=rebuildPresentation({id:7,kind:'update',state:'running',lines:['step rebuild','plugin tracker']});
   assert.equal(plugin.message,'Step 5 of 5, Rebuild: Rebuilding tracker…');
-  const refused=rebuildPresentation({id:7,kind:'workspace-update',state:'failed',error:'Pull: Local changes would be overwritten by the update: a.txt. Commit or stash them first, then run Update again. Nothing changed.',lines:['step check','step fetch','step lfs','step pull','error: Your local changes would be overwritten']});
+  const refused=rebuildPresentation({id:7,kind:'update',state:'failed',error:'Pull: Local changes would be overwritten by the update: a.txt. Commit or stash them first, then run Update again. Nothing changed.',lines:['step check','step fetch','step lfs','step pull','error: Your local changes would be overwritten']});
   assert.equal(refused.title,'Update failed');assert.equal(refused.step,'pull');assert.match(refused.message,/a\.txt\. Commit or stash them first/);assert.match(refused.output,/would be overwritten/);assert.equal(refused.succeeded,false);
-  const done=rebuildPresentation({id:7,kind:'workspace-update',state:'done',lines:['step rebuild'],result:{state:'updated',summary:'Updated 1111111 → 2222222 (2 commits). Rebuilt: tracker.'}});
-  assert.equal(done.title,'Workspace updated');assert.equal(done.message,'Updated 1111111 → 2222222 (2 commits). Rebuilt: tracker.');assert.equal(done.succeeded,true);
-  const current=rebuildPresentation({id:7,kind:'workspace-update',state:'done',lines:['step fetch'],result:{state:'up-to-date',summary:'Already up to date (1111111). Nothing was rebuilt.'}});
-  assert.equal(current.title,'Already up to date');
-  const notStarted=rebuildPresentation({kind:'workspace-update',state:'running',lines:[]},'The workspace is not a Git clone.');
+  const done=rebuildPresentation({id:7,kind:'update',state:'done',lines:['step rebuild'],result:{state:'updated',summary:'Workspace updated 1111111 → 2222222 (2 commits). Rebuilt: tracker. Core: 3 commits behind origin/main, not updated by this version yet; pull it by hand.'}});
+  assert.equal(done.title,'Workspace updated');assert.equal(done.message,'Workspace updated 1111111 → 2222222 (2 commits). Rebuilt: tracker. Core: 3 commits behind origin/main, not updated by this version yet; pull it by hand.');assert.equal(done.succeeded,true);
+  const current=rebuildPresentation({id:7,kind:'update',state:'done',lines:['step fetch'],result:{state:'up-to-date',summary:'Workspace already up to date (1111111). Nothing was rebuilt.'}});
+  assert.equal(current.title,'Workspace already up to date','the title names the repository: the core may still be behind');
+  const notStarted=rebuildPresentation({kind:'update',state:'running',lines:[]},'The workspace is not a Git clone.');
   assert.equal(notStarted.title,'Update failed');assert.equal(notStarted.message,'The workspace is not a Git clone.');assert.equal(notStarted.output,'The job could not start.');
 });
 
 test('the behind hint and the update menu item read a status that never fetches',async()=>{
   const ui=path.resolve(import.meta.dirname,'../ui');
   const [app,index]=await Promise.all(['app.js','index.html'].map(file=>fs.readFile(path.join(ui,file),'utf8')));
-  assert.match(index,/id="workspace-chip" class="chip rebuild" data-maintenance="update" hidden/);
-  assert.match(app,/workspace behind \$\{remote\} by \$\{status\.behind\}/);
-  assert.match(app,/Remote last checked \$\{ago\(status\.checkedMs\)\}/);
+  assert.match(index,/id="update-chip" class="chip rebuild" data-maintenance="update" hidden/);
+  assert.match(app,/workspace behind \$\{remote\} by \$\{workspace\.behind\}/);
+  assert.match(app,/Remote last checked \$\{ago\(workspace\.checkedMs\)\}/);
   assert.match(app,/item\.setAttribute\('aria-disabled', 'true'\)/);
-  assert.match(app,/api\('GET', '\/api\/workspace\/update'\)/);
-  assert.doesNotMatch(app,/api\('POST', '\/api\/workspace\/update'\)/,'only the explicit menu action starts an update');
+  assert.match(app,/item\.title = updateTooltip\(status\)/);
+  assert.match(app,/api\('GET', '\/api\/update'\)/);
+  assert.doesNotMatch(app,/api\('POST', '\/api\/update'\)/,'only the explicit menu action starts an update');
   const [dialog,setup]=await Promise.all(['rebuild-dialog.js','desktop-setup.js'].map(file=>fs.readFile(path.join(ui,file),'utf8')));
-  assert.match(dialog,/'\/api\/workspace\/update', \{kind: 'workspace-update', state: 'running', lines: \[\]\}, options, 'Update', 'Update'\)/);
+  assert.match(dialog,/'\/api\/update', \{kind: 'update', state: 'running', lines: \[\]\}, options, 'Update', 'Update'\)/);
   assert.match(setup,/action === 'Update' \? 'Install missing prerequisites, then update the workspace and rebuild\.'/);
   assert.match(setup,/data-desktop-build>\$\{action === 'Update' \? 'Update' : 'Rebuild'\}<\/button>/);
+  // One action for both repositories: no text the person sees still says "Update workspace".
+  for (const file of await fs.readdir(ui)) {
+    if (!/\.(js|html|css)$/.test(file)) continue;
+    assert.doesNotMatch(await fs.readFile(path.join(ui,file),'utf8'),/Update workspace|Updating workspace/,`${file} still says Update workspace`);
+  }
 });
 
 test('setup action descriptions use sentence capitalization without changing job metadata',()=>{
@@ -74,8 +80,8 @@ test('all host rebuild entry points consume one full dialog component',async()=>
   assert.match(component,/iconSvg\('check-circle'\)/);assert.match(component,/iconSvg\('error-circle'\)/);
   assert.match(component,/presentation\.succeeded && autoclose\.checked && dialog\.open/);
   assert.match(component,/destination\.searchParams\.set\('job', String\(job\.id\)\)/);
-  assert.match(navigation,/import \{rebuildHostInPlace,updateWorkspaceInPlace\} from '\.\/rebuild-dialog\.js'/);
-  assert.match(app,/import \{rebuildHostInPlace,updateWorkspaceInPlace\} from '\.\/rebuild-dialog\.js'/);
+  assert.match(navigation,/import \{rebuildHostInPlace,updateInPlace\} from '\.\/rebuild-dialog\.js'/);
+  assert.match(app,/import \{rebuildHostInPlace,updateInPlace,updateTooltip\} from '\.\/rebuild-dialog\.js'/);
   assert.doesNotMatch(navigation,/data-xrb-rebuild-output|function rebuildDialog|function renderRebuild/);
   assert.doesNotMatch(app,/data-xrb-rebuild-output|id="host-rebuilding"/);
   assert.doesNotMatch(index,/id="host-rebuilding"|data-xrb-rebuild-dialog/);
