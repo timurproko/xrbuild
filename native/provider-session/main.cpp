@@ -42,7 +42,12 @@ int main(int argc, char** argv) {
 #else
   if (bootstrap.contains("testScope")) { CloseHandle(parent); return 2; }
 #endif
-  if (!lease.open(&why, scope) || !lease.take("Hands provider session", &why)) { event({{"phase", "failed"}, {"reason", why}}); CloseHandle(parent); return 3; }
+  event({{"phase", "acquiring"}, {"pid", GetCurrentProcessId()}});
+  bool acquired = lease.open(&why, scope);
+  if (acquired && bootstrap.contains("ticket") && bootstrap["ticket"].is_string())
+    acquired = acquisition::acceptHandoff(lease, widen(bootstrap["ticket"].get<std::string>()), "Hands provider session", &why);
+  else if (acquired) acquired = lease.take("Hands provider session", &why);
+  if (!acquired) { event({{"phase", "failed"}, {"reason", why}}); CloseHandle(parent); return 3; }
   std::atomic<bool> quit{false}, done{false}, starting{true}; std::atomic<int> invalid{0};
   std::mutex reasonMutex; std::string failure, providerLog;
   auto fail = [&](const std::string& text) { std::lock_guard<std::mutex> lock(reasonMutex); if (failure.empty()) failure = text.substr(0, 1024); quit = true; };
@@ -89,6 +94,11 @@ int main(int argc, char** argv) {
       }
     } else if (name != "simulated" && name != "replay") fail("Selected input binary is missing");
     auto config = bootstrap["config"]; if (!config.contains("xrb") || !config["xrb"].is_object()) config["xrb"] = json::object();
+#ifndef XRB_PROVIDER_TEST
+    // Preserve the app's existing provider-owned calibration/data lookup. New core state is workspace-owned.
+    config["xrb"]["dataDir"] = narrow(logx::dataDir());
+#endif
+    config["xrb"]["view"] = "3d";
     config["xrb"]["debugImages"] = false;
     if (!quit && !providers::createInput(name, catalog, config.dump(), &sink, &input, &why)) {
       std::string detail; { std::lock_guard<std::mutex> lock(reasonMutex); detail = providerLog; }

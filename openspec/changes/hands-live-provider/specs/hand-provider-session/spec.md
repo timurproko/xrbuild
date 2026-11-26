@@ -12,8 +12,9 @@ A Hands session SHALL start only on an authenticated explicit request for the gl
 
 #### Scenario: Start selected native provider
 - **WHEN** the person starts an available saved provider with current source and profile revisions
-- **THEN** only that provider is created and started, with its checked effective settings and writable workspace data paths
+- **THEN** only that provider is created and started, with its checked effective settings and app-compatible provider metadata, including the existing provider data directory
 - **AND** no display, platform session or browser host is opened
+- **AND** new core state remains workspace-owned without overriding provider data lookup or copying/migrating calibration
 
 #### Scenario: Draft or unavailable source
 - **WHEN** the selection is unsaved, unavailable, ambiguous, unconfigured or unsupported in this execution context

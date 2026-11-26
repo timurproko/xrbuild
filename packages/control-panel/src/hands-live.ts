@@ -8,7 +8,7 @@ export class LiveHands {
   deliveryState: 'pending' | 'applied' | 'failed' = 'pending';
   private deadline: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
-  constructor(profile: HandProfile, revision: string, runId = randomUUID()) {
+  constructor(profile: HandProfile, revision: string, runId: string = randomUUID()) {
     this.envelope = { version: 1, runId, sequence: 0, revision, profile }; this.armDeadline();
   }
   private clearDeadline(): void { if (this.deadline) clearTimeout(this.deadline); this.deadline = null; }

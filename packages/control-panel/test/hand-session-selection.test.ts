@@ -14,7 +14,7 @@ test('session preparation snapshots selected owner/settings/profile without an a
   const core = path.join(root, 'core'), workspace = path.join(root, 'workspace');
   const write = async (file: string, value: unknown) => { await fs.mkdir(path.dirname(file), { recursive: true }); await fs.writeFile(file, typeof value === 'string' ? value : JSON.stringify(value)); };
   const runtime = path.join(core, 'native/host/build/Release');
-  for (const name of ['xrb-host.exe', 'xrb-provider-session.exe', 'xrb-acquisition.exe']) await write(path.join(runtime, name), 'fake executable, never started');
+  for (const name of ['xrb-host.exe', 'xrb-provider-session.exe', 'xrb-acquisition.exe', 'xrb-provider-supervisor.exe']) await write(path.join(runtime, name), 'fake executable, never started');
   const plugin = path.join(workspace, 'plugins/example'), dll = path.join(plugin, 'bin/xrb_live.dll');
   await write(path.join(plugin, 'xrb-plugin.json'), { title: 'Example source', type: 'input', version: '1.0.0',
     settings: [{ key: 'gain', type: 'number', label: 'Gain', default: 1 }], handProviders: [{ version: 1, id: 'live', runtimeName: 'live', transport: 'native', purpose: 'tracked' }] });
@@ -33,7 +33,7 @@ test('session preparation snapshots selected owner/settings/profile without an a
     assert.equal((await readHandsState(core, workspace)).exists, false);
     const selected = await prepareHandSession(core, workspace, { provider: { owner: 'workspace:example', id: 'live' }, revision: state.revision, registryRevision: registry.revision }, probe);
     assert.equal(selected.runtimeName, 'live'); assert.equal(selected.pluginPath, dll); assert.equal(selected.config.gain, 2);
-    assert.equal(selected.config.xrb.debugImages, false); assert.equal(selected.config.xrb.dataDir, workspace);
+    assert.equal(selected.config.xrb.debugImages, false); assert.equal('dataDir' in selected.config.xrb, false, 'native worker derives the same existing provider data root as an app, not a workspace override');
     assert.equal(selected.source.version, '1.0'); assert.equal(selected.profile.sizeFactor, 1);
     state = await readHandsState(core, workspace); assert.deepEqual(state.provider, { owner: 'workspace:example', id: 'live' });
     const bytes = await fs.readFile(path.join(workspace, 'config/hands/profile.json'));

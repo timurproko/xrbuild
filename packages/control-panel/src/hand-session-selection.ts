@@ -27,7 +27,7 @@ export async function prepareHandSession(core: string, workspace: string, expect
   if (runtime.problem) throw new Error(runtime.problem);
   const workerExe = path.join(runtime.releaseDir, 'xrb-provider-session.exe');
   const helperExe = path.join(runtime.releaseDir, 'xrb-acquisition.exe');
-  for (const file of [workerExe, helperExe]) {
+  for (const file of [workerExe, helperExe, path.join(runtime.releaseDir, 'xrb-provider-supervisor.exe')]) {
     const stat = await fs.lstat(file).catch(() => null);
     if (!stat?.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new Error('The provider-session runtime is missing or unsafe. Rebuild the host before Start.');
     nativeBinaryFingerprint(file);
@@ -46,6 +46,6 @@ export async function prepareHandSession(core: string, workspace: string, expect
   return {
     source: { owner: row.owner, id: row.id, label: row.label, version },
     runtimeName: row.runtimeName!, pluginPath, workerExe, helperExe, revision: state.revision, profile: state.profile,
-    config: { ...settings, xrb: { pluginDir, exeDir: runtime.releaseDir, dataDir: workspace, debugImages: false } },
+    config: { ...settings, xrb: { pluginDir, exeDir: runtime.releaseDir, debugImages: false, view: '3d' } },
   };
 }

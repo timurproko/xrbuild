@@ -78,6 +78,23 @@ test('native supervisor contains the worker at birth and launcher death leaves n
   } finally { peer.socket.destroy(); await f.close(); }
 });
 
+test('actual panel-process death closes the supervisor job and its worker', { skip: !worker || !supervisor, timeout: 15000 }, async () => {
+  const code = `const {spawn}=require('node:child_process'); process.stdin.once('data',data=>{const b=JSON.parse(data);const p=spawn(b.supervisor,[b.worker,String(process.pid)],{windowsHide:true,stdio:['pipe','pipe','ignore']});process.stdout.write('@launcher '+p.pid+'\\n');p.stdout.pipe(process.stdout);delete b.supervisor;delete b.worker;b.parentPid=process.pid;p.stdin.write(JSON.stringify(b)+'\\n');});setInterval(()=>{},1000);`;
+  const panel = spawn(process.execPath, ['-e', code], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+  let launcher = 0, pid = 0;
+  const lines = new LineSplitter(line => { if (line.startsWith('@launcher ')) launcher = Number(line.slice(10)); if (line.startsWith('@provider ')) { const event = JSON.parse(line.slice(10)); if (event.url) pid = event.pid; } });
+  panel.stdout.setEncoding('utf8').on('data', text => lines.push(text));
+  panel.stdin.end(JSON.stringify({ worker, supervisor, version: 1, runtimeName: 'simulated', config: {}, testScope: randomBytes(32).toString('hex'), token: randomBytes(32).toString('hex'), epoch: randomBytes(32).toString('hex'), origin }));
+  try {
+    const until = Date.now() + 5000; while (!pid && Date.now() < until) await delay(10); assert.ok(pid); assert.ok(launcher);
+    const gone = once(panel, 'close'); panel.kill(); await gone;
+    for (const child of [pid, launcher]) {
+      let dead = false; for (let i = 0; i < 150; i++) { try { process.kill(child, 0); } catch (e: any) { if (e.code === 'ESRCH') { dead = true; break; } throw e; } await delay(20); }
+      assert.equal(dead, true, `owned child ${child} must not outlive its panel process`);
+    }
+  } finally { if (panel.exitCode === null && panel.signalCode === null) panel.kill(); }
+});
+
 test('headless socket requires exact Origin and first-message capability and never leaks credentials in URL/logs', { skip: !worker, timeout: 15000 }, async () => {
   const f = await fixture();
   try {

@@ -6,6 +6,8 @@ import { readAppSettings, saveAppSettings } from './app-settings.ts';
 import fs from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import os from 'node:os';
+import { HandSessions } from './hand-session.ts';
+import { prepareHandSession } from './hand-session-selection.ts';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultIcon } from '../../app-icon/src/icon.ts';
@@ -212,6 +214,7 @@ export async function packageGraphReady(root: string): Promise<boolean> {
 }
 
 export class Panel {
+  readonly handSessions: HandSessions;
   readonly jobs = new JobRunner();
   private activeHandSource: HandProviderKey | null = null;
   private nativeHandPolicy: 'off' | 'native' | null = null;
@@ -251,7 +254,7 @@ export class Panel {
   private captureOwner: { label: string } | null = null;
   /** Shared exclusion for explicit acquisition tools and app launch preparation. */
   acquireCapture(label: string): () => void {
-    if (this.captureOwner || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.restartPending || this.changingPlugins || this.maintainingCache || this.pluginConsumers || this.settingsWrites.size || this.jobs.active().length)
+    if (this.handSessions.busy || this.captureOwner || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.restartPending || this.changingPlugins || this.maintainingCache || this.pluginConsumers || this.settingsWrites.size || this.jobs.active().length)
       throw new HttpError(409, this.captureOwner ? `${this.captureOwner.label} owns capture. Stop it first.` : 'Another app or panel operation owns acquisition. Stop it first.');
     const owner = { label }; this.captureOwner = owner;
     let released = false;
@@ -317,6 +320,14 @@ export class Panel {
     this.projects = projects;
     this.bootstrapPackageLock = bootstrapPackageLock;
     this.hub = hub;
+    this.handSessions = new HandSessions({ origin: () => new URL(this.panelUrl!).origin,
+      prepare: request => prepareHandSession(this.repo, this.workspace, request, this.nativeProviders),
+      acquire: () => {
+        this.refuseCaptureConflict();
+        if (this.savingHands || this.preparingNativeRun || this.preparingPreview || this.changingPlugins || this.maintainingCache || this.restartPending || this.pluginConsumers || this.settingsWrites.size || this.jobs.active().length)
+          throw new HttpError(409, 'Wait for app, settings or provider preparation before Hands Start');
+        return () => {};
+      } });
     this.packages = new PackageList(path.join(workspace, 'builds'));
     this.jobs.on('change', (j: Job) => {
       hub.send('job', jobSummary(j));
@@ -376,7 +387,7 @@ export class Panel {
     const services = await embeddedServiceReadiness(this.repo, this.workspace);
     const buildNative = native && (force || await this.nativeRebuildNeeded());
     if (!services.needsBuild && !buildNative && !this.servicesPending) return;
-    if (this.preparingRebuild || this.pluginConsumers || this.runner.busy || this.preparingNativeRun || this.preparingPreview || this.settingsWrites.size || this.jobs.active().length > 1)
+    if (this.handSessions.busy || this.preparingRebuild || this.pluginConsumers || this.runner.busy || this.preparingNativeRun || this.preparingPreview || this.settingsWrites.size || this.jobs.active().length > 1)
       throw new Error('Stop apps and other jobs, then retry Rebuild.');
     this.preparingRebuild = true;
     try {
@@ -422,7 +433,7 @@ export class Panel {
 
   private async withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
     this.refuseCaptureConflict();
-    if (this.savingHands || this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
+    if (this.handSessions.busy || this.savingHands || this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop running apps and jobs and wait for launch/settings preparation before changing plugins');
     this.changingPlugins = true;
     try { return await work(); } finally { this.changingPlugins = false; }
@@ -464,7 +475,7 @@ export class Panel {
   }
 
   async synchronizePluginServices(force = false): Promise<void> {
-    if (this.captureOwner) return;
+    if (this.captureOwner || this.handSessions.busy) return;
     if (this.changingPlugins || !force && Date.now() - this.servicesCheckedMs < this.discoveryMaxAgeMs) return;
     if (this.servicesSync) return this.servicesSync;
     this.servicesSync = (async () => {
@@ -525,6 +536,7 @@ export class Panel {
     this.refuseCaptureConflict();
     if (this.restartPending) throw new HttpError(409, 'The panel is restarting');
     const [kind, projectId] = args;
+    if (this.handSessions.busy && ['host-rebuild', 'update', 'cache-cleanup', 'desktop-setup', 'service-setup'].includes(kind)) throw new HttpError(409, 'Hands owns capture. Stop it before changing runtime files.');
     const originalWork = args[3];
     const work: typeof originalWork = async ctx => {
       try {
@@ -960,7 +972,7 @@ export class Panel {
       || body.confirm !== true || typeof body.action !== 'string' || !['toolchain', 'native-deps'].includes(body.action)) throw new HttpError(400, 'Confirm a supported desktop setup action before installing');
     const requireIdle = () => {
       this.refuseCaptureConflict();
-      if (this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
+      if (this.handSessions.busy || this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
         throw new HttpError(409, 'Stop apps/jobs and wait for preparation before desktop setup');
     };
     requireIdle();
@@ -975,7 +987,7 @@ export class Panel {
 
   cleanupWorkingCache(project: Project | undefined, body: Parameters<typeof cleanWorkingCache>[1]): Job {
     this.refuseCaptureConflict();
-    if (this.maintainingCache || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
+    if (this.handSessions.busy || this.maintainingCache || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop apps/jobs and wait for preparation before cache maintenance');
     return this.startJob('cache-cleanup', project?.id ?? null, 'remove reviewed working cache', async () => {
       this.maintainingCache = true;
@@ -986,7 +998,7 @@ export class Panel {
 
   setupBundledServices(): Job {
     this.refuseCaptureConflict();
-    if (this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
+    if (this.handSessions.busy || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop apps/jobs and wait for preparation before setting up bundled services');
     // Setup is the explicit recovery path for a failed/stale installed service snapshot.
     this.servicesPending = false;
@@ -2041,7 +2053,7 @@ export class Panel {
         return true;
       }
       case 'PUT hands/postprocessing': {
-        if (this.savingHands || this.preparingNativeRun || this.preparingPreview || this.changingPlugins || this.pluginConsumers || this.jobs.active().length) throw new HttpError(409, 'Wait for Hands preparation before saving');
+        if (this.handSessions.preparing || this.savingHands || this.preparingNativeRun || this.preparingPreview || this.changingPlugins || this.pluginConsumers || this.jobs.active().length) throw new HttpError(409, 'Wait for Hands preparation before saving');
         this.savingHands = true;
         try {
           const body = await readJson<{ selected?: unknown; values?: unknown; revision?: unknown; registryRevision?: unknown }>(req);
@@ -2063,7 +2075,7 @@ export class Panel {
         return true;
       }
       case 'POST hands/apply': {
-        if (this.savingHands || this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.changingPlugins || this.jobs.active().length)
+        if (this.handSessions.preparing || this.savingHands || this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.changingPlugins || this.jobs.active().length)
           throw new HttpError(409, 'Wait for launch, package or provider preparation before applying Hands');
         this.savingHands = true;
         try {
@@ -2096,7 +2108,7 @@ export class Panel {
         return true;
       }
       case 'PUT hands': {
-        if (this.savingHands || this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.changingPlugins || this.jobs.active().length)
+        if (this.handSessions.preparing || this.savingHands || this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.changingPlugins || this.jobs.active().length)
           throw new HttpError(409, 'Wait for launch, package or provider preparation before saving Hands');
         this.savingHands = true;
         try {
@@ -2193,7 +2205,7 @@ export class Panel {
         sendJson(res, 202, jobSummary(await this.setupDesktop(await readJson(req)))); return true;
       case 'POST host/rebuild':
         if (await this.desktopSetup.isBusy()) throw new HttpError(409, 'Wait for desktop setup to finish before rebuilding');
-        if (this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop the running or starting host first: its exe must not overlap a rebuild');
+        if (this.handSessions.busy || this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop Hands and the running or starting host first: its exe must not overlap a rebuild');
         if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before rebuilding');
         sendJson(res, 202, jobSummary(this.startJob('host-rebuild', null, 'rebuild xrb-host', async ctx => {
           ctx.line('Rebuild complete.');
@@ -2337,6 +2349,7 @@ export class Panel {
   }
 
   async dispose(): Promise<void> {
+    await this.handSessions.close();
     await this.stopMesh(); await this.meshCleanup;
     this.setLiveHands(null);
     if (this.runner.busy) await this.runner.stop();

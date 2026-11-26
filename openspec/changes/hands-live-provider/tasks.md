@@ -20,11 +20,11 @@ Each numbered group corresponds to one PR Implementation outcome, in the same or
 
 ## 3. Authenticated bounded session service and complete supervision
 
-- [ ] 3.1 Add capability-bound session bootstrap/status/Start/Stop and exact Host/Origin/fetch-metadata checks without widening preview CORS; isolated route tests reject cross-origin, stale/foreign owner, malformed and unauthorized controls without acquisition.
-- [ ] 3.2 Add worker loopback authentication roles, bounded binary envelopes, one-in-flight plus newest-pending delivery and consumer acknowledgements; actual fake-worker socket tests cover credential leakage, slow readers, rejected payloads and bounded pending bytes.
-- [ ] 3.3 Implement epoch/sequence admission, four-timestamp clock mapping/uncertainty, future/age checks and injectable freshness/liveness deadlines; transport tests cover backwards time, stale/duplicate/retired frames, invalid values and valid empty-frame health.
-- [ ] 3.4 Implement native supervisor mode with pre-resume job containment and exact panel-process monitoring, plus idempotent cancellation/Stop and verified-death recovery; process tests cover start timeout, worker hang/crash, panel crash and abandoned lease reacquisition.
-- [ ] 3.5 Wire page/socket/heartbeat loss and panel shutdown into cleanup without relying on unload fetch; isolated lifecycle tests assert bounded shutdown, no automatic restart, no live-owner lease stealing and no orphan worker. Document authentication, deadlines and failure recovery.
+- [x] 3.1 Add capability-bound session bootstrap/status/Start/Stop and exact Host/Origin/fetch-metadata checks without widening preview CORS; isolated route tests reject cross-origin, stale/foreign owner, malformed and unauthorized controls without acquisition.
+- [x] 3.2 Add worker loopback authentication roles, bounded binary envelopes, one-in-flight plus newest-pending delivery and consumer acknowledgements; actual fake-worker socket tests cover credential leakage, slow readers, rejected payloads and bounded pending bytes.
+- [x] 3.3 Implement epoch/sequence admission, four-timestamp clock mapping/uncertainty, future/age checks and injectable freshness/liveness deadlines; transport tests cover backwards time, stale/duplicate/retired frames, invalid values and valid empty-frame health.
+- [x] 3.4 Implement native supervisor mode with pre-resume job containment and exact panel-process monitoring, plus idempotent cancellation/Stop and verified-death recovery; process tests cover start timeout, worker hang/crash, panel crash and abandoned lease reacquisition.
+- [x] 3.5 Wire page/socket/heartbeat loss and panel shutdown into cleanup without relying on unload fetch; isolated lifecycle tests assert bounded shutdown, no automatic restart, no live-owner lease stealing and no orphan worker. Document authentication, deadlines and failure recovery.
 
 ## 4. Live frames and profile Apply through the existing SDK view
 
