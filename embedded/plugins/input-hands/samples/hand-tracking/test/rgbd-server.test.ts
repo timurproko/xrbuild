@@ -13,6 +13,10 @@ test('loopback origins and exact token gate upgrade before native enumeration/ca
  const status=await new Promise<number>(resolve=>http.get({hostname:'127.0.0.1',port:bridge.port,path:'/health',headers:{host:'remote.example'}},r=>{r.resume();resolve(r.statusCode!);}));assert.equal(status,403);
  }finally{await bridge.close();}
 });
+test('explicit device enumeration failures retain a short reason and loader diagnostics without capture',async()=>{
+ const native=new FakeNative();native.list=async()=>{throw Object.assign(new Error('Camera device runtime could not start; restore the reviewed device runtime.'),{detail:'fixture loader 3221225781'});};
+ const bridge=await createBridge({port:0,token,nativeFactory:()=>native});try{const c=await client(bridge);c.send({type:'list'});const error=await c.wait(v=>v.type==='error');assert.match(error.message,/device runtime could not start/);assert.equal(error.detail,'fixture loader 3221225781');assert.equal(native.starts,0);}finally{await bridge.close();}
+});
 test('connect/list never starts a camera; one authenticated owner at a time',async()=>{
  const{bridge,captures}=await setup();try{const c=await client(bridge);assert.equal(captures.length,0);c.send({type:'list'});const list=await c.wait(v=>v.type==='devices');assert.equal(list.devices[0].serial,'fixture-serial');assert.ok(captures.every(n=>n.starts===0));await rejected(bridge);assert.equal(c.ws.protocol,'handtracking-rgbd-v1','token is never selected/reflected as protocol');}finally{await bridge.close();}
 });

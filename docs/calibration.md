@@ -2,13 +2,33 @@
 
 Open **Calibration** in the module menu, or `/calibration/`. It measures the depth-camera B → A optical-space transform, bound to both camera serials and exact profiles. Hand providers can consume the result; this page does not change app hand placement or start a hand provider.
 
-The core page opens without optional tools. The optional calibration contribution supplies measurement and saved-result operations. A missing/stale checked native bridge blocks capture only. **Connect** explicitly starts authenticated local bridge services and checks camera inventory; opening the page does neither. Two distinct supported depth cameras are required. Build/stage the optional bridge explicitly through its documented setup; navigation never installs or builds it.
+The page uses the panel's standard loading indicator without a description subtitle. Method and Start share a control baseline and height.
+
+The core page opens without optional tools. The optional calibration contribution supplies measurement and saved-result operations. A missing/stale checked native bridge blocks capture only. **Connect** explicitly starts authenticated local bridge services and checks camera inventory; opening the page does neither. Two distinct supported depth cameras are required. **Rebuild** refreshes the bridge for the current source when its reviewed device SDK is present; navigation never installs or builds it.
+
+## Availability and recovery
+
+After updating, choose **Rebuild** in the module menu (or the availability notice), let it complete, then open Calibration and **Connect**. Rebuild prepares missing/stale public service dependencies and rebuilds/stages the source-bound camera bridge using the desktop-validated CMake and generator and the same checked core native dependency root as the host. Core native libraries installed by Desktop setup may live entirely in the selected workspace cache; the bridge does not require a second product-tree header copy. A bridge built before a native source update is refreshed automatically; no separate bridge command is needed. The bridge step runs framing/geometry/marker self-tests, never device enumeration or capture. It skips an unconfigured optional device SDK rather than installing it or failing an unrelated host build.
+
+| Notice cause | Action |
+| --- | --- |
+| Calibration plugin missing, disabled or conflicting | Enable/install the contribution or select one owner in Plugins. |
+| Application components missing, stale or unfinished | Rebuild. Current immutable contribution generations refresh while idle. |
+| Camera device SDK missing | Supply the reviewed `dependency.json` and its verified headers, library, runtime and notices under core `third_party/hand-tracking/sensor`, then Rebuild. No machine-global/private SDK discovery or automatic device download occurs. |
+| Device SDK files invalid/incomplete | Restore the reviewed dependency; diagnostic details identify the validation failure. |
+| Camera device runtime missing from the dependency | Restore the reviewed SDK runtime file; it is named separately from an unconfigured SDK. |
+| Native bridge absent or from an older source version | Rebuild with the configured reviewed device SDK. |
+| Bridge manifest/inventory/hash or component ownership/output invalid, unsafe paths or leftover locks | Inspect the preserved files/diagnostic details and resolve ownership or restore the verified generation; unsafe state is never erased or overwritten automatically. |
+| Device-runtime loader or enumeration failure after Connect | Restore the reviewed device runtime or check camera connections; details retain the native failure without claiming which unobserved library is missing. |
+| Fewer than two compatible cameras | Connect a second supported camera, then Connect again. |
+
+The notice contains only the current reason and applicable action. Additional diagnostics are available on hover. A successful Rebuild from the notice, including a successful Retry after a failed attempt, reloads this route and rechecks availability without starting cameras. If an already-running panel reports a real loaded-code restart requirement, use Restart in its existing job result. Save/Import/Export remain available when only capture prerequisites are missing. Physical camera behavior and Windows device-runtime loading still require an operator check on the rig.
 
 ## Manual targets
 
 Connect, select two distinct serials and exact profiles, choose **Manual targets**, then Start. Keep both cameras fixed. For each static target, use the same ID and role and click it once in each RGB preview. Collect at least six well-spread fit pairs and three separate held-out check pairs. Remove a target explicitly to replace a probe. Confirm the fixed setup, describe the physical reference and supply its uncertainty (mm); unknown uncertainty remains provisional. Fit shows separate fit/check quality. Stop releases both cameras and the shared acquisition lease; it does not stop another app. A busy app/tool blocks connection rather than being taken over. Connection loss or partial start rolls back both streams. Hand models are not needed.
 
-The minimal native port validates authenticated loopback transport, serial/profile, frame planes, run/sequence and clock messages. Static point sampling shares calibrated geometry with the retained algorithms but imports no hand reconstruction engine. Native services require explicitly prepared public service dependencies as well as an explicitly built/staged bridge; neither is installed on navigation.
+The minimal native port validates authenticated loopback transport, serial/profile, frame planes, run/sequence and clock messages. Static point sampling shares calibrated geometry with the retained algorithms but imports no hand reconstruction engine. Native services require prepared public service dependencies and a checked staged bridge; explicit Rebuild prepares both, but neither is installed on navigation.
 
 ## Marker
 

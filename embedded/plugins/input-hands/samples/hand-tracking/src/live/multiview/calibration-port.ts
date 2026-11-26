@@ -72,7 +72,7 @@ export class CalibrationCamera {
       this.calibration = message.calibration; this.runId = message.runId; this.phase = 'running'; this.pending?.resolve(); return;
     }
     if (message.type === 'stopped') { if (message.id === this.stopId && this.phase === 'stopping') { this.phase = 'connected'; this.stopPending?.resolve(); } else if (message.fatal === true) this.fail(new Error('Native stream stopped.')); return; }
-    if (message.type === 'error') throw new Error(typeof message.message === 'string' ? message.message : 'Native acquisition failed.');
+    if (message.type === 'error') throw Object.assign(new Error(typeof message.message === 'string' ? message.message : 'Native acquisition failed.'), { detail: typeof message.detail === 'string' ? message.detail : '' });
     if (message.type === 'pong') {
       requireValue(Number.isSafeInteger(message.id), 'Native clock ID'); const sent = this.pings.get(message.id as number); this.pings.delete(message.id as number);
       if (sent === undefined) return;

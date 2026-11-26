@@ -15,6 +15,7 @@ export { hostPaths, hostCachePaths, resolvedHostPaths } from './host-artifacts.t
 export { nativeBinaryFingerprint } from './plugin-artifacts.ts';
 import { mergeProviderProbes, providerQuery } from './native-provider-validation.ts';
 import { nativeDependencyRoot } from './native-dependencies.ts';
+import { rebuildPluginContributions } from './plugin-native-rebuild.ts';
 
 export const PLUGIN_BUILD_SUCCESS = '.xrb-last-successful-build';
 
@@ -561,6 +562,9 @@ export async function rebuildHost(repo: string, workspace: string, ctx: JobConte
   const generator = options.generator ?? visualStudioGenerator(cmake);
   ctx.line(`using ${generator} (${cmake})`);
   if (!options.pluginsOnly) await rebuildCoreHost(repo, workspace, ctx, cmake, generator);
-  if (!options.coreOnly) await rebuildNativePlugins(repo, workspace, ctx, cmake, generator, options.includeDisabled, options.pluginOrigin);
+  if (!options.coreOnly) {
+    await rebuildNativePlugins(repo, workspace, ctx, cmake, generator, options.includeDisabled, options.pluginOrigin);
+    await rebuildPluginContributions(repo, workspace, ctx, { cmake, generator }, options.includeDisabled, options.pluginOrigin);
+  }
   return resolvedHostFreshness(repo, workspace, options.coreOnly, options.pluginOrigin);
 }

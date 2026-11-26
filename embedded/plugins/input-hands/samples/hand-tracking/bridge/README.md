@@ -16,6 +16,8 @@ The explicit builder verifies the descriptor and all listed files before invokin
 
 With `XRB_CORE`/`XRB_HOME` explicitly selected, run `bridge:build`; `bridge:stage` also publishes an immutable source-bound runtime in selected user `build/hand-tracking/bridge`. This performs only framing/geometry/marker self-tests; it never enumerates or opens a camera. Marker preparation fetches its pinned verified public archive into core third_party; existing foreign/changed/incomplete dependency stores are refused, not removed. Missing SDK configuration is explicit and does not prevent core Hands or legacy recording playback from opening.
 
+Normal full **Rebuild** now rebuilds/stages a missing or source-stale bridge when this reviewed SDK is configured, including after an update changes the source digest. It uses the validated CMake/generator and selected integration workspace, and does not enumerate cameras. A missing SDK is named and skipped; invalid dependency/runtime files and leftover build locks are preserved and refused. Explicit `bridge:build` / `bridge:stage` remain available for standalone setup.
+
 The managed viewer checks an explicitly built runtime's source/inventory hashes. It never runs a compiler at startup. Missing/stale runtime blocks native acquisition only. Runtime files and accompanying notices remain user-owned generated output, not tracked source or automatically redistributable product files.
 
 ## Local service and lifecycle

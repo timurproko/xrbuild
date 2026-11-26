@@ -7,16 +7,16 @@ import { calibrationStorage } from './calibration-storage.mjs';
 export async function calibrationRequest(url, options = {}) {
   const response = await fetch(url, { cache: 'no-store', ...options, headers: { 'content-type': 'application/json', ...options.headers } });
   const value = await response.json();
-  if (!response.ok) throw new Error(value.error || `Calibration request failed (${response.status}).`);
+  if (!response.ok) throw Object.assign(new Error(value.error || `Calibration request failed (${response.status}).`), { detail: value.detail });
   return value;
 }
 /** Injected ports are the same seam used by software-only tests; no product fixture mode exists. */
-export async function mountCalibration(root, { capture, request = calibrationRequest, createCamera = (_side, callbacks) => new CalibrationCamera(callbacks), now = () => performance.now(), storage = null, onController = () => {} } = {}) {
+export async function mountCalibration(root, { capture, notice = null, request = calibrationRequest, createCamera = (_side, callbacks) => new CalibrationCamera(callbacks), now = () => performance.now(), storage = null, onController = () => {} } = {}) {
   storage ??= calibrationStorage(request);
   const el = id => root.querySelector(`#${id}`), events = new AbortController();
   let saved = []; const urls = new Map();
   let disposed = false, connecting = false, work = false, lease = null, heartbeat = null, operation = 0, dirty = false, entriesKey = '', lastResult = null, stopWork = null;
-  const error = value => { el('cal-error').textContent = value?.message || String(value || ''); el('cal-error').hidden = !value; };
+  const error = value => { el('cal-error').textContent = value?.message || String(value || ''); el('cal-error').title = value?.detail || ''; el('cal-error').hidden = !value; };
   const api = input => request('/api/calibration/capture', { method: 'POST', body: JSON.stringify(input), keepalive: true });
   const ports = {};
   const controller = new CameraCalibration(ports, storage, now); onController(controller);
@@ -108,7 +108,9 @@ export async function mountCalibration(root, { capture, request = calibrationReq
         el(`cal-profile-${side}`).replaceChildren();
       }
       const distinct = new Set(Object.values(ports).flatMap(port => port.snapshot().devices.filter(device => matchingProfiles(device).length).map(device => device.serial)));
-      el('cal-capture-status').textContent = distinct.size < 2 ? 'Two compatible depth cameras are required.' : 'Select two cameras and profiles.';
+      const missing = distinct.size < 2;
+      notice?.({ available: !missing, reason: 'Two compatible depth cameras are required; connect a second supported camera.' });
+      el('cal-capture-status').textContent = missing && !notice ? 'Two compatible depth cameras are required.' : missing ? 'Connected.' : 'Select two cameras and profiles.';
     } catch (reason) { await stop(); throw reason; }
     finally { if (generation === operation) connecting = false; render(); }
   });
@@ -176,7 +178,8 @@ export async function mountCalibration(root, { capture, request = calibrationReq
   try { await reloadSaved(); } catch (reason) { error(reason); }
   const timer = setInterval(render, 200); render();
   el('cal-connect').disabled = !capture?.available;
-  el('cal-capture-status').textContent = capture?.reason || 'Not connected.';
+  notice?.(capture);
+  el('cal-capture-status').textContent = notice && !capture?.available ? 'Not connected.' : capture?.reason || 'Not connected.';
   addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } }, { signal: events.signal });
   return () => { disposed = true; events.abort(); clearInterval(timer); for (const [url, timer] of urls) { clearTimeout(timer); URL.revokeObjectURL(url); } urls.clear(); void stop().catch(() => {}); };
 }

@@ -11,13 +11,13 @@ import { savePluginPrefs } from '../src/plugin-manager.ts';
 import { NATIVE_RECEIPT } from '../src/plugin-artifacts.ts';
 import { hostPaths, hostCachePaths, resolvedHostPaths, nativePluginPlan, resolvedPluginCmakeVars, nativeBinaryFingerprint, resolvedPluginBinDirs, resolvedHostFreshness, rebuildHost, rebuildNativePlugins, listProviders, parseProviderList, type ProviderInfo, type ProviderList } from '../src/host-build.ts';
 import { mergeProviderProbes } from '../src/native-provider-validation.ts';
-import type { JobContext } from '../src/jobs.ts';
+import { runProcess, type JobContext } from '../src/jobs.ts';
 import { Panel } from '../src/panel.ts';
 import { EventHub } from '../src/http.ts';
 import type { Project } from '../src/projects.ts';
 
 async function fixture(t: TestContext) {
-  const artifacts = path.join(REPO, '.artifacts'); await fs.mkdir(artifacts, { recursive: true });
+  const artifacts = process.env.XRB_TEST_ROOT ?? path.join(REPO, '.artifacts'); await fs.mkdir(artifacts, { recursive: true });
   const root = await fs.mkdtemp(path.join(artifacts, 'native-origins-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const core = path.join(root, 'core'), workspace = path.join(root, 'user'), embedded = path.join(core, 'embedded');
@@ -58,6 +58,56 @@ const desktop: ProviderInfo = { role: 'display', name: 'desktop', version: '', d
 const base: ProviderList = { providers: [desktop], rejected: [], error: null };
 const provider = (file: string, name = 'hands', role: ProviderInfo['role'] = 'input'): ProviderInfo => ({ role, name, path: file, builtin: false, version: '0.1.0', description: 'Fixture' });
 const list = (...providers: ProviderInfo[]): ProviderList => ({ providers: [desktop, ...providers], rejected: [], error: null });
+
+test('normal Rebuild invokes checked selected native rebuild contributions with validated tools', async t => {
+  const f = await fixture(t), dir = path.join(f.workspace, 'plugins/camera');
+  await f.write(dir, 'xrb-plugin.json', { title: 'Camera', type: 'input', version: '1.0.0', exports: { 'native-rebuild': './rebuild.mjs' } });
+  await f.write(dir, 'helper.mjs', `export const label='before';`);
+  await f.write(dir, 'rebuild.mjs', `import {label} from './helper.mjs';export async function rebuildNative(context,job,tools){job.line(label);job.line(JSON.stringify({core:context.core,workspace:context.workspace,tools}));}`);
+  const lines: string[] = [], ctx: JobContext = { line: line => lines.push(line), async run(cmd, args, options) {
+    if (cmd === process.execPath) { assert.equal(await runProcess(cmd, args, line => lines.push(line), options), 0, lines.join('\n')); }
+    else await f.ctx.run(cmd, args, options);
+  } };
+  await rebuildHost(f.core, f.workspace, ctx, { cmake: 'checked-cmake', generator: 'checked-generator' });
+  assert.ok(lines.some(line => line.includes('"cmake":"checked-cmake"') && line.includes('"generator":"checked-generator"') && line.includes(JSON.stringify(f.workspace))));
+  lines.length = 0;
+  await f.write(dir, 'helper.mjs', `export const label='after';`);
+  await rebuildHost(f.core, f.workspace, ctx, { cmake: 'checked-cmake', generator: 'checked-generator' });
+  assert.ok(lines.includes('after')); assert.ok(!lines.includes('before'), 'transitive source changes must not reuse cached modules');
+  lines.length = 0;
+  await savePluginPrefs(f.workspace, { disabled: ['camera'], settings: {}, panelSettings: {} });
+  await rebuildHost(f.core, f.workspace, ctx, { cmake: 'checked-cmake', generator: 'checked-generator' });
+  assert.equal(lines.some(line => line.includes('workspace:camera')), false);
+});
+
+for (const origin of ['bundled', 'workspace'] as const) test(`scoped ${origin} rebuild contributions never consume the refused opposite origin`, async t => {
+  const f = await fixture(t), otherOrigin = origin === 'bundled' ? 'workspace' : 'bundled';
+  const selectedRoot = origin === 'bundled' ? f.embedded : f.workspace, refusedRoot = origin === 'bundled' ? f.workspace : f.embedded;
+  const dir = path.join(selectedRoot, 'plugins/camera');
+  await f.write(dir, 'xrb-plugin.json', { title: 'Camera', type: 'input', version: '1.0.0', exports: { 'native-rebuild': './rebuild.mjs' } });
+  await f.write(dir, 'rebuild.mjs', `export async function rebuildNative(context,job,tools){job.line('selected ${origin} contribution');job.line(JSON.stringify(tools));}`);
+  await f.write(refusedRoot, 'plugins/broken/xrb-plugin.json', '{invalid refused source');
+  const lines: string[] = [], ctx: JobContext = { line: line => lines.push(line), async run(cmd, args, options) {
+    if (cmd === process.execPath) {
+      assert.equal(args.at(-1), origin, 'the fresh worker must revalidate the same source scope');
+      assert.equal(await runProcess(cmd, args, line => lines.push(line), options), 0, lines.join('\n'));
+    } else await f.ctx.run(cmd, args, options);
+  } };
+  const options = { pluginsOnly: true, cmake: 'checked-cmake', generator: 'checked-generator', pluginOrigin: origin };
+  await rebuildHost(f.core, f.workspace, ctx, options);
+  assert.ok(lines.includes(`selected ${origin} contribution`));
+  assert.ok(lines.some(line => line.includes('"cmake":"checked-cmake"') && line.includes('"generator":"checked-generator"')));
+  await savePluginPrefs(f.workspace, { disabled: ['camera'], settings: {}, panelSettings: {} });
+  lines.length = 0; await rebuildHost(f.core, f.workspace, ctx, options);
+  assert.ok(!lines.includes(`selected ${origin} contribution`));
+  await rebuildHost(f.core, f.workspace, ctx, { ...options, includeDisabled: true });
+  assert.ok(lines.includes(`selected ${origin} contribution`));
+  await savePluginPrefs(f.workspace, { disabled: [], origins: { camera: otherOrigin }, settings: {}, panelSettings: {} });
+  lines.length = 0; await rebuildHost(f.core, f.workspace, ctx, options);
+  assert.ok(!lines.includes(`selected ${origin} contribution`), 'a scoped build cannot substitute for an explicitly selected other origin');
+  lines.length = 0; await rebuildHost(f.core, f.workspace, ctx, { ...options, pluginsOnly: false, coreOnly: true });
+  assert.ok(!lines.includes(`selected ${origin} contribution`), 'core-only builds must keep skipping contributions');
+});
 
 test('host rebuilds publish core-scoped immutable runtimes without changing installed sources', async t => {
   const f = await fixture(t);

@@ -9,7 +9,7 @@ test('two bridge services share exclusion, reject takeover, expire and release o
   const server = http.createServer((req, res) => { void capture.handle(req, res); }); await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${(server.address() as any).port}`, call = (value: object, origin = base) => fetch(base + '/api/calibration/capture', { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(value) });
   try {
-    assert.equal(capture.status().available, true); assert.equal(creates, 0);
+    assert.equal((await capture.status()).available, true); assert.equal(creates, 0);
     assert.equal((await call({ action: 'connect' }, 'https://untrusted.test')).status, 403); assert.equal(creates, 0);
     const connected = await call({ action: 'connect' }).then(r => r.json()); assert.equal(connected.cameras.length, 2); assert.ok(held);
     assert.equal((await call({ action: 'connect' })).status, 409); assert.equal((await call({ action: 'disconnect', id: 'foreign' })).status, 409); assert.ok(held);
@@ -18,6 +18,19 @@ test('two bridge services share exclusion, reject takeover, expire and release o
     assert.equal((await call({ action: 'disconnect', id: again.id })).status, 200); assert.equal(held, false); assert.equal(closes, 4);
   } finally { await capture.close(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });
+test('disposal during asynchronous prerequisite checks cannot acquire or start services later', async () => {
+  let resume!: () => void, entered!: () => void;
+  const prepared = new Promise<void>(resolve => { resume = resolve; }), preparing = new Promise<void>(resolve => { entered = resolve; });
+  const capture = calibrationCapture({ acquireCapture() { assert.fail('disposed capture must not acquire'); } }, { async prepare() { entered(); await prepared; }, factory() { assert.fail('disposed capture must not start services'); } });
+  const server = http.createServer((req, res) => { void capture.handle(req, res); }); await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${(server.address() as any).port}`;
+  try {
+    const response = fetch(base + '/api/calibration/capture', { method: 'POST', headers: { origin: base }, body: JSON.stringify({ action: 'connect' }) });
+    await preparing; await capture.close(); resume();
+    assert.equal((await response).status, 409); assert.equal(capture.busy(), false);
+  } finally { resume(); await capture.close(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
 test('partial service allocation rolls back without losing the acquisition lease', async () => {
   let held = false, closes = 0, creates = 0;
   const capture = calibrationCapture({ acquireCapture() { held = true; return () => { held = false; }; } }, { prepare() {}, async factory() { if (++creates === 2) throw new Error('Second bridge failed'); return { async close() { assert.ok(held); closes++; } }; } });

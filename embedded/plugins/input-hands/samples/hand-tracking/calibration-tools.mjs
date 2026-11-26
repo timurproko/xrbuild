@@ -24,6 +24,7 @@ export async function createCalibrationTools(context) {
   const capture = calibrationCapture(context);
   return {
     status: () => capture.status(),
+    busy: () => capture.busy(),
     close: () => capture.close(),
     async handle(req, res) {
       const url = new URL(req.url, 'http://127.0.0.1');
