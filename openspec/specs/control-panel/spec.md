@@ -8,12 +8,17 @@ Describes control-panel actions that maintain the selected workspace and its nat
 
 ### Requirement: Update a Git workspace
 
-The control panel SHALL offer an Update workspace action that brings the selected workspace's Git clone up to date with its upstream by fast-forward only, fetches its Git LFS content, and then rebuilds the native plugins, and the core host only when it is missing or outdated, with the same tool discovery as Rebuild. It SHALL never stash, merge, rebase, reset or discard local work, and SHALL never update the core checkout the panel runs from. Rebuild SHALL stay build-only.
+The control panel SHALL offer an Update action that fast-forwards the selected workspace's Git clone to exactly the upstream commit it fetched, without fetching again, fetches its Git LFS content first, and then rebuilds the native plugins, and the core host only when it is missing or outdated. It SHALL never stash, merge, rebase, reset or discard local work. Rebuild SHALL stay build-only.
 
 #### Scenario: Workspace behind its upstream
 
 - **WHEN** the workspace branch is 3 commits behind its upstream with no local commits and the person runs Update
 - **THEN** the panel fetches, downloads the LFS content of the new commits, fast-forwards, rebuilds, and reports the old and new commit, 3 commits and what was rebuilt
+
+#### Scenario: Remote moves during the update
+
+- **WHEN** the upstream gets another commit after the panel fetched and downloaded the LFS content, and before it fast-forwards
+- **THEN** the workspace ends at the commit that was fetched, not at the newer one, and the next Update brings the newer one
 
 #### Scenario: Already up to date
 
@@ -57,8 +62,8 @@ The control panel SHALL offer an Update workspace action that brings the selecte
 
 #### Scenario: Status leaves the Git index alone
 
-- **WHEN** the panel reads the workspace status for the menu item and the behind hint
-- **THEN** it takes no Git lock and does not rewrite the index, and it runs no Git in the workspace while an update is active
+- **WHEN** the panel reads the core and workspace status for the menu item and the behind hint
+- **THEN** it takes no Git lock and does not rewrite the index, and it runs no Git in either repository while an update is active
 
 #### Scenario: Behind hint without fetching
 
@@ -83,3 +88,27 @@ The control panel SHALL refuse to start Update while a host is running or starti
 
 - **WHEN** an update is active and the person starts a run or a rebuild
 - **THEN** the panel refuses with a conflict until the update finishes
+
+### Requirement: Update reports the core checkout
+
+The control panel SHALL report the status of the core checkout the panel runs from next to the workspace's, SHALL update each repository at most once per run, treating a workspace that is the core checkout as that one repository, and SHALL never report the core as updated while it only reports it.
+
+#### Scenario: One Update action for both repositories
+
+- **WHEN** the person opens the panel menu and points at the Update item
+- **THEN** the item is named exactly "Update", no visible text says "Update workspace", and its tooltip gives the core's and the workspace's state and when the remote was last checked, such as "Core: up to date. Workspace: up to date. Remote last checked just now."
+
+#### Scenario: Core status
+
+- **WHEN** the core checkout is not a Git checkout, is on a detached HEAD, or its branch has no upstream
+- **THEN** the panel reports the core as unavailable with that reason, does not require Git LFS for it, and the workspace status is unaffected
+
+#### Scenario: Core behind while only its status is reported
+
+- **WHEN** the core checkout is 3 commits behind its upstream as of its last fetch, or cannot be updated, and the person points at Update or runs it
+- **THEN** the tooltip and the result say that the core is behind or why it cannot be updated, that this version does not update it yet and to pull it by hand, and the result never reports the core as updated
+
+#### Scenario: Workspace is the core checkout
+
+- **WHEN** the selected workspace is the core checkout the panel runs from
+- **THEN** the panel reports one repository, and an update never fast-forwards it more than once
