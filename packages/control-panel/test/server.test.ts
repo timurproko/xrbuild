@@ -1221,8 +1221,12 @@ test('native Run reaches the host runner, while a WebXR Run must open the browse
     assert.equal(started?.mode, 'built');
     assert.ok(started?.hostExe.endsWith('xrb-host.exe'));
     assert.ok(started?.hostArgs.includes('--title=native-run'));
-    assert.equal(started?.builtUrl, `https://app.local/index.html?xrb-panel=${encodeURIComponent(`http://127.0.0.1:${port}/`)}&xrb-project=native-run&xrb-mouse=1&xrb-cursor=ring-dot&xrb-hand=off`,
-      'panel native runs carry workspace and Mouse selection while still serving the built app at app.local');
+    assert.match(started?.handProfileRunId, /^[a-zA-Z0-9-]{16,80}$/);
+    assert.equal(started?.builtUrl, `https://app.local/index.html?xrb-panel=${encodeURIComponent(`http://127.0.0.1:${port}/`)}&xrb-project=native-run&xrb-mouse=1&xrb-cursor=ring-dot&xrb-hand=off&xrb-hand-profile-run=${started.handProfileRunId}`,
+      'panel native runs carry workspace, Mouse selection and profile-run binding while still serving the built app at app.local');
+    const config = JSON.parse(await fs.readFile(started.hostArgs.find((arg: string) => arg.startsWith('--config=')).slice(9), 'utf8'));
+    assert.equal(config.handProfileRun.runId, started.handProfileRunId);
+    assert.deepEqual(config.handProfileRun.profile, { version: 1, offsetMm: { x: 0, y: 0, z: 0 }, sizeFactor: 1, appearance: {} });
     assert.equal(started?.mouseEnabled, true);
     assert.equal(started?.handPolicy, 'off');
   } finally { runner.start = originalStart; panel.panel.repo = originalCore; }

@@ -8,6 +8,7 @@
 #include "app_scheme.h"
 #include "args.h"
 #include "host_channel.h"
+#include "hand_profile.h"
 #include "hand_recording.h"
 #include "host_config.h"
 #include "log.h"
@@ -423,7 +424,27 @@ static void testShellPolicy() {
   EXPECT(shell.accepts("page-a", "page-a", "reload"));
 }
 
+static void testHandProfiles() {
+  using nlohmann::json;
+  const json p = {{"version", 1}, {"offsetMm", {{"x", 0}, {"y", 0}, {"z", 0}}}, {"sizeFactor", 1}, {"appearance", json::object()}};
+  json e = {{"version", 1}, {"runId", "fixture-run-123456789"}, {"revision", std::string(64, 'a')}, {"sequence", 0}, {"profile", p}};
+  EXPECT(handprofile::validProfile(p)); EXPECT(handprofile::validEnvelope(e));
+  handprofile::State state{e};
+  auto newer = e; newer["sequence"] = 2; newer["profile"]["sizeFactor"] = .8;
+  EXPECT(state.accept(newer)); EXPECT(!state.accept(e)); EXPECT(state.accept(newer));
+  auto wrong = newer; wrong["runId"] = "foreign-run-123456789"; EXPECT(!state.accept(wrong));
+  wrong = newer; wrong["profile"]["offsetMm"]["x"] = 151; EXPECT(!state.accept(wrong));
+  wrong = newer; wrong["sequence"] = 2.5; EXPECT(!state.accept(wrong));
+  wrong = newer; wrong["profile"]["appearance"]["jointColorLinear"] = json::array({0, 2, 1}); EXPECT(!state.accept(wrong));
+  EXPECT(state.acknowledge(newer)); EXPECT(!state.acknowledge(e));
+  std::string text = newer.dump(); std::vector<uint8_t> bytes(16 + text.size()); bytes[0] = handprofile::kSetProfile; bytes[1] = 2;
+  memcpy(bytes.data() + 16, text.data(), text.size()); EXPECT(handprofile::decode(bytes.data(), bytes.size(), handprofile::kSetProfile) == newer);
+  bytes[1] = 1; EXPECT(handprofile::decode(bytes.data(), bytes.size(), handprofile::kSetProfile).is_null());
+  EXPECT(handprofile::decode(bytes.data(), 2, handprofile::kSetProfile).is_null());
+}
+
 int main() {
+  testHandProfiles();
   testShellPolicy();
   testPluginAbi();
   testChannelV2();

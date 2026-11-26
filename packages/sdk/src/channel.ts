@@ -19,6 +19,7 @@ import {
   type StatusMessage,
   type ViewMessage,
 } from './protocol.ts';
+import { MSG_HAND_PROFILE, MSG_ACK_HAND_PROFILE, decodeProfileControl, encodeProfileControl, type HandProfileAck } from './hand-profile-control.ts';
 import type { HostInfo } from './host.ts';
 
 /** The subset of WebSocket the channel uses (lets tests pass a fake). */
@@ -60,6 +61,10 @@ export class HostChannel {
   connected = false;
   /** messages received per type since start, for diagnostics */
   readonly counts = { eyes: 0, hands: 0, status: 0, view: 0, platform: 0, projection: 0 };
+
+  private profileListeners = new Set<Listener<unknown>>();
+  onHandProfile(fn: Listener<unknown>): () => void { this.profileListeners.add(fn); return () => this.profileListeners.delete(fn); }
+  ackHandProfile(ack: HandProfileAck): void { if (this.socket?.readyState === OPEN) this.socket.send(encodeProfileControl(MSG_ACK_HAND_PROFILE, ack)); }
 
   private socket: SocketLike | null = null;
   private closed = false;
@@ -141,6 +146,8 @@ export class HostChannel {
   }
 
   private handle(data: ArrayBuffer): void {
+    const profile = decodeProfileControl(data, MSG_HAND_PROFILE);
+    if (profile) { for (const fn of this.profileListeners) fn(profile); return; }
     const msg = decodeMessage(data);
     if (!msg) return;
     if (msg.type === MSG_EYES) {

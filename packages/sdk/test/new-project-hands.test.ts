@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { decodeMessage, type HandsMessage } from '../src/protocol.ts';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -105,6 +106,14 @@ test('an explicit managed visual opt-out does not remove the shared hand API', (
   const g = globalThis as Record<string, any>, previous = { width: g.innerWidth, height: g.innerHeight };
   Object.assign(g, { innerWidth: 1280, innerHeight: 720 });
   const app = createXrbApp(renderer(), { handVisual: false, xrb: { pointer: false }, autoStart: false });
-  try { assert.equal(app.xrb.handsObject.parent, null); assert.ok(app.xrb.interaction); assert.deepEqual(app.xrb.currentHands, []); }
+  try {
+    assert.equal(app.xrb.handsObject.parent, null); assert.ok(app.xrb.interaction);
+    const ingress = (app.xrb as any).handIngress;
+    ingress.profile = { version: 1, offsetMm: { x: 100, y: 0, z: 0 }, sizeFactor: 1, appearance: {} };
+    const raw = decodeMessage(handsMessage([{ id: 1 }], performance.now())) as HandsMessage;
+    ingress.push('webxr', raw, performance.now()); app.xrb.render(app.scene, app.camera);
+    assert.ok(Math.abs(app.xrb.currentHands[0].keypoints[0][0] - raw.hands[0].keypoints[0][0] - .1) < 1e-6);
+    assert.equal(app.xrb.handsObject.parent, null);
+  }
   finally { app.dispose(); if (previous.width === undefined) delete g.innerWidth; else g.innerWidth = previous.width; if (previous.height === undefined) delete g.innerHeight; else g.innerHeight = previous.height; }
 });

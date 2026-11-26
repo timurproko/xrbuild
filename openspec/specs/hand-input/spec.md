@@ -32,7 +32,7 @@ Plugins and core SHALL register hand skeleton sources with stable owner-qualifie
 
 ### Requirement: One global selected source
 
-Hands SHALL store one global source choice in the selected workspace, never per application. With no choice, exactly one installed enabled real source compatible with the execution context SHALL be the initial default; zero or several SHALL require a choice. Discovery SHALL NOT create state. Changes SHALL apply on next launch, not hot-switch running acquisition.
+Hands SHALL store one global source choice in the selected workspace, never per application. With no choice, exactly one installed enabled real source compatible with the execution context SHALL be the initial default; zero or several SHALL require a choice. Discovery SHALL NOT create state. Source changes SHALL apply on next launch, not hot-switch running acquisition; adjustment Apply SHALL NOT switch the running source.
 
 #### Scenario: Two logical-Hand applications
 - **WHEN** the user saves a different source in Hands
@@ -45,6 +45,10 @@ Hands SHALL store one global source choice in the selected workspace, never per 
 #### Scenario: Zero or multiple real sources initially
 - **WHEN** no choice exists and zero or several real sources qualify
 - **THEN** Hand requires an explicit choice and synthetic or replay sources are not automatically selected
+
+#### Scenario: Adjustment after source Save
+- **WHEN** a different source was saved during a managed run and the user applies adjustments
+- **THEN** the current run receives the adjustments while retaining its original source and policy
 
 ### Requirement: Visible source failure without fallback
 
@@ -129,3 +133,87 @@ Synthetic and replay sources SHALL be labelled sources in Hands rather than appl
 #### Scenario: Replay lacks a recording
 - **WHEN** an installed replay source has no required recording configured
 - **THEN** Hands reports configuration-required rather than running or substituting another source
+
+### Requirement: Canonical wrist-relative hand adjustment
+
+Each accepted provider frame SHALL receive geometry adjustment exactly once after provider panel conversion and before shared filtering, gestures, interaction, pointer and drawing. For each hand wrist w and point p, the result SHALL be w + s*(p-w) + offsetMm/1000. Identity defaults SHALL leave frames bit-identical. Provider rig correction SHALL NOT be repeated or changed.
+
+#### Scenario: Scale before translation
+- **WHEN** a hand with wrist [0.1,0.2,0.3] and fingertip [0.2,0.4,0.6] uses size 0.5 and offset [10,-20,30] mm
+- **THEN** the wrist becomes [0.11,0.18,0.33] and fingertip becomes [0.16,0.28,0.48] metres within arithmetic precision, without origin-relative scaling or a second transform
+
+#### Scenario: Two wrists
+- **WHEN** two hands have different wrist positions
+- **THEN** each scales about its own wrist and receives the same panel-space translation
+
+#### Scenario: Identity native and WebXR
+- **WHEN** native or WebXR frames enter with zero offsets and size one
+- **THEN** coordinates, optional fields, flags, scores, capabilities, IDs and timestamps remain bit-identical and existing gesture traces are unchanged
+
+### Requirement: Coherent optional provider geometry
+
+Present native pinch positions, grab position and palm origin SHALL use the same wrist-relative transform as joints. Palm direction vectors SHALL remain unchanged. Unsupported optional geometry SHALL remain absent or retain its unsupported representation. Native gesture flags, confidence, IDs, timestamps and capability masks SHALL remain unchanged; derived gestures SHALL use adjusted geometry with existing thresholds and native-gesture policy.
+
+#### Scenario: Full native geometry
+- **WHEN** a capable provider supplies pinch positions, a grab position, palm origin and orientation vectors
+- **THEN** positions transform once with their hand's original wrist while orientation vectors and native pinch/grab flags remain unchanged
+
+#### Scenario: Skeleton-only source
+- **WHEN** a source lacks native gesture and palm capabilities
+- **THEN** no optional capability is invented and existing derivation operates on adjusted joints
+
+### Requirement: Appearance cannot change interaction
+
+Global appearance SHALL govern the standard SDK skeleton and its existing pinch-or-grab indicator only after geometry processing. Joint/bone visibility, thickness, colour, opacity and indicator settings SHALL NOT alter interaction coordinates, collision radii, gesture decisions or pointer events. The indicator SHALL remain at the thumb/index midpoint on pinch OR grab. Default drawing SHALL be unchanged.
+
+#### Scenario: Appearance during held interaction
+- **WHEN** only appearance changes while a hand holds a control
+- **THEN** materials, visibility and visual diameters update without moving interaction points, resetting filters or cancelling that hold
+
+#### Scenario: Grab indicator
+- **WHEN** grabbing is true, pinching is false and the indicator is enabled
+- **THEN** it appears at the existing thumb/index midpoint, not at a newly chosen native grab marker
+
+#### Scenario: Visual opt-out
+- **WHEN** an app uses createXrbApp with handVisual false
+- **THEN** geometry adjustment still governs its hand input and interaction but the standard visual remains unattached
+
+#### Scenario: Custom app drawing
+- **WHEN** an app authors its own canvas, mesh or diagnostic visual
+- **THEN** global appearance does not claim to restyle that drawing, and absent global overrides preserve explicit SDK constructor styles
+
+### Requirement: Portable profile on every managed launch and build
+
+Managed native/dev/browser apps and trusted Launcher destinations SHALL receive a validated versioned adjustment snapshot without app code or workspace-path discovery. Packages and publications SHALL freeze their build-time snapshot and require no panel at runtime. Managed Hand-off SHALL remain off. Existing bundles without the new SDK SHALL NOT be claimed to support adjustments without rebuilding.
+
+#### Scenario: Built and dev launch
+- **WHEN** a Hand-enabled app launches through either native or browser built/dev flow
+- **THEN** its SDK uses the same saved adjustment snapshot and no raw-frame interaction occurs before initial profile readiness
+
+#### Scenario: Native Launcher destination
+- **WHEN** an active managed native host navigates through trusted Launcher links, nested links or resume
+- **THEN** the destination retains that host's active adjustment snapshot and acquisition policy without resolving a second source or weakening URL trust
+
+#### Scenario: Frozen package and publication
+- **WHEN** desktop, headset or published browser output is built and workspace adjustments later change
+- **THEN** that output retains its build-time profile offline, without local paths, live control credentials or a dependency on the author's panel
+
+### Requirement: Ordered safe running profile Apply
+
+A running managed app SHALL accept only validated full profile messages bound to its current run and a newer ordered revision. Geometry changes SHALL atomically release held interactions and pointer presses, clear old hand state and reset filters before new frames use the new transform. Appearance-only changes SHALL update drawing without those resets. Stale, duplicate, malformed, out-of-order or retired-run messages SHALL NOT change active state.
+
+#### Scenario: Geometry Apply while holding
+- **WHEN** the current run accepts a newer geometry profile while holding a control or pointer press
+- **THEN** the hold is released without a synthetic click, filters and previous geometry are cleared, and subsequent provider frames use only the new transform
+
+#### Scenario: Appearance-only and equivalent profile
+- **WHEN** a newer profile changes only appearance or is geometrically equivalent
+- **THEN** interaction continues without cancellation or filter reset
+
+#### Scenario: Reordered and retired messages
+- **WHEN** an older sequence, duplicate, wrong-run or invalid profile arrives after a valid Apply
+- **THEN** it is ignored without reverting geometry, changing appearance or cancelling interaction
+
+#### Scenario: Reconnect and disposal
+- **WHEN** an active app reconnects or a disposed run's delayed message arrives
+- **THEN** reconnect restores the newest current-run profile before hand use and disposed-run messages have no effect

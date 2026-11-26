@@ -57,11 +57,13 @@ test('native, synthetic-style skeleton-only and WebXR data expose the same app A
 
 test('native execution metadata survives nested launch/resume and its marker stays local to the owning panel', () => {
   const panel = 'http://127.0.0.1:5180';
-  const root = `https://app.local/index.html?xrb-panel=${encodeURIComponent(panel + '/')}&xrb-hand=native`;
+  const root = `https://app.local/index.html?xrb-panel=${encodeURIComponent(panel + '/')}&xrb-hand=native&xrb-hand-profile-run=native-profile-123456789`;
   const first = appLaunchUrl(panel + '/preview/first/', { returnUrl: root });
   assert.equal(isNativeLauncherDocument(first, panel), true);
   const second = appLaunchUrl(panel + '/preview/second/', { returnUrl: first });
   assert.equal(isNativeLauncherDocument(second, panel), true);
+  assert.equal(new URL(second).searchParams.get('xrb-hand-profile-run'), 'native-profile-123456789');
+  assert.equal(new URL(appResumeUrl(first, 'perspective')).searchParams.get('xrb-hand-profile-run'), 'native-profile-123456789');
   assert.equal(isNativeLauncherDocument(appResumeUrl(first, 'perspective'), panel), true);
   assert.equal(isNativeLauncherDocument(first, 'http://127.0.0.1:1'), false);
   assert.equal(isNativeLauncherDocument(panel + '/preview/first/?xrb-hand=native', panel), false);
