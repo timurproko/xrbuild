@@ -4,15 +4,15 @@
 
 ### Requirement: Minimal provider picker with availability
 
-Hands SHALL put the global provider picker first, followed by purpose, availability/reason and explicit source Save/Reload. It SHALL retain missing choices, distinguish installed from running/device status and label changes as next-launch-only. Explicit Start/Stop SHALL control the saved source's live session. Session and historical app status SHALL be distinct; calibration data, replay and generated substitutes SHALL NOT impersonate the provider's live hand.
+Hands SHALL put explicit Start/Stop at the top of the left sidebar above Skeleton provider, retaining only the autosaving provider and optional installed post-processing controls there. Selection SHALL save silently on change, with inline error/retry on failure and retained missing/unavailable identities. Routine availability/session/history prose, Save source, Reload, guidance paragraphs and recording UI SHALL remain absent. Session state SHALL be compact on or beside Start/Stop, in the fps chips and viewport message. Active acquisition SHALL retain its launch source until Stop; calibration, replay and generated substitutes SHALL NOT impersonate live provider input.
 
 #### Scenario: Saved source unavailable
 - **WHEN** the chosen provider is disabled, missing or failed
-- **THEN** Hands identifies that provider and its problem without selecting a replacement
+- **THEN** Hands retains and labels that option without selecting a replacement or routine availability prose
 
 #### Scenario: Installed but not started
 - **WHEN** a source is installed and enabled but no run has checked its device
-- **THEN** Hands says it is not started and does not claim that hardware is connected or running
+- **THEN** the compact Start control does not claim hardware is connected or running, and no separate not-started sentence appears
 
 #### Scenario: Standalone live session not available
 - **WHEN** the standalone session runtime is missing, outdated or unsupported on this platform
@@ -21,11 +21,15 @@ Hands SHALL put the global provider picker first, followed by purpose, availabil
 #### Scenario: Explicit live delivery replaces page-only idle
 - **WHEN** the person starts the saved selected provider and valid session frames arrive
 - **THEN** the viewport shows those actual hands through the shared SDK adapter
-- **AND** before Start it shows no hand, with Start guidance next to provider status and any previous app status labelled historical
+- **AND** before Start it shows no hand, with compact Start guidance confined to the control/viewport rather than sidebar prose or cached app history
 
 #### Scenario: Source Save independent of tools
-- **WHEN** the user saves a provider with adjustment drafts or an open calibration/recording tool
-- **THEN** only source selection is saved, without committing/discarding those drafts or starting acquisition
+- **WHEN** the person selects a provider while an adjustment edit is unfinished
+- **THEN** only source selection is saved, without committing/discarding that edit, starting acquisition or switching a running app's source
+
+#### Scenario: Selection save fails
+- **WHEN** saving a selected provider fails
+- **THEN** a short inline error and retry preserve the unsaved selection without a success claim
 
 #### Scenario: Source draft differs from session
 - **WHEN** the person edits or saves another source while a session is active
@@ -36,7 +40,7 @@ Hands SHALL put the global provider picker first, followed by purpose, availabil
 
 ### Requirement: Honest live session states and rates
 
-Hands SHALL distinguish Not started, Starting, Running, Running but no hands detected, Stopping, Failed with reason, and Stopped beside provider status. Tracking fps SHALL derive from valid session frames, separately from render fps; frame age SHALL derive from mapped capture time. Unavailable measurements SHALL remain unavailable, never fixture motion or cached app rates.
+Hands SHALL distinguish Not started, Starting, Running, Running but no hands detected, Stopping, Failed with reason, and Stopped compactly on or beside Start/Stop, in the fps chips and viewport message, without adding sidebar status sentences. Tracking fps SHALL derive from valid session frames, separately from render fps; frame age SHALL derive from mapped capture time. Unavailable measurements SHALL remain unavailable, never fixture motion or cached app rates.
 
 #### Scenario: Running with hands
 - **WHEN** fresh valid frames contain hands
@@ -56,16 +60,16 @@ Hands SHALL distinguish Not started, Starting, Running, Running but no hands det
 
 ### Requirement: Live viewport shares applied app semantics
 
-Session frames SHALL pass through the same validated applied global profile, canonical ingress, default filtering, gestures, scene mapping and standard drawing as managed apps. Geometry SHALL be applied exactly once. Explicit Apply SHALL distinguish persistence from actual session application and retain the running source. Unsaved drafts SHALL NOT change live input.
+Session frames SHALL pass through the same validated applied global profile, canonical ingress, default filtering, gestures, scene mapping and standard drawing as managed apps. Geometry SHALL be applied exactly once. Committed immediate adjustment edits SHALL distinguish persistence from actual session application and retain the running source. There SHALL be no Apply button, and unfinished or invalid edits SHALL NOT change live input.
 
 #### Scenario: Same frame and profile
 - **WHEN** Hands and an app process equivalent source frames, clocks and applied profiles
 - **THEN** their processed hand positions, size, gestures and standard appearance agree without a second geometry transform
 
 #### Scenario: Apply while holding
-- **WHEN** changed geometry is explicitly applied during pinch or drag
+- **WHEN** changed geometry is committed immediately during pinch or drag
 - **THEN** shared SDK cleanup releases the hold without click, clears old filter state and acknowledges the new session-bound profile only after application
-- **AND** an appearance-only Apply changes drawing without releasing that hold or altering acquisition
+- **AND** an appearance-only commit changes drawing without releasing that hold or altering acquisition
 
 #### Scenario: Delivery fails after save
 - **WHEN** profile persistence succeeds but the viewport does not acknowledge application

@@ -7,7 +7,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   button.type = 'button'; button.id = 'hands-start-stop'; state.id = 'hands-live-state'; state.className = 'chip'; state.setAttribute('role', 'status');
   root.replaceChildren(button, state); (provider.closest('label') ?? provider).before(root);
   provider.title = 'Provider changes are saved for the next Start or app launch; the active session is not switched.';
-  let status = { phase: 'not-started' }, data = null, supported = true, starting = false, stopping = false, closed = false, polling = false;
+  let status = { phase: 'not-started' }, data = null, supported = true, starting = false, stopping = false, closed = false, polling = false, generation = 0;
   const rates = document.getElementById('hands-tracking-fps'), overlay = document.getElementById('hands-view-empty');
   function render() {
     if (closed) return;
@@ -22,7 +22,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     if (active && status.source && key(status.source) !== provider.value) label += ` · ${status.source.label}`;
     if (state.textContent !== label) state.textContent = label;
     state.classList.toggle('warn', ['failed', 'occupied', 'stalled'].includes(phase));
-    const detail = status.reason || unavailable || (status.source ? `Active provider: ${status.source.label}` : 'Opening this page starts no capture.');
+    const detail = status.reason || (active && status.source ? `Active provider: ${status.source.label}` : unavailable || 'Opening this page starts no capture.');
     button.title = state.title = detail;
     const fps = Number.isFinite(status.trackingFps) && ['running', 'no-hands'].includes(phase) ? status.trackingFps.toFixed(1) : '—';
     if (rates.textContent !== fps) rates.textContent = fps;
@@ -38,20 +38,23 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   const changed = () => render(); provider.addEventListener('change', changed);
   const click = async () => {
     if (starting || session.active) {
+      generation++;
       stopping = true; starting = false; update({ phase: 'stopping', source: status.source });
       try { await session.stop(); } catch (error) { update({ phase: 'failed', reason: error.message }); }
-      finally { stopping = false; render(); }
+      finally { stopping = false; if (status.phase === 'stopping' && !session.active && !session.stopping) update({ phase: 'stopped' }); else render(); }
       return;
     }
+    const own = ++generation;
     starting = true; update({ phase: 'starting' });
     try {
       data = await load();
+      if (closed || own !== generation) return;
       // Works with both reviewed source Save and immediate autosave: never starts a stale picker draft.
       if (key(data.selected) !== provider.value) throw new Error('Wait for the provider choice to save before Start.');
       if (!data.selected) throw new Error('Choose a saved provider before Start.');
       await session.start({ provider: data.selected, revision: data.revision, registryRevision: data.registryRevision });
-    } catch (error) { update({ phase: 'failed', reason: error.message }); }
-    finally { starting = false; render(); }
+    } catch (error) { if (!closed && own === generation) update({ phase: 'failed', reason: error.message }); }
+    finally { if (own === generation) { starting = false; render(); } }
   };
   button.addEventListener('click', click);
   const poll = async () => {
@@ -66,5 +69,5 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   };
   const timer = setInterval(() => { if (session.active) render(); else void poll(); }, 1000);
   render(); void poll();
-  return { update, dispose() { closed = true; clearInterval(timer); unsubscribe(); provider.removeEventListener('change', changed); button.removeEventListener('click', click); root.remove(); } };
+  return { update, dispose() { closed = true; generation++; clearInterval(timer); unsubscribe(); provider.removeEventListener('change', changed); button.removeEventListener('click', click); root.remove(); } };
 }

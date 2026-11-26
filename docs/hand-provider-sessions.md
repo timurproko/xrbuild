@@ -1,4 +1,12 @@
-# Native hand acquisition ownership
+# Live Hands and native acquisition ownership
+
+## Using Hands
+
+Opening Hands starts no device. Choose the desired Skeleton provider (the choice saves immediately), then use **Start** at the top of the left sidebar. The same button becomes **Stop**. Compact feedback distinguishes startup, waiting, running, valid empty detections, stalled input, teardown, failure and stopped. Another page/app's owner is never implicitly stopped. Changing the saved provider does not change active acquisition; its old identity remains on the compact chip when different.
+
+The hand-tracking chip counts unique admitted source results in the last second, including empty frames, not renders, prediction samples, app history or provider-reported rate. Hover it for mapped capture age/uncertainty, delivery gaps and separately reported Hz. Unavailable/stale rates show a dash. Renderer fps remains independent. Standard SDK drawing keeps its existing two-human-hand display capacity; transport, ingress and raw recording validate/retain the wire's complete up-to-255-hand data rather than truncating it.
+
+The viewport's small sphere is a pinch target and the cube is draggable. They use SDK interaction events from current live hands only; camera orbit/mouse cannot count as a hand check. Their held/result feedback resets on no hands, stale input, geometry changes, Stop and disposal. Appearance changes preserve a hold. Right-sidebar edits commit immediately through the shared profile pipeline; there is no Apply button or left-side recorder/status-prose UI.
 
 Windows x64 native Hand runs reserve a single acquisition slot before starting a development server or opening a display. The slot spans all providers, workspaces, panels and checkouts for the current Windows user/logon session. Different provider names can refer to the same cameras, so the initial policy deliberately does not allow concurrent native sources.
 
@@ -30,7 +38,7 @@ The optional `XRB_TEST_ACQUISITION_HELPER` and `XRB_TEST_ACQUISITION_CHILD` test
 
 The same standalone build now also produces `xrb-provider-session.exe` without CEF, display or platform initialization. It reuses the neutral DLL loader, input ABI bridge, existing Synthetic/Replay implementations and unchanged HANDS v2 serialization. It checks the selected binary identity and complete input function table. Borrowed callbacks are validated and copied into one owned newest-frame slot; invalid size/count/coordinates/confidence/signals/clocks never enter that slot. Optional native capabilities and all published hand bytes remain intact. Debug images are disabled.
 
-Bootstrap and Stop are bounded stdin messages. The worker opens the exact parent process handle and observes stdin loss; graceful shutdown stops input, awaits callback quiescence, destroys and unloads the provider, then releases acquisition. A watchdog contains hung start/stop/destroy by ending this worker only, not any app or foreign panel. Test-only timers and mutex namespaces are compiled into a separate test executable, never the production worker. The session service supplies authenticated controls, worker transport and supervisor job containment; page controls and SDK/recorder integration consume its dedicated client. Lifecycle stdout is not used as pose input. Lifecycle stdout is never a browser frame API.
+Bootstrap and Stop are bounded stdin messages. The worker opens the exact parent process handle and observes stdin loss; graceful shutdown stops input, awaits callback quiescence, destroys and unloads the provider, then releases acquisition. A watchdog contains hung start/stop/destroy by ending this worker only, not any app or foreign panel. Test-only timers and mutex namespaces are compiled into a separate test executable, never the production worker. The session service supplies authenticated controls, worker transport and supervisor job containment; page controls and SDK/recorder integration consume its dedicated client. Lifecycle stdout is never pose input or a browser frame API.
 
 `prepareHandSession` checks current profile/registry revisions and the saved source before any acquisition, pins only the already-shown unique-real initial choice through the existing writer, snapshots selected global provider settings, and refuses unsupported sources, unsafe/missing runtime files or changed ownership. The native worker derives `xrb.dataDir` through the very same `logx::dataDir()` function as an app host, rather than overriding the provider's existing calibration/data lookup. New core state remains workspace-owned and no private source or calibration is imported. The actual private provider's data-path/runtime assumptions still require the physical-machine check; a missing prerequisite must remain the provider's visible error, not trigger fallback or migration.
 
@@ -59,3 +67,13 @@ Replay validates the whole file and every raw packet, owns a copy, takes a fresh
 ### Provider data lookup: compatibility decision
 
 The module passes app-compatible provider metadata, including the existing local-app-data `xrb.dataDir`, `exeDir`, owning `pluginDir`, 3D view and disabled debug images. There is no data-root override, copying, calibration reset or migration. Profile, recording and session core state stays workspace-owned. Test executables retain their explicit isolated configuration instead of looking up the person's app data. No device/runtime startup, physical camera release or latency result is claimed by these software tests. Other platforms need their own native loader/ABI export layer, OS-owned interprocess exclusion, child containment, monotonic clocks and device validation; they must not emulate success with Synthetic or silently enter XR.
+
+## Person-run hardware checklist (not yet verified)
+
+1. With the normal rebuilt runtime and intended real provider installed, open Hands: no camera starts. Choose it, press Start, note the identity, observed fps and capture-age tooltip, and retain any bounded provider error.
+2. Show/hide both hands: check handedness, axes, scale and empty detections; no generated replacement or old hold should remain. Move again and check clean recovery.
+3. Change position, size and appearance; compare against a normally launched Hand-enabled app after stopping Hands. Pinch the sphere and move the cube. Check geometry edits and Stop mid-hold release without a click; appearance alone should not release.
+4. Test app-to-Hands and Hands-to-app contention (and another panel/checkout if used). The competitor must name the owner and require explicit Stop without touching that owner. Hand-off apps must remain usable.
+5. In separate runs, Stop, close the page and close the panel; confirm camera indicators turn off and the next explicit Start/app Run reacquires. Browser suspension deliberately relinquishes ownership after timeout. Do not infer physical camera release or latency from software-only job tests.
+
+Only an isolated test-built ABI DLL and explicitly selected existing Synthetic were exercised. Actual private-provider startup, calibration/data-path assumptions, driver release/reacquisition, native gesture feel and end-to-end latency remain unverified. No private provider, calibration/profile or person's running panel/project was used, migrated or copied.

@@ -17,7 +17,12 @@ test('top-level Start/Stop and SDK pinch/drag use actual native frames, preserve
   await fs.writeFile(path.join(plugin, 'xrb-plugin.json'), JSON.stringify({ title: 'Fixture input', type: 'input', version: '1.0.0', handProviders: [{ version: 1, id: 'fixture', runtimeName: 'session-test', transport: 'native', purpose: 'tracked' }] }));
   await fs.writeFile(path.join(workspace, 'xrb-plugins.json'), JSON.stringify({ disabled: ['input-hands'], settings: {} }));
   let state = await readHandsState(REPO, workspace); await saveHandsState(REPO, workspace, { owner: 'workspace:fixture', id: 'fixture' }, state.revision);
-  const untouched = path.join(workspace, 'unrelated-recording.bin'); await fs.writeFile(untouched, 'keep exact bytes');
+  const immutable = new Map<string, Buffer>();
+  for (const [relative, content] of [['recordings/kept.csv', 'existing recording bytes'], ['projects/unsorted/kept/index.js', 'export const keep = 42;'], ['config/plugins/fixture/calibration.json', '{"keep":"calibration bytes"}'], ['plugins/fixture/keep.bin', 'plugin-owned bytes']]) {
+    const file = path.join(workspace, relative); await fs.mkdir(path.dirname(file), { recursive: true }); const bytes = Buffer.from(content); await fs.writeFile(file, bytes); immutable.set(file, bytes);
+  }
+  immutable.set(path.join(workspace, 'xrb-plugins.json'), await fs.readFile(path.join(workspace, 'xrb-plugins.json')));
+  const profileFile = path.join(workspace, 'config/hands/profile.json'), profile = JSON.parse(await fs.readFile(profileFile, 'utf8')); profile.unrelated = { keep: [1, 2, 3] }; await fs.writeFile(profileFile, JSON.stringify(profile));
   const app = createServer({ repo: REPO, workspace, port }); let empty = false;
   const inventory = async () => ({ providers: [{ role: 'input' as const, name: 'session-test', builtin: false, version: '0.0.1', description: 'test-built ABI fixture', path: binary }], rejected: [], error: null });
   app.panel.nativeProviders = inventory;
@@ -37,30 +42,50 @@ test('top-level Start/Stop and SDK pinch/drag use actual native frames, preserve
       await wait(`!document.querySelector('#hands-start-stop').disabled`).catch(async error => { throw new Error(error.message + ' ' + JSON.stringify(await evaluate(`({errors:window.scriptErrors, button:document.querySelector('#hands-start-stop').outerHTML, state:document.querySelector('#hands-live-state').outerHTML, title:document.querySelector('#hands-start-stop').title, message:document.querySelector('#hands-message').textContent, error:document.querySelector('#hands-view-error').textContent, provider:document.querySelector('#hands-provider').value})`))); });
       await evaluate(`(async()=>{window.livePage=(await import('/hands.js')).handsPage;window.captureCalls=0;if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw Error('forbidden camera')};})()`);
       assert.equal(app.panel.handSessions.busy, false);
+      assert.equal(await evaluate(`document.querySelector('#hands-save, #hands-reload, #hands-recordings-panel, #hands-session-status') === null`), true);
+      assert.equal(await evaluate(`document.querySelector('[data-action="apply"]') === null`), true);
       assert.equal(await evaluate(`document.querySelector('#hands-start-stop').getBoundingClientRect().top < document.querySelector('#hands-provider').getBoundingClientRect().top`), true);
+      // Cancel before the controller's source read completes: no delayed consent may open a worker.
+      await evaluate(`(()=>{window.originalFetch=fetch;window.startReadHeld=false;window.fetch=(url,options)=>{if(!startReadHeld&&url==='/api/hands'&&options?.method==='GET'){startReadHeld=true;return new Promise(resolve=>{window.releaseStartRead=()=>resolve(originalFetch(url,options))})}return originalFetch(url,options)};document.querySelector('#hands-start-stop').click();})()`);
+      await wait('window.startReadHeld===true');
+      await evaluate(`document.querySelector('#hands-start-stop').click();window.fetch=originalFetch;releaseStartRead();`); await sleep(150);
+      assert.equal(app.panel.handSessions.busy, false); assert.equal(await evaluate('livePage.session.active'), false);
+      await wait(`!document.querySelector('#hands-start-stop').disabled`);
       await evaluate(`document.querySelector('#hands-start-stop').click()`);
       await wait(`livePage.view.testState.pinch.held && livePage.view.testState.drag.held`);
       await wait(`Number(document.querySelector('#hands-tracking-fps').textContent)>0`);
       assert.ok(await evaluate('livePage.view.testState.drag.moves') > 0);
       await evaluate(`window.ends=[];livePage.view.testTargets.forEach(t=>t.on(e=>{if(e.type==='end')ends.push(e.reason)}))`);
       // Actual ordered service delivery, not direct view edits; appearance must not end either hold.
-      await evaluate(`(async()=>{const d=await livePage.request('GET');d.profile.appearance.opacity=.7;await livePage.request('POST',{profile:d.profile,revision:d.revision},'/api/hands/apply')})()`);
+      await evaluate(`(()=>{const f=document.querySelector('[data-field="appearance.opacity"]');f.value='.7';f.dispatchEvent(new Event('input',{bubbles:true}));f.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       await wait('livePage.view.profile.appearance.opacity===.7');
       assert.deepEqual(await evaluate('ends'), []); assert.equal(await evaluate('livePage.view.testState.drag.held'), true);
       const proof = path.join(root, 'proof'); await fs.mkdir(proof, { recursive: true });
       const dimensions = await evaluate('({outerWidth,outerHeight,innerWidth,innerHeight,devicePixelRatio})');
       await fs.writeFile(path.join(proof, 'hands-live-default-dimensions.json'), JSON.stringify(dimensions, null, 2));
       await fs.writeFile(path.join(proof, 'hands-live-default.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
-      await evaluate(`(async()=>{const d=await livePage.request('GET');d.profile.offsetMm.x=15;await livePage.request('POST',{profile:d.profile,revision:d.revision},'/api/hands/apply')})()`);
+      await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false }); await sleep(100);
+      await fs.writeFile(path.join(proof, 'hands-live-desktop.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+      await evaluate(`document.documentElement.dataset.theme='light'`); await sleep(100);
+      await fs.writeFile(path.join(proof, 'hands-live-light.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+      await evaluate(`document.documentElement.dataset.theme='dark'`);
+      await evaluate(`(()=>{const f=document.querySelector('[data-field="offsetMm.x"]');f.value='15';f.dispatchEvent(new Event('input',{bubbles:true}));f.dispatchEvent(new Event('change',{bubbles:true}));})()`);
       await wait('livePage.view.profile.offsetMm.x===15');
       assert.ok((await evaluate('ends')).includes('lost')); assert.equal((await evaluate('ends')).includes('release'), false);
       await wait('livePage.view.testState.pinch.held && livePage.view.testState.drag.held');
+      await evaluate(`(()=>{const s=document.querySelector('#hands-provider');s.value='core/webxr';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await wait(`livePage.snapshot.selected?.id==='webxr'`);
+      assert.equal(await evaluate('livePage.session.recordingSource().source.id'), 'fixture', 'autosaving another source never replaces active acquisition');
+      assert.match(await evaluate(`document.querySelector('#hands-live-state').textContent`), /Fixture input/);
       await evaluate(`document.querySelector('#hands-start-stop').click()`);
       await wait(`document.querySelector('#hands-start-stop').textContent==='Start'`);
       assert.equal(await evaluate('livePage.view.currentHands.length'), 0); assert.equal(await evaluate('livePage.view.testState.drag.held'), false); assert.equal(await evaluate('livePage.view.testState.pinch.held'), false);
       assert.equal(await evaluate(`document.querySelector('#hands-tracking-fps').textContent`), '—'); assert.equal(app.panel.handSessions.busy, false);
+      assert.equal(await evaluate(`document.querySelector('#hands-start-stop').disabled`), true, 'WebXR choice remains explicit app-only guidance, never a native/synthetic fallback');
       await send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', x: 300, y: 220, clickCount: 1 }); await send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', x: 300, y: 220, clickCount: 1 });
       assert.equal(await evaluate('livePage.view.testState.pinch.starts + livePage.view.testState.drag.starts'), 0, 'mouse cannot count as a tracked-hand check');
+      await evaluate(`(()=>{const s=document.querySelector('#hands-provider');s.value='workspace:fixture/fixture';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await wait(`livePage.snapshot.selected?.id==='fixture' && !document.querySelector('#hands-start-stop').disabled`);
       empty = true; await evaluate(`document.querySelector('#hands-start-stop').click()`);
       await wait(`document.querySelector('#hands-live-state').textContent==='No hands' && Number(document.querySelector('#hands-tracking-fps').textContent)>0`);
       assert.equal(await evaluate('livePage.view.currentHands.length'), 0); assert.equal(await evaluate('captureCalls'), 0);
@@ -69,6 +94,7 @@ test('top-level Start/Stop and SDK pinch/drag use actual native frames, preserve
       await fs.writeFile(path.join(proof, 'hands-live-responsive.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
       await evaluate(`document.querySelector('#hands-start-stop').click()`); await wait('!livePage.session.active && !livePage.session.stopping');
     });
-    assert.equal(await fs.readFile(untouched, 'utf8'), 'keep exact bytes');
+    for (const [file, bytes] of immutable) assert.deepEqual(await fs.readFile(file), bytes, path.relative(workspace, file));
+    assert.deepEqual(JSON.parse(await fs.readFile(profileFile, 'utf8')).unrelated, { keep: [1, 2, 3] });
   } finally { await app.close(); await fs.rm(workspace, { recursive: true, force: true }); }
 });
