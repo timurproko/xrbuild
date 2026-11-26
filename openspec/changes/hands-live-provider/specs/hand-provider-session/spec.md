@@ -73,12 +73,12 @@ Every frame SHALL be validated before copying or SDK admission for bounded layou
 
 ### Requirement: Raw provider recording provenance
 
-The session SHALL expose validated provider-published frames to the retained recorder before global geometry, filtering or scene mapping. New recordings SHALL preserve source, timing, sequence, capabilities and native signals in a bounded versioned provider-stream format without credentials or baked-in global adjustments. Replay SHALL validate provenance and feed the current shared pipeline exactly once; existing formats SHALL remain unchanged.
+The session SHALL expose validated provider-published frames to the retained recorder before global geometry, filtering or scene mapping. New recordings SHALL preserve source, timing, sequence, capabilities and native signals in a bounded versioned provider-stream format without credentials or baked-in global adjustments. Replay SHALL validate provenance and feed the shared pipeline with the recorded portable profile exactly once; existing formats SHALL remain unchanged.
 
 #### Scenario: Record and replay with adjustments
 - **WHEN** a live provider stream is recorded while nonidentity global adjustments are active and later explicitly replayed
 - **THEN** the file contains the raw published positions and native signals, not adjusted or filtered output
-- **AND** replay uses a new epoch and the current applied profile once, without accumulating the recording-time adjustment
+- **AND** replay uses a new epoch and the validated frozen recording-start portable profile once, without also applying the current live profile
 
 #### Scenario: Recording ends or fills
 - **WHEN** the source stops, retires its epoch or reaches a recording size, duration or frame-count bound
