@@ -2,7 +2,7 @@
 
 ### Requirement: Update a Git workspace
 
-The control panel SHALL offer an Update action that brings the selected workspace's Git clone up to date with its upstream by fast-forward only, fetches its Git LFS content, and then rebuilds the native plugins, and the core host only when it is missing or outdated, with the same tool discovery as Rebuild. It SHALL fast-forward to exactly the upstream commit it fetched and downloaded the LFS content of, without fetching again. It SHALL never stash, merge, rebase, reset or discard local work. It SHALL report the status of the core checkout the panel runs from next to the workspace's, and SHALL update each repository at most once per run, treating a workspace that is the core checkout as that one repository. Rebuild SHALL stay build-only.
+The control panel SHALL offer an Update action that fast-forwards the selected workspace's Git clone to exactly the upstream commit it fetched, without fetching again, fetches its Git LFS content first, and then rebuilds the native plugins, and the core host only when it is missing or outdated. It SHALL never stash, merge, rebase, reset or discard local work. Rebuild SHALL stay build-only.
 
 #### Scenario: Workspace behind its upstream
 
@@ -68,6 +68,12 @@ The control panel SHALL offer an Update action that brings the selected workspac
 
 - **WHEN** the workspace is not a Git clone, its branch has no upstream, or Git LFS is not installed
 - **THEN** the Update action is unavailable and shows the reason
+
+## ADDED Requirements
+
+### Requirement: Update reports the core checkout
+
+The control panel SHALL report the status of the core checkout the panel runs from next to the workspace's, SHALL update each repository at most once per run, treating a workspace that is the core checkout as that one repository, and SHALL never report the core as updated while it only reports it.
 
 #### Scenario: One Update action for both repositories
 
