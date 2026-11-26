@@ -61,19 +61,38 @@ export async function setupEmbeddedServices(core: string, workspace: string, ctx
     throw error;
   } finally { await lock.close(); await fs.unlink(lockFile); }
 }
-export async function embeddedServiceRuntime(core: string, workspace: string): Promise<{ root: string | null; installed: boolean }> {
+export interface ServiceReadiness { root: string | null; installed: boolean; needsBuild: boolean }
+export class ServiceRebuildRequired extends Error {}
+
+/** Only owned, structurally valid stale/failed state is eligible for automatic rebuilding. */
+export async function embeddedServiceReadiness(core: string, workspace: string): Promise<ServiceReadiness> {
+  if (!await fs.lstat(path.join(core, 'embedded')).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; }))
+    return { root: null, installed: false, needsBuild: false };
   const state = await buildStateDirectory(core, workspace, serviceStateRoot(core, workspace));
-  if (!await fs.lstat(state).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; })) return { root: null, installed: false };
-  if (await fs.lstat(path.join(state, SERVICE_LOCK)).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; })) throw new Error('Embedded service setup is active or has a leftover lock');
+  if (!await fs.lstat(state).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; })) return { root: null, installed: false, needsBuild: false };
+  if (await fs.lstat(path.join(state, SERVICE_LOCK)).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; })) throw new Error('Application component rebuild is active or has a leftover lock; verify the previous writer stopped before retrying Rebuild');
   const saved = await buildJson(await containedPath(state, SERVICE_RECEIPT));
-  if (saved?.version !== 1 || saved.status !== 'complete' || saved.core !== canonicalFuturePath(core) || saved.source !== canonicalFuturePath(path.join(core, 'embedded'))
-    || typeof saved.runtime !== 'string' || !/^build\/embedded\/e-[a-f0-9]{20}\/w-[a-zA-Z0-9]{6}\/workspace$/.test(saved.runtime)
+  if (saved?.version !== 1 || saved.core !== canonicalFuturePath(core) || saved.source !== canonicalFuturePath(path.join(core, 'embedded'))
+    || typeof saved.inputs !== 'string' || !/^[a-f0-9]{64}$/.test(saved.inputs)) throw new Error('Application component state is invalid or belongs to another source; preserve it for recovery before retrying Rebuild');
+  if (saved.status === 'failed' || saved.status === 'building') return { root: null, installed: true, needsBuild: true };
+  if (saved.status !== 'complete' || typeof saved.runtime !== 'string' || !/^build\/embedded\/e-[a-f0-9]{20}\/w-[a-zA-Z0-9]{6}\/workspace$/.test(saved.runtime)
     || typeof saved.output !== 'string' || !/^[a-f0-9]{64}$/.test(saved.output)) throw new Error('Embedded service setup is incomplete, failed or belongs to another source');
-  if (saved.inputs !== await sourceFingerprint(core)) throw new Error('Embedded service inputs changed; run Setup bundled services again');
   const expected = canonicalFuturePath(path.join(workspace, 'build', 'embedded', path.basename(state)));
   const runtime = await containedPath(canonicalFuturePath(workspace), saved.runtime);
-  if (!withinRoot(expected, runtime) || await installedFingerprint(runtime) !== saved.output) throw new Error('Installed service output changed or is unsafe; run Setup bundled services again');
-  return { root: runtime, installed: true };
+  if (!withinRoot(expected, runtime) || await installedFingerprint(runtime) !== saved.output) throw new Error('Installed application component output changed or is unsafe; inspect preserved files before retrying Rebuild');
+  return { root: runtime, installed: true, needsBuild: saved.inputs !== await sourceFingerprint(core) };
+}
+export async function embeddedServiceRuntime(core: string, workspace: string): Promise<{ root: string | null; installed: boolean }> {
+  const state = await embeddedServiceReadiness(core, workspace);
+  if (state.needsBuild) throw new ServiceRebuildRequired('Application components changed or their rebuild failed or is unfinished; choose Rebuild to prepare them');
+  return { root: state.root, installed: state.installed };
+}
+export async function rebuildServiceInputs(core: string, workspace: string, ctx: JobContext): Promise<boolean> {
+  if (!(await embeddedServiceReadiness(core, workspace)).needsBuild) return false;
+  ctx.line('Rebuild: preparing application components…');
+  await setupEmbeddedServices(core, workspace, ctx);
+  ctx.line('Application components are ready.');
+  return true;
 }
 export async function serviceModuleFile(plugin: ResolvedPlugin, sourceFile: string, workspace: string, core?: string) {
   if (plugin.origin !== 'bundled' || !core) return { file: sourceFile, runtimeRoot: null };

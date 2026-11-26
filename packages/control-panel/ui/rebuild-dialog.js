@@ -80,24 +80,26 @@ export function rebuildPresentation(job, error = '') {
     return {
       state: running ? 'running' : failed ? 'failed' : 'done',
       ...updatePresentation(job, error, running, failed, phase),
-      output: job.lines?.length ? job.lines.slice(-20).join('\n') : error ? 'The job could not start.' : 'Waiting for output…',
+      output: job.lines?.length ? job.lines.slice(-20).join('\n') : error ? error : 'Waiting for output…',
       running,
       succeeded: !running && !failed,
       viewJobDisabled: job.id == null,
     };
   }
   const restart = setup && job?.result?.restartRequired === true;
+  const panelRestart = !setup && (job?.result?.restart || job?.result?.restartRequired);
+  const run = job?.kind === 'run' || job?.kind === 'preview-run';
   const phase = [...(job?.lines ?? [])].reverse().find((line) => line.startsWith('plugin '));
   return {
     state: running ? 'running' : failed ? 'failed' : 'done',
-    title: setup ? running ? 'Installing desktop prerequisites' : failed ? 'Setup failed' : restart ? 'Restart required' : 'Setup complete' : running ? 'Rebuilding' : failed ? 'Rebuild failed' : 'Rebuilt',
+    title: panelRestart ? 'Restart needed' : run ? running ? 'Preparing to run' : failed ? 'Run needs attention' : 'Running' : setup ? running ? 'Installing desktop prerequisites' : failed ? 'Setup failed' : restart ? 'Restart required' : 'Setup complete' : running ? 'Rebuilding' : failed ? 'Rebuild failed' : 'Rebuilt',
     message: error || (setup ? running ? sentenceText(job.title || 'Installing desktop prerequisites').replace(/\.$/u, '…') : failed ? job.error || 'Review setup output and retry explicitly.' : restart ? 'Restart Windows when convenient, then refresh Desktop setup.' : 'Setup completed and readiness checks passed.' : running
-      ? `Building ${phase ? phase.slice('plugin '.length) : 'xrb-host'}…`
+      ? [...(job?.lines ?? [])].reverse().find(line => line.startsWith('Rebuild:')) || `Building ${phase ? phase.slice('plugin '.length) : 'xrb-host'}…`
       : failed ? job?.error || 'See build output below.' : 'The host and workspace plugins are ready.'),
     output: job?.lines?.length ? job.lines.slice(-20).join('\n')
-      : error ? 'The job could not start.' : 'Waiting for build output…',
+      : error ? error : 'Waiting for build output…',
     running,
-    succeeded: !running && !failed && !restart,
+    succeeded: !running && !failed && !restart && !panelRestart,
     viewJobDisabled: job?.id == null,
   };
 }
@@ -107,7 +109,7 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
   if (!/^[a-z][a-z0-9-]*$/.test(idPrefix)) throw new Error('A valid dialog ID prefix is required');
   const existing = controllers.get(container);
   if (existing) {
-    existing.setViewJob(onViewJob);
+    if (onViewJob) existing.setViewJob(onViewJob);
     return existing;
   }
 
@@ -124,6 +126,8 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
     <p id="${idPrefix}-rebuilding-message" class="muted" data-xrb-rebuild-message role="status">Starting update…</p></div></div>
   <pre class="log" data-xrb-rebuild-output aria-label="Build output">Waiting for build output…</pre>
   <div class="row ask-buttons is-building" data-xrb-rebuild-actions><label class="toggle"><input type="checkbox" data-xrb-rebuild-autoclose> Autoclose on finish</label><span class="spacer"></span>
+    <button type="button" class="action-button" data-xrb-rebuild-retry hidden>Retry</button>
+    <button type="button" class="action-button primary" data-xrb-rebuild-restart hidden>Restart</button>
     <button type="button" class="action-button" data-xrb-rebuild-view>View job</button>
     <button type="button" class="action-button primary" data-xrb-rebuild-close>Close</button>
   </div>`;
@@ -136,6 +140,11 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
   const view = dialog.querySelector('[data-xrb-rebuild-view]');
   let currentJob = null;
   let viewJob = onViewJob;
+  let recovery = {};
+  const retry = dialog.querySelector('[data-xrb-rebuild-retry]');
+  const restart = dialog.querySelector('[data-xrb-rebuild-restart]');
+  retry.addEventListener('click', () => { void recovery.retry?.(); });
+  restart.addEventListener('click', () => { dialog.close(); void recovery.restart?.(); });
 
   autoclose.checked = storedAutoclose(storage);
   autoclose.addEventListener('change', () => saveAutoclose(storage, autoclose.checked));
@@ -151,6 +160,7 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
   const controller = {
     element: dialog,
     setViewJob(callback) { viewJob = callback; },
+    setRecovery(callbacks) { recovery = callbacks; },
     render(job, error = '') {
       currentJob = job ?? null;
       const presentation = rebuildPresentation(job, error);
@@ -161,6 +171,8 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
       output.scrollTop = output.scrollHeight;
       actions.classList.toggle('is-building', presentation.running);
       view.disabled = presentation.viewJobDisabled;
+      restart.hidden = presentation.running || !recovery.restart || !(job?.result?.restart || job?.result?.restartRequired);
+      retry.hidden = presentation.running || !recovery.retry || !restart.hidden || presentation.succeeded;
       if (presentation.succeeded && autoclose.checked && dialog.open) dialog.close();
       return presentation;
     },
@@ -185,6 +197,10 @@ async function followJobInPlace(origin, route, placeholder, options, label, setu
     globalThis.location?.assign(destination.href);
   };
   const progress = rebuildProgressDialog({onViewJob: options.onViewJob ?? defaultViewJob});
+  progress.setRecovery({
+    retry: () => followJobInPlace(origin, route, placeholder, options, label, setupAction),
+    restart: async () => (await import('./navigation.js')).restartPanelInPlace(safe),
+  });
   let started;
   try {
     if (!await desktopSetupBeforeRebuild(safe, {progress,onJob:options.onJob,action:setupAction})) return null;
@@ -200,6 +216,17 @@ async function followJobInPlace(origin, route, placeholder, options, label, setu
     return null;
   }
 
+  return followStartedJobInPlace(safe, started, options);
+}
+
+/** Follow an automatically prepared Run in the same dialog as its rebuild steps. */
+export async function followStartedJobInPlace(origin, started, options = {}) {
+  const safe = safePanelOrigin(origin);
+  if (!safe) throw new Error('Invalid local panel origin');
+  const progress = rebuildProgressDialog({onViewJob: options.onViewJob});
+  if (options.onRetry) progress.setRecovery({ retry: options.onRetry, restart: async () => (await import('./navigation.js')).restartPanelInPlace(safe) });
+  progress.show(started);
+  const label = ['run', 'preview-run'].includes(started.kind) ? 'Run' : started.kind === 'update' ? 'Update' : 'Rebuild';
   const deadline = Date.now() + 30 * 60_000;
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 500));

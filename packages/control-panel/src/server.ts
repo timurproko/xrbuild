@@ -262,6 +262,7 @@ export async function describeProject(projects: string, p: Project, panel: Panel
     card: m ? publicationCard(m, iconModelMs !== null) : null,
     canDev: !!m?.scripts?.dev,
     archived: isArchivedId(p.id),
+    componentsNeedRebuild: panel.pluginServiceStatus().pending,
     packaging: panel.packagingOf(m),
     packagingChoices: panel.packagingChoicesOf(m),
     publication,
