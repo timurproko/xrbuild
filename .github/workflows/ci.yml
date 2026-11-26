@@ -1,13 +1,14 @@
 name: CI
 
 # Every PR to main runs the checks its changes need; "CI required" collects them and is the one check the main ruleset
-# requires. A draft runs only the light jobs; marking it ready (or editing its body or labels) runs the rest. Pushes to
-# main run the fast jobs; the nightly schedule and explicit dispatch also build and test the native host. Delivery
+# requires. A draft runs only the light jobs; marking it ready runs the rest. Body/title edits and label changes do
+# not restart CI. Pushes to main run the fast jobs; the nightly schedule and explicit dispatch also build and test
+# the native host. Delivery
 # rules are not checked here: the shared Delivery workflow publishes its own check.
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, labeled, unlabeled]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [main]
   schedule:
@@ -160,7 +161,8 @@ jobs:
 
   required:
     name: CI required
-    if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    # Still collect failed needs, but never publish a failure for a cancelled/superseded run.
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: [readiness, changes, names, openspec, node, embedded, native]
     runs-on: ubuntu-latest
     steps:
