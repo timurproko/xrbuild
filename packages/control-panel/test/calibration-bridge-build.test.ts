@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
+import test from 'node:test';
+import { REPO } from '../src/env.ts';
+import { nativeDependencyPaths, nativeDependencyRoot, nativeDependencyStatus } from '../src/native-dependencies.ts';
+import { canonicalFuturePath, nativeBinaryFingerprint } from '../src/plugin-artifacts.ts';
+
+const execute = promisify(execFile);
+const digest = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
+
+test('bridge build recipe uses verified workspace-only native dependencies and refuses an invalid cache', async t => {
+  const parent = process.env.XRB_TEST_ROOT ?? path.join(REPO, '.artifacts'); await fs.mkdir(parent, { recursive: true });
+  const root = await fs.mkdtemp(path.join(parent, 'bridge-cache-')), core = path.join(root, 'core'), workspace = path.join(root, 'user');
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const write = async (file: string, value: string | Buffer) => { await fs.mkdir(path.dirname(file), { recursive: true }); await fs.writeFile(file, value); };
+  await fs.mkdir(core); await fs.mkdir(workspace);
+  const header = 'fixture checked header', lock = Buffer.from(JSON.stringify({ 'archive:cef': '1'.repeat(64), 'nlohmann/nlohmann/json.hpp': digest(header) })), sources = Buffer.from('// fixture pinned sources');
+  await write(path.join(core, 'tools/fetch-deps/deps.lock.json'), lock);
+  await write(path.join(core, 'tools/fetch-deps/sources.mjs'), sources);
+  const cache = nativeDependencyPaths(core, workspace), generation = 'n-ABC123', cached = path.join(cache.root, generation);
+  for (const name of ['cef/cmake/FindCEF.cmake', 'cef/include/cef_version.h', 'cef/Release/libcef.dll', 'cef/Release/libcef.lib']) await write(path.join(cached, name), 'fixture');
+  await write(path.join(cached, 'cef/.fetched-sha256'), '1'.repeat(64));
+  await write(path.join(cached, 'nlohmann/nlohmann/json.hpp'), header);
+  const receipt = JSON.stringify({ version: 1, core: canonicalFuturePath(core), revision: digest(Buffer.concat([lock, sources])), generation, output: nativeBinaryFingerprint(cached) });
+  await write(cache.receipt, receipt);
+  // A disposable product points at the real resolver, not a stub of its result.
+  await write(path.join(core, 'packages/control-panel/src/native-dependencies.ts'), `export {nativeDependencyRoot} from ${JSON.stringify(pathToFileURL(path.join(REPO, 'packages/control-panel/src/native-dependencies.ts')).href)};`);
+  await write(path.join(core, 'packages/control-panel/src/host-build.ts'), 'export function findCmake(){return "fixture-cmake";}export function visualStudioGenerator(){return "fixture-generator";}');
+  assert.equal((await nativeDependencyStatus(core, workspace)).ready, true);
+  assert.equal(await nativeDependencyRoot(core, workspace), cached);
+  await assert.rejects(fs.access(path.join(core, 'third_party/nlohmann/nlohmann/json.hpp')), /ENOENT/);
+  const commands = path.join(root, 'commands.jsonl');
+  const build = () => execute(process.execPath, ['--loader', pathToFileURL(path.join(import.meta.dirname, 'fixtures/bridge-build-loader.mjs')).href, path.join(REPO, 'embedded/plugins/input-hands/samples/hand-tracking/bridge/build.mjs')], { env: { ...process.env, XRB_CORE: core, XRB_HOME: workspace, XRB_BRIDGE_CMAKE: 'fixture-cmake', XRB_BRIDGE_GENERATOR: 'fixture-generator', XRB_BRIDGE_TEST_COMMANDS: commands } });
+  await build();
+  const calls = (await fs.readFile(commands, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as { exe: string; args: string[] });
+  assert.equal(calls.length, 3, 'configure, compile and self-test boundaries only');
+  assert.equal(calls[0].args.find(arg => arg.startsWith('-DXRB_CORE_THIRD_PARTY=')), `-DXRB_CORE_THIRD_PARTY=${cached.replaceAll('\\', '/')}`);
+  assert.equal(await fs.readFile(path.join(cached, 'nlohmann/nlohmann/json.hpp'), 'utf8'), header);
+  assert.equal(calls[0].exe, 'fixture-cmake'); assert.ok(calls[0].args.includes('fixture-generator'));
+  assert.deepEqual(calls[1].args.slice(0, 1), ['--build']); assert.ok(calls[2].args.includes('--output-on-failure'));
+  await fs.unlink(commands);
+  await write(path.join(cached, 'nlohmann/nlohmann/json.hpp'), 'tampered');
+  await assert.rejects(build(), /Cached native dependencies changed/);
+  await assert.rejects(fs.access(commands), /ENOENT/, 'invalid cached input must be refused before compiler commands');
+});

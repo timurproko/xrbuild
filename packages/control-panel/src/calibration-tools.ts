@@ -4,31 +4,40 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolvePluginCatalog } from './extension-catalog.ts';
 import { resolvePluginModule } from './component-resolver.ts';
 import { pluginServiceContext } from './plugin-service.ts';
+import { ServiceRebuildRequired } from './service-artifacts.ts';
 
 interface Instance {
   handle(req: IncomingMessage, res: ServerResponse): boolean | Promise<boolean>;
   status(): unknown;
   close?(): unknown;
+  busy?(): boolean;
 }
 /** A checked optional contribution; discovery never opens native services or cameras. */
 export class CalibrationTools {
   private identity = '';
   private instance: Instance | null = null;
   private pending: Promise<Instance> | null = null;
+  private resolving: Promise<Instance> | null = null;
   private closed = false;
   private core: string;
   private workspace: string;
   private acquire: () => () => void;
   constructor(core: string, workspace: string, acquire: () => () => void) { this.core = core; this.workspace = workspace; this.acquire = acquire; }
-  private async get(): Promise<Instance> {
+  private get(): Promise<Instance> {
+    return this.resolving ??= this.resolve().finally(() => { this.resolving = null; });
+  }
+  private async resolve(): Promise<Instance> {
     if (this.closed) throw new Error('Calibration is closed.');
     const catalog = await resolvePluginCatalog(this.workspace, this.core);
     if (catalog.problems.length) throw new Error(catalog.problems.join('; '));
     const owners = catalog.selected.filter(plugin => plugin.meta.exports?.['camera-calibration']);
-    if (owners.length !== 1) throw new Error(owners.length ? 'Calibration plugin owners conflict.' : 'Calibration plugin is not installed.');
+    if (owners.length !== 1) throw Object.assign(new Error(owners.length ? 'Calibration plugin owners conflict; select one in Plugins.' : 'Calibration plugin is not installed or is disabled; enable it in Plugins.'), { code: 'plugin-unavailable', recovery: 'plugins' });
     const owner = owners[0], resolved = await resolvePluginModule(owner, owner.sourceRoot, owner.meta.exports!['camera-calibration'], this.workspace, this.core, catalog);
     const stat = await fs.stat(resolved.file), identity = JSON.stringify([owner.key, resolved.file, stat.mtimeMs, stat.size]);
-    if (this.identity && identity !== this.identity) throw new Error('Calibration plugin changed. Restart the panel.');
+    if (this.identity && identity !== this.identity) {
+      if (this.instance?.busy?.()) throw new Error('Calibration plugin changed; stop capture before refreshing.');
+      await this.instance?.close?.(); this.instance = null; this.identity = '';
+    }
     if (this.instance) return this.instance;
     if (!this.pending) this.pending = (async () => {
       const context = await pluginServiceContext(owner, this.workspace, this.core, resolved.runtimeRoot);
@@ -43,8 +52,12 @@ export class CalibrationTools {
   }
   async status() {
     try { const instance = await this.get(); return { available: true, module: '/calibration/tools/calibration-browser.mjs', capture: await instance.status() }; }
-    catch (error) { return { available: false, reason: (error as Error).message }; }
+    catch (error) {
+      if (error instanceof ServiceRebuildRequired) return { available: false, code: 'services-stale', reason: 'Calibration components need rebuilding.', recovery: 'rebuild' };
+      const failure = error as Error & { code?: string; recovery?: string };
+      return { available: false, code: failure.code ?? 'plugin-load-failed', reason: ['ENOENT', 'ERR_MODULE_NOT_FOUND'].includes(failure.code ?? '') ? 'Calibration plugin files are missing; restore the plugin.' : failure.message, recovery: failure.recovery, detail: failure.message };
+    }
   }
   async handle(req: IncomingMessage, res: ServerResponse) { return (await this.get()).handle(req, res); }
-  async close() { this.closed = true; await this.pending?.catch(() => {}); await this.instance?.close?.(); this.instance = null; }
+  async close() { this.closed = true; await this.resolving?.catch(() => {}); await this.pending?.catch(() => {}); await this.instance?.close?.(); this.instance = null; }
 }
