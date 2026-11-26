@@ -19,6 +19,7 @@
     "panel:repo": "node packages/control-panel/src/server.ts --open --workspace=.xrbuild",
     "host": "node packages/control-panel/src/rebuild-host.ts",
     "host:repo": "node packages/control-panel/src/rebuild-host.ts --workspace=.xrbuild",
+    "update:repo": "node packages/control-panel/src/update-cli.ts --workspace=.xrbuild",
     "embedded": "node tools/embedded/embedded.ts",
     "setup:embedded": "node tools/embedded/embedded.ts setup",
     "setup:services": "node tools/embedded/embedded.ts services",

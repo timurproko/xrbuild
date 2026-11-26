@@ -4,7 +4,7 @@ import { SettingsWriter } from './settings-writer.js';
 import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
 import {requestedNavigation,menuKeyboard,renderNavigationMenu,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
-import {rebuildHostInPlace} from './rebuild-dialog.js';
+import {rebuildHostInPlace,updateInPlace,updateTooltip} from './rebuild-dialog.js';
 import {enhanceHelpText,iconSvg,installDropdowns,installIcons,installNumberSteppers,installTabs,installTooltips,openFloating,renderField,resumeAnimations,setFieldError,setPageIdentity,setRevealed,stabilizePanelHeight,transitionPanelHeight,updateRebuildChip,updateRestartChip} from './design-system.js';
 import {logicalInputNames} from './provider-choice.js';
 import {bumpPackageVersion, nextPublicationVersion} from './package-version.js';
@@ -409,8 +409,16 @@ const loadPlugins = async () => {
   renderHost();
   if (state.page === 'settings') renderGlobalSettings();
 };
+// Update status of the core and the workspace. It never fetches: "behind" is as of the last fetch, which only Update itself runs.
+const loadUpdate = async () => {
+  // While an update runs its own Git commands, the panel leaves the clones alone; the job's end refreshes the status.
+  if ([...state.jobs.values()].some((job) => job.kind === 'update' && (job.state === 'running' || job.state === 'queued'))) return;
+  state.update = await api('GET', '/api/update').catch(() => null);
+  renderUpdate();
+};
 const loadHost = async () => {
   state.host = await api('GET', '/api/host');
+  void loadUpdate();
   // The host's providers change only with a rebuild: refreshed here, after one.
   await loadPlugins();
   renderRunLog();
@@ -2352,6 +2360,25 @@ function renderHost() {
   rebuildDot.hidden = !needsRebuild;
 }
 
+/** The "workspace behind" hint and the Update menu item, from a status that never fetches. */
+function renderUpdate() {
+  const status = state.update, workspace = status?.workspace, chip = $('#update-chip'), item = $('#panel-update');
+  const remote = workspace?.upstream?.split('/')[0] || 'origin';
+  const checked = workspace?.checkedMs ? `Remote last checked ${ago(workspace.checkedMs)}` : 'Remote not checked yet';
+  const behind = !!workspace?.available && workspace.behind > 0, unfinished = !!workspace?.available && !!workspace.unfinished;
+  if (chip) {
+    chip.hidden = !behind && !unfinished;
+    chip.textContent = behind ? `workspace behind ${remote} by ${workspace.behind}` : unfinished ? 'workspace update unfinished' : '';
+    chip.title = behind ? `${checked}. Choose Update to fetch, pull and rebuild the workspace.`
+      : unfinished ? 'An earlier update pulled new workspace commits but its rebuild did not succeed. Choose Update to finish it.' : '';
+  }
+  if (item) {
+    // This version updates the workspace: the item is available when the workspace can be updated.
+    if (workspace && !workspace.available) item.setAttribute('aria-disabled', 'true'); else item.removeAttribute('aria-disabled');
+    item.title = updateTooltip(status);
+  }
+}
+
 /** Panel server code changed after this process started: the chip and the Restart dot say a restart loads it. */
 function renderPanelFreshness() {
   const f = state.panel;
@@ -3491,7 +3518,7 @@ window.addEventListener('xrb-theme-change', () => {
 let navigationTools=[];
 function renderPanelNavigation(){
   renderNavigationMenu($('#panel-menu'),{origin:location.origin,tools:navigationTools,current:state.page,indicators:true});
-  if(state.host)renderHost();if(state.panel)renderPanelFreshness();
+  if(state.host)renderHost();if(state.panel)renderPanelFreshness();renderUpdate();
 }
 renderPanelNavigation();
 
@@ -3514,8 +3541,9 @@ async function loadNavigation() {
 }
 $('#panel-menu').addEventListener('click',event=>{
   const item=event.target.closest('[data-navigation]');if(!item)return;const id=item.dataset.navigation;
-  if(id==='rebuild'||id==='restart')event.preventDefault();
+  if(id==='rebuild'||id==='restart'||id==='update')event.preventDefault();
   if(id==='rebuild')void rebuildHost();else if(id==='restart')void restartPanel().catch(report);
+  else if(id==='update'&&item.getAttribute('aria-disabled')!=='true')void updateBoth();
 });
 $('#panel-menu').addEventListener('keydown',e=>menuKeyboard(e,$('#panel-menu'),()=>{closeMenu();$('#panel-menu-button').focus();}));
 $('#panel-menu-button').addEventListener('keydown',e=>{if(['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();if($('#panel-menu').hidden)$('#panel-menu-button').click();$('#panel-menu [role="menuitem"]')?.focus();}});
@@ -3611,6 +3639,18 @@ async function openJobInActivity(jobId) {
 async function rebuildHost() {
   closeMenu();
   await rebuildHostInPlace(location.origin, {
+    onJob(job) {
+      const previous = state.jobs.get(job.id);
+      state.jobs.set(job.id, { ...job, lines: job.lines ?? previous?.lines ?? [] });
+      renderJobsSoon();
+    },
+    onViewJob: (job) => void openJobInActivity(job.id),
+    onComplete: () => loadHost().then(() => renderDetail()).catch(report),
+  });
+}
+async function updateBoth() {
+  closeMenu();
+  await updateInPlace(location.origin, {
     onJob(job) {
       const previous = state.jobs.get(job.id);
       state.jobs.set(job.id, { ...job, lines: job.lines ?? previous?.lines ?? [] });
@@ -3727,7 +3767,7 @@ function connect() {
         void finishPackageSetup(j).catch(report);
       }
     }
-    if (j.state !== 'running' && j.kind === 'host-rebuild') loadHost().then(() => renderDetail()).catch(report);
+    if (j.state !== 'running' && (j.kind === 'host-rebuild' || j.kind === 'update')) loadHost().then(() => renderDetail()).catch(report);
   });
   on('job-line', ({ id, text }) => {
     const j = state.jobs.get(id);
@@ -3779,6 +3819,7 @@ connect();
 // A maintenance link is an explicit one-shot action; shared tool navigation normally handles it in place.
 if(navigationRequest.maintenance){
   if(navigationRequest.maintenance==='rebuild')$('#host-rebuild').click();
+  else if(navigationRequest.maintenance==='update')$('#panel-update').click();
   else $('#panel-restart').click();
 }
 setInterval(() => { renderProjects(); loadHost().catch(() => {}); loadPanelFreshness().catch(() => {}); }, 30000);

@@ -1,15 +1,16 @@
 name: CI
 
-# Every PR to develop runs the checks its changes need; "CI required" collects them and is the one check the develop ruleset
-# requires. A draft runs only the light jobs; marking it ready (or editing its body or labels) runs the rest. Pushes to
-# develop run the fast jobs; the nightly schedule and explicit dispatch also build and test the native host. Delivery
+# Every PR to main runs the checks its changes need; "CI required" collects them and is the one check the main ruleset
+# requires. A draft runs only the light jobs; marking it ready runs the rest. Body/title edits and label changes do
+# not restart CI. Pushes to main run the fast jobs; the nightly schedule and explicit dispatch also build and test
+# the native host. Delivery
 # rules are not checked here: the shared Delivery workflow publishes its own check.
 on:
   pull_request:
-    branches: [develop]
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited, labeled, unlabeled]
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
-    branches: [develop]
+    branches: [main]
   schedule:
     - cron: '17 1 * * *'
   workflow_dispatch:
@@ -17,8 +18,8 @@ on:
 permissions:
   contents: read
 
-# A new push to a PR cancels its older run; runs on develop (push, nightly, dispatch) each get their own group, so every
-# commit on develop is checked to the end.
+# A new push to a PR cancels its older run; runs on main (push, nightly, dispatch) each get their own group, so every
+# commit on main is checked to the end.
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-run-{0}', github.run_id) }}
   cancel-in-progress: true
@@ -97,10 +98,22 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      # The shared delivery workflow: the pr-automation tests validate OpenSpec scaffolds with the version it pins.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: timurproko/MyWorkflows
+          ref: main
+          path: .artifacts/workflow
+          persist-credentials: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:types
+      # pnpm/action-setup does not populate Corepack's separate cache. Bootstrap the root-pinned
+      # manager here, not during a timed fixture's first real frozen install (even an empty graph).
+      - run: corepack install
       # --no-bail: every suite reports, not only the first that fails.
       - run: pnpm -r --no-bail --if-present test
+        env:
+          XRB_WORKFLOW_HOME: ${{ github.workspace }}/.artifacts/workflow
       # Separate public workspace; frozen installs/builds/tests stay in the job-owned cache.
       - run: pnpm test:embedded --if-present --workspace=.artifacts/embedded-ci
 
@@ -125,7 +138,7 @@ jobs:
   native:
     name: Host build and tests
     needs: [readiness]
-    # Deliberately skip every PR and develop push; a dispatch can check a sensitive change before merge.
+    # Deliberately skip every PR and main push; a dispatch can check a sensitive change before merge.
     if: needs.readiness.outputs.ready == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     runs-on: windows-latest
     steps:
@@ -148,7 +161,8 @@ jobs:
 
   required:
     name: CI required
-    if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    # Still collect failed needs, but never publish a failure for a cancelled/superseded run.
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: [readiness, changes, names, openspec, node, embedded, native]
     runs-on: ubuntu-latest
     steps:

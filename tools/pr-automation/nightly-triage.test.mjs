@@ -6,8 +6,10 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { apiClients, failureComment, failureSummary, jobLog, logTail, planTriage, prBody, scaffold } from './nightly-triage.mjs';
 
-// The pinned OpenSpec CLI (this package's devDependency) validates the generated scaffold.
-const OPENSPEC_BIN = path.join(import.meta.dirname, 'node_modules', '@fission-ai', 'openspec', 'bin', 'openspec.js');
+// The shared delivery workflow's OpenSpec version validates the generated scaffold, the same version finalization uses.
+// The shared workflow copy is XRB_WORKFLOW_HOME when set (CI), else the managed copy in ~/.workflow.
+const WORKFLOW_HOME = process.env.XRB_WORKFLOW_HOME || path.join(os.homedir(), '.workflow');
+const DELIVERY = path.join(WORKFLOW_HOME, 'bin', 'delivery.mjs');
 
 test('first failure opens a PR, a repeat comments, green comments only with a PR open', () => {
   assert.equal(planTriage({ conclusion: 'failure', openPr: null }), 'open');
@@ -81,7 +83,9 @@ test('the scaffold is valid, preserves evidence, and the PR body is promotion-co
     fs.mkdirSync(path.dirname(path.join(repo, file)), { recursive: true });
     fs.writeFileSync(path.join(repo, file), text);
   }
-  execFileSync(process.execPath, [OPENSPEC_BIN, 'validate', '--all', '--strict', '--no-interactive'], { cwd: repo, stdio: 'pipe', env: { ...process.env, CI: '1' } });
+  assert.ok(fs.existsSync(DELIVERY), `the shared workflow is missing at ${WORKFLOW_HOME}: set XRB_WORKFLOW_HOME or install it with `
+    + 'git clone https://github.com/timurproko/MyWorkflows.git ~/.workflow && node ~/.workflow/bin/delivery.mjs install');
+  execFileSync(process.execPath, [DELIVERY, 'openspec', 'validate', '--all', '--strict', '--no-interactive'], { cwd: repo, stdio: 'pipe', env: { ...process.env, CI: '1' } });
   const tasks = files['openspec/changes/fix-nightly-2026-10-11/tasks.md'];
   const body = prBody(input);
   assert.match(tasks, /- \[ \] 1\.1/);

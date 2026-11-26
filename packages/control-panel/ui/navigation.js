@@ -1,10 +1,11 @@
 // Shared, framework-neutral navigation. Maintenance choices are explicit one-shot actions.
 import {openFloating} from './design-system.js';
-import {rebuildHostInPlace} from './rebuild-dialog.js';
-export {rebuildHostInPlace};
+import {rebuildHostInPlace,updateInPlace} from './rebuild-dialog.js';
+export {rebuildHostInPlace,updateInPlace};
 export const MAINTENANCE_ACTIONS = Object.freeze([
   Object.freeze({id:'restart',label:'Restart'}),
   Object.freeze({id:'rebuild',label:'Rebuild'}),
+  Object.freeze({id:'update',label:'Update'}),
 ]);
 /** Move existing label nodes into menu order, preserving their slots, bindings and unrelated header content. */
 export function orderMaintenanceLabels(header, order = MAINTENANCE_ACTIONS.map(item=>item.id)) {
@@ -27,7 +28,7 @@ export function panelDestination(origin,page) {
   else if(page==='settings')u.pathname='/settings/';
   else if(page==='hands')u.pathname='/hands/';
   else if(page==='design-system')u.pathname='/design';
-  else if(['rebuild','restart'].includes(page))u.searchParams.set('maintenance',page);
+  else if(['rebuild','restart','update'].includes(page))u.searchParams.set('maintenance',page);
   else throw new Error('Unknown panel destination');return u.href;
 }
 export function toolDestination(url,origin,passPanelOrigin=true) {
@@ -48,7 +49,7 @@ export function requestedNavigation(url) {
   const u=new URL(url),legacyPage=u.searchParams.get('page'),maintenance=u.searchParams.get('maintenance'),jobValue=u.searchParams.get('job');
   u.searchParams.delete('page');u.searchParams.delete('maintenance');u.searchParams.delete('job');
   const routePage=u.pathname==='/plugins'||u.pathname==='/plugins/'?'plugins':u.pathname==='/settings'||u.pathname==='/settings/'?'settings':u.pathname==='/'?'projects':null;
-  return {page:['projects','plugins','settings'].includes(legacyPage)?legacyPage:routePage,maintenance:['rebuild','restart'].includes(maintenance)?maintenance:null,job:/^[1-9]\d*$/.test(jobValue??'')?Number(jobValue):null,cleanUrl:u.href};
+  return {page:['projects','plugins','settings'].includes(legacyPage)?legacyPage:routePage,maintenance:['rebuild','restart','update'].includes(maintenance)?maintenance:null,job:/^[1-9]\d*$/.test(jobValue??'')?Number(jobValue):null,cleanUrl:u.href};
 }
 /** One menu model for the panel and every standalone workspace tool. */
 export function navigationItems(origin,tools=[],current='projects',{maintenance=true}={}) {
@@ -66,7 +67,7 @@ export function renderNavigationMenu(menu,{origin,tools=[],current='projects',in
   const items = navigationItems(origin,tools,current,{maintenance});
   for (const header of menu.ownerDocument.querySelectorAll('.xrb-app-bar')) orderMaintenanceLabels(header,items.filter(item=>item.id).map(item=>item.id));
   menu.replaceChildren();
-  const ids={projects:'panel-home',plugins:'plugin-manager-open',settings:'settings-open','design-system':'design-system-open',rebuild:'host-rebuild',restart:'panel-restart'};
+  const ids={projects:'panel-home',plugins:'plugin-manager-open',settings:'settings-open','design-system':'design-system-open',rebuild:'host-rebuild',restart:'panel-restart',update:'panel-update'};
   for(const item of items){
     const el=document.createElement(item.separator?'hr':'a');
     if(item.separator)el.setAttribute('role','separator');
@@ -110,7 +111,7 @@ export function mountToolNavigation(button,menu,{origin,tools,current,maintenanc
   button.addEventListener('click',()=>{if(!menu.hidden){close();return;}openFloating(menu,{anchor:button});button.setAttribute('aria-expanded','true');menu.querySelector('[aria-current="page"]')?.focus();},{signal});
   button.addEventListener('keydown',e=>{if(['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();if(menu.hidden)button.click();menu.querySelector('[role="menuitem"]')?.focus();}},{signal});
   menu.addEventListener('keydown',e=>menuKeyboard(e,menu,dismiss),{signal});
-  menu.addEventListener('click',e=>{const item=e.target.closest('[data-navigation]'),action=item?.dataset.navigation;if(action==='restart'||action==='rebuild'){e.preventDefault();close();void (action==='restart'?restartPanelInPlace(origin):rebuildHostInPlace(origin));return;}if(e.target.closest('[aria-current="page"]'))e.preventDefault();close();},{signal});
+  menu.addEventListener('click',e=>{const item=e.target.closest('[data-navigation]'),action=item?.dataset.navigation;if(action==='update'){e.preventDefault();if(item.getAttribute('aria-disabled')==='true')return;close();void updateInPlace(origin);return;}if(action==='restart'||action==='rebuild'){e.preventDefault();close();void (action==='restart'?restartPanelInPlace(origin):rebuildHostInPlace(origin));return;}if(e.target.closest('[aria-current="page"]'))e.preventDefault();close();},{signal});
   document.addEventListener('click',e=>{if(!button.contains(e.target)&&!menu.contains(e.target))close();},{signal});
   addEventListener('resize',close,{signal});return ()=>{events.abort();menu.replaceChildren();close();};
 }

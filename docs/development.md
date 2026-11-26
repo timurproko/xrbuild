@@ -84,7 +84,7 @@ Related: [Confidentiality](confidentiality.md) for what must stay out of this re
   `pnpm task:repos` provisions such an independent private clone when a task needs one.
 - `tools/pr-automation` - the `CI required` aggregate (`required.mjs`) and nightly triage.
 - `.github/` - CI (`ci.yml`: ready PRs keep fast selected checks; full Windows host build/tests run nightly on
-  `develop` or by explicit CI dispatch, not on PRs or `develop` pushes), nightly triage, and
+  `main` or by explicit CI dispatch, not on PRs or `main` pushes), nightly triage, and
   `delivery.yml`, which only forwards pull-request events and the bot credentials to the shared delivery workflow.
 - `.xrbuild` - ignored independent private clone: projects, plugins and pinned Git LFS dependencies, with its own
   `.git` and LFS hooks; credentials, installed packages and generated builds stay ignored in that repository.
@@ -116,7 +116,8 @@ Tests: `node --test "test/**/*.test.ts"` in `packages/sdk`, `packages/ui-kit`, `
 `packages/control-panel` (Node runs the .ts directly; no TypeScript parameter properties, type stripping refuses
 them). The control-panel package's `pnpm test` bounds file parallelism to two workers without changing test deadlines
 or within-test competing writers; `node --test` in `tools/fetch-deps`, `tools/name-guard`, `tools/worktree`, `tools/pr-automation`
-and `tools/public-history` (`pnpm test` runs them all); `pnpm check:names`.
+and `tools/public-history` (`pnpm test` runs them all); `pnpm check:names`. The `tools/pr-automation` tests validate
+generated OpenSpec changes with the shared workflow's pinned OpenSpec, read from `XRB_WORKFLOW_HOME` or `~/.workflow`.
 
 Use the CMake bundled with VS Build Tools
 (`Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe`) if none is on PATH.

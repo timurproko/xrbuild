@@ -33,6 +33,7 @@ import { PluginConfigConflict, PluginConfigInvalid, readUserPluginConfigState, w
 import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, discoverProjectCatalog, containedPath, type PluginCatalog } from './extension-catalog.ts';
 import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
 import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
+import { rebuiltPluginNames, runUpdate, updateStatus, type UpdateDeps, type UpdateStatus } from './update.ts';
 import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatus, type BuildTarget, type IdentityField, type PackagerDiscovery, type PackagerSetupStatus, type RoleSelection } from './packagers.ts';
 import { PackageList } from './packages.ts';
 import { discoverHandProviders, sameHandProvider, handRegistry, handProviderKey, type HandProviderKey } from './hand-providers.ts';
@@ -229,6 +230,9 @@ export class Panel {
   private readonly settingsWrites = new Set<string>();
   readonly runner = new HostRunner();
   desktopSetup: DesktopSetup;
+  /** Test seams for Update (a stubbed Git runner or rebuild); production uses Git and rebuildHost. */
+  updateDeps: Partial<UpdateDeps> = {};
+  private updateLast: UpdateStatus | null = null;
   readonly packages: PackageList;
   readonly hub: EventHub;
   /** the core repo (host build, templates) */
@@ -1403,6 +1407,7 @@ export class Panel {
     const desktopSetupBusy = await this.desktopSetup.isBusy();
     this.refuseIfLaunchBlocked(p, this.launchState(p));
     if (this.jobs.active().some(job => job.kind === 'host-rebuild')) throw new HttpError(409, 'wait for the native rebuild to finish before running');
+    if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before running');
     if (this.jobs.active().some(job => job.kind === 'desktop-setup') || desktopSetupBusy) throw new HttpError(409, 'wait for desktop setup to finish before running');
     if (p.readOnly) this.refuseIfBusy(p.id);
     this.preparingNativeRun = true;
@@ -1864,11 +1869,41 @@ export class Panel {
       case 'POST host/rebuild':
         if (await this.desktopSetup.isBusy()) throw new HttpError(409, 'Wait for desktop setup to finish before rebuilding');
         if (this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop the running or starting host first: its exe must not overlap a rebuild');
+        if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before rebuilding');
         sendJson(res, 202, jobSummary(this.startJob('host-rebuild', null, 'rebuild xrb-host', async ctx => {
           const tools = await this.desktopSetup.deps.tools();
           return rebuildHost(this.repo, this.workspace, ctx, { cmake: tools.cmake ?? undefined, generator: tools.generator });
         })));
         return true;
+      case 'GET update': {
+        // While an update job runs Git in the clones, answer from the last status instead of running Git beside it.
+        const updating = this.jobs.active().some(job => job.kind === 'update');
+        if (!updating || !this.updateLast) this.updateLast = await updateStatus(this.repo, this.workspace, this.updateDeps.git);
+        sendJson(res, 200, { ...this.updateLast, updating });
+        return true;
+      }
+      case 'POST update': {
+        // The same guards as Rebuild: the update ends with one. The job runner keeps it apart from every other job.
+        if (await this.desktopSetup.isBusy()) throw new HttpError(409, 'Wait for desktop setup to finish before updating');
+        if (this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop the running or starting host first: its exe must not overlap a rebuild');
+        const status = this.updateLast = await updateStatus(this.repo, this.workspace, this.updateDeps.git);
+        // This version updates the workspace only; the core is reported and the result says what holds for it.
+        if (!status.workspace.available) throw new HttpError(409, status.workspace.reason ?? 'The workspace cannot be updated');
+        sendJson(res, 202, jobSummary(this.startJob('update', null, 'update', ctx => runUpdate(this.workspace, ctx, {
+          core: this.repo,
+          coreHostCurrent: async () => {
+            const core = await resolvedHostFreshness(this.repo, this.workspace, true);
+            return core.exists && !core.outdated;
+          },
+          rebuild: async (pluginsOnly, context) => {
+            const tools = await this.desktopSetup.deps.tools();
+            const freshness = await rebuildHost(this.repo, this.workspace, context, { cmake: tools.cmake ?? undefined, generator: tools.generator, pluginsOnly });
+            return rebuiltPluginNames(freshness.plugins);
+          },
+          ...this.updateDeps,
+        }))));
+        return true;
+      }
       case 'GET preview/projection': {
         const query = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams;
         const current = this.previewProjection;

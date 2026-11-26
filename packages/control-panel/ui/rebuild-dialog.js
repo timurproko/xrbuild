@@ -19,10 +19,78 @@ function safePanelOrigin(value) {
   } catch { return null; }
 }
 
+const commitCount = (n) => `${n} commit${n === 1 ? '' : 's'}`;
+function agoText(ms, now) {
+  const s = (now - ms) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  const days = Math.floor(s / 86400);
+  if (days < 14) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return `${Math.floor(days / 7)} weeks ago`;
+}
+
+/**
+ * The Update tooltip: one sentence per repository, each with the time of that repository's own last fetch, from
+ * `GET /api/update`. The two remotes are fetched at different times (this version never fetches the core), so one
+ * repository's check never vouches for the other: a core without a fetch time is "not checked yet", never "up to
+ * date". A core that is behind or cannot be updated here says so, and to pull it by hand.
+ */
+export function updateTooltip(status, now = Date.now()) {
+  if (!status) return '';
+  const {core, workspace} = status;
+  const asOf = (repo) => repo.checkedMs ? ` as of ${agoText(repo.checkedMs, now)}` : '';
+  const coreText = !core ? '' : !core.available ? `Core: not updated here. ${core.reason ?? ''}`.trim()
+    : core.behind ? `Core: ${commitCount(core.behind)} behind ${core.upstream}${asOf(core)}, not updated by this version yet; pull it by hand.`
+    : core.checkedMs ? `Core: up to date${asOf(core)}.` : 'Core: not checked yet.';
+  const remote = workspace?.upstream?.split('/')[0] || 'origin';
+  const checked = (repo) => repo.checkedMs ? `, checked ${agoText(repo.checkedMs, now)}` : '';
+  const workspaceText = !workspace ? '' : !workspace.available ? `Workspace: ${workspace.reason ?? 'cannot be updated.'}`
+    : workspace.unfinished ? 'Workspace: the last update did not finish; run Update again.'
+    : workspace.behind ? `Workspace: ${commitCount(workspace.behind)} behind ${remote}${checked(workspace)}.`
+    : workspace.checkedMs ? `Workspace: up to date${checked(workspace)}.` : 'Workspace: not checked yet.';
+  return [coreText, workspaceText].filter(Boolean).join(' ');
+}
+
+/** Update steps, in order, as announced by `step <id>` job lines. */
+export const UPDATE_STEPS = Object.freeze([
+  Object.freeze({id: 'check', title: 'Check', message: 'Checking the core and the workspace'}),
+  Object.freeze({id: 'fetch', title: 'Fetch', message: 'Fetching the workspace from its remote'}),
+  Object.freeze({id: 'lfs', title: 'LFS', message: 'Downloading the workspace\'s LFS files'}),
+  Object.freeze({id: 'pull', title: 'Pull', message: 'Pulling new workspace commits'}),
+  Object.freeze({id: 'rebuild', title: 'Rebuild', message: 'Rebuilding'}),
+]);
+
+function updatePresentation(job, error, running, failed, phase) {
+  // The job carries its current step: /api/jobs sends only the last lines, which long LFS or build output fills.
+  const latest = job?.step ?? [...(job?.lines ?? [])].reverse().find((line) => line.startsWith('step '))?.slice('step '.length);
+  const at = Math.max(0, UPDATE_STEPS.findIndex((step) => step.id === latest)), step = UPDATE_STEPS[at];
+  const upToDate = job?.result?.state === 'up-to-date';
+  const doing = step.id === 'rebuild' ? `Rebuilding ${phase ? phase.slice('plugin '.length) : 'plugins'}` : step.message;
+  return {
+    step: step.id,
+    // Titles name the repository the result is about: this version updates the workspace and only reports the core.
+    title: running ? 'Updating' : failed ? 'Update failed' : upToDate ? 'Workspace already up to date' : 'Workspace updated',
+    message: error || (running ? `Step ${at + 1} of ${UPDATE_STEPS.length}, ${step.title}: ${doing}…`
+      : failed ? job?.error || `${step.title} failed: see the output below.` : job?.result?.summary || 'The workspace is up to date.'),
+  };
+}
+
 export function rebuildPresentation(job, error = '') {
   const running = !error && (!job || job.state === 'running' || job.state === 'queued');
   const failed = !!error || job?.state === 'failed';
   const setup = job?.kind === 'desktop-setup';
+  if (job?.kind === 'update') {
+    const phase = [...(job.lines ?? [])].reverse().find((line) => line.startsWith('plugin '));
+    return {
+      state: running ? 'running' : failed ? 'failed' : 'done',
+      ...updatePresentation(job, error, running, failed, phase),
+      output: job.lines?.length ? job.lines.slice(-20).join('\n') : error ? 'The job could not start.' : 'Waiting for output…',
+      running,
+      succeeded: !running && !failed,
+      viewJobDisabled: job.id == null,
+    };
+  }
   const restart = setup && job?.result?.restartRequired === true;
   const phase = [...(job?.lines ?? [])].reverse().find((line) => line.startsWith('plugin '));
   return {
@@ -112,7 +180,8 @@ export function rebuildProgressDialog({document: documentRef = globalThis.docume
   return controller;
 }
 
-export async function rebuildHostInPlace(origin = globalThis.location?.origin, options = {}) {
+/** Starts one maintenance job from a menu and follows it in the shared progress dialog. */
+async function followJobInPlace(origin, route, placeholder, options, label, setupAction = 'Rebuild') {
   const safe = safePanelOrigin(origin);
   if (!safe) throw new Error('Invalid local panel origin');
   const defaultViewJob = (job) => {
@@ -123,16 +192,16 @@ export async function rebuildHostInPlace(origin = globalThis.location?.origin, o
   const progress = rebuildProgressDialog({onViewJob: options.onViewJob ?? defaultViewJob});
   let started;
   try {
-    if (!await desktopSetupBeforeRebuild(safe, {progress,onJob:options.onJob})) return null;
-    progress.show();
-    const response = await fetch(new URL('/api/host/rebuild', safe), {method: 'POST'});
+    if (!await desktopSetupBeforeRebuild(safe, {progress,onJob:options.onJob,action:setupAction})) return null;
+    progress.show(placeholder);
+    const response = await fetch(new URL(route, safe), {method: 'POST'});
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.error || `Rebuild failed (${response.status})`);
+    if (!response.ok) throw new Error(body.error || `${label} failed (${response.status})`);
     started = body;
     progress.render(started);
     options.onJob?.(started);
   } catch (error) {
-    progress.show(null, error instanceof Error ? error.message : String(error));
+    progress.show(placeholder, error instanceof Error ? error.message : String(error));
     return null;
   }
 
@@ -142,7 +211,7 @@ export async function rebuildHostInPlace(origin = globalThis.location?.origin, o
     try {
       const response = await fetch(new URL('/api/jobs', safe), {cache: 'no-store'});
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || `Rebuild status failed (${response.status})`);
+      if (!response.ok) throw new Error(body.error || `${label} status failed (${response.status})`);
       const job = body.jobs?.find((candidate) => candidate.id === started.id);
       if (!job) continue;
       progress.render(job);
@@ -156,6 +225,15 @@ export async function rebuildHostInPlace(origin = globalThis.location?.origin, o
       return null;
     }
   }
-  progress.render(started, 'The rebuild is taking longer than expected.');
+  progress.render(started, `The ${label.toLowerCase()} is taking longer than expected.`);
   return null;
+}
+
+export function rebuildHostInPlace(origin = globalThis.location?.origin, options = {}) {
+  return followJobInPlace(origin, '/api/host/rebuild', null, options, 'Rebuild');
+}
+
+/** Update: report the core, fast-forward the workspace, pull LFS content, rebuild. Git refusals arrive as the job error. */
+export function updateInPlace(origin = globalThis.location?.origin, options = {}) {
+  return followJobInPlace(origin, '/api/update', {kind: 'update', state: 'running', lines: []}, options, 'Update', 'Update');
 }

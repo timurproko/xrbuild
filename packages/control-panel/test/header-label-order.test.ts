@@ -19,9 +19,11 @@ function headerFixture() {
 
 test('maintenance menu has one immutable order used for corresponding header labels', () => {
   const menu = navigationItems('http://localhost:5180', [{ id: 'tool', label: 'Tool', route: '/tool/' }]);
-  assert.deepEqual(MAINTENANCE_ACTIONS.map(item => item.id), ['restart', 'rebuild']);
-  assert.deepEqual(menu.slice(-2).map(item => item.id), MAINTENANCE_ACTIONS.map(item => item.id));
-  assert.deepEqual(menu.map(item => item.label ?? 'separator'), ['Apps', 'Tool', 'Plugins', 'Settings', 'separator', 'Restart', 'Rebuild']);
+  assert.deepEqual(MAINTENANCE_ACTIONS.map(item => item.id), ['restart', 'rebuild', 'update']);
+  assert.deepEqual(menu.slice(-3).map(item => item.id), MAINTENANCE_ACTIONS.map(item => item.id));
+  assert.deepEqual(menu.map(item => item.label ?? 'separator'), ['Apps', 'Hands', 'Tool', 'Plugins', 'Settings', 'separator', 'Restart', 'Rebuild', 'Update']);
+  // One action updates both repositories: the item is named exactly "Update", never "Update workspace".
+  assert.equal(MAINTENANCE_ACTIONS.find(item => item.id === 'update')?.label, 'Update');
   assert.ok(Object.isFrozen(MAINTENANCE_ACTIONS));assert.ok(MAINTENANCE_ACTIONS.every(Object.isFrozen));
 });
 
@@ -43,7 +45,9 @@ test('panel and embedded hand default markup follow the same menu order before s
   for (const file of ['../ui/index.html', '../../../embedded/plugins/input-hands/samples/hand-tracking/index.html']) {
     const html = await fs.readFile(new URL(file, import.meta.url), 'utf8'), header = html.match(/<header\b[^>]*>[\s\S]*?<\/header>/)![0];
     const ids = [...header.matchAll(/data-maintenance="([^"]+)"/g)].map(match => match[1]);
-    assert.deepEqual(ids, MAINTENANCE_ACTIONS.map(item => item.id), file);
+    // The panel labels every action; a tool page may leave out the workspace hint but keeps the same order.
+    const expected = MAINTENANCE_ACTIONS.map(item => item.id).filter(id => file.startsWith('../ui/') || id !== 'update');
+    assert.deepEqual(ids, expected, file);
     assert.ok(header.indexOf('id="panel-chip"') < header.indexOf('id="host-chip"'), file);
   }
 });

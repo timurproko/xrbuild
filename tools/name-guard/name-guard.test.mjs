@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { checkRepo, checksContents, findNames, hashOf, hookDecision, nameKeys, words } from './name-guard.mjs';
+import { addKeys, checkRepo, checksContents, findNames, hashOf, hookDecision, nameKeys, words } from './name-guard.mjs';
 
 // Made-up names: the guard's own tests name nothing real.
 const banned = new Set([...nameKeys('acmecorp'), ...nameKeys('Widget Pro'), ...nameKeys('ZX', true)].map(hashOf));
@@ -24,6 +24,16 @@ test('a name inside a longer word is not a match', () => {
 
 test('an exact-case name matches only that spelling', () => {
   assert.deepEqual(findNames('<circle cx="1" zx="2"/> the ZX runtime', banned).map((h) => h.word), ['ZX']);
+});
+
+test('a common word is added only forced or in a capitalised exact spelling', () => {
+  assert.throws(() => addKeys('display'), (e) => /common word/.test(e.message) && /capitalised --exact/.test(e.message) && /--force/.test(e.message));
+  const exact = addKeys('Display', { exact: true });
+  assert.deepEqual(exact, ['=Display']);
+  assert.deepEqual(findNames('the display shows Display', new Set(exact.map(hashOf))).map((h) => h.word), ['Display']);
+  assert.throws(() => addKeys('display', { exact: true }), (e) => /all-lower-case exact ban/.test(e.message) && !/use --exact/.test(e.message));
+  assert.deepEqual(addKeys('display', { force: true }), ['display']);
+  assert.deepEqual(addKeys('acmecorp'), ['acmecorp'], 'an uncommon word needs no option');
 });
 
 test('the repo check reports contents with line numbers, file names and package names', async () => {

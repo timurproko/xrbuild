@@ -126,7 +126,7 @@ export async function repositoryInventory(options) {
   let dependency = 'not-required';
   if (options.requiredCore) {
     if (!/^[a-f0-9]{40}$/.test(options.requiredCore)) throw new Error('Core dependency must be an immutable commit');
-    dependency = git(core.root, ['merge-base', '--is-ancestor', options.requiredCore, 'refs/remotes/origin/develop'], true) && git(core.root, ['merge-base', '--is-ancestor', options.requiredCore, core.head], true) ? 'merged' : 'blocked-or-unknown';
+    dependency = git(core.root, ['merge-base', '--is-ancestor', options.requiredCore, 'refs/remotes/origin/main'], true) && git(core.root, ['merge-base', '--is-ancestor', options.requiredCore, core.head], true) ? 'merged' : 'blocked-or-unknown';
   }
   return { version: 1, scope: route.scope, paths: route, repositories, requiredCore: options.requiredCore ?? null, dependency, delivery: 'manual' };
 }

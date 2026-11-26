@@ -3,7 +3,7 @@
 import { spawn, type SpawnOptions } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 
-export type JobKind = 'web-build' | 'package' | 'packager-setup' | 'tool-setup' | 'publication' | 'host-rebuild' | 'icon-render' | 'cache-cleanup' | 'desktop-setup';
+export type JobKind = 'web-build' | 'package' | 'packager-setup' | 'tool-setup' | 'publication' | 'host-rebuild' | 'icon-render' | 'cache-cleanup' | 'desktop-setup' | 'update';
 export type JobState = 'queued' | 'running' | 'done' | 'failed';
 export type JobOperation = 'publish' | 'update' | 'activate' | 'delete-release' | 'unpublish';
 
@@ -43,6 +43,8 @@ export interface Job {
   publication: JobPublication | null;
   release: JobRelease | null;
   result: unknown;
+  /** Update's current step (its last `step <id>` line), kept because /api/jobs sends only the last lines. */
+  step?: string | null;
   lines: string[];
 }
 
@@ -145,6 +147,8 @@ export class JobRunner extends EventEmitter {
     for (const j of this.active()) {
       if (kind === 'desktop-setup' || j.kind === 'desktop-setup') return `${j.title} is active: desktop setup cannot overlap other jobs`;
       if (kind === 'cache-cleanup' || j.kind === 'cache-cleanup') return `${j.title} is active: cache maintenance cannot overlap other jobs`;
+      // An update changes the sources every other job reads, and ends with a native rebuild.
+      if (kind === 'update' || j.kind === 'update') return `${j.title} is active: an update cannot overlap other jobs`;
       if (j.kind === kind) {
         if (kind === 'publication') continue;
         return `a ${kind} job is already running (${j.title})`;
@@ -213,6 +217,7 @@ export class JobRunner extends EventEmitter {
     const line = (raw: string) => {
       const text = stripAnsi(raw);  // tools like vite colour their output even into a pipe
       job.lines.push(text);
+      if (kind === 'update' && /^step [a-z]+$/.test(text)) job.step = text.slice('step '.length);
       if (job.lines.length > MAX_LINES) job.lines.splice(0, job.lines.length - MAX_LINES);
       this.emit('line', job, text);
     };
