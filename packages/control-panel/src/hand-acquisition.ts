@@ -1,8 +1,22 @@
 // Native OS ownership, not a workspace lock or heartbeat lease. Helpers never start input.
 import { randomBytes } from 'node:crypto';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { once } from 'node:events';
 import { LineSplitter } from './jobs.ts';
+
+/** The existing metadata-only option is safe on old hosts; never probe with an unknown flag. */
+export function checkHandAcquisitionHost(exe: string, run: typeof execFile = execFile): Promise<void> {
+  return new Promise((resolve, reject) => {
+    run(exe, ['--list-plugins'], { windowsHide: true, timeout: 15000, maxBuffer: 1024 * 1024 }, (error, stdout) => {
+      let capable = false;
+      try {
+        const line = String(stdout).split(/\r?\n/).find(value => value.startsWith('@plugins '));
+        capable = !error && !!line && JSON.parse(line.slice(9)).handAcquisition === 1;
+      } catch { /* Malformed, old or unavailable hosts fail closed before reservation/startup. */ }
+      if (capable) resolve(); else reject(new Error('This native host cannot safely share hand acquisition. Rebuild the host before running Hand.'));
+    });
+  });
+}
 
 export interface HandAcquisitionReservation {
   readonly ticket: string;

@@ -11,7 +11,7 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { LineSplitter, stripAnsi } from './jobs.ts';
-import { reserveHandAcquisition, type HandAcquisitionReservation } from './hand-acquisition.ts';
+import { checkHandAcquisitionHost, reserveHandAcquisition, type HandAcquisitionReservation } from './hand-acquisition.ts';
 import type { CursorStyle } from '../../sdk/src/cursor-style.ts';
 
 export type RunMode = 'built' | 'dev';
@@ -251,6 +251,7 @@ export class HostRunner extends EventEmitter {
   private handReservation: HandAcquisitionReservation | null = null;
   private startEpoch = 0;
   reserveAcquisition = reserveHandAcquisition;
+  checkAcquisitionHost = checkHandAcquisitionHost;
   private preview: ChildProcess | null = null;
   private previewStopping = false;
   private dev: ChildProcess | null = null;
@@ -382,6 +383,7 @@ export class HostRunner extends EventEmitter {
     this.set({ projectId: req.projectId, mode: req.mode, flat: !!req.flat, switchable: false, switchView: !!req.switchView, cameraAvailable: req.cameraAvailable ?? !!req.cameraView, cameraView: !!req.cameraView, phase: 'starting', pid: null, startedMs: Date.now(), channelUrl: null, devUrl: null, status: null, warning: null, foreign: [] });
     try {
       if (req.acquisitionHelper && req.handPolicy === 'native') {
+        await this.checkAcquisitionHost(req.hostExe); current();
         reservation = await this.reserveAcquisition(req.acquisitionHelper, `App ${req.projectId}`);
         this.handReservation = reservation; current();
       }

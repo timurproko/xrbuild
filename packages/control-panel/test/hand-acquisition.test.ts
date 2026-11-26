@@ -6,7 +6,7 @@ import { once } from 'node:events';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { reserveHandAcquisition } from '../src/hand-acquisition.ts';
+import { checkHandAcquisitionHost, reserveHandAcquisition } from '../src/hand-acquisition.ts';
 import { HostRunner } from '../src/host-runner.ts';
 
 const helper = process.env.XRB_TEST_ACQUISITION_HELPER, nativeChild = process.env.XRB_TEST_ACQUISITION_CHILD;
@@ -40,6 +40,16 @@ test('legacy host guard refuses old hosts but allows updated input-free hosts, i
   }
 });
 
+test('old/malformed host inventories fail closed and only the existing passive list option is probed', async () => {
+  for (const inventory of ['@plugins {"handAcquisition":1,"plugins":[]}', '@plugins {"plugins":[]}', '@plugins {bad']) {
+    const run = ((_exe: string, args: string[], options: object, callback: Function) => {
+      assert.deepEqual(args, ['--list-plugins']); callback(null, inventory); return {};
+    }) as any;
+    if (inventory.includes('"handAcquisition":1')) await checkHandAcquisitionHost('host.exe', run);
+    else await assert.rejects(checkHandAcquisitionHost('host.exe', run), /Rebuild the host/);
+  }
+});
+
 test('missing native helper fails with Rebuild guidance rather than unprotected launch', async () => {
   await assert.rejects(reserveHandAcquisition('xrb-nonexistent-acquisition-test.exe', 'App'), /Rebuild the host/);
 });
@@ -49,6 +59,7 @@ test('managed Hand reservation is acquired before starting dev/display, keeps ti
   const script = path.join(root, 'fake.mjs'); await fs.writeFile(path.join(root, 'index.html'), 'test');
   await fs.writeFile(script, `if(process.env.XRB_HAND_LEASE_TICKET!=='secret-ticket')process.exitCode=9;`);
   const runner = new HostRunner(async () => [], async () => {});
+  runner.checkAcquisitionHost = async () => {};
   let held = false, transferred = 0, closed = 0;
   runner.reserveAcquisition = async (_exe, label) => {
     assert.match(label, /App example/); held = true;
@@ -69,12 +80,14 @@ test('Hand-off does not reserve native acquisition and cancellation cannot launc
   const root = await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'hand-lease-cancel-'));
   await fs.writeFile(path.join(root, 'index.html'), 'test'); const script = path.join(root, 'fake.mjs'); await fs.writeFile(script, '');
   const runner = new HostRunner(async () => [], async () => {});
+  runner.checkAcquisitionHost = async () => {};
   runner.reserveAcquisition = async () => { throw new Error('must not reserve'); };
   const exited = once(runner, 'exit');
   await runner.start({ projectId: 'off', mode: 'built', hostExe: process.execPath, entryDir: root, projectDir: root, hostArgs: [script], handPolicy: 'off', acquisitionHelper: 'helper.exe' }); await exited;
   let release!: () => void, closed = 0;
   runner.reserveAcquisition = () => new Promise(resolve => { release = () => resolve({ ticket: 'never-spawn', handoff: async () => { assert.fail('cancelled launch must not hand off'); }, close: async () => { closed++; } }); });
   const starting = runner.start({ projectId: 'cancel', mode: 'built', hostExe: process.execPath, entryDir: root, projectDir: root, hostArgs: [script], handPolicy: 'native', acquisitionHelper: 'helper.exe' });
+  await Promise.resolve(); // The metadata-only capability check precedes reservation.
   await runner.stop(); release(); await assert.rejects(starting, /cancelled/);
   assert.equal(closed, 1); assert.equal(runner.state().pid, null);
   await fs.rm(root, { recursive: true, force: true });

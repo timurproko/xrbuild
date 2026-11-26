@@ -12,7 +12,7 @@ The acquisition process holds a secured named Windows mutex. A separate transiti
 
 New direct and packaged hosts also acquire the slot before input creation and display startup. The full host's existing singleton remains in place for display/CEF safety; it is not used as the hand slot. Legacy executables and unrelated applications cannot be made to cooperate retroactively. Running an old host concurrently with a new provider session is unsupported. Cross-user/logon-session arbitration needs a separate machine-wide broker/security policy and is not claimed here.
 
-The native helper belongs to the selected immutable runtime next to the host; it is built by normal Rebuild host, and helper source changes invalidate the normal host fingerprint. A managed Hand run with an absent helper fails with Rebuild guidance instead of using an unprotected old runtime. Offline app packages still require no author panel; their updated host can acquire the slot directly without the reservation helper.
+The native helper belongs to the selected immutable runtime next to the host; it is built by normal Rebuild host, and helper source changes invalidate the normal host fingerprint. Before reserving or starting an app, the panel also checks the host's existing passive `--list-plugins` inventory for `handAcquisition:1`; a helper file alone does not prove the host participates. A managed Hand run with an old/malformed inventory or absent helper fails with Rebuild guidance instead of using an unprotected old runtime. Offline app packages still require no author panel; their updated host can acquire the slot directly without the reservation helper.
 
 ## Standalone build and focused checks
 

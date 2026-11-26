@@ -102,7 +102,8 @@ int main() {
   if (const HostArgs early = parseArgs(argc, argv); early.listPlugins) {
     plugins::Catalog catalog;
     catalog.scan(pluginRoots(exeDir(), early));
-    printf("@plugins %s\n", plugins::catalogJson(catalog, builtinProviders()).c_str());  // tagged like @channel/@status
+    const std::string inventory = plugins::catalogJson(catalog, builtinProviders());
+    printf("@plugins {\"handAcquisition\":1,%s\n", inventory.c_str() + 1);  // Only this host entry implements the early acquisition gate.
     fflush(stdout);
     LocalFree(argv);
     return 0;
