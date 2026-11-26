@@ -8,8 +8,8 @@
 
 ## 2. Calibration prerequisites expose specific causes and supported recovery actions
 
-- [ ] 2.1 Preserve concrete reasons across catalog/module resolution, bridge manifest/path/hash checks and service dependency preparation; cover absent/disabled/conflicting plugin, missing/stale/invalid bridge, missing/stale services and unsafe state with targeted fixtures.
-- [ ] 2.2 Render concise existing-style notices with only applicable actions, retaining supported stored-result operations; cover explicit device-runtime/inventory failures without claiming passive hardware verification.
-- [ ] 2.3 Extend normal Rebuild to rebuild/stage a previously built bridge for current source when its reviewed dependency exists, using validated tools and the logged job; cover source-update recovery, missing dependency, service refresh and safety refusal without device provisioning or capture.
-- [ ] 2.4 Document the cause-to-action matrix and exact operator recovery sequence in calibration documentation; explain automatic bridge refresh on explicit Rebuild versus missing reviewed device dependency and name hardware-only checks.
-- [ ] 2.5 Run only affected page/capture/runtime/rebuild tests and isolated real-browser checks, save screenshots of every changed notice/action and recovery view, and stop all disposable processes before reporting results and hardware limitations.
+- [x] 2.1 Preserve concrete reasons across catalog/module resolution, bridge manifest/path/hash checks and service dependency preparation; cover absent/disabled/conflicting plugin, missing/stale/invalid bridge, missing/stale services and unsafe state with targeted fixtures.
+- [x] 2.2 Render concise existing-style notices with only applicable actions, retaining supported stored-result operations; cover explicit device-runtime/inventory failures without claiming passive hardware verification.
+- [x] 2.3 Extend normal Rebuild to rebuild/stage a previously built bridge for current source when its reviewed dependency exists, using validated tools and the logged job; cover source-update recovery, missing dependency, service refresh and safety refusal without device provisioning or capture.
+- [x] 2.4 Document the cause-to-action matrix and exact operator recovery sequence in calibration documentation; explain automatic bridge refresh on explicit Rebuild versus missing reviewed device dependency and name hardware-only checks.
+- [x] 2.5 Run only affected page/capture/runtime/rebuild tests and isolated real-browser checks, save screenshots of every changed notice/action and recovery view, and stop all disposable processes before reporting results and hardware limitations.

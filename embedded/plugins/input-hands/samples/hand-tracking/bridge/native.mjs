@@ -20,7 +20,7 @@ export class NativeCapture extends EventEmitter {
   constructor(options={}){super();this.options=options;}
   get executable(){assertRuntimeSync(this.options);return runtimePaths(this.options).executable;}
   child=null;done=null;stopping=false;stderr='';pings=new Map();nextPing=0;clock=null;
-  async list(){const {stdout}=await execute(this.executable,['--list'],{windowsHide:true,timeout:10000,maxBuffer:2*1024*1024});const result=JSON.parse(stdout);validateDevices(result);return result;}
+  async list(){try{const {stdout}=await execute(this.executable,['--list'],{windowsHide:true,timeout:10000,maxBuffer:2*1024*1024});const result=JSON.parse(stdout);validateDevices(result);return result;}catch(error){const loader=[-1073741515,3221225781].includes(error.code);throw Object.assign(new Error(loader?'Camera device runtime could not start; restore the reviewed device runtime.':'Camera enumeration failed; check device connections and the runtime.'),{detail:error.message});}}
   start(serial,markerCalibration=false,profile='640x480@30'){
     if(this.child)throw new Error('Native capture already active');this.stopping=false;this.stderr='';
     const child=spawn(this.executable,[`--serial=${serial}`,...(profile==='640x480@30'?[]:[`--profile=${profile}`]),...(markerCalibration?['--marker=tag36h11']:[])],{windowsHide:true,stdio:['pipe','pipe','pipe']});this.child=child;

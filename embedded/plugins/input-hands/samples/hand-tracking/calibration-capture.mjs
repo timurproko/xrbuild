@@ -1,11 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
 import { sameOrigin } from './state-paths.mjs';
-import { assertRuntimeSync } from './bridge/runtime.mjs';
-const require = createRequire(import.meta.url);
+import { bridgeReadiness } from './bridge/readiness.mjs';
 const json = (res, status, value) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
 /** One lease covers both services, including connection, enumeration and asynchronous cleanup. */
-export function calibrationCapture(context, { prepare = () => { assertRuntimeSync(context); require.resolve('ws'); }, factory = options => import('./bridge/server.mjs').then(module => module.createBridge(options)), ttlMs = 20000 } = {}) {
+export function calibrationCapture(context, { prepare = () => bridgeReadiness(context), factory = options => import('./bridge/server.mjs').then(module => module.createBridge(options)), ttlMs = 20000 } = {}) {
   let owner = null, closed = false;
   const closeOwner = async value => {
     if (!value || value.closing) return value?.closing;
@@ -19,7 +17,8 @@ export function calibrationCapture(context, { prepare = () => { assertRuntimeSyn
   };
   const touch = value => { clearTimeout(value.timer); value.timer = setTimeout(() => { void closeOwner(value).catch(() => {}); }, ttlMs); value.timer.unref?.(); };
   return {
-    status() { try { prepare(); return { available: true, reason: 'Connect to check depth cameras.' }; } catch { return { available: false, reason: 'Native bridge or its service dependencies are unavailable or stale.' }; } },
+    busy: () => !!owner,
+    async status() { try { return await prepare() ?? { available: true, reason: 'Connect to check depth cameras.' }; } catch (error) { return { available: false, code: 'preparation-failed', reason: 'Camera preparation failed.', detail: error.message }; } },
     async handle(req, res) {
       if (req.url !== '/api/calibration/capture') return false;
       if (closed || req.method !== 'POST' || !sameOrigin(req) || req.headers.origin !== `http://${req.headers.host}`) { json(res, 403, { error: 'Same-origin explicit capture request required.' }); return true; }
@@ -28,7 +27,11 @@ export function calibrationCapture(context, { prepare = () => { assertRuntimeSyn
         const input = JSON.parse(bytes || '{}');
         if (input.action === 'connect') {
           if (owner) throw new Error('Another Calibration tab owns capture. Stop it there first.');
-          prepare();
+          const ready = await prepare();
+          if (ready?.available === false) { json(res, 409, { error: ready.reason, ...ready }); return true; }
+          // Preparation is asynchronous; disposal or another tab may have won meanwhile.
+          if (closed) throw new Error('Calibration connection cancelled.');
+          if (owner) throw new Error('Another Calibration tab owns capture. Stop it there first.');
           const value = { id: randomUUID(), release: context.acquireCapture(), services: [], pending: null, closing: null, timer: null };
           owner = value; touch(value);
           value.pending = (async () => {

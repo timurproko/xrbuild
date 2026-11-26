@@ -31,7 +31,7 @@ test('Calibration is a reserved core module, not an optional or old laboratory r
   await fixture(false, async (base, root, app) => {
     const page = await fetch(base + '/calibration/'); assert.equal(page.status, 200); const html = await page.text(); assert.doesNotMatch(html, /Camera B → A transform|Checking calibration plugin/); assert.match(html, /xrb-spinner/);
     const status = await fetch(base + '/api/calibration').then(r => r.json());
-    assert.equal(status.available, true, status.reason); assert.equal(status.capture.available, false); assert.match(status.capture.reason, /Native bridge/);
+    assert.equal(status.available, true, status.reason); assert.equal(status.capture.available, false); assert.match(status.capture.reason, /Native bridge|Camera device SDK/);
     assert.equal((await fetch(base + status.module)).status, 200);
     const marker = await fetch(base + '/calibration/tools/assets/tag36h11-0.svg'); assert.equal(marker.status, 200); assert.equal(marker.headers.get('content-type'), 'image/svg+xml'); assert.match(marker.headers.get('content-disposition') || '', /attachment/);
     assert.equal((await fetch(base + '/calibration/tools/assets/APRILTAG-LICENSE.txt')).status, 200);
@@ -72,7 +72,7 @@ test('Calibration browser opens passively in existing panel styles', { skip: !pr
   await fixture(false, async (base, root) => withBrowser(async browser => {
     await browser.navigate(base + '/calibration/', "document.querySelector('#calibration-root')?.hidden === false");
     assert.equal(await browser.evaluate("document.querySelector('#cal-connect').disabled"), true);
-    assert.match(await browser.evaluate("document.querySelector('#cal-capture-status').textContent"), /Native bridge/);
+    assert.match(await browser.evaluate("document.querySelector('#calibration-availability').textContent"), /Native bridge|Camera device SDK/);
     assert.equal(await browser.evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
     await browser.evaluate("document.getElementById('cal-method').closest('.dropdown').querySelector('.dropdown-btn').click()");
     await browser.evaluate("[...document.querySelectorAll('[role=option]')].find(option=>option.textContent==='Marker').click()");
