@@ -7,7 +7,7 @@ import { createServer } from '../src/server.ts';
 import { withBrowser, sleep } from './browser-fixture.ts';
 
 test('Activity header and Settings remain accessible in narrow/wide and light/dark layouts', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async () => {
-  const root = path.resolve(import.meta.dirname, '../../..'), artifacts = path.join(root, '.artifacts');
+  const root = path.resolve(import.meta.dirname, '../../..'), artifacts = process.env.XRB_TEST_ROOT ?? path.join(root, '.artifacts');
   await fs.mkdir(artifacts, { recursive: true });
   const workspace = await fs.mkdtemp(path.join(artifacts, 'shell-ui-'));
   await fs.mkdir(path.join(workspace, 'projects/Apps/sample'), { recursive: true });
@@ -20,16 +20,21 @@ test('Activity header and Settings remain accessible in narrow/wide and light/da
   const port = (reserve.address() as { port: number }).port;
   await new Promise<void>(resolve => reserve.close(() => resolve()));
   const panel = createServer({ repo: root, workspace, port });
+  // Layout checks must not depend on real Git/network latency or passive admission work.
+  panel.panel.remoteUpdates.git = async () => ({code:1,output:''});
   await new Promise<void>(resolve => panel.server.listen(port, '127.0.0.1', resolve));
   try {
     await withBrowser(async ({ send, evaluate, navigate }) => {
+      const until = async (expression: string) => { for(let n=0;n<100;n++){if(await evaluate(expression))return;await sleep(30);}assert.fail(expression); };
       await navigate(panel.url, `!!document.querySelector('.proj') && !!document.querySelector('#activity-log-tab')`);
-      await sleep(600);
+      for(let n=0;n<100&&!panel.hub.size;n++)await sleep(20);
+      assert.ok(panel.hub.size,'the live output stream is attached');
       panel.hub.send('run-log', '0.001 [host] header check');
       panel.hub.send('run-log', '0.002 [tracker debug] debug check');
-      await sleep(150);
+      await until(`document.querySelector('#run-log').textContent.includes('header check') && !!document.querySelector('#log-debug [data-source="tracker"]')`);
       const completed = panel.panel.jobs.start('web-build', null, 'Completed check', async () => {});
-      await sleep(150);
+      await panel.panel.jobs.wait(completed);
+      await until(`document.querySelector('details[data-job="${completed.id}"]')?.closest('.item').querySelector('.state')?.textContent==='done'`);
       for (const width of [1500, 900, 500]) {
         await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
         for (const tab of ['jobs', 'log']) {
@@ -52,13 +57,16 @@ test('Activity header and Settings remain accessible in narrow/wide and light/da
       await evaluate(`document.querySelector('#activity-jobs-tab').click();document.querySelector('[data-state="done"]').click()`);
       await evaluate(`document.querySelector('#activity-log-tab').click();document.querySelector('#activity-jobs-tab').click()`);
       assert.equal(await evaluate(`document.querySelector('[data-state="done"]').getAttribute('aria-pressed')`), 'false');
-      let finish!: () => void;
-      const active = panel.panel.jobs.start('host-rebuild', null, 'Running check', () => new Promise<void>(resolve => finish = resolve));
-      await sleep(100);
+      let finish!: () => void, admitted!: () => void;
+      const started = new Promise<void>(resolve => admitted = resolve);
+      const active = panel.panel.jobs.start('host-rebuild', null, 'Running check', () => { admitted();return new Promise<void>(resolve => finish = resolve); });
+      await started;
+      await until(`document.querySelector('details[data-job="${active.id}"]')?.closest('.item').querySelector('.state')?.textContent==='running'`);
       await evaluate(`document.querySelector('[data-state="done"]').click();document.querySelector('#jobs-clear').click()`);
-      await sleep(200); assert.equal(panel.panel.jobs.get(completed.id), undefined);
+      for(let n=0;n<100&&panel.panel.jobs.get(completed.id);n++)await sleep(20);
+      assert.equal(panel.panel.jobs.get(completed.id), undefined);
       assert.equal(panel.panel.jobs.get(active.id)?.state, 'running', 'X never stops active work');
-      finish();
+      finish();await panel.panel.jobs.wait(active);
       assert.equal(await evaluate(`document.querySelector('#activity-jobs').hidden`), false, 'X clears jobs rather than closing Activity');
       await evaluate(`document.querySelector('#activity-log-tab').click();document.querySelector('#log-clear').click()`);
       for (let i = 0; i < 30 && await evaluate(`document.querySelector('#run-log').textContent.includes('header check')`); i++) await sleep(100);

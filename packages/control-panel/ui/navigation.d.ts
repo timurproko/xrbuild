@@ -12,6 +12,7 @@ export function shouldReportNavigationError(error:unknown,panelFreshness:{outdat
 export function requestedNavigation(url:string):{page:'projects'|'plugins'|null;maintenance:'rebuild'|'restart'|'update'|null;job:number|null;cleanUrl:string};
 export function navigationItems(origin:string,tools?:readonly ToolLink[],current?:string,options?:{maintenance?:boolean}):NavigationItem[];
 export function renderNavigationMenu(menu:HTMLElement,options:{origin:string;tools?:readonly ToolLink[];current?:string;indicators?:boolean;maintenance?:boolean}):void;
+export function renderRemoteUpdate(menu:HTMLElement,status:import('../src/remote-updates.ts').RemoteUpdateStatus|null|undefined,activate:()=>void):void;
 export function isReplacementPanel(previous:{pid?:number;instanceId?:string}|null|undefined,ping:{app?:string;pid?:number;instanceId?:string}|null|undefined):boolean;
 export function replaceActiveDocument(target?:{href:string;replace(url:string):void}):void;
 export function restartPanelInPlace(origin?:string):Promise<void>;

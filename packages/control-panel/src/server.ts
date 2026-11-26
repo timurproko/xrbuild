@@ -443,7 +443,22 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       if (url.pathname.endsWith('/') || parts[0]?.startsWith('__')) await panel.synchronizePluginServices(true);
       if (await managedTools.handle(req, res, url.pathname)) return;
       if (method !== 'GET') throw new HttpError(405, 'method not allowed');
-      if (url.pathname === '/' || url.pathname === '/plugins' || url.pathname === '/plugins/' || url.pathname === '/settings' || url.pathname === '/settings/') return serveStatic(res, uiDir, 'index.html');
+      if (url.pathname === '/' || url.pathname === '/plugins' || url.pathname === '/plugins/' || url.pathname === '/settings' || url.pathname === '/settings/') {
+        // Send the correct visible frame before application modules or API requests run.
+        const page = parts[0] === 'plugins' ? 'plugins' : parts[0] === 'settings' ? 'settings' : 'projects';
+        let html = await fs.readFile(path.join(uiDir, 'index.html'), 'utf8');
+        if (page !== 'projects') {
+          html = html.replace('class="workspace-pending"', `class="workspace-pending ${page}-page"`)
+            .replace('>Apps</button>', `>${page === 'plugins' ? 'Plugins' : 'Settings'}</button>`)
+            .replace('<main id="dashboard"', '<main hidden id="dashboard"');
+          const frame = page === 'plugins' ? 'plugins-manager' : 'global-settings';
+          html = html.replace(new RegExp(`(<main id="${frame}"[^>]*?) hidden>`), '$1>');
+        }
+        res.setHeader('content-type', 'text/html; charset=utf-8');
+        res.setHeader('cache-control', 'no-cache');
+        res.end(html);
+        return;
+      }
       return serveStatic(res, uiDir, url.pathname);
     }
 
@@ -728,6 +743,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       sendJson(res, status, { error: (e as Error).message, details: e instanceof HttpError ? e.details : undefined });
     }).finally(() => { if (mutation) activeMutations--; });
   });
+  server.once('listening', () => panel.remoteUpdates.start());
   panel.onQuit = () => void closeServer();
   panel.onRestart = () => void closeServer();
   let closeWork: Promise<void> | null = null;

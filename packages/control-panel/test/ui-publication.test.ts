@@ -154,7 +154,9 @@ test('publication is offered only on the selected local project Publish surface'
   const app = await fs.readFile(path.join(ui, 'app.js'), 'utf8');
   const index = await fs.readFile(path.join(ui, 'index.html'), 'utf8');
   assert.doesNotMatch(index, /id="public-apps-open"/);
-  assert.doesNotMatch(app, /remote-publications|renderRemoteDetail|loadRemote/);
+  assert.doesNotMatch(app, /remote-publications|renderRemoteDetail|\bloadRemote(?!Updates\b)\w*\b/);
+  assert.match(app, /const loadRemoteUpdates = async \(\) => \{ state\.remoteUpdates = await api\('GET', '\/api\/update\/available'\)/,
+    'the remote update notice is a cached maintenance read, not a remote publication catalog');
   assert.match(app, /projectUrl\(p\.id\)\}\/\$\{route\}/);
 });
 

@@ -12,7 +12,8 @@ test('panel freshness shows the restart chip and the Restart dot only while outd
   assert.match(index, /<span id="panel-chip" class="chip warn" data-maintenance="restart" hidden>restart available<\/span>/);
   assert.match(navigation, /\{id:'restart',label:'Restart'/);
   assert.match(navigation, /\{id:'rebuild',label:'Rebuild'/);
-  assert.match(navigation, /dot\.id=item\.id==='rebuild'\?'host-rebuild-dot':'panel-restart-dot'/, 'both menu items share one dot style');
+  assert.match(navigation, /dot\.id=item\.id==='rebuild'\?'host-rebuild-dot':item\.id==='update'\?'panel-update-dot':'panel-restart-dot'/, 'each maintenance action keeps its own dot identity');
+  assert.match(navigation, /dot\.className=item\.id==='restart'\?'menu-dot':'menu-dot rebuild'/, 'all maintenance dots use the shared styles');
   assert.match(app, /setInterval\([^\n]*loadPanelFreshness\(\)[^\n]*, 30000\)/, 'refreshed with the host timer');
   assert.match(app, /addEventListener\('focus', \(\) => loadPanelFreshness\(\)/, 'refreshed when the page regains focus');
 

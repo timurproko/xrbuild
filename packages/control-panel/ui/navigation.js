@@ -77,10 +77,29 @@ export function renderNavigationMenu(menu,{origin,tools=[],current='projects',in
     else{
       el.setAttribute('role','menuitem');el.dataset.navigation=item.id;el.href=item.href;el.textContent=item.label;
       if(ids[item.id])el.id=ids[item.id];if(item.current)el.setAttribute('aria-current','page');
-      if(indicators&&['rebuild','restart'].includes(item.id)){const dot=document.createElement('span');dot.className=item.id==='rebuild'?'menu-dot rebuild':'menu-dot';dot.id=item.id==='rebuild'?'host-rebuild-dot':'panel-restart-dot';dot.hidden=true;dot.setAttribute('aria-hidden','true');el.append(dot);}
+      if(indicators&&['rebuild','restart','update'].includes(item.id)){const dot=document.createElement('span');dot.className=item.id==='restart'?'menu-dot':'menu-dot rebuild';dot.id=item.id==='rebuild'?'host-rebuild-dot':item.id==='update'?'panel-update-dot':'panel-restart-dot';dot.hidden=true;dot.setAttribute('aria-hidden','true');el.append(dot);}
     }
     menu.append(el);
   }
+}
+/** Shared advisory indicator; starting Update is always the existing explicit action. */
+export function renderRemoteUpdate(menu, status, activate) {
+  const header = menu.ownerDocument.querySelector?.('.xrb-app-bar');
+  if (!header) return;
+  let chip = header.querySelector('[data-maintenance="update"]');
+  if (!chip) {
+    chip = menu.ownerDocument.createElement('span');chip.className = 'chip rebuild';chip.dataset.maintenance = 'update';
+    header.querySelector('.spacer')?.before(chip);
+    if (!chip.isConnected) header.append(chip);
+    orderMaintenanceLabels(header);
+  }
+  chip.textContent = 'update available';chip.hidden = !status?.available;
+  chip.setAttribute('role', 'button');chip.tabIndex = 0;
+  chip.title = ['core','workspace'].filter(role => status?.[role]?.available)
+    .map(role => `${role}: origin/${status[role].branch}, checked ${new Date(status[role].checkedMs).toLocaleTimeString()}`).join('\n');
+  chip.onclick = () => { if (!chip.hidden) activate(); };
+  chip.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault();chip.click(); } };
+  const dot = menu.querySelector('#panel-update-dot');if (dot) dot.hidden = !status?.available;
 }
 function restartDialog(){let dialog=document.querySelector('[data-xrb-restart-dialog]');if(dialog)return dialog;dialog=document.createElement('dialog');dialog.className='xrb-dialog xrb-progress-dialog';dialog.dataset.xrbRestartDialog='';dialog.setAttribute('aria-labelledby','xrb-restarting-title');dialog.setAttribute('aria-describedby','xrb-restarting-message');dialog.innerHTML='<div class="xrb-progress-status"><span class="xrb-progress-spinner" data-xrb-restart-spinner aria-hidden="true"></span><div><h3 id="xrb-restarting-title" data-xrb-restart-title>Restarting</h3><p id="xrb-restarting-message" class="muted" data-xrb-restart-message role="status">The page will reload when it is ready.</p></div></div><div class="row ask-buttons" data-xrb-restart-actions hidden><span class="spacer"></span><button type="button" data-xrb-restart-close>Close</button></div>';dialog.addEventListener('cancel',event=>event.preventDefault());dialog.querySelector('[data-xrb-restart-close]').addEventListener('click',()=>dialog.close());document.body.append(dialog);return dialog;}
 function restartFailed(dialog,message){dialog.querySelector('[data-xrb-restart-spinner]').hidden=true;dialog.querySelector('[data-xrb-restart-title]').textContent='Restart failed';dialog.querySelector('[data-xrb-restart-message]').textContent=message;dialog.querySelector('[data-xrb-restart-actions]').hidden=false;}
@@ -102,11 +121,18 @@ export function mountToolNavigation(button,menu,{origin,tools,current,maintenanc
   renderNavigationMenu(menu,{origin,tools,current,indicators:maintenance,maintenance});
   // Registered tools share the panel's full navigation (including Dev-only entries), not a hardcoded subset.
   const safe=panelOrigin(origin);
+  let remoteStatus = null;
+  const showRemote = () => renderRemoteUpdate(menu, remoteStatus, () => { close();void updateInPlace(origin); });
+  const refreshRemote = () => { if (safe === location.origin && maintenance) void fetch(new URL('/api/update/available',safe),{cache:'no-store',signal})
+    .then(response => response.ok ? response.json() : null).then(status => { if (!signal.aborted) { remoteStatus=status;showRemote(); } }).catch(()=>{}); };
+  const remoteTimer = maintenance ? setInterval(refreshRemote,30000) : null;
+  refreshRemote();
   if(discover&&safe)void fetch(new URL('/api/navigation',safe),{cache:'no-store',signal}).then(async response=>{
     if(!response.ok)return;
     const data=await response.json();if(signal.aborted||!Array.isArray(data.tools))return;
     const focused=menu.contains(document.activeElement)?document.activeElement?.dataset.navigation:null;
     renderNavigationMenu(menu,{origin,tools:data.tools,current,indicators:maintenance,maintenance});
+    if (maintenance) showRemote();
     if(focused)menu.querySelector(`[data-navigation="${CSS.escape(focused)}"]`)?.focus();
   }).catch(()=>{/* Existing local links remain usable when discovery is unavailable. */});
   const close=()=>{menu.hidden=true;button.setAttribute('aria-expanded','false');};
@@ -114,7 +140,7 @@ export function mountToolNavigation(button,menu,{origin,tools,current,maintenanc
   button.addEventListener('click',()=>{if(!menu.hidden){close();return;}openFloating(menu,{anchor:button});button.setAttribute('aria-expanded','true');menu.querySelector('[aria-current="page"]')?.focus();},{signal});
   button.addEventListener('keydown',e=>{if(['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();if(menu.hidden)button.click();menu.querySelector('[role="menuitem"]')?.focus();}},{signal});
   menu.addEventListener('keydown',e=>menuKeyboard(e,menu,dismiss),{signal});
-  menu.addEventListener('click',e=>{const item=e.target.closest('[data-navigation]'),action=item?.dataset.navigation;if(action==='update'){e.preventDefault();if(item.getAttribute('aria-disabled')==='true')return;close();void updateInPlace(origin);return;}if(action==='restart'||action==='rebuild'){e.preventDefault();close();void (action==='restart'?restartPanelInPlace(origin):rebuildHostInPlace(origin));return;}if(e.target.closest('[aria-current="page"]'))e.preventDefault();close();},{signal});
+  menu.addEventListener('click',e=>{const item=e.target.closest('[data-navigation]'),action=item?.dataset.navigation;if(['restart','rebuild','update'].includes(action)&&safe!==location.origin){close();return;}if(action==='update'){e.preventDefault();if(item.getAttribute('aria-disabled')==='true')return;close();void updateInPlace(origin);return;}if(action==='restart'||action==='rebuild'){e.preventDefault();close();void (action==='restart'?restartPanelInPlace(origin):rebuildHostInPlace(origin));return;}if(e.target.closest('[aria-current="page"]'))e.preventDefault();close();},{signal});
   document.addEventListener('click',e=>{if(!button.contains(e.target)&&!menu.contains(e.target))close();},{signal});
-  addEventListener('resize',close,{signal});return ()=>{events.abort();menu.replaceChildren();close();};
+  addEventListener('resize',close,{signal});return ()=>{events.abort();if(remoteTimer)clearInterval(remoteTimer);menu.replaceChildren();close();};
 }

@@ -73,6 +73,10 @@ nav h2:not(:first-child) { margin-top: 6px; }
 .project-hero .hero-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .project-title-row .hero-actions { flex: none; }
 .project-actions { display: flex; align-items: center; justify-content: flex-start; gap: 12px; flex-wrap: wrap; }
+.project-actions:has(.project-save-status) { flex-wrap: nowrap; }
+.project-save-status { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
+.project-save-status > .xrb-help { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.project-save-status > button { flex: none; }
 .project-hero .publication-hero-link { margin-left: auto; }
 .hero-tag:empty { display: none; }
 .hero .actions { border-top: 1px solid var(--line); margin: 4px -18px 0; padding: 0 18px; }

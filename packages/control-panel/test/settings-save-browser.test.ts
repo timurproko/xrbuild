@@ -8,8 +8,9 @@ import { REPO } from '../src/env.ts';
 import { withBrowser, sleep } from './browser-fixture.ts';
 
 test('first embedded and rapid ordinary input edits persist without a reload modal; conflicts remain inline', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
-  await fs.mkdir(path.join(REPO, '.artifacts'), { recursive: true });
-  const root = await fs.mkdtemp(path.join(REPO, '.artifacts/settings-save-'));
+  const parent = process.env.XRB_TEST_ROOT ?? path.join(REPO, '.artifacts');
+  await fs.mkdir(parent, { recursive: true });
+  const root = await fs.mkdtemp(path.join(parent, 'settings-save-'));
   const core = path.join(root, 'core'), workspace = path.join(root, 'workspace');
   const dir = path.join(core, 'embedded/projects/core/demo');
   await fs.mkdir(path.join(dir, 'dist'), { recursive: true }); await fs.mkdir(workspace);
@@ -17,14 +18,17 @@ test('first embedded and rapid ordinary input edits persist without a reload mod
   await fs.writeFile(path.join(dir, 'dist/index.html'), '<html>demo</html>');
   const panel = createServer({ repo: core, workspace, port: await freePort() });
   await new Promise<void>(resolve => panel.server.listen(Number(new URL(panel.url).port), '127.0.0.1', resolve));
-  t.after(async () => { await panel.close(); await fs.rm(root, { recursive: true, force: true }); });
+  t.after(async () => { await panel.close(); await fs.rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); });
   const current = async () => (await (await fetch(`${panel.url}api/projects/bundled%3Ademo`)).json()) as any;
-  await withBrowser(async ({ navigate, evaluate }) => {
+  await withBrowser(async ({ navigate, evaluate, send }) => {
     const until = async (expr: string) => { for (let i = 0; i < 150; i++) { if (await evaluate(expr)) return; await sleep(50); } assert.fail(expr); };
     await navigate(panel.url, `!!document.querySelector('#settings [name="inputs"]')`);
-    await evaluate(`window.originalFetch=fetch;window.saves=0;window.fetch=async(...args)=>{if(args[1]?.method==='PUT'&&String(args[0]).endsWith('/manifest')){saves++;if(saves===1)await new Promise(r=>setTimeout(r,150));}return originalFetch(...args)};window.editInputs=value=>{const input=document.querySelector('#settings [name="inputs"]');input.value=JSON.stringify(value);input.dispatchEvent(new Event('change',{bubbles:true}));};editInputs(['mouse']);`);
+    const initialRunTop = await evaluate(`document.querySelector('#act-run').getBoundingClientRect().top`);
+    await evaluate(`window.originalFetch=fetch;window.saves=0;window.fetch=async(...args)=>{if(args[1]?.method==='PUT'&&String(args[0]).endsWith('/manifest')){saves++;if(saves===1)await new Promise(r=>window.finishFirstSave=r);}return originalFetch(...args)};window.editInputs=value=>{const input=document.querySelector('#settings [name="inputs"]');input.value=JSON.stringify(value);input.dispatchEvent(new Event('change',{bubbles:true}));};editInputs(['mouse']);`);
     await until(`saves===1`);
-    await evaluate(`editInputs(['mouse','keyboard'])`);
+    assert.equal(await evaluate(`!!document.querySelector('[data-settings-status]')`), false, 'pending saves have no status element');
+    assert.equal(await evaluate(`document.querySelector('#act-run').getBoundingClientRect().top`), initialRunTop, 'pending save does not move Run');
+    await evaluate(`editInputs(['mouse','keyboard']);finishFirstSave()`);
     await until(`saves>=2&&!document.querySelector('[data-settings-status]')?.textContent.includes('Saving')`);
     for (let i = 0; i < 100 && (await current()).manifest.inputs.length !== 2; i++) await sleep(50);
     assert.deepEqual((await current()).manifest.inputs, ['mouse', 'keyboard']);
@@ -42,11 +46,21 @@ test('first embedded and rapid ordinary input edits persist without a reload mod
     assert.equal(await evaluate(`document.querySelector('#ask').open`), false);
     manifest = JSON.parse(await fs.readFile(manifestFile, 'utf8'));
     await fs.writeFile(manifestFile, JSON.stringify({ ...manifest, inputs: ['mouse'] }));
+    const beforeFailure = await evaluate(`document.querySelector('#act-run').getBoundingClientRect().top`);
     await evaluate(`const input=document.querySelector('#settings [name="inputs"]');input.value='[]';input.dispatchEvent(new Event('change',{bubbles:true}))`);
     await until(`document.querySelector('[data-settings-status]')?.textContent.includes('another editor')`);
+    assert.equal(await evaluate(`document.querySelector('#act-run').getBoundingClientRect().top`), beforeFailure, 'failure feedback does not move Run');
+    for (const width of [1500, 500, 320]) {
+      await send('Emulation.setDeviceMetricsOverride', {width,height:900,deviceScaleFactor:1,mobile:false});
+      await sleep(100);
+      const geometry = await evaluate(`(()=>{const run=document.querySelector('#act-run').getBoundingClientRect(),status=document.querySelector('[data-settings-status]').getBoundingClientRect();return {top:Math.abs(run.top-status.top),overlap:run.right>status.left,right:status.right,width:innerWidth};})()`);
+      assert.ok(geometry.top < 8, JSON.stringify(geometry));assert.equal(geometry.overlap,false);assert.ok(geometry.right <= geometry.width);
+    }
+    await evaluate(`window.runCalls=0;const beforeFetch=fetch;window.fetch=(input,options)=>{if(new URL(input,location.href).pathname.endsWith('/run')){runCalls++;return Promise.resolve(Response.json({error:'Fixture blocked'},{status:409}));}return beforeFetch(input,options);};document.querySelector('#act-run').click()`);
+    await sleep(100);assert.equal(await evaluate('runCalls'),0,'failed settings never launch stale saved choices');
     assert.deepEqual((await current()).manifest.inputs, ['mouse']);
     assert.equal(await evaluate(`document.querySelector('#ask').open`), false);
-    await evaluate(`[...document.querySelectorAll('[data-settings-status] button')].find(b=>b.textContent==='Retry').click()`);
+    await evaluate(`document.querySelector('[data-settings-status] button[aria-label="Retry"]').click()`);
     for (let i = 0; i < 100 && (await current()).manifest.inputs.length; i++) await sleep(50);
     assert.deepEqual((await current()).manifest.inputs, []);
     await navigate(panel.url, `!!document.querySelector('#settings [name="inputs"]')`);
