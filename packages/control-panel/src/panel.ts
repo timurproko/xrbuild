@@ -27,7 +27,7 @@ import { log } from './env.ts';
 import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHost, clearProviderCache } from './host-build.ts';
 import { DesktopSetup } from './desktop-setup.ts';
 import { panelFreshness, panelSourceRoots, type PanelFreshness } from './panel-freshness.ts';
-import { HostRunner, type RunMode } from './host-runner.ts';
+import { HostRunner, type RunMode, type RunState } from './host-runner.ts';
 import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings, type PluginSetting, type SettingValue } from './plugin-manager.ts';
 import { PluginConfigConflict, PluginConfigInvalid, readUserPluginConfigState, writeUserPluginConfig, type UserPluginConfigState } from './plugin-config.ts';
 import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, discoverProjectCatalog, containedPath, type PluginCatalog } from './extension-catalog.ts';
@@ -38,7 +38,7 @@ import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatu
 import { PackageList } from './packages.ts';
 import { discoverHandProviders, sameHandProvider, handRegistry, handProviderKey, type HandProviderKey } from './hand-providers.ts';
 import { isNativeLauncherDocument } from '../../sdk/src/launch-context.ts';
-import { LiveHands, sendHandProfile } from './hands-live.ts';
+import { LiveHands, sendHandProfile, observeHandProfile } from './hands-live.ts';
 import { HAND_APPEARANCE_DEFAULTS, type HandProfile } from '../../sdk/src/hand-profile.ts';
 import { readHandsState, saveHandsState, saveHandAdjustments, selectedHandProvider, validHandProviderKey, prepareHandInput, resolveHandInput, type HandContext } from './hands-state.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
@@ -271,7 +271,10 @@ export class Panel {
   launchBrowser: typeof launchPreviewBrowser = launchPreviewBrowser;
   /** Metadata probe injection for device-free fixtures. */
   nativeProviders: typeof listProviders = listProviders;
+  /** Device-free transport injection for native control/ack fixtures. */
+  nativeHandSocket: typeof WebSocket = WebSocket;
   private liveHands: LiveHands | null = null;
+  private nativeHandObserver: { live: LiveHands; url: string; close: () => void } | null = null;
   private previewProjection: { route: string; token: string; session: string; fullscreen: boolean; monitor: number; projection: 'perspective' | 'orthographic'; projectId: string; handPolicy: 'off' | 'webxr' } | null = null;
 
   constructor(repo: string, workspace: string, hub: EventHub, projects = workspace, bootstrapPackageLock = false) {
@@ -293,6 +296,7 @@ export class Panel {
     this.jobs.on('line', (j: Job, text: string) => hub.send('job-line', { id: j.id, text }));
     this.runner.on('state', (s) => {
       if (s.phase === 'idle') { this.nativeHandPolicy = null; this.liveHands = null; this.previewProjection = null; }
+      this.syncNativeHandObserver(s);
       hub.send('run', s);
       hub.send('projects-changed', { projectId: s.projectId });
     });
@@ -301,6 +305,15 @@ export class Panel {
       hub.send('status', s);
     });
     this.runner.on('log', (text) => hub.send('run-log', text));
+  }
+
+  private syncNativeHandObserver(state: Pick<RunState, 'phase' | 'channelUrl'>): void {
+    const live = this.liveHands;
+    const url = live && this.nativeHandPolicy !== null && (state.phase === 'starting' || state.phase === 'running') ? state.channelUrl : null;
+    if (this.nativeHandObserver && (this.nativeHandObserver.live !== live || this.nativeHandObserver.url !== url)) {
+      this.nativeHandObserver.close(); this.nativeHandObserver = null;
+    }
+    if (live && url && !this.nativeHandObserver) this.nativeHandObserver = { live, url, close: observeHandProfile(url, live, this.nativeHandSocket) };
   }
 
   private async withPluginServices<T>(work: () => Promise<T>): Promise<T> {
@@ -1814,7 +1827,7 @@ export class Panel {
         const state = await readHandsState(this.repo, this.workspace);
         const selected = selectedHandProvider(state, registry, 'native');
         sendJson(res, 200, { ...registry, providers: registry.providers.map(p => ({ ...p, runtimeState: this.handRuntimeStates.get(handProviderKey(p)) ?? null })), registryRevision: registry.revision, selected: selected.key, initial: selected.initial, revision: state.revision,
-          choiceRequired: !selected.key, applies: 'next-launch', profile: state.profile, appearanceDefaults: HAND_APPEARANCE_DEFAULTS, delivery: this.liveHands?.delivery ?? 'Saved for next launch' });
+          choiceRequired: !selected.key, applies: 'next-launch', profile: state.profile, appearanceDefaults: HAND_APPEARANCE_DEFAULTS, delivery: this.liveHands?.delivery ?? 'Saved for next launch', deliveryState: this.liveHands?.deliveryState ?? 'saved' });
         return true;
       }
       case 'POST hands/apply': {
@@ -1839,12 +1852,12 @@ export class Panel {
               try {
                 const channel = this.runner.state().channelUrl;
                 if (!channel) throw new Error('Saved; running host channel is unavailable. Retry Apply or relaunch.');
-                await sendHandProfile(channel, live.envelope); live.acknowledge(live.envelope);
-              } catch (error) { live.delivery = (error as Error).message; }
+                await sendHandProfile(channel, live.envelope, this.nativeHandSocket); live.acknowledge(live.envelope);
+              } catch (error) { live.fail((error as Error).message); }
             }
           }
           this.hub.send('hands-changed', {});
-          sendJson(res, 200, { revision: saved.revision, profile: saved.profile, delivery: live?.delivery ?? 'Saved for next launch' });
+          sendJson(res, 200, { revision: saved.revision, profile: saved.profile, delivery: live?.delivery ?? 'Saved for next launch', deliveryState: live?.deliveryState ?? 'saved' });
         } finally { this.savingHands = false; }
         return true;
       }
@@ -2097,6 +2110,7 @@ export class Panel {
   }
 
   async dispose(): Promise<void> {
+    this.nativeHandObserver?.close(); this.nativeHandObserver = null;
     if (this.runner.busy) await this.runner.stop();
   }
 }

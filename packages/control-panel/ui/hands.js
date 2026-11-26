@@ -21,7 +21,10 @@ const adjustments = mountHandAdjustments($('hands-adjustments'), {
   load: () => request('GET'),
   apply: async body => {
     const result = await request('POST', body, '/api/hands/apply');
-    if (snapshot) snapshot.revision = result.revision; // Apply never changes the source picker draft.
+    // Only advance a picker which actually reviewed the Apply request's base.
+    // Adjustment-only Reload may have seen another client's source Save.
+    if (snapshot?.revision === body.revision) snapshot.revision = result.revision;
+    else $('hands-message').textContent = 'Source settings changed. Reload to review the current selection.';
     return result;
   },
 });
@@ -57,6 +60,6 @@ void fetch('/api/navigation').then(r => r.json()).then(data => { $('hands-diagno
 const events = new EventSource('/api/events');
 events.addEventListener('hands-changed', () => { $('hands-message').textContent = 'Hands settings changed. Reload to review them.'; adjustments.markStale(); });
 events.addEventListener('plugins-changed', () => { $('hands-message').textContent = 'Provider availability changed. Reload before saving.'; });
-const deliveryTimer = setInterval(() => { void request('GET').then(data => adjustments.updateDelivery(data.delivery)).catch(() => {}); }, 1000);
+const deliveryTimer = setInterval(() => { void request('GET').then(data => adjustments.updateDelivery(data.delivery, data.deliveryState)).catch(() => {}); }, 1000);
 addEventListener('pagehide', () => { clearInterval(deliveryTimer); events.close(); adjustments.dispose(); disposeSelects(); disposeDropdowns(); }, { once: true });
 await load();

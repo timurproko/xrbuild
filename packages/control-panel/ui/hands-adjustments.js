@@ -31,10 +31,14 @@ export function mountHandAdjustments(root, { load, apply }) {
   </form>`;
   const form = root.querySelector('form'), status = root.querySelector('[data-status]'), applyButton = root.querySelector('[data-action="apply"]'), reload = root.querySelector('[data-action="reload"]');
   const fields = [...root.querySelectorAll('[data-field]')];
-  let state = null, draft = null, dirty = false, stale = false, busy = false, disposed = false;
+  let state = null, draft = null, dirty = false, stale = false, busy = false, disposed = false, retryDelivery = false;
   const disposers = [installNumberSteppers(root), enhanceHelpText(root)];
   const read = key => key.startsWith('appearance.') ? draft.appearance[key.slice(11)] ?? state.appearanceDefaults[key.slice(11)] : key.startsWith('offsetMm.') ? draft.offsetMm[key.slice(9)] : draft[key];
-  function buttons() { applyButton.disabled = !state || !dirty || stale || busy; reload.hidden = !stale; root.dataset.dirty = String(dirty); }
+  function buttons() {
+    applyButton.disabled = !state || (!dirty && !retryDelivery) || stale || busy;
+    applyButton.textContent = retryDelivery && !dirty ? 'Retry Apply' : 'Apply';
+    reload.hidden = !stale; root.dataset.dirty = String(dirty);
+  }
   function render() {
     for (const field of fields) {
       field.disabled = !state || busy;
@@ -53,6 +57,7 @@ export function mountHandAdjustments(root, { load, apply }) {
     if (disposed) return;
     if (dirty && !discard) { markStale(); return; }
     state = next; draft = structuredClone(next.profile); dirty = false; stale = false;
+    retryDelivery = next.deliveryState === 'failed';
     status.textContent = next.delivery ?? ''; render();
   }
   function markStale(message = 'Hands settings changed. Reload to review them.') { stale = true; status.textContent = message; buttons(); }
@@ -88,12 +93,13 @@ export function mountHandAdjustments(root, { load, apply }) {
     }
   };
   const submit = async event => {
-    event.preventDefault(); if (!state || !dirty || stale || busy || !form.reportValidity()) return;
+    event.preventDefault(); if (!state || (!dirty && !retryDelivery) || stale || busy || !form.reportValidity()) return;
     busy = true; render();
     try {
       const result = await apply({ profile: draft, revision: state.revision, registryRevision: state.registryRevision });
       if (disposed) return;
       state = { ...state, ...result }; draft = structuredClone(result.profile); dirty = false; stale = false;
+      retryDelivery = result.deliveryState === 'failed';
       status.textContent = result.delivery;
     } catch (error) {
       if (disposed) return;
@@ -110,6 +116,6 @@ export function mountHandAdjustments(root, { load, apply }) {
   };
   form.addEventListener('input', change); form.addEventListener('change', change); form.addEventListener('submit', submit); root.addEventListener('click', click);
   render();
-  return { refresh, markStale, get dirty() { return dirty; }, updateDelivery(text) { if (!dirty && !stale && !busy) status.textContent = text; },
+  return { refresh, markStale, get dirty() { return dirty; }, updateDelivery(text, deliveryState) { if (!dirty && !stale && !busy) { status.textContent = text; retryDelivery = deliveryState === 'failed'; buttons(); } },
     dispose() { disposed = true; form.removeEventListener('input', change); form.removeEventListener('change', change); form.removeEventListener('submit', submit); root.removeEventListener('click', click); disposers.reverse().forEach(fn => fn()); root.replaceChildren(); } };
 }

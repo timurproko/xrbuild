@@ -162,7 +162,7 @@ test('the build job runs the packager with the app, identity, selection and the 
   assert.deepEqual(out, {
     identity: { code: 'D1', version: '1.0.0' }, plugins: ['fake'], from: 'plugins', shipped: ['xrb-runtime.json', 'xrb_platform_fake.dll'],
     selection: { input: 'none', inputs: ['mouse', 'keyboard'], display: 'desktop', platform: 'fake' }, projectName: 'Demo',
-    config: { input: 'none', inputs: ['mouse', 'keyboard'], display: 'desktop', platform: 'fake', plugins: { fake: { code: 'D1', version: '1.0.0' } } }, app: 'app',
+    config: { handProfile: { version: 1, offsetMm: { x: 0, y: 0, z: 0 }, sizeFactor: 1, appearance: {} }, input: 'none', inputs: ['mouse', 'keyboard'], display: 'desktop', platform: 'fake', plugins: { fake: { code: 'D1', version: '1.0.0' } } }, app: 'app',
   });
   const m = JSON.parse(await fs.readFile(path.join(repo, 'projects/Apps/demo/xrb-project.json'), 'utf8'));
   assert.deepEqual(m.plugins.fake, { code: 'D1', version: '1.0.1', lastPackaged: '1.0.0' }, 'version raised after the package');
