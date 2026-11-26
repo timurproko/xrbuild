@@ -49,7 +49,7 @@ export async function saveHandAdjustments(core: string, workspace: string, value
     offsetMm: profile.offsetMm, sizeFactor: profile.sizeFactor,
     appearance: { ...Object.fromEntries(Object.entries(state.raw.appearance as object ?? {}).filter(([k]) => !Object.hasOwn(HAND_APPEARANCE_DEFAULTS, k))), ...profile.appearance } }));
 }
-async function writeHandsState(core: string, workspace: string, revision: unknown, update: (state: HandsState) => Record<string, unknown>): Promise<HandsState> {
+export async function writeHandsState(core: string, workspace: string, revision: unknown, update: (state: HandsState) => Record<string, unknown>): Promise<HandsState> {
   if (typeof revision !== 'string') throw new HttpError(400, 'Hands profile revision required');
   const file = path.join(workspace, FILE), lock = `${file}.lock`, temp = `${file}.${randomUUID()}.tmp`;
   assertWritablePath(core, workspace, file);

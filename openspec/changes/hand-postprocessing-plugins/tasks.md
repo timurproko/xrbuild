@@ -1,12 +1,12 @@
 # Tasks
 
-Implementation approved for the reduced scope. Profile integration awaits PR #50 landing, and the page mount is supplied by PR #51. Four groups match the draft PR outcomes. The real plugin is a separate later task after feasibility; use only one fake sidecar plugin in tests.
+Implementation approved for the reduced scope. PR #50 is merged; the page mount is supplied by PR #51. Four groups match the draft PR outcomes. The real plugin is a separate later task after feasibility; use only one fake sidecar plugin in tests.
 
 ## 1. Installed mesh declaration and global selection
 
 - [x] 1.1 Add the small versioned handMesh declaration and metadata-only owner/entry/settings validation; contract tests trap imports, downloads and process starts and cover conflicting/disabled owners.
-- [ ] 1.2 Extend the landed Hands profile transaction with None/one selected identity and retained bounded per-plugin settings; tests cover missing profiles, unknown/source/adjustment preservation, stale revisions and missing saved plugins.
-- [ ] 1.3 Document the declaration and next-run selection contract; validate neutral examples and confirm no stage-order, refinement or bypass fields are introduced.
+- [x] 1.2 Extend the landed Hands profile transaction with None/one selected identity and retained bounded per-plugin settings; tests cover missing profiles, unknown/source/adjustment preservation, stale revisions and missing saved plugins.
+- [x] 1.3 Document the declaration and next-run selection contract; validate neutral examples and confirm no stage-order, refinement or bypass fields are introduced.
 
 ## 2. Optional desktop sidecar supervision
 

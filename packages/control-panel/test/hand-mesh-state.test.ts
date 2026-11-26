@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { test } from 'node:test';
+import { readHandsState, saveHandsState, saveHandAdjustments } from '../src/hands-state.ts';
+import { meshChoice, saveMeshChoice } from '../src/hand-mesh-state.ts';
+import { handMeshDeclaration } from '../src/hand-mesh-contract.ts';
+import type { HandMeshRegistry } from '../src/hand-mesh-plugins.ts';
+
+test('mesh settings share the profile transaction and retain other editors and unselected plugin data', async t => {
+  const parent = path.resolve(process.env.XRB_TEST_ROOT ?? '.artifacts'); await fs.mkdir(parent, { recursive: true });
+  const root = await fs.mkdtemp(path.join(parent, 'mesh-state-')), core = path.join(root, 'core'), workspace = path.join(root, 'user');
+  await fs.mkdir(core); t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const selected = { owner: 'workspace:example', id: 'mesh' }, provider = { owner: 'core', id: 'simulated' };
+  const declaration = handMeshDeclaration({ version: 1, id: 'mesh', label: 'Mesh', program: 'mesh.exe', settingsVersion: 1,
+    settings: [{ key: 'quality', label: 'Quality', type: 'number', min: 1, max: 3, default: 2 }] });
+  const registry: HandMeshRegistry = { revision: 'catalog', problems: [], plugins: [{ ...selected, label: 'Mesh', available: true, reason: 'Not started', declaration, program: '/never-executed' }] };
+  let state = await readHandsState(core, workspace);
+  assert.equal(meshChoice(state.raw.postprocessing).selected, null); assert.equal(state.exists, false);
+  await assert.rejects(saveMeshChoice(core, workspace, registry, { selected, revision: state.revision, registryRevision: 'stale' }), /changed/);
+  state = await saveMeshChoice(core, workspace, registry, { selected, values: { quality: 3 }, revision: state.revision, registryRevision: registry.revision }, provider);
+  assert.deepEqual(state.provider, provider); assert.deepEqual(meshChoice(state.raw.postprocessing).selected, selected);
+  const original = state.revision;
+  state = await saveHandAdjustments(core, workspace, { offsetMm: { x: 12 }, appearance: { opacity: .7 } }, state.revision);
+  assert.equal(meshChoice(state.raw.postprocessing).settings['workspace:example/mesh'].values.quality, 3);
+  await assert.rejects(saveMeshChoice(core, workspace, registry, { selected: null, revision: original, registryRevision: registry.revision }), /changed/);
+  state = await saveMeshChoice(core, workspace, registry, { selected: null, revision: state.revision, registryRevision: registry.revision });
+  assert.equal(state.profile.offsetMm.x, 12); assert.equal(state.profile.appearance.opacity, .7);
+  assert.equal(meshChoice(state.raw.postprocessing).settings['workspace:example/mesh'].values.quality, 3);
+  state = await saveHandsState(core, workspace, null, state.revision);
+  assert.equal(meshChoice(state.raw.postprocessing).selected, null);
+  await assert.rejects(saveMeshChoice(core, workspace, registry, { selected, values: { quality: 10 }, revision: state.revision, registryRevision: registry.revision }), /handMesh/);
+  const missing = { ...registry, plugins: [] };
+  await assert.rejects(saveMeshChoice(core, workspace, missing, { selected, revision: state.revision, registryRevision: registry.revision }), /unavailable/);
+  for (const bad of [{ version: 2 }, { version: 1, selected, settings: { bad: {} } }, { version: 1, selected: { owner: 'core', id: 'bad' }, settings: {} }]) assert.throws(() => meshChoice(bad), /Invalid/);
+});
