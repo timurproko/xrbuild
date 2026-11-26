@@ -17,6 +17,10 @@ never leave it.
   workspace clone to the fetched commit after `git lfs fetch` of the new commits, and rebuilds; it never stashes,
   merges, rebases or discards. It reports the core checkout's state but does not update it yet: when the core is
   behind, its tooltip and result say to pull it by hand. Rebuild stays build-only.
+  The shared updater now explicitly discovers and fetches `origin`'s default branch. It refuses every uncommitted
+  tracked/staged/untracked change (including non-conflicting edits), detached HEAD and local-only commits.
+  A removed or non-default upstream is not migrated automatically: preserve local work and safely switch to the
+  advertised default branch with matching origin tracking, then retry. Never discard work to satisfy Update.
 - `pnpm panel:repo`, `start-repo.vbs` and `pnpm fetch-deps:repo` explicitly select the current checkout's
   `.xrbuild/`. Explicit panel workspaces default to port 5181; user-mode panels default to 5180, and
   `XRB_PANEL_PORT` overrides either for that invocation. A port occupied by another workspace is refused, not reused.

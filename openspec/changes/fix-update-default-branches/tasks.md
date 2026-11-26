@@ -2,10 +2,10 @@
 
 ## 1. Safe fresh default-branch fast-forward
 
-- [ ] 1.1 Replace cached-upstream targeting with explicit origin default discovery, explicit branch fetch and a captured validated target; local bare-repository tests cover stale refs, non-main defaults, default rename, narrow refspec and network/discovery failures.
-- [ ] 1.2 Refuse dirty tracked/staged/untracked paths, detached HEAD, missing/deleted/non-default/non-origin upstreams, ahead-only commits and divergence; tests assert unchanged HEAD, branch, index and files with actionable role-specific messages.
-- [ ] 1.3 Retain exact-target LFS-before-checkout behavior and recheck local state before fast-forward; tests cover remote movement after fetch, concurrent local edits, LFS failure and clean-clone exclusions without reset, stash or forced commands.
-- [ ] 1.4 Document the stricter all-dirty refusal and default-branch recovery policy in the owner-facing Update documentation; check that examples never suggest destructive recovery.
+- [x] 1.1 Replace cached-upstream targeting with explicit origin default discovery, explicit branch fetch and a captured validated target; local bare-repository tests cover stale refs, non-main defaults, default rename, narrow refspec and network/discovery failures.
+- [x] 1.2 Refuse dirty tracked/staged/untracked paths, detached HEAD, missing/deleted/non-default/non-origin upstreams, ahead-only commits and divergence; tests assert unchanged HEAD, branch, index and files with actionable role-specific messages.
+- [x] 1.3 Retain exact-target LFS-before-checkout behavior and recheck local state before fast-forward; tests cover remote movement after fetch, concurrent local edits, LFS failure and clean-clone exclusions without reset, stash or forced commands.
+- [x] 1.4 Document the stricter all-dirty refusal and default-branch recovery policy in the owner-facing Update documentation; check that examples never suggest destructive recovery.
 
 ## 2. Independent core and workspace outcomes
 

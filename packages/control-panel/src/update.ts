@@ -157,6 +157,8 @@ export const STEP_TITLES: Record<UpdateStep, string> = { check: 'Check', fetch: 
 
 /** A refusal or failure at one step; the message says what happened and what to do. */
 export class UpdateError extends Error {
+  fetched = false;
+  defaultBranch: string | null = null;
   readonly step: UpdateStep;
   constructor(step: UpdateStep, message: string) {
     super(`${STEP_TITLES[step]}: ${message}`);
@@ -226,13 +228,17 @@ export interface FastForwardOptions {
   git?: GitRunner;
   role: RepoRole;
   lfs: 'required' | 'optional';
-  /** The branch whose upstream is fetched; its remote is used for the LFS download. */
-  branch: string;
+  /** Optional expected branch from a prior status read; rechecked before checkout. */
+  branch?: string;
   /** The resume marker written after the fast-forward, until the caller's update finishes. */
   marker: string;
 }
 
 export interface FastForwardResult {
+  /** HEAD at the start of this attempt, distinct from the original pending update. */
+  before: string;
+  defaultBranch: string;
+  fetched: true;
   /** Where the repository was before this update, or before the unfinished update it resumes. */
   from: string;
   to: string;
@@ -245,67 +251,109 @@ export interface FastForwardResult {
   marker: string | null;
 }
 
-/**
- * Fetch, then fast-forward to exactly the fetched upstream commit, for either repository. Each step is announced as
- * a `step <id>` line. LFS objects of the new commits are downloaded first (`git lfs fetch`, which honours the
- * clone's lfs.fetchinclude/fetchexclude), so the fast-forward's own checkout writes LFS content only for files the
- * update changes: a local deletion or edit of another LFS file stays, and an LFS failure changes nothing. With
- * optional LFS the download runs only when Git LFS is present and the fetched commit tracks LFS files.
- * A successful fast-forward leaves a marker under the Git folder until the caller removes it, so running Update
- * again after a later failure finishes it although the branch is no longer behind.
+/** Freshly discover/fetch origin's default branch, refuse unsafe local state, and fast-forward to that exact target.
+ * LFS downloads precede checkout; an update marker keeps post-pull work retryable. No stash, reset or forced refs.
  */
 export async function fastForward(dir: string, ctx: JobContext, options: FastForwardOptions): Promise<FastForwardResult> {
   const git = options.git ?? runGit;
-  const prefix = options.role === 'core' ? 'Core: ' : '';
-  const fail = (at: UpdateStep, message: string) => new UpdateError(at, `${prefix}${message}`);
+  const prefix = options.role === 'core' ? 'Core: ' : 'Workspace: ';
+  let defaultBranch: string | null = null, fresh = false;
+  const fail = (at: UpdateStep, message: string) => Object.assign(new UpdateError(at, `${prefix}${message}`), { fetched: fresh, defaultBranch });
   const step = (id: UpdateStep) => ctx.line(`step ${id}`);
   const quiet = (args: string[]) => readOnly(git)(args, dir);
   const out = (line: string) => ctx.line(redactRemote(line));
   const loud = (args: string[], env?: NodeJS.ProcessEnv, onLine: (line: string) => void = out) => { ctx.line(`> git ${args.join(' ')}`); return git(args, dir, { onLine, env }); };
-  const head = async () => firstLine((await quiet(['rev-parse', 'HEAD'])).output);
+  const checked = async (args: string[], at: UpdateStep = 'check') => {
+    const result = await quiet(args);
+    if (result.code !== 0) throw fail(at, `Git could not inspect ${args[0]}; check git status and retry Update.`);
+    return result.output.trim();
+  };
+  const head = async () => {
+    const sha = await checked(['rev-parse', '--verify', 'HEAD^{commit}']);
+    if (!/^[0-9a-f]{40,64}$/.test(sha)) throw fail('check', 'Cannot read HEAD; repair the checkout before retrying Update.');
+    return sha;
+  };
+  const top = await checked(['rev-parse', '--show-toplevel']);
+  if (!await samePath(top, dir)) throw fail('check', 'This is not an independent clone; select its checkout root before retrying Update.');
+  const before = await head();
   const marker = await markerPath(dir, readOnly(git), options.marker);
+  if (!marker) throw fail('check', 'Cannot locate the update marker; check Git permissions and retry Update.');
   const pending = await readMarker(marker);
-  if (pending) ctx.line('an earlier update did not finish its rebuild: finishing it');
+  if (pending) ctx.line(`${prefix}finishing the earlier update's setup and rebuild`);
 
   step('fetch');
-  const fetched = await loud(['fetch']);
-  if (fetched.code !== 0) throw fail('fetch', `Could not reach the remote. Nothing changed.\n${redactRemote(tail(fetched.output))}`);
+  const advertised = await loud(['ls-remote', '--symref', 'origin', 'HEAD', 'refs/heads/*']);
+  if (advertised.code !== 0) throw fail('fetch', 'Cannot discover origin default branch; check remote access and retry Update.');
+  const defaults = [...advertised.output.matchAll(/^ref: refs\/heads\/(.+)\tHEAD\r?$/gm)].map(match => match[1]!);
+  if (defaults.length !== 1) throw fail('fetch', 'Origin has no unambiguous default branch; repair its HEAD setting and retry Update.');
+  defaultBranch = defaults[0]!;
+  if ((await quiet(['check-ref-format', `refs/heads/${defaultBranch}`])).code !== 0
+    || !advertised.output.split(/\r?\n/).some(line => new RegExp(`^[0-9a-f]{40,64}\\t`).test(line) && line.endsWith(`\trefs/heads/${defaultBranch}`)))
+    throw fail('fetch', 'Origin default branch is invalid or missing; repair its HEAD setting and retry Update.');
 
-  // The commit this update goes to: read once after the fetch and used for the count, the LFS download and the
-  // fast-forward, so the update never moves past what was fetched and checked, even if the remote moves meanwhile.
-  const target = firstLine((await quiet(['rev-parse', '--verify', '@{u}^{commit}'])).output);
-  if (!/^[0-9a-f]{40,64}$/.test(target)) throw fail('fetch', 'Could not read the upstream commit after fetching. Nothing changed.');
-  const counts = await quiet(['rev-list', '--left-right', '--count', `HEAD...${target}`]);
-  const [ahead = 0, behind = 0] = firstLine(counts.output).split(/\s+/).map((n) => Number.parseInt(n, 10) || 0);
-  const before = await head();
-  if (ahead > 0 && behind > 0) throw fail('fetch', `The branch has ${ahead} local commit(s) and ${behind} new remote commit(s). Merge or rebase by hand, then run Update again. Nothing changed.`);
+  // Explicit refspec: neither a stale upstream nor a narrow configured fetch refspec can choose the target.
+  // No '+' or force: a rewritten remote-tracking branch is an attention case, not permission to discard history.
+  const fetched = await loud(['fetch', '--no-tags', '--no-recurse-submodules', 'origin', `refs/heads/${defaultBranch}:refs/remotes/origin/${defaultBranch}`]);
+  if (fetched.code !== 0) throw fail('fetch', 'Could not fetch origin default branch; check remote access and history, then retry Update.');
+  const target = await checked(['rev-parse', '--verify', 'FETCH_HEAD^{commit}'], 'fetch');
+  if (!/^[0-9a-f]{40,64}$/.test(target)) throw fail('fetch', 'Cannot read the fetched commit; inspect the checkout and retry Update.');
+  fresh = true;
+
+  const branch = firstLine((await quiet(['symbolic-ref', '-q', '--short', 'HEAD'])).output);
+  const recovery = `preserve local work, switch safely to ${defaultBranch} tracking origin/${defaultBranch}, then retry Update.`;
+  if (!branch) throw fail('check', `Detached HEAD; ${recovery}`);
+  const remote = firstLine((await quiet(['config', '--get', `branch.${branch}.remote`])).output);
+  const merge = firstLine((await quiet(['config', '--get', `branch.${branch}.merge`])).output);
+  if (branch !== defaultBranch || remote !== 'origin' || merge !== `refs/heads/${defaultBranch}`)
+    throw fail('check', `Branch ${branch} has a missing, removed or non-default upstream; ${recovery}`);
+  const ensureUnchanged = async () => {
+    const currentBranch = await quiet(['symbolic-ref', '-q', '--short', 'HEAD']);
+    if (currentBranch.code !== 0 || currentBranch.output.trim() !== branch || await head() !== before)
+      throw fail('check', 'HEAD changed during Update; finish other Git work and retry Update.');
+    const status = await checked(['status', '--porcelain', '--untracked-files=all']);
+    if (status) throw fail('check', 'Uncommitted or untracked changes exist; commit or move them to safety before retrying Update.');
+    for (const state of ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply']) {
+      const file = await checked(['rev-parse', '--git-path', state]);
+      if (await fs.stat(path.resolve(dir, file)).then(() => true, () => false))
+        throw fail('check', 'A merge, rebase or cherry-pick is in progress; finish or abort it yourself before retrying Update.');
+    }
+  };
+  await ensureUnchanged();
+  const counts = await checked(['rev-list', '--left-right', '--count', `${before}...${target}`], 'fetch');
+  if (!/^\d+\s+\d+$/.test(counts)) throw fail('fetch', 'Cannot compare local and fetched history; inspect Git history before retrying Update.');
+  const [ahead = 0, behind = 0] = counts.split(/\s+/).map(Number);
+  if (ahead > 0) throw fail('fetch', `${ahead} local commit(s) are absent from origin/${defaultBranch}${behind ? ` and ${behind} remote commit(s) are missing locally` : ''}; reconcile local history by hand before retrying Update.`);
 
   if (behind > 0) {
-    const remote = firstLine((await quiet(['config', '--get', `branch.${options.branch}.remote`])).output) || 'origin';
-    const lfsNeeded = options.lfs === 'required'
-      || ((await quiet(['lfs', 'version'])).code === 0 && !!firstLine((await quiet(['lfs', 'ls-files', '--name-only', target])).output));
+    const lfsInstalled = (await quiet(['lfs', 'version'])).code === 0;
+    // Optional LFS still must not silently check out pointers when the fetched core tracks LFS files.
+    const attributes = await quiet(['grep', '-l', 'filter=lfs', target, '--', '.gitattributes', '**/.gitattributes']);
+    if (attributes.code !== 0 && attributes.code !== 1) throw fail('lfs', 'Cannot inspect LFS attributes; check the fetched tree and retry Update.');
+    const lfsNeeded = options.lfs === 'required' || !!attributes.output.trim();
+    if (lfsNeeded && !lfsInstalled) throw fail('lfs', 'Git LFS is required; install it and retry Update.');
     if (lfsNeeded) {
       step('lfs');
       // Git LFS shows no progress when its output is not a terminal unless forced.
-      const lfs = await loud(['lfs', 'fetch', remote, target], { GIT_LFS_FORCE_PROGRESS: '1' }, lfsProgressFilter(out));
+      const lfs = await loud(['lfs', 'fetch', 'origin', target], { GIT_LFS_FORCE_PROGRESS: '1' }, lfsProgressFilter(out));
       if (lfs.code !== 0) throw fail('lfs', `Could not download the LFS files of the new commits: run Update again. Nothing changed.\n${redactRemote(tail(lfs.output))}`);
     }
 
+    await ensureUnchanged();
     step('pull');
-    // A fast-forward to the fetched commit, not `git pull`: that would fetch again and could move past `target`.
-    const pulled = await loud(['merge', '--ff-only', '--no-edit', target]);
+    // Write before checkout so a crash after advancing HEAD still leaves retryable build work.
+    if (!pending) await fs.writeFile(marker, `${JSON.stringify({ from: before })}\n`);
+    const pulled = await loud(['-c', 'merge.autostash=false', 'merge', '--ff-only', '--no-edit', target]);
     if (pulled.code !== 0) {
-      const files = overwrittenFiles(pulled.output);
-      if (files.length) throw fail('pull', `Local changes would be overwritten by the update: ${files.join(', ')}. Commit or stash them first, then run Update again. Nothing changed.`);
-      throw fail('pull', `Git could not fast-forward. Check git status in the ${options.role}, then run Update again.\n${redactRemote(tail(pulled.output))}`);
+      if (!pending && await head() === before) await fs.rm(marker, { force: true });
+      throw fail('pull', 'Git could not fast-forward; check git status and reconcile by hand before retrying Update.');
     }
-    // Until the caller's update finishes, the next Update must finish it even though nothing is behind any more.
-    if (marker && !pending?.from) await fs.writeFile(marker, `${JSON.stringify({ from: before })}\n`);
   }
   const to = await head();
+  if (to !== target) throw fail('pull', 'HEAD does not match the fetched target; inspect other Git activity before retrying Update.');
   const from = pending?.from || before;
-  const commits = from === to ? 0 : Number.parseInt(firstLine((await quiet(['rev-list', '--count', `${from}..${to}`])).output), 10) || 0;
-  return { from, to, commits, ahead: behind > 0 ? 0 : ahead, pending: !!pending, marker };
+  const count = await checked(['rev-list', '--count', `${from}..${to}`]);
+  if (!/^\d+$/.test(count)) throw fail('check', 'Cannot read the update range; inspect Git history before retrying Update.');
+  return { before, from, to, commits: Number(count), ahead: 0, defaultBranch, fetched: true, pending: !!pending, marker };
 }
 
 export interface UpdateStatus { core: RepoStatus; workspace: RepoStatus }
