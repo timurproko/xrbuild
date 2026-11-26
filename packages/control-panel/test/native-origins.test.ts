@@ -216,8 +216,13 @@ test('native run, package and icon jobs use the same published host runtime', as
   assert.equal(await fs.readFile(path.join(packaged, 'xrb-host.exe'), 'utf8'), await fs.readFile(fresh.exe, 'utf8'));
   assert.notEqual((await resolvedHostPaths(f.core, f.workspace)).releaseDir, packaged);
   f.fail(true); await assert.rejects(rebuildHost(f.core, f.workspace, f.ctx, options));
-  await assert.rejects(panel.run(p, 'built'), /incomplete, failed/);
-  await assert.rejects(panel.packageBuild(p, {}), /incomplete, failed/);
+  panel.desktopSetup.deps.tools = async () => ({ cmake: 'fixture', generator: 'fixture' } as never);
+  panel.rebuildDeps.rebuildNative = async (core, workspace) => rebuildHost(core, workspace, f.ctx, options);
+  const runRetry = await panel.run(p, 'built'); assert.ok(runRetry);
+  await panel.jobs.wait(runRetry); assert.equal(runRetry.state, 'failed'); assert.match(runRetry.error!, /fixture compile failed/);
+  const packageRetry = await panel.packageBuild(p, {});
+  await panel.jobs.wait(packageRetry); assert.equal(packageRetry.state, 'failed'); assert.match(packageRetry.error!, /fixture compile failed/);
+  assert.equal(await fs.readFile(fresh.exe, 'utf8'), 'complete', 'automatic preparation failures preserve the published generation');
   const badIcon = panel.renderIcon(p); await panel.jobs.wait(badIcon);
   assert.equal(badIcon.state, 'failed'); assert.match(badIcon.error!, /incomplete, failed/);
   const productIcon = await f.write(f.core, 'embedded/icon.png', 'preserve product icon');
