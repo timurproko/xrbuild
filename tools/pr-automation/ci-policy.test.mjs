@@ -5,6 +5,7 @@ import { requiredProblems } from './required.mjs';
 
 const ci = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const triage = readFileSync(new URL('../../.github/workflows/nightly-triage.yml', import.meta.url), 'utf8');
+const delivery = readFileSync(new URL('../../.github/workflows/delivery.yml', import.meta.url), 'utf8');
 
 function job(name) {
   const lines = ci.split(/\r?\n/);
@@ -13,6 +14,39 @@ function job(name) {
   const next = lines.findIndex((line, index) => index > start && /^  [a-z][\w-]*:$/.test(line));
   return lines.slice(start, next < 0 ? undefined : next).join('\n');
 }
+
+test('only code and readiness events start PR CI; Delivery retains description edits', () => {
+  const trigger = ci.match(/^  pull_request:\r?\n([\s\S]*?)(?=^  \w+:)/m)?.[1];
+  assert.ok(trigger, 'missing explicit pull_request trigger');
+  const types = trigger.match(/types: \[([^\]]+)\]/)?.[1].split(',').map(type => type.trim());
+  assert.deepEqual(types, ['opened', 'synchronize', 'reopened', 'ready_for_review', 'converted_to_draft']);
+  for (const action of ['edited', 'labeled', 'unlabeled']) assert.equal(types.includes(action), false, action);
+  // No title/body input justifies restarting tests. Delivery independently validates the PR description.
+  assert.doesNotMatch(ci, /pull_request\.(title|body)|GITHUB_EVENT_PATH/);
+  assert.match(delivery, /types: \[opened, synchronize, ready_for_review, converted_to_draft, reopened, edited, closed\]/);
+  assert.match(ci, /cancel-in-progress: true/);
+  assert.ok(ci.includes("format('ci-pr-{0}', github.event.pull_request.number)"));
+});
+
+test('cancelled aggregates skip, while failures and intentional skips still reach the existing validator', () => {
+  const required = job('required');
+  assert.match(required, /^    name: CI required$/m); // Keep the protected check context unchanged.
+  const gate = required.match(/^    if: \$\{\{ (.+) \}\}$/m)?.[1];
+  assert.equal(gate, "!cancelled() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)");
+  // This expression uses only the common JS/Actions boolean subset; evaluate the actual workflow gate.
+  const runs = new Function('cancelled', 'github', `return ${gate};`);
+  for (const event of ['pull_request', 'push', 'schedule', 'workflow_dispatch']) {
+    for (const draft of [false, true]) {
+      for (const cancelled of [false, true]) {
+        assert.equal(runs(() => cancelled, { event_name: event, event: { pull_request: { draft } } }),
+          !cancelled && (event !== 'pull_request' || !draft), `${event}, draft=${draft}, cancelled=${cancelled}`);
+      }
+    }
+  }
+  // A status function avoids Actions' implicit success() gate: failed needs must still be aggregated.
+  assert.doesNotMatch(gate, /always\(\)|success\(\)|needs\./);
+  assert.match(required, /node tools\/pr-automation\/required\.mjs/);
+});
 
 test('the full host build is scheduled only at night or by explicit dispatch', () => {
   const native = job('native');
@@ -49,7 +83,7 @@ test('fast PR checks remain path-selected and the required check accepts only in
   assert.match(job('node'), /needs\.changes\.outputs\.node == 'true'/);
   const required = job('required');
   assert.match(required, /needs: \[readiness, changes, names, openspec, node, embedded, native\]/);
-  assert.match(required, /always\(\) && \(github\.event_name != 'pull_request' \|\| !github\.event\.pull_request\.draft\)/);
+  assert.match(required, /!cancelled\(\) && \(github\.event_name != 'pull_request' \|\| !github\.event\.pull_request\.draft\)/);
   assert.match(required, /node tools\/pr-automation\/required\.mjs/);
   const ready = { readiness: { result: 'success', outputs: { ready: 'true' } }, changes: { result: 'success', outputs: { node: 'true', embedded: 'true' } },
     names: { result: 'success' }, openspec: { result: 'success' }, node: { result: 'success' }, embedded: { result: 'success' }, native: { result: 'skipped' } };
@@ -58,7 +92,13 @@ test('fast PR checks remain path-selected and the required check accepts only in
     for (const name of ['node', 'embedded']) assert.ok(requiredProblems({ ...ready, [name]: { result } }, 'pull_request').length, `${name}: ${result}`);
   }
   assert.ok(requiredProblems({ ...ready, readiness: { result: 'success', outputs: { ready: 'false' } } }, 'pull_request').length);
-  assert.deepEqual(requiredProblems({ ...ready, native: { result: 'success' } }, 'schedule'), []);
+  for (const name of ['readiness', 'changes', 'names', 'openspec', 'node', 'embedded']) {
+    assert.ok(requiredProblems({ ...ready, [name]: { ...ready[name], result: 'failure' } }, 'pull_request').length, `${name}: real failure`);
+  }
+  for (const event of ['schedule', 'workflow_dispatch']) {
+    assert.deepEqual(requiredProblems({ ...ready, native: { result: 'success' } }, event), []);
+    assert.ok(requiredProblems({ ...ready, native: { result: 'failure' } }, event).length, `${event}: real host failure`);
+  }
   for (const node of ['true', 'false']) for (const embedded of ['true', 'false']) {
     const selected = { ...ready, changes: { result: 'success', outputs: { node, embedded } },
       node: { result: node === 'true' ? 'success' : 'skipped' }, embedded: { result: embedded === 'true' ? 'success' : 'skipped' } };
