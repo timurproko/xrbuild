@@ -18,7 +18,7 @@ const visibleOrder = (restart: boolean, rebuild: boolean) => [restart ? 'restart
 
 test('panel and Hands labels retain menu order, visible placement and node identity through state/menu refreshes', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
   const ui = path.join(REPO, 'packages/control-panel/ui');
-  const headers = await Promise.all(['packages/control-panel/ui/index.html', 'embedded/plugins/input-hands/samples/hand-tracking/index.html'].map(async file => {
+  const headers = await Promise.all(['packages/control-panel/ui/index.html', 'packages/control-panel/ui/hands.html'].map(async file => {
     const html = await fs.readFile(path.join(REPO,file),'utf8');return html.match(/<header\b[^>]*>[\s\S]*?<\/header>/)![0];
   }));
   const server = http.createServer((req,res) => {
@@ -47,15 +47,15 @@ test('panel and Hands labels retain menu order, visible placement and node ident
         assert.deepEqual(result.classes,[restart?'chip warn':null,rebuild?'chip rebuild':null].filter(Boolean));
       }
       await evaluate(`refreshLabels(true,true);document.querySelector('#host-chip').before(document.querySelector('#panel-chip'));refreshLabels(true,true);document.querySelector('#panel-chip').click();document.querySelector('#host-chip').click()`);
-      assert.deepEqual(await evaluate(`[...document.querySelectorAll('.xrb-app-bar [data-maintenance]')].map(n=>n.dataset.maintenance)`),page==='/panel'?['restart','rebuild','update']:['restart','rebuild']);
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('.xrb-app-bar [data-maintenance]')].map(n=>n.dataset.maintenance)`),['restart','rebuild','update']);
       assert.equal(await evaluate('actions'),0,'ordering/status labels never invoke maintenance');
     }
   });
 });
 
 test('actual Apps/Plugins/Settings headers keep order through asynchronous polling and navigation', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
-  await fs.mkdir(path.join(REPO,'.artifacts'),{recursive:true});
-  const root=await fs.mkdtemp(path.join(REPO,'.artifacts/header-refresh-')),core=path.join(root,'core');await fs.mkdir(core);
+  const parent=process.env.XRB_TEST_ROOT??path.join(REPO,'.artifacts');await fs.mkdir(parent,{recursive:true});
+  const root=await fs.mkdtemp(path.join(parent,'header-refresh-')),core=path.join(root,'core');await fs.mkdir(core);
   const project=path.join(root,'projects/unsorted/demo');await fs.mkdir(project,{recursive:true});await fs.writeFile(path.join(project,'xrb-project.json'),JSON.stringify({name:'Demo',kind:'test',entry:'.'}));
   const port=await freePort(),panel=createServer({repo:core,workspace:root,port});await new Promise<void>(r=>panel.server.listen(port,'127.0.0.1',r));
   t.after(async()=>{await panel.close();await fs.rm(root,{recursive:true,force:true});});

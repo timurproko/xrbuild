@@ -1,3 +1,0 @@
-#pragma once
-// Generated at configure time from the same authored fixture imported by the viewer.
-inline constexpr char kHandFixture[] = R"fixture(@HAND_FIXTURE_JSON@)fixture";

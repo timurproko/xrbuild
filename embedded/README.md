@@ -1,7 +1,7 @@
 # Product workspace
 
 This is the core-owned, public embedded workspace. It includes **consolidated WebXR publisher** with local/explicit production
-destinations, **the authored hand implementation/diagnostic**, including its plugin-owned sample and tests, and
+destinations, **the authored hand provider/recording library and retained calibration/future-provider source**, including its nested package and tests, and
 **the explicitly configured headset launcher packager**. Seven standalone project groups preserve their core/archive placement:
 launcher, UI showcase, cube example and four archived capability-aware diagnostics. Portable defaults select desktop/no input;
 there are no live publication, package/signing or machine identities. Optional hardware remains an explicit choice. The independent user/private workspace
@@ -21,7 +21,7 @@ The returned working tree is retained diagnostic/development state, not a distri
 See [the embedded contracts](../docs/embedded-extensions.md) for configuration, graph and ownership rules.
 
 Approved packages use `plugins/<id>[/<component>]`, `plugins/<id>/samples/<sample>` and `projects/<section>/<id>`,
-including `unsorted` and `archive`. The bounded `plugins/*/samples/*` glob registers plugin-owned diagnostics without
+including `unsorted` and `archive`. The bounded `plugins/*/samples/*` glob registers plugin-owned nested source packages without
 requiring a second package at the plugin root or enabling arbitrary recursive globs.
 Each registered package needs a unique package name. Local dependencies must explicitly use `workspace:*`, `workspace:^`
 or `workspace:~`; missing identities, implicit local resolution and cycles fail before installation. Standard `build`

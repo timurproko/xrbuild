@@ -1,19 +1,61 @@
-# Hands adjustments
+# Hands
 
-Hands owns one profile at `<workspace>/config/hands/profile.json`, shared with the source picker, not a provider's calibration or an app's settings. Opening Hands writes nothing and starts no tracking. Existing source-only records inherit identity geometry and the exact standard SDK look without migration.
+`/hands/` is the core hand workspace: global skeleton provider, post-processing component slot,
+SDK hand view, grouped global adjustments and Record. It opens without optional hand tools.
+Source changes apply on the next app launch; viewing this page never starts hardware.
+Until the separate live-session component is connected, the view is idle and Record says it needs a live hand session.
 
-Position is panel-space millimetres: X right, Y up, Z toward the viewer; each -150..150, default 0. Size is uniform .5..1.5, default 1, about each hand's own wrist. It changes where the hand touches.
+The former diagnostic and legacy hand-tracking page routes are removed (404, no redirects).
+There is no generated preview, local fixture, fixture interaction target or laboratory navigation.
+Synthetic remains an ordinary installed provider choice, never a fallback.
 
-Appearance is drawing only: joints/bones on by default, diameters 15 mm (bounds 1..40 / 1..30); linear colours [0,.541,1] / [0,.482,1]; skeleton opacity .333. The pinch-or-grab indicator defaults to on, 30 mm (1..60), white [1,1,1], opacity .9. Opacities/linear colour components are 0..1; visibility values are booleans. Colour pickers display sRGB but untouched colours retain their precise stored linear components.
+## Independent modules
 
-Invalid types, non-finite or out-of-range values are rejected with a field-specific reason. Invalid/foreign/linked/oversized records are not silently reset. Source Save and adjustment Apply use the same file revision and exclusive atomic writer; a stale editor must reload/review instead of overwriting another edit. Reloading only adjustments never rebases an outdated source picker: its revision advances after Apply only if it reviewed that same request base; otherwise source Reload/review is required. Unknown fields are preserved. Applying adjustments never changes an existing source choice or its calibration.
+Camera calibration is **not** part of Hands. A following change extracts it as the separate Calibration module.
+Its output is a B-to-A camera-space rigid transform, bound to both cameras' serials and exact profiles, not an app-hand offset.
+See the retained [camera calibration contract](../embedded/plugins/input-hands/samples/hand-tracking/camera-calibration.md) while that extraction is pending.
+Existing calibration code and state remain intact. Browser landmark and two-view fusion algorithms are retained,
+unwired from product pages, as source for a future provider. No such provider is implemented here.
 
-Change notifications contain the saved file revision. Each editor tracks its incorporated revision independently: a self-notification before the response is reconciled when that response arrives, and one after it is ignored. Other queued notices are checked against current saved state: hashes are not ordered, and another client returning to an older hash still counts as a change. A different client's unseen revision still requires Reload; a successful own response cannot erase it. A Reload cannot clear a newer notification arriving during its request. Delivery polls are fenced across save/retry so an older pending/applied result cannot overwrite the newer status, even when retry leaves the saved revision unchanged.
+## Recording integration
 
-Position and size and Appearance are independent, relocatable control sections, not part of the source card. `packages/control-panel/ui/hands-adjustments.js` exports `mountHandAdjustments(root, {load, apply})`; the returned controller supports `refresh`, `markStale`, `updateDelivery` and `dispose`. Queries/listeners/drafts are root-scoped and IDs are unique per mount. The next layout can move the existing root into a hand-view side panel, or mount the same component there with the same callbacks, without rebuilding controls or changing the pipeline/storage/delivery. A real-browser regression moves the mounted root into a 340px side-panel fixture and applies successfully. Reset changes only that group's draft; explicit Apply saves both adjustment groups. Source Save is separate and applies on next launch. The live hand view and future plugin processing-stage layout are separate work.
+The page exports `handsPage` from `ui/hands.js`: `view`, `snapshot`, `request`, and `recorder`.
+`snapshot` is the editor's revision-bound base, not the running session's profile authority. While `view.active`
+the session component owns ordered SDK profile updates; saved-file polling changes only idle preview.
+`view.profile` returns a cloned validated applied profile. Start must reject `recorder.replaying` (including async
+replay setup). Never derive recording provenance from unsaved controls or acknowledge a profile merely reaching disk.
 
-Every managed native/dev/browser launch receives a validated portable snapshot. Native hosts retain the newest run profile on the authenticated channel across navigation/reconnect; browser previews use their existing bounded token/session/route/project context. Trusted Launcher links carry that scope without opening a second provider. A running app keeps its acquisition source when source Save changes the next-launch choice.
+The live-session component calls `handsPage.recorder.connect({ producer, format })`:
 
-Apply persists first, then sends a complete run-bound profile with a monotonic sequence. Geometry changes release held interactions/pointer presses without a click, clear old hands and reset filters before the next adjusted frame. Appearance-only or geometrically equivalent updates keep holds/filters. Stale, malformed, reordered and retired-run messages cannot revert the app. Status distinguishes saved-for-next-launch, Applying, Applied (SDK-acknowledged), and saved but delivery failed. A failed delivery leaves Retry Apply available even when there are no unsaved edits; it resends the saved values without manufacturing a geometry change. Native acknowledgement observation starts with the owning host channel, so launch sequence zero can become Applied without another Apply; the observer reconnects read-only and is retired on stop/disposal. Rebuild/relaunch an old or disconnected bundle when retry cannot reach it. Pending acknowledgements have a three-second run/sequence-bound deadline, including browser runs and old bundles without the subscription. Timeout reports saved-but-not-applied with Retry Apply and rebuild/relaunch guidance; a matching current-run late acknowledgement recovers to Applied. New Apply replaces the prior deadline; stop, replacement and disposal retire it. Browser acknowledgements travel on the authenticated no-store polling endpoint. No arbitrary broadcast message can change the active profile.
+- `producer.recordingSource()` returns the selected source/session/epoch and validated portable profile snapshot, or null when idle.
+- `producer.subscribeRawFrames(listener)` returns an unsubscribe function; events contain owned raw native packets, source sequence and capture/publication times, before SDK adjustments/filtering.
+- `producer.subscribeLifecycle(listener)` retires/finalizes the current recording on Stop/failure/epoch change.
+- `format.validate(document)` validates the agreed raw format and every native packet. `format.replay(document, { view })` explicitly plays it through a fresh view epoch and returns a disposer.
 
-Desktop/headset packages and both publication paths freeze the build-time profile in checked output copies. They neither read the author's workspace nor subscribe to its panel; later Apply does not change them. Rebuild packages to use new values. Old SDK bundles need a normal rebuild and are not claimed to support live adjustments. A managed launch requiring the new native profile channel fails closed in a new SDK on an older host, with host rebuild/relaunch guidance instead of unadjusted contacts.
+The agreed format is `kind: xrbuild-hand-session`, version 1, raw `panel-metres`,
+`processing: provider-published`, `globalAdjustmentsApplied: false`, axes `x-right,y-up,z-viewer`,
+clock `windows-qpc-ms`, source/session/epoch provenance and a frozen portable `profile`.
+`samples` contain original sequence/capture/publication times and base64 unchanged native HANDS v2 packets.
+Caps are 16 MiB encoded, 10,000 samples and 120 seconds; gaps stay gaps. Recording stops visibly on a cap or session retirement.
+New captures remain in memory with explicit Export (`.xrbhands`). Navigation warnings persist after download
+initiation, which cannot prove durability; replacing that buffer requires confirmation. Imported files already exist on disk.
+No control claims to record before the compatible producer/validator arrives in the live-session change.
+
+Replay uses the recorded profile once, not the current live profile plus the recorded profile.
+The replay view wraps `setProfile` and `beginSession` with `mode: replay`; current-profile polling leaves that snapshot alone.
+Stopping replay restores the current saved profile. Live and replay cannot concurrently feed the view.
+Legacy CSV/RGB/RGB-D/paired files use their unchanged readers and original spaces, not the provider-stream schema.
+
+The optional `hands-recordings` export is a contained checked component, not a second page.
+Its exact asset allowlist serves only legacy reader helpers through `/hands/tools/`; bounded same-origin
+storage operations use `/api/hands/tools/`. No device/model/inference/fusion module is started by loading it.
+
+## Data
+
+Global source and adjustments belong to workspace `config/hands/profile.json`.
+The existing right-side component owns both groups, resets, Apply and revision/delivery handling;
+see [global adjustment behaviour](hand-adjustments.md).
+Legacy pose CSV remains in `.xrb/hand-tracking/recordings/`; optional calibration/preferences remain in
+`config/plugins/input-hands/preferences.json`. Exports and models stay in their existing locations.
+The page redesign does not migrate, delete or rewrite user data. Replay preserves a recording's coordinate space
+and provenance; old camera-relative data is not silently promoted to provider input or adjusted twice.

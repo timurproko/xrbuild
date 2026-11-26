@@ -1,0 +1,27 @@
+<!-- Retained fragment for the following Calibration module; not a product document or Hands asset. -->
+<section class="xrb-stack">
+  <p>Measures camera B relative to camera A for a future two-camera provider.</p>
+  <div class="xrb-field-grid"><label>Camera A<select id="mv-device-a"></select></label><label>Camera B<select id="mv-device-b"></select></label><label>Profile A<select id="mv-profile-a"></select></label><label>Profile B<select id="mv-profile-b"></select></label></div>
+  <div class="xrb-button-row"><button id="mv-marker-open" type="button">Calibrate cameras</button><button id="mv-marker-download" type="button">Download marker</button><button id="mv-marker-license" type="button">Detector license</button></div>
+  <section id="calibration-settings" class="xrb-control-group"><details class="xrb-disclosure"><summary>Manual static targets</summary>
+    <p class="xrb-help">Fixed cameras, matching static targets: at least six fit pairs and three held-out checks.</p>
+    <label>Current camera role<select id="cal-role"><option value="a">A · reference optical frame</option><option value="b">B · second serial</option></select></label>
+    <div class="xrb-field-grid"><label>Target ID<input id="cal-id" maxlength="32" value="p1"></label><label>Target use<select id="cal-use"><option value="fit">Fit</option><option value="check">Held-out check</option></select></label></div>
+    <button id="cal-add" type="button" disabled>Add current RGB surface probe</button><p id="cal-sources" class="xrb-help"></p>
+    <label>Targets<select id="cal-targets" size="4" aria-label="Matched spatial targets"></select></label>
+    <div class="xrb-button-row"><button id="cal-remove" type="button">Remove selected target</button><button id="cal-clear" type="button">Clear setup</button></div>
+    <label>Setup / target description<input id="cal-description" maxlength="256"></label>
+    <label>Reference/setup uncertainty (m)<input id="cal-uncertainty" type="number" min="0.0001" max="0.1" step="0.001"></label>
+    <label class="toggle"><input id="cal-static" type="checkbox">Fixed camera poses and matching static targets verified</label>
+    <div class="xrb-button-row"><button id="cal-fit" type="button" disabled>Fit spatial transform</button><button id="cal-export" type="button" disabled>Export calibration</button></div>
+    <label>Import spatial calibration<input id="cal-import" type="file" accept=".json,application/json"></label>
+    <p id="cal-status" class="xrb-help" role="status"></p><p id="cal-error" class="field-error" role="alert"></p><pre id="cal-result" class="xrb-code-block"></pre>
+  </details></section>
+</section>
+<dialog id="mv-marker-dialog" class="marker-dialog xrb-dialog" aria-labelledby="mv-marker-title">
+  <div class="marker-dialog-header xrb-dialog-header"><h2 id="mv-marker-title" class="xrb-dialog-title">Camera calibration</h2><button id="mv-marker-close" class="marker-dialog-close xrb-dialog-close" aria-label="Close calibration">×</button></div>
+  <p id="mv-marker-instruction" class="xrb-visually-hidden" role="status" aria-live="polite">Place marker in both camera views</p>
+  <div class="marker-dialog-previews"><div><p id="mv-marker-label-a" class="xrb-help">Camera 1</p><div class="xrb-media-stage"><canvas id="mv-marker-preview-a" width="640" height="480" aria-label="Calibration camera 1"></canvas><div id="mv-marker-state-a" class="xrb-overlay-empty"><span>Starting camera…</span></div></div><p id="mv-marker-seen-a" class="xrb-help"></p></div><div><p id="mv-marker-label-b" class="xrb-help">Camera 2</p><div class="xrb-media-stage"><canvas id="mv-marker-preview-b" width="640" height="480" aria-label="Calibration camera 2"></canvas><div id="mv-marker-state-b" class="xrb-overlay-empty"><span>Starting camera…</span></div></div><p id="mv-marker-seen-b" class="xrb-help"></p></div></div>
+  <div class="marker-progress-slot"><progress id="mv-marker-progress" max="1" value="0" aria-label="Calibration progress" hidden></progress></div>
+  <div class="xrb-dialog-actions"><button id="mv-marker-cancel">Cancel</button><button id="mv-marker-next" disabled>Done</button></div>
+</dialog>

@@ -1,5 +1,6 @@
 // Shared, framework-neutral navigation. Maintenance choices are explicit one-shot actions.
 import {openFloating} from './design-system.js';
+import {isRetiredHandsTool} from './hands-routes.js';
 import {rebuildHostInPlace,updateInPlace} from './rebuild-dialog.js';
 export {rebuildHostInPlace,updateInPlace};
 export const MAINTENANCE_ACTIONS = Object.freeze([
@@ -56,7 +57,7 @@ export function navigationItems(origin,tools=[],current='projects',{maintenance=
   const design=tools.some(tool=>tool.id==='design-system');
   return [{id:'projects',label:'Apps',href:panelDestination(origin,'projects')},
     {id:'hands',label:'Hands',href:panelDestination(origin,'hands')},
-    ...tools.filter(tool=>tool.id!=='design-system'&&tool.id!=='hands').map(t=>({id:t.id,label:t.label,href:t.route?managedToolDestination(t.route,origin):toolDestination(t.url,origin,t.passPanelOrigin!==false)})),
+    ...tools.filter(tool=>tool.id!=='design-system'&&tool.id!=='hands'&&!isRetiredHandsTool(tool)).map(t=>({id:t.id,label:t.label,href:t.route?managedToolDestination(t.route,origin):toolDestination(t.url,origin,t.passPanelOrigin!==false)})),
     {id:'plugins',label:'Plugins',href:panelDestination(origin,'plugins')},
     {id:'settings',label:'Settings',href:panelDestination(origin,'settings')},
     ...(design?[{id:'design-system',label:'Design',href:panelDestination(origin,'design-system')}]:[]),

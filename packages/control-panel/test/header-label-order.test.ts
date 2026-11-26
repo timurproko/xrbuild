@@ -42,7 +42,7 @@ test('ordering moves the same nodes into their existing slots, preserving unrela
 });
 
 test('panel and embedded hand default markup follow the same menu order before scripts initialize', async () => {
-  for (const file of ['../ui/index.html', '../../../embedded/plugins/input-hands/samples/hand-tracking/index.html']) {
+  for (const file of ['../ui/index.html', '../ui/hands.html']) {
     const html = await fs.readFile(new URL(file, import.meta.url), 'utf8'), header = html.match(/<header\b[^>]*>[\s\S]*?<\/header>/)![0];
     const ids = [...header.matchAll(/data-maintenance="([^"]+)"/g)].map(match => match[1]);
     // The panel labels every action; a tool page may leave out the workspace hint but keeps the same order.
