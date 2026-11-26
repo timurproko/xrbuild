@@ -1,7 +1,7 @@
 // Update workspace: bring the selected workspace's Git clone up to date with its upstream by fast-forward only,
 // fetch its Git LFS content, then rebuild the native plugins (and the core host only when it is missing or outdated).
 // It never stashes, merges, rebases, resets or discards: Git's own refusals are reported with what to do by hand.
-// Only the workspace is updated, never the core checkout the panel runs from.
+// It fast-forwards to exactly the upstream commit it fetched, never fetching a second time.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -197,7 +197,11 @@ export async function updateWorkspace(workspace: string, ctx: JobContext, deps: 
   const fetched = await loud(['fetch']);
   if (fetched.code !== 0) throw new WorkspaceUpdateError('fetch', `Could not reach the remote. Nothing changed.\n${tail(fetched.output)}`);
 
-  const counts = await quiet(['rev-list', '--left-right', '--count', 'HEAD...@{u}']);
+  // The commit this update goes to: read once after the fetch and used for the count, the LFS download and the
+  // fast-forward, so the update never moves past what was fetched and checked, even if the remote moves meanwhile.
+  const target = firstLine((await quiet(['rev-parse', '--verify', '@{u}^{commit}'])).output);
+  if (!/^[0-9a-f]{40,64}$/.test(target)) throw new WorkspaceUpdateError('fetch', 'Could not read the upstream commit after fetching. Nothing changed.');
+  const counts = await quiet(['rev-list', '--left-right', '--count', `HEAD...${target}`]);
   const [ahead = 0, behind = 0] = firstLine(counts.output).split(/\s+/).map((n) => Number.parseInt(n, 10) || 0);
   const before = await head();
   if (ahead > 0 && behind > 0) throw new WorkspaceUpdateError('fetch', `The branch has ${ahead} local commit(s) and ${behind} new remote commit(s). Merge or rebase by hand, then run Update again. Nothing changed.`);
@@ -210,13 +214,13 @@ export async function updateWorkspace(workspace: string, ctx: JobContext, deps: 
   if (behind > 0) {
     step('lfs');
     const remote = firstLine((await quiet(['config', '--get', `branch.${status.branch}.remote`])).output) || 'origin';
-    const upstreamRef = firstLine((await quiet(['rev-parse', '--symbolic-full-name', '@{u}'])).output);
     // Git LFS shows no progress when its output is not a terminal unless forced.
-    const lfs = await loud(['lfs', 'fetch', remote, upstreamRef], { GIT_LFS_FORCE_PROGRESS: '1' }, lfsProgressFilter(ctx.line));
+    const lfs = await loud(['lfs', 'fetch', remote, target], { GIT_LFS_FORCE_PROGRESS: '1' }, lfsProgressFilter(ctx.line));
     if (lfs.code !== 0) throw new WorkspaceUpdateError('lfs', `Could not download the LFS files of the new commits: run Update again. Nothing changed.\n${tail(lfs.output)}`);
 
     step('pull');
-    const pulled = await loud(['pull', '--ff-only', '--no-rebase']);
+    // A fast-forward to the fetched commit, not `git pull`: that would fetch again and could move past `target`.
+    const pulled = await loud(['merge', '--ff-only', '--no-edit', target]);
     if (pulled.code !== 0) {
       const files = overwrittenFiles(pulled.output);
       if (files.length) throw new WorkspaceUpdateError('pull', `Local changes would be overwritten by the update: ${files.join(', ')}. Commit or stash them first, then run Update again. Nothing changed.`);

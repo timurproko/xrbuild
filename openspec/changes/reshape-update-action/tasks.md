@@ -1,8 +1,8 @@
 ## 1. Exact fast-forward to the fetched commit
 
-- [ ] 1.1 Read the upstream sha once after the fetch and use it for the count, `git lfs fetch` and `git merge --ff-only`; drop `git pull`
-- [ ] 1.2 Keep the "would be overwritten" refusal and file list for the merge
-- [ ] 1.3 Test: the remote moves between the LFS fetch and the fast-forward, and `HEAD` ends at the fetched commit
+- [x] 1.1 Read the upstream sha once after the fetch and use it for the count, `git lfs fetch` and `git merge --ff-only`; drop `git pull`
+- [x] 1.2 Keep the "would be overwritten" refusal and file list for the merge
+- [x] 1.3 Test: the remote moves between the LFS fetch and the fast-forward, and `HEAD` ends at the fetched commit
 
 ## 2. Workspace that is the core checkout
 

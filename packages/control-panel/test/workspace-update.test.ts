@@ -72,14 +72,35 @@ test('downloads the LFS files of the new commits, fast-forwards, then rebuilds p
   assert.match(result.summary, new RegExp(`Updated ${before.slice(0, 7)} → ${result.to.slice(0, 7)} \\(3 commits\\)\\. Rebuilt: tracker\\.`));
   assert.equal(await fs.readFile(path.join(f.workspace, 'shared.txt'), 'utf8'), 'three\n');
   assert.deepEqual(f.lines.filter((l) => l.startsWith('step ')), ['step check', 'step fetch', 'step lfs', 'step pull', 'step rebuild']);
-  assert.ok(f.calls.some((args) => args.join(' ') === 'lfs fetch origin refs/remotes/origin/main'), 'LFS objects of the upstream are fetched, honouring the clone settings');
+  assert.ok(f.calls.some((args) => args.join(' ') === `lfs fetch origin ${result.to}`), 'LFS objects of the fetched upstream commit are fetched, honouring the clone settings');
   assert.ok(!f.calls.some((args) => args[0] === 'lfs' && args[1] === 'pull'), 'no git lfs pull: it would restore LFS files deleted locally');
   assert.equal(f.lfsEnv[0]?.GIT_LFS_FORCE_PROGRESS, '1', 'LFS progress is forced although the output is not a terminal');
   const progress = f.lines.filter((l) => l.startsWith('Downloading LFS objects:'));
   assert.equal(progress.length, 21, 'one progress line per 5 % and 100 % once');
   assert.equal(progress.at(-1), 'Downloading LFS objects: 100% (1/1), 100 MB | 10 MB/s');
-  assert.ok(f.calls.some((args) => args.join(' ') === 'pull --ff-only --no-rebase'));
-  for (const args of f.calls) assert.ok(!['stash', 'merge', 'rebase', 'reset', 'checkout', 'clean'].includes(args[0]!), `never runs git ${args[0]}`);
+  assert.ok(f.calls.some((args) => args.join(' ') === `merge --ff-only --no-edit ${result.to}`), 'a fast-forward to exactly the fetched commit');
+  assert.equal(f.calls.filter((args) => args[0] === 'fetch').length, 1, 'fetched once');
+  for (const args of f.calls) assert.ok(!['stash', 'pull', 'rebase', 'reset', 'checkout', 'clean'].includes(args[0]!) && (args[0] !== 'merge' || args[1] === '--ff-only'), `never runs git ${args.join(' ')}`);
+});
+
+test('the remote moving after the LFS download does not move the fast-forward past the fetched commit', async (t) => {
+  const f = await fixture(t);
+  await f.publish('shared.txt', 'two\n');
+  const fetched = git(f.publisher, 'rev-parse', 'HEAD');
+  let moved = false;
+  // Another commit reaches the remote while the LFS objects of the fetched commit are downloading.
+  const deps = { ...f.deps, git: (async (args, cwd, opts) => {
+    if (args[0] === 'lfs' && args[1] === 'fetch' && !moved) { moved = true; await f.publish('other.txt', 'two\n'); }
+    return f.deps.git(args, cwd, opts);
+  }) as GitRunner };
+  const result = await updateWorkspace(f.workspace, f.ctx, deps);
+  assert.ok(moved);
+  assert.equal(result.to, fetched); assert.equal(f.head(), fetched); assert.equal(result.commits, 1);
+  assert.equal(await fs.readFile(path.join(f.workspace, 'other.txt'), 'utf8'), 'one\n', 'the later commit is not in the workspace');
+  assert.equal(f.calls.filter((args) => args[0] === 'fetch').length, 1, 'no second fetch');
+  const next = await updateWorkspace(f.workspace, f.ctx, f.deps);
+  assert.equal(next.state, 'updated'); assert.equal(next.commits, 1, 'the next Update brings the newer commit');
+  assert.equal(await fs.readFile(path.join(f.workspace, 'other.txt'), 'utf8'), 'two\n');
 });
 
 test('rebuilds the core host too when it is missing or outdated', async (t) => {
@@ -95,7 +116,7 @@ test('up to date: reports it, runs no LFS step and does not rebuild', async (t) 
   assert.equal(result.state, 'up-to-date'); assert.equal(result.commits, 0);
   assert.match(result.summary, /^Already up to date \(\w{7}\)\. Nothing was rebuilt\.$/);
   assert.deepEqual(f.rebuilds, []);
-  assert.ok(!f.calls.some((args) => args[0] === 'pull' || (args[0] === 'lfs' && args[1] !== 'version')), 'no pull and no LFS download');
+  assert.ok(!f.calls.some((args) => args[0] === 'merge' || (args[0] === 'lfs' && args[1] !== 'version')), 'no fast-forward and no LFS download');
 });
 test('non-conflicting local changes stay', async (t) => {
   const f = await fixture(t);
@@ -128,7 +149,7 @@ test('a diverged branch is refused before pulling', async (t) => {
   await f.publish('shared.txt', 'two\n');
   await rejectsAt(updateWorkspace(f.workspace, f.ctx, f.deps), 'fetch', /1 local commit\(s\) and 1 new remote commit\(s\)\. Merge or rebase by hand/);
   assert.notEqual(local, before); assert.equal(f.head(), local);
-  assert.ok(!f.calls.some((args) => args[0] === 'pull'));
+  assert.ok(!f.calls.some((args) => args[0] === 'merge'));
 });
 
 test('a fetch failure stops with nothing changed', async (t) => {
@@ -144,7 +165,7 @@ test('an LFS failure stops before the pull: nothing changes and no rebuild', asy
   await f.publish('shared.txt', 'two\n');
   await rejectsAt(updateWorkspace(f.workspace, f.ctx, f.deps), 'lfs', /^LFS: Could not download the LFS files of the new commits: run Update again\. Nothing changed\./);
   assert.equal(f.head(), before); assert.deepEqual(f.rebuilds, []);
-  assert.ok(!f.calls.some((args) => args[0] === 'pull'));
+  assert.ok(!f.calls.some((args) => args[0] === 'merge'));
   assert.equal(await fs.readFile(path.join(f.workspace, 'shared.txt'), 'utf8'), 'one\n');
   assert.equal((await workspaceUpdateStatus(f.workspace, f.deps.git)).unfinished, false);
 });
