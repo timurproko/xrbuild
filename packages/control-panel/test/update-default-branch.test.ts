@@ -44,6 +44,9 @@ test('default rename is discovered despite stale origin HEAD and removed upstrea
     assert.match(error.message, /removed or non-default upstream.*switch safely to main/); return true;
   });
   assert.deepEqual(await snapshot(f.core.checkout), before);
+  git(f.core.checkout, 'update-ref', '-d', 'refs/remotes/origin/develop');
+  await assert.rejects(fastForward(f.core.checkout, f.ctx, { ...options, git: f.runner }), /removed.*main/);
+  assert.deepEqual(await snapshot(f.core.checkout), before, 'also refuses when the upstream ref was already pruned');
 });
 
 for (const state of ['unstaged', 'staged', 'untracked', 'deleted', 'detached', 'no-upstream', 'other-upstream', 'other-remote', 'ahead', 'diverged']) {
@@ -98,6 +101,21 @@ test('LFS download uses the captured target even if remote advances afterwards',
   assert.equal(f.workspace.head(), target); assert.notEqual(target, next);
   assert.equal(f.calls.filter(call => call.args[0] === 'fetch').length, 1);
   assert.ok(f.calls.some(call => call.args.join(' ') === `-c merge.autostash=false merge --ff-only --no-edit ${target}`));
+});
+
+test('Git fast-forward refusal leaves HEAD and files unchanged and removes only its new pending marker', async t => {
+  const f = await fixture(t), before = await snapshot(f.core.checkout); await f.core.publish();
+  const runner: GitRunner = (args, cwd, opts) => args.includes('merge') ? Promise.resolve({ code: 1, output: 'not possible to fast-forward' }) : f.runner(args, cwd, opts);
+  await assert.rejects(fastForward(f.core.checkout, f.ctx, { ...options, git: runner }), /could not fast-forward.*by hand/);
+  assert.deepEqual(await snapshot(f.core.checkout), before);
+  assert.equal(await fs.stat(path.join(f.core.checkout, '.git', options.marker)).then(() => true, () => false), false);
+});
+
+test('required workspace LFS absence fails even at a freshly current HEAD', async t => {
+  const f = await fixture(t), before = await snapshot(f.workspace.checkout);
+  const runner: GitRunner = (args, cwd, opts) => args[0] === 'lfs' ? Promise.resolve({ code: 127, output: 'missing' }) : f.runner(args, cwd, opts);
+  await assert.rejects(fastForward(f.workspace.checkout, f.ctx, { ...options, role: 'workspace', lfs: 'required', git: runner }), /Git LFS is required.*install/);
+  assert.deepEqual(await snapshot(f.workspace.checkout), before);
 });
 
 test('LFS failure or local edit during download leaves HEAD untouched', async t => {

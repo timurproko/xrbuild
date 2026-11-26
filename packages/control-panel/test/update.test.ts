@@ -72,7 +72,8 @@ for (const role of ['core', 'workspace'] as const) for (const state of ['dirty',
 
 test('same checkout is fetched and advanced once for both roles, without requiring core LFS', async t => {
   const f = await setup(t); await f.core.publish();
-  const result = await runUpdate(f.core.checkout, f.ctx, f.deps);
+  const noLfs: GitRunner = (args, cwd, opts) => args[0] === 'lfs' ? Promise.resolve({ code: 127, output: 'not installed' }) : f.runner(args, cwd, opts);
+  const result = await runUpdate(f.core.checkout, f.ctx, { ...f.deps, git: noLfs });
   assert.equal(result.repositories.length, 1); assert.deepEqual(result.repositories[0]!.roles, ['core', 'workspace']);
   assert.equal(f.calls.filter(call => call.args[0] === 'fetch').length, 1);
   assert.equal((await updateStatus(f.core.checkout, f.core.checkout, f.runner)).workspace.sameAsCore, true);

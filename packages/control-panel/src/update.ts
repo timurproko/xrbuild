@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { JobFailure, LineSplitter, type JobContext } from './jobs.ts';
+import { rebuildUpdatedSources, setupUpdatedCore } from './update-runtime.ts';
 
 export interface GitResult { code: number; output: string }
 /** Runs `git <args>` in a folder; streamed lines go to onLine. Injectable so tests can stub `git lfs`. */
@@ -146,8 +147,8 @@ export async function workspaceUpdateStatus(workspace: string, runner: GitRunner
   return repoUpdateStatus(workspace, { role: 'workspace', lfs: 'required', git: runner, marker: WORKSPACE_MARKER });
 }
 
-export type UpdateStep = 'check' | 'fetch' | 'lfs' | 'pull' | 'rebuild';
-export const STEP_TITLES: Record<UpdateStep, string> = { check: 'Check', fetch: 'Fetch', lfs: 'LFS', pull: 'Pull', rebuild: 'Rebuild' };
+export type UpdateStep = 'check' | 'fetch' | 'lfs' | 'pull' | 'setup' | 'rebuild';
+export const STEP_TITLES: Record<UpdateStep, string> = { check: 'Check', fetch: 'Fetch', lfs: 'LFS', pull: 'Pull', setup: 'Dependencies', rebuild: 'Rebuild' };
 
 /** A refusal or failure at one step; the message says what happened and what to do. */
 export class UpdateError extends Error {
@@ -181,6 +182,7 @@ export interface RepoOutcome {
 export interface UpdateResult {
   state: 'updated' | 'up-to-date' | 'failed';
   repositories: RepoOutcome[];
+  coreDependencies: 'unchanged' | 'prepared' | 'failed' | 'deferred';
   rebuilt: string[];
   restartRequired: boolean;
   lastLine: string;
@@ -197,12 +199,12 @@ export interface UpdateDeps {
   /** The core checkout the panel runs from; an identical workspace is updated only once. */
   core?: string;
   /** True when the core host is built and current, so only plugins need a rebuild. */
-  coreHostCurrent: () => Promise<boolean>;
-  /** The existing native rebuild, with the same tool discovery as Rebuild; returns the rebuilt plugin folders. */
-  rebuild: (pluginsOnly: boolean, ctx: JobContext) => Promise<string[]>;
+  coreHostCurrent?: () => Promise<boolean>;
+  /** Injectable build boundary; production invokes the fetched recipe in a fresh Node process. */
+  rebuild?: (pluginsOnly: boolean, ctx: JobContext) => Promise<string[]>;
+  /** Injectable installer boundary; production uses the existing frozen public-core installer in a fresh process. */
+  setupCore?: (core: string, ctx: JobContext) => Promise<void>;
 }
-
-const TAIL = 12;
 
 /** Plugin ids from rebuilt native projects: a plugin's `<id>/runtime` subproject is the same plugin. */
 export function rebuiltPluginNames(plugins: ReadonlyArray<{ dir: string }>): string[] {
@@ -223,8 +225,6 @@ export function lfsProgressFilter(onLine: (line: string) => void): (line: string
     if ((percent === 100 && last !== 100) || last < 0 || percent >= last + 5) { last = percent; onLine(line); }
   };
 }
-const tail = (output: string) => output.split('\n').filter((l) => l.trim()).slice(-TAIL).join('\n');
-const short = (sha: string) => sha.slice(0, 7);
 
 /** Paths Git lists under "... would be overwritten by merge/checkout:" (tab-indented lines). */
 export function overwrittenFiles(output: string): string[] {
@@ -242,8 +242,6 @@ export interface FastForwardOptions {
   git?: GitRunner;
   role: RepoRole;
   lfs: 'required' | 'optional';
-  /** Optional expected branch from a prior status read; rechecked before checkout. */
-  branch?: string;
   /** The resume marker written after the fast-forward, until the caller's update finishes. */
   marker: string;
 }
@@ -287,8 +285,12 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
     if (!/^[0-9a-f]{40,64}$/.test(sha)) throw fail('check', 'Cannot read HEAD; repair the checkout before retrying Update.');
     return sha;
   };
-  const top = await checked(['rev-parse', '--show-toplevel']);
-  if (!await samePath(top, dir)) throw fail('check', 'This is not an independent clone; select its checkout root before retrying Update.');
+  const top = await quiet(['rev-parse', '--show-toplevel']);
+  if (top.code === 127) throw fail('check', 'Git is unavailable; install Git before retrying Update.');
+  if (top.code !== 0) throw fail('check', options.role === 'core'
+    ? 'The core is not a Git checkout; install a newer package instead of using Update.'
+    : 'The workspace is not a Git clone; select an independent clone before retrying Update.');
+  if (!await samePath(top.output.trim(), dir)) throw fail('check', 'This is not an independent clone; select its checkout root before retrying Update.');
   const before = await head();
   const marker = await markerPath(dir, readOnly(git), options.marker);
   if (!marker) throw fail('check', 'Cannot locate the update marker; check Git permissions and retry Update.');
@@ -338,8 +340,9 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
   const [ahead = 0, behind = 0] = counts.split(/\s+/).map(Number);
   if (ahead > 0) throw fail('fetch', `${ahead} local commit(s) are absent from origin/${defaultBranch}${behind ? ` and ${behind} remote commit(s) are missing locally` : ''}; reconcile local history by hand before retrying Update.`);
 
+  const lfsInstalled = (await quiet(['lfs', 'version'])).code === 0;
+  if (options.lfs === 'required' && !lfsInstalled) throw fail('lfs', 'Git LFS is required; install it and retry Update.');
   if (behind > 0) {
-    const lfsInstalled = (await quiet(['lfs', 'version'])).code === 0;
     // Optional LFS still must not silently check out pointers when the fetched core tracks LFS files.
     const attributes = await quiet(['grep', '-l', 'filter=lfs', target, '--', '.gitattributes', '**/.gitattributes']);
     if (attributes.code !== 0 && attributes.code !== 1) throw fail('lfs', 'Cannot inspect LFS attributes; check the fetched tree and retry Update.');
@@ -349,7 +352,7 @@ export async function fastForward(dir: string, ctx: JobContext, options: FastFor
       step('lfs');
       // Git LFS shows no progress when its output is not a terminal unless forced.
       const lfs = await loud(['lfs', 'fetch', 'origin', target], { GIT_LFS_FORCE_PROGRESS: '1' }, lfsProgressFilter(out));
-      if (lfs.code !== 0) throw fail('lfs', `Could not download the LFS files of the new commits: run Update again. Nothing changed.\n${redactRemote(tail(lfs.output))}`);
+      if (lfs.code !== 0) throw fail('lfs', 'Could not download LFS files; check LFS remote access and retry Update.');
     }
 
     await ensureUnchanged();
@@ -397,7 +400,7 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
   for (const target of targets) {
     ctx.line('step check');
     ctx.line(`${target.roles.join('/')} checkout: ${target.dir}`);
-    const outcome: RepoOutcome = { ...target, state: 'failed', from: await checkoutHead(target.dir, git), to: null,
+    const outcome: RepoOutcome = { ...target, state: 'failed', from: await checkoutHead(target.dir, git).catch(() => null), to: null,
       updateFrom: null, commits: 0, fetched: false, defaultBranch: null, error: null, step: null, pending: false, marker: null };
     repositories.push(outcome);
     try {
@@ -407,7 +410,7 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
         updateFrom: moved.from, commits: moved.commits, fetched: true, defaultBranch: moved.defaultBranch,
         pending: moved.pending || moved.before !== moved.to, marker: moved.marker });
     } catch (e) {
-      outcome.to = await checkoutHead(target.dir, git);
+      outcome.to = await checkoutHead(target.dir, git).catch(() => null);
       outcome.error = redactRemote((e as Error).message);
       outcome.step = e instanceof UpdateError ? e.step : 'check';
       if (e instanceof UpdateError) { outcome.fetched = e.fetched; outcome.defaultBranch = e.defaultBranch; }
@@ -416,27 +419,52 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
   }
 
   const work = repositories.filter(repo => repo.pending);
+  let coreDependencies: UpdateResult['coreDependencies'] = 'unchanged';
   let rebuilt: string[] = [], buildError: string | null = null;
   if (work.length) {
     if (repositories.some(repo => repo.state === 'failed')) {
-      buildError = 'Build deferred because a repository needs attention; resolve its problem and retry Update.';
+      coreDependencies = 'deferred';
+      buildError = 'Setup/build deferred because a repository needs attention; resolve its problem and retry Update.';
       ctx.line(buildError);
     } else {
-      ctx.line('step rebuild');
+      let stage: 'setup' | 'rebuild' = 'setup';
       try {
-        const pluginsOnly = await deps.coreHostCurrent();
-        rebuilt = [...(pluginsOnly ? [] : ['xrb-host']), ...await deps.rebuild(pluginsOnly, ctx)];
+        const core = work.find(repo => repo.role === 'core');
+        if (core) {
+          const changed = await readOnly(git)(['diff', '--name-only', core.updateFrom!, core.to!, '--',
+            'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc',
+            ':(glob)packages/*/package.json', ':(glob)tools/*/package.json',
+            ':(glob)packages/*/.npmrc', ':(glob)tools/*/.npmrc'], core.dir);
+          if (changed.code !== 0) throw new Error('Cannot inspect public core dependency changes');
+          if (changed.output.trim()) {
+            ctx.line('step setup');
+            await (deps.setupCore ?? setupUpdatedCore)(core.dir, ctx);
+            coreDependencies = 'prepared';
+          } else ctx.line('Core dependency inputs unchanged; no package install needed.');
+        }
+        stage = 'rebuild';
+        ctx.line('step rebuild');
+        if (deps.rebuild) {
+          const pluginsOnly = await deps.coreHostCurrent?.() ?? false;
+          ctx.line(`Native rebuild: ${pluginsOnly ? 'plugins only (host current)' : 'host and plugins'}.`);
+          rebuilt = [...(pluginsOnly ? [] : ['xrb-host']), ...await deps.rebuild(pluginsOnly, ctx)];
+        } else {
+          if (!deps.core) throw new Error('Core checkout required for native rebuild');
+          rebuilt = await rebuildUpdatedSources(deps.core, workspace, ctx);
+        }
         for (const repo of work) {
           if (repo.marker) await fs.rm(repo.marker, { force: true });
           repo.pending = false;
         }
       } catch (e) {
-        buildError = `Rebuild failed: ${redactRemote((e as Error).message)}; fix the build and retry Update.`;
+        if (stage === 'setup') coreDependencies = 'failed';
+        buildError = `${stage === 'setup' ? 'Core dependency setup' : 'Rebuild'} failed: ${redactRemote((e as Error).message)}; fix it and retry Update.`;
         ctx.line(buildError);
       }
     }
   }
-  const changed = repositories.some(repo => !!repo.from && !!repo.to && repo.from !== repo.to || repo.updateFrom && repo.updateFrom !== repo.to);
+  const changed = repositories.some(repo => (!!repo.from && !!repo.to && repo.from !== repo.to)
+    || (!!repo.updateFrom && repo.updateFrom !== repo.to));
   const restartRequired = !!changed;
   const lastLine = restartRequired
     ? 'Restart required: restart the panel to load the updated code; Update did not restart the panel.'
@@ -444,14 +472,18 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
   const descriptions = repositories.map(repo => {
     const label = repo.roles.map(role => role === 'core' ? 'Core' : 'Workspace').join('/');
     const range = `${repo.from ?? 'unknown'} → ${repo.to ?? 'unknown'}`;
-    return `${label}: ${range}; ${repo.state === 'failed' ? repo.error : repo.state === 'up-to-date'
+    return `${label}: ${range}; ${repo.state === 'failed' ? repo.error?.replace(/\.$/, '') : repo.state === 'up-to-date'
       ? `already up to date after fresh fetch of origin/${repo.defaultBranch}` : `fetched origin/${repo.defaultBranch}, ${repo.commits} commit(s) in update${repo.pending ? ', setup/build pending' : ''}`}.`;
   });
   const failed = !!buildError || repositories.some(repo => repo.state === 'failed');
-  const summary = [...descriptions, buildError ?? `Rebuilt: ${rebuilt.length ? rebuilt.join(', ') : 'nothing'}.`, lastLine].join(' ');
+  const setupSummary = `Core dependencies: ${coreDependencies}.`;
+  const buildSummary = buildError ?? `Rebuilt: ${rebuilt.length ? rebuilt.join(', ') : 'nothing'}.`;
+  const summary = [...descriptions, setupSummary, buildSummary, lastLine].join(' ');
   const result: UpdateResult = { state: failed ? 'failed' : repositories.some(repo => repo.state === 'updated') ? 'updated' : 'up-to-date',
-    repositories, rebuilt, restartRequired, lastLine, summary };
+    repositories, coreDependencies, rebuilt, restartRequired, lastLine, summary };
   for (const description of descriptions) ctx.line(description);
+  ctx.line(setupSummary);
+  ctx.line(buildSummary);
   ctx.line(lastLine);
   if (failed) throw new UpdateFailure(result);
   return result;

@@ -33,7 +33,7 @@ import { PluginConfigConflict, PluginConfigInvalid, readUserPluginConfigState, w
 import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, discoverProjectCatalog, containedPath, type PluginCatalog } from './extension-catalog.ts';
 import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
 import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
-import { rebuiltPluginNames, runUpdate, updateStatus, type UpdateDeps, type UpdateStatus } from './update.ts';
+import { runUpdate, updateStatus, type UpdateDeps, type UpdateStatus } from './update.ts';
 import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatus, type BuildTarget, type IdentityField, type PackagerDiscovery, type PackagerSetupStatus, type RoleSelection } from './packagers.ts';
 import { PackageList } from './packages.ts';
 import { discoverHandProviders, sameHandProvider, handRegistry, handProviderKey, type HandProviderKey } from './hand-providers.ts';
@@ -1923,15 +1923,6 @@ export class Panel {
         this.updateLast = await updateStatus(this.repo, this.workspace, this.updateDeps.git);
         sendJson(res, 202, jobSummary(this.startJob('update', null, 'update', ctx => runUpdate(this.workspace, ctx, {
           core: this.repo,
-          coreHostCurrent: async () => {
-            const core = await resolvedHostFreshness(this.repo, this.workspace, true);
-            return core.exists && !core.outdated;
-          },
-          rebuild: async (pluginsOnly, context) => {
-            const tools = await this.desktopSetup.deps.tools();
-            const freshness = await rebuildHost(this.repo, this.workspace, context, { cmake: tools.cmake ?? undefined, generator: tools.generator, pluginsOnly });
-            return rebuiltPluginNames(freshness.plugins);
-          },
           ...this.updateDeps,
         }))));
         return true;

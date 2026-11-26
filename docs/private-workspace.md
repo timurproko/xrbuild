@@ -19,7 +19,7 @@ never leave it.
   Each repository reports full before/after commits; already up to date requires a fresh successful fetch.
   A refusal/failure in one repository does not prevent the other attempt, but the overall job fails with both results.
   A shared core/workspace checkout is updated once. Rebuild stays build-only; Update never stashes or discards work.
-  The updater refuses every uncommitted
+  Setup and recovery details are below. The updater refuses every uncommitted
   tracked/staged/untracked change (including non-conflicting edits), detached HEAD and local-only commits.
   A removed or non-default upstream is not migrated automatically: preserve local work and safely switch to the
   advertised default branch with matching origin tracking, then retry. Never discard work to satisfy Update.
@@ -71,3 +71,45 @@ never leave it.
   primary buttons do not stretch by default, maintenance colors belong only to bulbs, and warning/error banners
   share geometry and typography.
   See `docs/desktop-setup.md`; actual administrative/native acceptance remains separately provisioned work.
+
+## Update and recovery
+
+Update uses `origin` explicitly, discovers its advertised default branch (not a hard-coded branch name or cached
+`origin/HEAD`), fetches that branch even with a narrow refspec, and fast-forwards to the captured fetched commit.
+Remote changes after that fetch are picked up on the next Update. Cached menu hints are not proof of remote
+currentness: only a successful fresh fetch can produce the job's already-up-to-date result.
+
+The checked-out branch must be the advertised default and track its matching origin branch. A stale local branch
+tracking a deleted upstream is an attention result, not success. Preserve local/unpublished work, safely select the
+reported default branch and configure its matching tracking branch, then retry. Update never switches branches,
+stashes changes, resets, forces refs or reconciles divergence on your behalf. Dirty tracked, staged, untracked and
+locally deleted files all block that repository, including non-conflicting edits.
+
+After pulling, Update runs these visible steps:
+
+- Workspace LFS: `git lfs fetch origin <captured-commit>` before checkout, honoring clone fetch exclusions. Core
+  requires LFS only if its fetched tree uses LFS. A failed download leaves that repository's HEAD unchanged.
+- Changed public dependency inputs: a fresh `node tools/panel-bootstrap/update-setup.mjs` runs the exact pinned pnpm
+  manager with `install --frozen-lockfile --ignore-scripts --ignore-pnpmfile`, disabled user/global npm config and a
+  sanitized environment. It validates the same public graph and permissions as shortcut setup; local `.npmrc`,
+  unsupported graphs, network/lock/manager failures require explicit recovery. Private JS packages are not installed.
+- Native builds: a fresh `node packages/control-panel/src/update-rebuild.ts --workspace=<selected-workspace>` loads
+  the fetched recipe, checks host freshness and runs the existing CMake configure/build Release path for plugins,
+  plus the host only when missing/outdated. Existing tool discovery is reused; no native prerequisites are silently
+  installed. No native tests are run by Update.
+
+The output retains each repository's full before/after commit, even after setup/build failure. Completed pulls are
+not rolled back. Pending markers under each repository's Git metadata cause the next Update to retry setup/build
+at an unchanged HEAD; markers clear only after that work succeeds. A refusal in either source defers builds that
+would consume unsafe local work, without undoing the other source's successful pull.
+
+Update does **not** restart the running panel. Whenever core HEAD changes, its last job-output line explicitly says
+**Restart required**, including when setup, rebuild or the workspace fails afterwards. Workspace source changes also
+conservatively require Restart so loaded plugin code is replaced. Choose the existing panel **Restart** action after
+resolving failures; browser reload alone does not reload the running server's modules.
+
+Older panels with the workspace-only Update implementation cannot install this fix by pressing their Update button:
+they never fetch core. For the first upgrade only, inspect and preserve core local work, manually fetch its remote
+default branch and fast-forward a safe matching local branch, then restart the panel (the shortcut can repair public
+app dependencies). If the old upstream was removed, safely select the new default first rather than repeatedly
+pulling the removed branch. Subsequent Update runs use the two-repository behavior above.

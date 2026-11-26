@@ -53,6 +53,7 @@ export const UPDATE_STEPS = Object.freeze([
   Object.freeze({id: 'fetch', title: 'Fetch', message: 'Discovering and fetching each origin default branch'}),
   Object.freeze({id: 'lfs', title: 'LFS', message: 'Downloading required LFS files'}),
   Object.freeze({id: 'pull', title: 'Pull', message: 'Fast-forwarding to the fetched commit'}),
+  Object.freeze({id: 'setup', title: 'Dependencies', message: 'Preparing pinned public core dependencies'}),
   Object.freeze({id: 'rebuild', title: 'Rebuild', message: 'Rebuilding'}),
 ]);
 

@@ -23,13 +23,13 @@ test('rebuild presentation has stable running, success and failure states',()=>{
 });
 
 test('update presentation follows its steps and reports Git refusals and the result',()=>{
-  assert.deepEqual(UPDATE_STEPS.map(step=>step.title),['Check','Fetch','LFS','Pull','Rebuild']);
+  assert.deepEqual(UPDATE_STEPS.map(step=>step.title),['Check','Fetch','LFS','Pull','Dependencies','Rebuild']);
   const start=rebuildPresentation({kind:'update',state:'running',lines:[]});
-  assert.equal(start.title,'Updating');assert.equal(start.step,'check');assert.equal(start.message,'Step 1 of 5, Check: Checking the core and the workspace…');assert.equal(start.viewJobDisabled,true);
+  assert.equal(start.title,'Updating');assert.equal(start.step,'check');assert.equal(start.message,'Step 1 of 6, Check: Checking the core and the workspace…');assert.equal(start.viewJobDisabled,true);
   const lfs=rebuildPresentation({id:7,kind:'update',state:'running',lines:['step check','step fetch','step lfs','Downloading LFS objects: 40% (2/5)']});
-  assert.equal(lfs.step,'lfs');assert.equal(lfs.message,'Step 3 of 5, LFS: Downloading required LFS files…');assert.match(lfs.output,/40% \(2\/5\)/);
+  assert.equal(lfs.step,'lfs');assert.equal(lfs.message,'Step 3 of 6, LFS: Downloading required LFS files…');assert.match(lfs.output,/40% \(2\/5\)/);
   const plugin=rebuildPresentation({id:7,kind:'update',state:'running',lines:['step rebuild','plugin tracker']});
-  assert.equal(plugin.message,'Step 5 of 5, Rebuild: Rebuilding tracker…');
+  assert.equal(plugin.message,'Step 6 of 6, Rebuild: Rebuilding tracker…');
   const refused=rebuildPresentation({id:7,kind:'update',state:'failed',error:'Pull: Local changes would be overwritten by the update: a.txt. Commit or stash them first, then run Update again. Nothing changed.',lines:['step check','step fetch','step lfs','step pull','error: Your local changes would be overwritten']});
   assert.equal(refused.title,'Update needs attention');assert.equal(refused.step,'pull');assert.match(refused.message,/a\.txt\. Commit or stash them first/);assert.match(refused.output,/would be overwritten/);assert.equal(refused.succeeded,false);
   const summary='Core: 1111111 → 2222222. Workspace: 3333333 → 4444444. Restart required; Update did not restart the panel.';
@@ -53,7 +53,7 @@ test('the behind hint and the update menu item read a status that never fetches'
   assert.doesNotMatch(app,/api\('POST', '\/api\/update'\)/,'only the explicit menu action starts an update');
   const [dialog,setup]=await Promise.all(['rebuild-dialog.js','desktop-setup.js'].map(file=>fs.readFile(path.join(ui,file),'utf8')));
   assert.match(dialog,/'\/api\/update', \{kind: 'update', state: 'running', lines: \[\]\}, options, 'Update', 'Update'\)/);
-  assert.match(setup,/action === 'Update' \? 'Install missing prerequisites, then update the workspace and rebuild\.'/);
+  assert.match(setup,/action === 'Update' \? 'Install missing prerequisites, then update core and workspace and rebuild\.'/);
   assert.match(setup,/data-desktop-build>\$\{action === 'Update' \? 'Update' : 'Rebuild'\}<\/button>/);
   // One action for both repositories: no text the person sees still says "Update workspace".
   for (const file of await fs.readdir(ui)) {

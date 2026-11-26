@@ -16,7 +16,7 @@
 
 ## 3. Resumable setup, build and activation reporting
 
-- [ ] 3.1 Prepare changed public core dependencies through the existing pinned frozen hook-disabled installer with streamed output; injected installer tests cover successful setup, frozen-lock/config/network failure and no private-package or native-tool installation.
-- [ ] 3.2 Keep per-repository pending work until setup and native rebuild finish, invoke the fetched rebuild recipe with the existing host-freshness policy and safely defer builds that would consume refused local work; tests cover core-only changes, workspace-only changes, failures and retry at unchanged HEAD.
-- [ ] 3.3 Add explicit final restart-required and not-restarted reporting for changed core or loaded workspace code, including partial failures; job/dialog/CLI tests distinguish updated disk files from the running process.
-- [ ] 3.4 Finish README and private-workspace documentation with actual install/build commands, retry behavior and the initial manual-update limitation of old panels; focused regression coverage demonstrates the stale-core and removed-upstream cases without accessing real checkouts.
+- [x] 3.1 Prepare changed public core dependencies through the existing pinned frozen hook-disabled installer with streamed output; injected installer tests cover successful setup, frozen-lock/config/network failure and no private-package or native-tool installation.
+- [x] 3.2 Keep per-repository pending work until setup and native rebuild finish, invoke the fetched rebuild recipe with the existing host-freshness policy and safely defer builds that would consume refused local work; tests cover core-only changes, workspace-only changes, failures and retry at unchanged HEAD.
+- [x] 3.3 Add explicit final restart-required and not-restarted reporting for changed core or loaded workspace code, including partial failures; job/dialog/CLI tests distinguish updated disk files from the running process.
+- [x] 3.4 Finish README and private-workspace documentation with actual install/build commands, retry behavior and the initial manual-update limitation of old panels; focused regression coverage demonstrates the stale-core and removed-upstream cases without accessing real checkouts.
