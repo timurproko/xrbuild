@@ -15,6 +15,9 @@
 <body class="hands-page">
   <header class="xrb-app-bar xrb-app-bar--wrap">
     <h1 class="xrb-brand">XR Build <button id="hands-menu-button" class="xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Hands</button></h1>
+    <span id="panel-chip" class="chip warn" data-maintenance="restart" hidden>restart available</span>
+    <span id="host-chip" class="chip" data-maintenance="rebuild" hidden>rebuild available</span>
+    <span id="update-chip" class="chip rebuild" data-maintenance="update" hidden>update available</span>
     <span class="spacer"></span>
     <div class="row" aria-label="Hands frame rates">
       <span class="chip" data-tooltip="Viewport render rate"><span id="hands-render-fps">—</span><small>render fps</small></span>
@@ -27,7 +30,7 @@
         <form id="hands-form" class="xrb-stack">
           <label class="xrb-field-label" for="hands-provider">Skeleton provider<select id="hands-provider" name="provider" aria-describedby="hands-availability" aria-label="Skeleton provider"></select></label>
           <p id="hands-availability" class="xrb-help" role="status" aria-live="polite"></p>
-          <p id="hands-session-status" class="xrb-help" role="status">Live view is idle. The selected provider runs when an app is launched; live viewing here is not available yet.</p>
+          <p id="hands-session-status" class="xrb-help" role="status">Not started.</p>
           <div id="hands-session-actions" class="xrb-button-row" hidden></div>
           <div class="xrb-button-row"><button id="hands-save" type="submit" disabled>Save source</button><button id="hands-reload" type="button">Reload</button></div>
           <p class="xrb-help">Source changes apply on next launch.</p>
@@ -61,8 +64,7 @@
     </section>
     <section class="xrb-card hands-panel" aria-label="Hand adjustments">
       <div id="hands-adjustments-root" class="xrb-sidebar-content xrb-stack">
-        <section class="xrb-control-group"><h2>Position and size</h2><p class="xrb-help">Adjustment controls are not available in this version.</p></section>
-        <section class="xrb-control-group"><h2>Appearance</h2><p class="xrb-help">Adjustment controls are not available in this version.</p></section>
+        <h2>Adjustments</h2><p class="xrb-help">Adjustment controls are unavailable in this version.</p>
       </div>
     </section>
   </main>

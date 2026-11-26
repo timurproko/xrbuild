@@ -1,14 +1,13 @@
 // Admission/lifetime only. SDK ingress owns hand adjustment, filtering and gestures.
-const vector = p => Array.isArray(p) && p.length === 3 && p.every(Number.isFinite);
+const items = (value, count, check) => Array.isArray(value) && value.length === count && Array.from(value).every(check);
+const vector = p => items(p, 3, Number.isFinite);
 export function validHandFrame(frame) {
-  return frame?.type === 2 && [1, 2].includes(frame.version) && Number.isFinite(frame.captureTimeMs) && Number.isFinite(frame.trackingHz) && frame.trackingHz >= 0 && frame.trackingHz <= 1000 &&
+  return !!(frame?.type === 2 && [1, 2].includes(frame.version) && Number.isSafeInteger(frame.seq) && frame.seq >= 0 && frame.seq <= 0xffffffff && Number.isFinite(frame.hostTimeMs) && Number.isFinite(frame.captureTimeMs) && Number.isFinite(frame.trackingHz) && frame.trackingHz >= 0 && frame.trackingHz <= 1000 &&
     frame.capabilities && ['pinch', 'grab', 'palm'].every(k => typeof frame.capabilities[k] === 'boolean') &&
-    Array.isArray(frame.hands) && frame.hands.length <= 2 && frame.hands.every(h => Number.isSafeInteger(h.id) && [-1, 0, 1].includes(h.handedness) &&
-      typeof h.grabbing === 'boolean' && Array.isArray(h.pinch) && h.pinch.length === 4 && h.pinch.every(v => typeof v === 'boolean') &&
-      Array.isArray(h.keypoints) && h.keypoints.length === 21 && h.keypoints.every(vector) &&
-      Array.isArray(h.scores) && h.scores.length === 21 && h.scores.every(v => Number.isFinite(v) && v >= 0 && v <= 1) &&
-      Array.isArray(h.pinchPositions) && h.pinchPositions.length === 4 && h.pinchPositions.every(vector) && vector(h.grabPosition) &&
-      Array.isArray(h.palm) && h.palm.length === 4 && h.palm.every(vector));
+    Array.isArray(frame.hands) && frame.hands.length <= 2 && new Set(Array.from(frame.hands, h => h?.id)).size === frame.hands.length && Array.from(frame.hands).every(h => h && Number.isSafeInteger(h.id) && [-1, 0, 1].includes(h.handedness) &&
+      typeof h.grabbing === 'boolean' && items(h.pinch, 4, v => typeof v === 'boolean') &&
+      items(h.keypoints, 21, vector) && items(h.scores, 21, v => Number.isFinite(v) && v >= 0 && v <= 1) &&
+      items(h.pinchPositions, 4, vector) && vector(h.grabPosition) && items(h.palm, 4, vector)));
 }
 export function createHandStream({ ingress, clear = () => {}, now = () => performance.now() }) {
   let closed = false, ready = false, epoch = null, sequence = -1, capture = -Infinity, accepted = 0, lastFrame = null, times = [];

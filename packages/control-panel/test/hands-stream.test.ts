@@ -28,5 +28,5 @@ test('Hands admission is profile-gated, epoch-fenced, ordered and reset on dispo
 });
 test('Hands admission rejects malformed/nonfinite decoded frames', () => {
   assert.ok(validHandFrame(empty()));
-  for (const frame of [null, {}, { ...empty(), captureTimeMs: NaN }, { ...empty(), trackingHz: Infinity }, { ...empty(), capabilities: null }, { ...empty(), hands: [{ id: 1 }] }]) assert.equal(!!validHandFrame(frame), false);
+  for (const frame of [null, {}, { ...empty(), captureTimeMs: NaN }, { ...empty(), trackingHz: Infinity }, { ...empty(), capabilities: null }, { ...empty(), hands: [{ id: 1 }] }, { ...empty(), hands: [null] }, { ...empty(), hands: Array(1) }]) assert.equal(!!validHandFrame(frame), false);
 });

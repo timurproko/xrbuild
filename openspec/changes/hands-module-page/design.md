@@ -2,7 +2,7 @@
 
 ## Context
 
-This **latest simplified revision supersedes both earlier plans**. There is only Hands. Keep the provider, shared hand view, post-processing selector mount, global adjustments and recorder/replay in Hands. Calibration is a separate module, delivered by the immediately following PR. Remove fixture and benchmark/comparison code. Retain browser hand-landmark and two-view fusion source, unwired from every product page, as the starting point for a future two-camera provider. Old page routes are removed, never redirected.
+This **latest simplified revision supersedes both earlier plans**. Hands is the sole hand-workspace page. Keep the provider, shared hand view, post-processing selector mount, global adjustments and recorder/replay in Hands. Calibration is a separate module, delivered by the immediately following PR. Remove fixture and benchmark/comparison code. Retain browser hand-landmark and two-view fusion source, unwired from every product page, as the starting point for a future two-camera provider. Old page routes are removed, never redirected.
 
 Partial shell work from the earlier approval is uncommitted. It is not a finished implementation of this revised scope; no feature code or user data has been deleted. PR 50 remains open at the last check. The following findings are source inspection, not hardware validation.
 
@@ -64,7 +64,7 @@ Only Record in the Hands tool area; no Calibration, Capture, Setup, Output, Poin
 | Native RGB-D transport, marker observation, depth point sampling | Kept only as genuine calibration dependencies | Extract minimal dependency closure; no hand model or general camera/depth laboratory UI |
 | Existing CSV and media/paired recording formats/storage/playback | Kept | Original coordinate/provenance semantics, no implicit migration or re-inference |
 | New selected-provider recording and real-hand drawing | Needs live provider | Requires actual session frames and explicit recording provenance; not today's camera recorder |
-| Generated fixture, scenarios, fixture tests/targets/counters | Removed, code included | Synthetic is only an installed ordinary provider |
+| Generated fixture, scenarios, fixture tests/targets/counters | Removed, code included | Native Synthetic remains an ordinary provider; its unchanged authored pose lives in C++, without the deleted browser JSON/generated header dependency |
 | Browser hand landmarks / inference workers | Retained source, unwired | No Hands/camera-source UI; starting point for a future provider, not active acquisition |
 | General surface inspection / old standalone viewer | Removed from product UI | Geometry needed by retained calibration/future two-camera code remains; no acquisition UI in Hands |
 | Two-view hand fusion algorithms | Retained source, unwired | Future provider starting point; no fusion or clock-qualification laboratory UI |

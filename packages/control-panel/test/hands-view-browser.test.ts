@@ -1,28 +1,42 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import test from 'node:test';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { createServer } from '../src/server.ts';
 import { freePort } from '../src/host-runner.ts';
 import { REPO } from '../src/env.ts';
 import { withBrowser, sleep } from './browser-fixture.ts';
 
-// Explicit integration fixture: caller supplies a separately prepared current public service workspace.
-test('checked Hands opens the real generated viewer without bridge/bootstrap/capture or a Retry wall', { skip: !process.env.XRB_TEST_BROWSER || !process.env.XRB_TEST_SERVICE_WORKSPACE, timeout: 60000 }, async t => {
-  const port = await freePort(), panel = createServer({ repo: REPO, workspace: process.env.XRB_TEST_SERVICE_WORKSPACE!, port });
+test('core Hands opens the real SDK scene without optional tools, generated data, capture or setup', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
+  const parent = process.env.XRB_TEST_ROOT ?? path.resolve(import.meta.dirname, '../../../.artifacts'); await fs.mkdir(parent, { recursive: true });
+  const workspace = await fs.mkdtemp(path.join(parent, 'hands-view-'));
+  await fs.writeFile(path.join(workspace, 'xrb-plugins.json'), JSON.stringify({ disabled: ['input-hands'], settings: {} }));
+  const port = await freePort(), panel = createServer({ repo: REPO, workspace, port });
   await new Promise<void>(resolve => panel.server.listen(port, '127.0.0.1', resolve));
-  t.after(() => panel.close());
-  const mutations: string[] = [];
-  panel.server.on('request', req => { if (!['GET', 'HEAD'].includes(req.method!)) mutations.push(req.method + ' ' + req.url); });
+  t.after(async () => { await panel.close(); await fs.rm(workspace, { recursive: true, force: true }); });
+  const mutations: string[] = []; panel.server.on('request', req => { if (!['GET', 'HEAD'].includes(req.method!)) mutations.push(req.method + ' ' + req.url); });
   await withBrowser(async ({ send, navigate, evaluate }) => {
-    await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.captureCalls=0;if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw new Error('Camera use forbidden in generated-view fixture')};` });
-    await navigate(`${panel.url}hands-diagnostics/`, `document.querySelector('#input')?.value==='synthetic' && !document.body?.classList.contains('workspace-pending')`);
-    await sleep(300);
-    assert.equal(await evaluate(`!!document.querySelector('.xrb-app-bar')`), true);
+    await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.captureCalls=0;if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw Error('Camera forbidden')};` });
+    await navigate(`${panel.url}hands/`, `document.querySelector('#hands-render-fps')?.textContent!=='—' && document.querySelector('#hands-recordings-root')?.textContent.includes('not installed')`);
+    assert.equal(await evaluate(`document.title`), 'XR Build · Hands');
     assert.equal(await evaluate(`!!document.querySelector('canvas')`), true);
-    assert.equal(await evaluate(`!!document.querySelector('.tool-start-card,dialog[open]')`), false);
-    assert.equal(await evaluate(`captureCalls`), 0);
-    assert.ok(!mutations.some(route=>route.includes('/__handtracking/bridge')));
-    assert.ok(!mutations.some(route=>route.includes('/setup-bundled')));
-    assert.equal(panel.panel.jobs.list().length, 0);
-    assert.equal(panel.panel.runner.busy, false);
+    assert.equal(await evaluate(`document.querySelector('#hands-view-error').hidden`), true);
+    assert.equal(await evaluate(`document.querySelector('#hands-tracking-fps').textContent`), '—');
+    assert.equal(await evaluate(`document.querySelectorAll('[role="tab"]').length`), 1);
+    assert.equal(await evaluate(`document.querySelector('#hands-recording-actions').hidden`), true);
+    await evaluate(`document.querySelector('#hands-view-reset').click();document.querySelector('#hands-recordings-tab').click()`); await sleep(100);
+    const fullscreen = await evaluate(`(()=>{const r=document.querySelector('#hands-fullscreen').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...fullscreen });
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...fullscreen });
+    await sleep(100);
+    const fullscreenState = await evaluate(`({active:document.fullscreenElement?.id,error:document.querySelector('#hands-view-error').textContent,errorHidden:document.querySelector('#hands-view-error').hidden})`);
+    // Headless Windows may deny the native permission even for trusted input. It must be visible, not swallowed.
+    if (fullscreenState.active) { assert.equal(fullscreenState.active, 'hands-viewport'); await evaluate('document.exitFullscreen()'); }
+    else { assert.equal(fullscreenState.error, 'not granted'); assert.equal(fullscreenState.errorHidden, false); }
+    assert.equal(await evaluate(`captureCalls`), 0); assert.deepEqual(mutations, []);
+    assert.equal(panel.panel.jobs.list().length, 0); assert.equal(panel.panel.runner.busy, false);
+    await send('Emulation.setDeviceMetricsOverride', { width: 380, height: 800, deviceScaleFactor: 1, mobile: false });
+    assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
   });
+  await assert.rejects(fs.stat(path.join(workspace, 'config/hands/profile.json')), /ENOENT/);
 });

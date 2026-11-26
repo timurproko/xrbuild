@@ -45,7 +45,7 @@ export function createProviderRecording({ producer, format, onComplete = () => {
 
 /** Live PR supplies producer + format {validate(document), replay(document,{view}) -> disposer}. */
 export function mountProviderRecorder({ actions, status, view, restoreProfile = () => {} }) {
-  let capture = null, producer = null, format = null, documentFormat = null, document = null, saved = true, stopReplay = null, disposed = false, disposeLifecycle = null;
+  let capture = null, producer = null, format = null, documentFormat = null, document = null, saved = true, stopReplay = null, replayBusy = false, disposed = false, disposeLifecycle = null;
   const events = new AbortController(), signal = events.signal;
   actions.innerHTML = '<button type="button" data-record hidden>Start recording</button><button type="button" data-save hidden>Export</button><button type="button" data-replay hidden>Replay</button><button type="button" data-import hidden>Import hand session</button><input type="file" data-file accept=".xrbhands,.json" hidden>';
   const $ = selector => actions.querySelector(selector);
@@ -55,6 +55,7 @@ export function mountProviderRecorder({ actions, status, view, restoreProfile = 
     const available = !!producer?.recordingSource();
     $('[data-record]').hidden = !available && !capture?.active; $('[data-record]').textContent = capture?.active ? 'Stop recording' : 'Start recording';
     $('[data-save]').hidden = !document || !!capture?.active; $('[data-replay]').hidden = !document || !!capture?.active; $('[data-replay]').textContent = stopReplay ? 'Stop replay' : 'Replay'; $('[data-import]').hidden = !format || !!capture?.active;
+    $('[data-record]').disabled = $('[data-replay]').disabled = $('[data-import]').disabled = replayBusy;
     actions.hidden = !available && !document && !format;
   }
   function complete(value, reason) { if (disposed) return; document = value; documentFormat = format; saved = !value; say(reason); refresh(); }
@@ -69,16 +70,16 @@ export function mountProviderRecorder({ actions, status, view, restoreProfile = 
     }
     say('Recording needs a live hand session.'); refresh();
   }
-  $('[data-record]').addEventListener('click', () => { try { if (capture.active) capture.stop(); else { if (document && !saved) throw new Error('Export the previous recording first.'); endReplay(); capture.start(); saved = false; say('Recording.'); } refresh(); } catch (error) { say(error.message); } }, { signal });
+  $('[data-record]').addEventListener('click', () => { try { if (capture.active) capture.stop(); else { if (document && !saved && !confirm('Replace the in-memory recording? Make sure its export is saved first.')) return; endReplay(); capture.start(); saved = false; say('Recording.'); } refresh(); } catch (error) { say(error.message); } }, { signal });
   $('[data-save]').addEventListener('click', () => {
     if (!document) return;
-    try { documentFormat.validate(document); const url = URL.createObjectURL(new Blob([JSON.stringify(document)], { type: 'application/json' })), link = actions.ownerDocument.createElement('a'); link.href = url; link.download = 'hands-session.xrbhands'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0); saved = true; }
+    try { documentFormat.validate(document); const url = URL.createObjectURL(new Blob([JSON.stringify(document)], { type: 'application/json' })), link = actions.ownerDocument.createElement('a'); link.href = url; link.download = 'hands-session.xrbhands'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0); say('Download started. Keep the saved export before leaving.'); }
     catch (error) { say(error.message); }
   }, { signal });
   $('[data-import]').addEventListener('click', () => $('[data-file]').click(), { signal });
   $('[data-file]').addEventListener('change', async () => {
     const file = $('[data-file]').files[0]; $('[data-file]').value = ''; if (!file) return;
-    try { if (capture?.active) throw new Error('Stop recording before import.'); if (document && !saved) throw new Error('Export the previous recording first.'); if (file.size > RECORDING_LIMITS.bytes) throw new Error('Recording exceeds 16 MiB.'); const next = JSON.parse(await file.text()); format.validate(next); if (disposed) return; document = next; documentFormat = format; saved = true; say('Hand session loaded.'); refresh(); }
+    try { if (capture?.active) throw new Error('Stop recording before import.'); if (document && !saved && !confirm('Replace the in-memory recording? Make sure its export is saved first.')) return; if (file.size > RECORDING_LIMITS.bytes) throw new Error('Recording exceeds 16 MiB.'); const next = JSON.parse(await file.text()); format.validate(next); if (disposed) return; document = next; documentFormat = format; saved = true; say('Hand session loaded.'); refresh(); }
     catch (error) { say(error.message); }
   }, { signal });
   $('[data-replay]').addEventListener('click', async () => {
@@ -89,14 +90,17 @@ export function mountProviderRecorder({ actions, status, view, restoreProfile = 
       if (typeof documentFormat?.replay !== 'function') throw new Error('Replay adapter is unavailable.');
       documentFormat.validate(document);
       if (!view) throw new Error('3D view is unavailable.');
+      replayBusy = true; refresh();
       const replayView = Object.create(view);
+      replayView.setProfile = (value, options) => view.setProfile(value, { ...options, mode: 'replay' });
       replayView.beginSession = options => view.beginSession({ ...options, mode: 'replay' });
       replayView.clearSession = () => { view.clearSession(); void restoreProfile(); };
       const stop = await documentFormat.replay(document, { view: replayView }); if (disposed) { stop?.(); return; }
       stopReplay = stop; say('Recorded hand session.'); refresh();
-    } catch (error) { say(error.message); }
+    } catch (error) { if (view?.replaying && !stopReplay) { view.clearSession(); void restoreProfile(); } say(error.message); }
+    finally { replayBusy = false; refresh(); }
   }, { signal });
   addEventListener('beforeunload', event => { if (!saved || capture?.active) { event.preventDefault(); event.returnValue = ''; } }, { signal });
   connect();
-  return { connect, dispose() { if (disposed) return; disposed = true; events.abort(); stopReplay?.(); capture?.dispose(); disposeLifecycle?.(); actions.replaceChildren(); } };
+  return { connect, get replaying() { return replayBusy || !!stopReplay; }, dispose() { if (disposed) return; disposed = true; events.abort(); stopReplay?.(); capture?.dispose(); disposeLifecycle?.(); actions.replaceChildren(); } };
 }

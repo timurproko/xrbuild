@@ -8,12 +8,12 @@ export function mountHandsTools({ root, view }) {
     <div data-list class="xrb-stack"></div>
     <section data-playback class="xrb-stack" hidden>
       <p data-label class="xrb-help"></p>
-      <label data-track-label hidden>Stream<select data-track aria-label="Recorded stream"></select></label>
+      <label data-track-label hidden>Stream<select data-track name="recording-stream" aria-label="Recorded stream"></select></label>
       <div class="xrb-button-row"><button type="button" data-play>Play</button><button type="button" data-rewind>Rewind</button><button type="button" data-export>Export</button><button type="button" data-close>Close</button></div>
       <input type="range" class="xrb-range" data-seek min="0" value="0" step="1" aria-label="Recorded frame">
-      <label>Speed<select data-speed><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label>
+      <label>Speed<select data-speed name="recording-speed"><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label>
       <div data-media class="xrb-media-stage" hidden><canvas data-image aria-label="Recorded pixels"></canvas></div>
-      <label data-plane-label hidden>Pixels<select data-plane><option value="rgb">RGB</option><option value="depth">Saved depth</option></select></label>
+      <label data-plane-label hidden>Pixels<select data-plane name="recording-plane"><option value="rgb">RGB</option><option value="depth">Saved depth</option></select></label>
       <p data-frame class="xrb-help"></p>
     </section>
     <p data-error class="field-error" role="status" hidden></p>
@@ -62,6 +62,7 @@ export function mountHandsTools({ root, view }) {
     stop(); if (view?.active) throw new Error('Stop live hands before replay.');
     const owner = ++generation; pending = null;
     const next = await openRecordingArchive(file); if (disposed || owner !== generation) return;
+    for (const url of urls) URL.revokeObjectURL(url); urls.clear();
     archive = next; fileName = name; track = index = 0; error('');
     $('[data-track]').replaceChildren(...archive.tracks.map((t, i) => new Option(t.label, String(i))));
     $('[data-track-label]').hidden = archive.tracks.length < 2; $('[data-playback]').hidden = false;
@@ -94,8 +95,8 @@ export function mountHandsTools({ root, view }) {
   $('[data-seek]').addEventListener('input', () => { stop(); void show(Number($('[data-seek]').value)); }, { signal });
   $('[data-track]').addEventListener('change', () => { stop(); generation++; track = Number($('[data-track]').value); $('[data-seek]').max = String(archive.tracks[track].times.length - 1); void show(0); }, { signal });
   $('[data-plane]').addEventListener('change', () => { void show(index); }, { signal });
-  $('[data-close]').addEventListener('click', () => { stop(); generation++; archive = null; pending = null; $('[data-playback]').hidden = true; view?.clearLegacy(); }, { signal });
-  $('[data-export]').addEventListener('click', () => { if (!archive) return; const url = URL.createObjectURL(archive.original), a = document.createElement('a'); urls.add(url); a.href = url; a.download = fileName; a.click(); }, { signal });
+  $('[data-close]').addEventListener('click', () => { stop(); generation++; archive = null; pending = null; for (const url of urls) URL.revokeObjectURL(url); urls.clear(); $('[data-playback]').hidden = true; view?.clearLegacy(); }, { signal });
+  $('[data-export]').addEventListener('click', () => { if (!archive) return; for (const previous of urls) URL.revokeObjectURL(previous); urls.clear(); const url = URL.createObjectURL(archive.original), a = document.createElement('a'); urls.add(url); a.href = url; a.download = fileName; a.click(); }, { signal });
   void list().catch(e => { if (!disposed) error(e.message); });
   return { dispose() { disposed = true; generation++; pending = null; stop(); events.abort(); for (const url of urls) URL.revokeObjectURL(url); root.replaceChildren(); view?.clearLegacy(); } };
 }

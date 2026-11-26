@@ -29,10 +29,10 @@ Approved scope: Hands with Record only; Calibration extraction is the immediatel
 
 ## 5. Obsolete-code removal and isolated acceptance
 
-- [ ] 5.1 Delete fixture/scenario/test/target and benchmark/comparison/model-rerun UI/code/tests/build references; verify production imports/builds no longer reference them while retained calibration/future-provider algorithms have no page wiring.
-- [ ] 5.2 Keep optional provider registration and recording/calibration prerequisites without old page entry points; verify missing optional tools leaves core usable with a concise reason and no install/startup wall.
-- [ ] 5.3 Preserve user-state paths/bytes on navigation/source/profile writes; verify isolated pre-seeded calibration/preferences/recordings/exports/caches survive without migration/deletion or project writes.
-- [ ] 5.4 Capture implemented Hands/Record and optional-unavailable states in an isolated default-size browser, record dimensions/targeted checks in the task output folder and stop owned processes before handoff.
+- [x] 5.1 Delete fixture/scenario/test/target and benchmark/comparison/model-rerun UI/code/tests/build references; verify production imports/builds no longer reference them while retained calibration/future-provider algorithms have no page wiring.
+- [x] 5.2 Keep optional provider registration and recording/calibration prerequisites without old page entry points; verify missing optional tools leaves core usable with a concise reason and no install/startup wall.
+- [x] 5.3 Preserve user-state paths/bytes on navigation/source/profile writes; verify isolated pre-seeded calibration/preferences/recordings/exports/caches survive without migration/deletion or project writes.
+- [x] 5.4 Capture implemented Hands/Record and optional-unavailable states in an isolated default-size browser, record dimensions/targeted checks in the task output folder and stop owned processes before handoff.
 
 ## Workflow follow-up
 

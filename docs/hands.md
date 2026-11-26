@@ -20,6 +20,11 @@ unwired from product pages, as source for a future provider. No such provider is
 ## Recording integration
 
 The page exports `handsPage` from `ui/hands.js`: `view`, `snapshot`, `request`, and `recorder`.
+`snapshot` is the editor's revision-bound base, not the running session's profile authority. While `view.active`
+the session component owns ordered SDK profile updates; saved-file polling changes only idle preview.
+`view.profile` returns a cloned validated applied profile. Start must reject `recorder.replaying` (including async
+replay setup). Never derive recording provenance from unsaved controls or acknowledge a profile merely reaching disk.
+
 The live-session component calls `handsPage.recorder.connect({ producer, format })`:
 
 - `producer.recordingSource()` returns the selected source/session/epoch and validated portable profile snapshot, or null when idle.
@@ -32,11 +37,12 @@ The agreed format is `kind: xrbuild-hand-session`, version 1, raw `panel-metres`
 clock `windows-qpc-ms`, source/session/epoch provenance and a frozen portable `profile`.
 `samples` contain original sequence/capture/publication times and base64 unchanged native HANDS v2 packets.
 Caps are 16 MiB encoded, 10,000 samples and 120 seconds; gaps stay gaps. Recording stops visibly on a cap or session retirement.
-New captures remain in memory until explicit Export (`.xrbhands`); leaving warns about unsaved data.
+New captures remain in memory with explicit Export (`.xrbhands`). Navigation warnings persist after download
+initiation, which cannot prove durability; replacing that buffer requires confirmation. Imported files already exist on disk.
 No control claims to record before the compatible producer/validator arrives in the live-session change.
 
 Replay uses the recorded profile once, not the current live profile plus the recorded profile.
-The provided replay view wraps `beginSession` with `mode: replay`; current-profile polling leaves that snapshot alone.
+The replay view wraps `setProfile` and `beginSession` with `mode: replay`; current-profile polling leaves that snapshot alone.
 Stopping replay restores the current saved profile. Live and replay cannot concurrently feed the view.
 Legacy CSV/RGB/RGB-D/paired files use their unchanged readers and original spaces, not the provider-stream schema.
 

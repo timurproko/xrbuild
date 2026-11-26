@@ -26,12 +26,16 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   function clearHands() { currentHands = []; sceneHands = []; interaction.update([], 1); visual.update([], panel); }
   const stream = createHandStream({ ingress, clear: clearHands });
   function clearLegacy() { for (const object of [...legacy.children]) { object.geometry.dispose(); object.material.dispose(); legacy.remove(object); } }
-  async function setProfile(value) {
+  async function setProfile(value, { isCurrent = () => true, mode = 'live' } = {}) {
+    const allowed = () => mode === 'replay' ? !stream.active || recordedSession : !recordedSession;
+    const guard = () => { if (!allowed()) throw new Error('Stop the current hand session before switching live/replay.'); };
+    guard();
     const request = ++profileRequest;
     // Reuse the delivered SDK contract; never duplicate an adjustment schema/transform in the panel.
     const api = await import('/sdk/hand-profile.js');
     const next = api.handProfile(value);
-    if (closed || request !== profileRequest) return false;
+    if (closed || request !== profileRequest || !isCurrent()) return false;
+    guard();
     if (!('profile' in ingress) || typeof visual.applyAppearance !== 'function') throw new Error('Rebuild the SDK to apply hand adjustments.');
     if (profile && !api.sameHandGeometry(profile, next)) { ingress.reset(performance.now()); clearHands(); }
     ingress.profile = next; visual.applyAppearance(next.appearance); profile = next; stream.setReady(true); return true;
@@ -57,17 +61,18 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     sceneHands = currentHands.map(hand => toSceneHand(hand, panel));
     interaction.update(sceneHands, 1); visual.update(currentHands, panel);
     renderer.render(scene, camera); ticks++;
-    if (now - start >= 1000) { onMetrics({ renderFps: ticks * 1000 / (now - start), ...stream.metrics() }); ticks = 0; start = now; }
+    if (now - start >= 1000) { onMetrics({ renderFps: ticks * 1000 / (now - start), ...stream.metrics(), ...(recordedSession ? { trackingFps: null } : {}) }); ticks = 0; start = now; }
     frameId = requestAnimationFrame(render);
   }
   frameId = requestAnimationFrame(render);
   return {
     setProfile,
-    beginSession(options) { clearLegacy(); const accepted = stream.beginSession(options); if (accepted) { recordedSession = options.mode === 'replay'; onStatus({ phase: recordedSession ? 'replay' : 'running', hands: 0 }); } return accepted; },
+    beginSession(options) { if (stream.active && recordedSession !== (options.mode === 'replay')) return false; const accepted = stream.beginSession(options); if (accepted) { clearLegacy(); recordedSession = options.mode === 'replay'; onStatus({ phase: recordedSession ? 'replay' : 'running', hands: 0 }); } return accepted; },
     pushFrame(value) { const accepted = stream.pushFrame(value); if (accepted) onStatus({ phase: recordedSession ? 'replay' : 'running', hands: value.frame.hands.length }); return accepted; },
     clearSession() { stream.clearSession(); recordedSession = false; onStatus({ phase: 'idle', hands: null }); },
     get replaying() { return recordedSession; },
     get active() { return stream.active; },
+    get profile() { return profile ? structuredClone(profile) : null; },
     get currentHands() { return currentHands; },
     get sceneHands() { return sceneHands; },
     get interaction() { return interaction; },
@@ -81,7 +86,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
       }
       onStatus({ phase: 'replay', hands: frame.hands.length, space: frame.space });
     },
-    clearLegacy() { clearLegacy(); onStatus({ phase: 'idle', hands: null }); },
+    clearLegacy() { clearLegacy(); if (!stream.active) onStatus({ phase: 'idle', hands: null }); },
     resetView,
     setViewOptions(options) { grid.visible = options.includes('grid'); axes.visible = options.includes('axes'); },
     dispose() {
