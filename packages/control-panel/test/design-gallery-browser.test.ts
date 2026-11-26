@@ -87,7 +87,7 @@ test('registered tool navigation discovers the full Dev menu and retains links w
     await until(evaluate,`!!document.querySelector('#discovery-menu [data-navigation="design-system"]')`);
     assert.equal(await evaluate(`document.querySelector('#discovery-menu [data-navigation="design-system"]').previousElementSibling.dataset.navigation`),'settings');
     assert.equal(await evaluate(`document.querySelector('#discovery-menu [data-navigation="design-system"]').nextElementSibling.getAttribute('role')`),'separator');
-    assert.equal(await evaluate(`document.querySelector('#discovery-menu').lastElementChild.dataset.navigation`),'rebuild');
+    assert.equal(await evaluate(`document.querySelector('#discovery-menu').lastElementChild.dataset.navigation`),'update');
     await evaluate(`window.__disposeTool()`);
     assert.equal(await evaluate(`document.querySelector('#discovery-menu').children.length`),0);
     await evaluate(`(async()=>{
@@ -97,7 +97,7 @@ test('registered tool navigation discovers the full Dev menu and retains links w
       window.__disposeTool=mountToolNavigation(button,document.querySelector('#discovery-menu'),{origin:location.origin,tools:[],current:'projects'});
       window.fetch=original;
     })()`);
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('#discovery-menu [data-navigation]')].map(item=>item.dataset.navigation)`),['projects','plugins','settings','restart','rebuild']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('#discovery-menu [data-navigation]')].map(item=>item.dataset.navigation)`),['projects','plugins','settings','restart','rebuild','update']);
     await evaluate(`window.__disposeTool()`);
   });
   assert.deepEqual(f.apiRequests.filter(request=>request!=='GET /api/navigation'),[]);
@@ -209,7 +209,7 @@ test('Design system offers dependency cases with a clean dimmed background and s
     await navigate(f.url,`!!document.querySelector('#panel-menu [data-navigation="design-system"]')`);
     assert.equal(await evaluate(`document.querySelector('#design-system-open').previousElementSibling.dataset.navigation`),'settings');
     assert.equal(await evaluate(`document.querySelector('#design-system-open').nextElementSibling.getAttribute('role')`),'separator');
-    assert.equal(await evaluate(`document.querySelector('#panel-menu').lastElementChild.dataset.navigation`),'rebuild');
+    assert.equal(await evaluate(`document.querySelector('#panel-menu').lastElementChild.dataset.navigation`),'update');
     await evaluate(`document.querySelector('#panel-menu-button').click();document.querySelector('#panel-menu [data-navigation="design-system"]').click()`);
     await until(evaluate,frameReady);
     f.apiRequests.length=0;

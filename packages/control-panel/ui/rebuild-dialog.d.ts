@@ -1,11 +1,15 @@
 export interface RebuildJob {
-  id:number;
+  id?:number;
+  kind?:string;
+  step?:string|null;
+  result?:{state?:string;summary?:string;restartRequired?:boolean}|null;
   state:'running'|'done'|'failed';
   error?:string|null;
   lines?:string[];
 }
 export interface RebuildPresentation {
   state:'running'|'done'|'failed';
+  step?:'check'|'fetch'|'lfs'|'pull'|'rebuild';
   title:string;
   message:string;
   output:string;
@@ -24,4 +28,7 @@ export interface RebuildProgressController {
 export const REBUILD_AUTOCLOSE_KEY:string;
 export function rebuildPresentation(job:RebuildJob|null,error?:string):RebuildPresentation;
 export function rebuildProgressDialog(options?:{document?:Document;storage?:Storage|null;container?:HTMLElement;idPrefix?:string;onViewJob?:(job:RebuildJob)=>void}):RebuildProgressController;
-export function rebuildHostInPlace(origin?:string,options?:{onJob?:(job:RebuildJob)=>void;onViewJob?:(job:RebuildJob)=>void;onComplete?:(job:RebuildJob)=>void}):Promise<RebuildJob|null>;
+export interface JobInPlaceOptions {onJob?:(job:RebuildJob)=>void;onViewJob?:(job:RebuildJob)=>void;onComplete?:(job:RebuildJob)=>void}
+export const UPDATE_STEPS:readonly Readonly<{id:'check'|'fetch'|'lfs'|'pull'|'rebuild';title:string;message:string}>[];
+export function rebuildHostInPlace(origin?:string,options?:JobInPlaceOptions):Promise<RebuildJob|null>;
+export function updateWorkspaceInPlace(origin?:string,options?:JobInPlaceOptions):Promise<RebuildJob|null>;

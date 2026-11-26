@@ -34,7 +34,7 @@ export function desktopChecklistHtml(status) {
   return `<ol class="xrb-setup-list">${steps.map(step => rowAction(step) === 'toolchain' ? step === tools[0] ? buildTools() : '' : check(step)).join('')}</ol>`;
 }
 
-export async function desktopSetupBeforeRebuild(origin, {progress, onJob, document: doc = globalThis.document} = {}) {
+export async function desktopSetupBeforeRebuild(origin, {progress, onJob, document: doc = globalThis.document, action = 'Rebuild'} = {}) {
   const url = new URL(origin);
   if (url.protocol !== 'http:' || !['127.0.0.1','localhost'].includes(url.hostname) || !url.port || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('Invalid local desktop setup origin');
   const request = async (route, body) => {
@@ -66,7 +66,7 @@ export async function desktopSetupBeforeRebuild(origin, {progress, onJob, docume
     dialog.dataset.desktopSetup = '';
     dialog.setAttribute('aria-labelledby', 'desktop-setup-title');
     dialog.setAttribute('aria-describedby', 'desktop-setup-message');
-    dialog.innerHTML = `<div class="xrb-stack"><header class="xrb-progress-status xrb-setup-dialog-header"><span class="xrb-progress-status-icon" aria-hidden="true">${iconSvg('settings')}</span><div><h3 id="desktop-setup-title">Desktop setup</h3><p id="desktop-setup-message" class="muted">Install missing prerequisites, then rebuild the desktop host.</p></div></header><div data-desktop-steps></div><p class="xrb-help field-error" data-desktop-error role="alert" hidden></p><div class="row xrb-dialog-actions"><button type="button" class="action-button" data-desktop-refresh>Refresh</button><span class="spacer"></span><button type="button" class="action-button" data-desktop-close>Close</button><button type="button" class="action-button primary" data-desktop-build>Rebuild</button></div></div>`;
+    dialog.innerHTML = `<div class="xrb-stack"><header class="xrb-progress-status xrb-setup-dialog-header"><span class="xrb-progress-status-icon" aria-hidden="true">${iconSvg('settings')}</span><div><h3 id="desktop-setup-title">Desktop setup</h3><p id="desktop-setup-message" class="muted">${action === 'Update' ? 'Install missing prerequisites, then update the workspace and rebuild.' : 'Install missing prerequisites, then rebuild the desktop host.'}</p></div></header><div data-desktop-steps></div><p class="xrb-help field-error" data-desktop-error role="alert" hidden></p><div class="row xrb-dialog-actions"><button type="button" class="action-button" data-desktop-refresh>Refresh</button><span class="spacer"></span><button type="button" class="action-button" data-desktop-close>Close</button><button type="button" class="action-button primary" data-desktop-build>${action === 'Update' ? 'Update' : 'Rebuild'}</button></div></div>`;
     doc.body.append(dialog);
     let latest = status, working = false, checking = false, ended = false, lastJob = null;
     const steps = dialog.querySelector('[data-desktop-steps]'), error = dialog.querySelector('[data-desktop-error]');

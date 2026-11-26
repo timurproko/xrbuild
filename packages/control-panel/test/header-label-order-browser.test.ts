@@ -38,7 +38,7 @@ test('panel and Hands labels retain menu order, visible placement and node ident
       await navigate(base+page, `typeof refreshLabels==='function'`);
       for (const [restart,rebuild] of states) {
         await evaluate(`refreshLabels(${restart},${rebuild})`);
-        const result = await evaluate(`(()=>{const h=document.querySelector('.xrb-app-bar'),nodes=[...h.querySelectorAll('[data-maintenance]')],shown=nodes.filter(n=>!n.hidden),brand=h.querySelector('.xrb-brand').getBoundingClientRect();return {order:nodes.map(n=>n.dataset.maintenance),shown:shown.map(n=>n.dataset.maintenance),left:shown.map(n=>n.getBoundingClientRect().left),gap:shown.length?shown[0].getBoundingClientRect().left-brand.right:null,expected:parseFloat(getComputedStyle(h).columnGap),identity:nodes.every((n,i)=>n===originalLabels[i]),menu:[...document.querySelectorAll('#panel-menu [data-navigation]')].filter(n=>['restart','rebuild'].includes(n.dataset.navigation)).map(n=>n.dataset.navigation),dots:[!document.querySelector('#panel-restart-dot').hidden,!document.querySelector('#host-rebuild-dot').hidden],captions:shown.map(n=>n.textContent),classes:shown.map(n=>n.className)};})()`);
+        const result = await evaluate(`(()=>{const h=document.querySelector('.xrb-app-bar'),nodes=[...h.querySelectorAll('[data-maintenance]')],shown=nodes.filter(n=>!n.hidden),brand=h.querySelector('.xrb-brand').getBoundingClientRect();return {order:nodes.map(n=>n.dataset.maintenance),shown:shown.map(n=>n.dataset.maintenance),left:shown.map(n=>n.getBoundingClientRect().left),gap:shown.length?shown[0].getBoundingClientRect().left-brand.right:null,expected:parseFloat(getComputedStyle(h).columnGap),identity:nodes.every((n,i)=>n===originalLabels[i]),menu:[...document.querySelectorAll('#panel-menu [data-navigation]')].filter(n=>nodes.some(label=>label.dataset.maintenance===n.dataset.navigation)).map(n=>n.dataset.navigation),dots:[!document.querySelector('#panel-restart-dot').hidden,!document.querySelector('#host-rebuild-dot').hidden],captions:shown.map(n=>n.textContent),classes:shown.map(n=>n.className)};})()`);
         assert.deepEqual(result.order,result.menu);assert.deepEqual(result.shown,visibleOrder(restart,rebuild));assert.equal(result.identity,true);
         assert.deepEqual(result.dots,[restart,rebuild]);
         if (result.left.length===2) assert.ok(result.left[0]<result.left[1]);
@@ -47,7 +47,7 @@ test('panel and Hands labels retain menu order, visible placement and node ident
         assert.deepEqual(result.classes,[restart?'chip warn':null,rebuild?'chip rebuild':null].filter(Boolean));
       }
       await evaluate(`refreshLabels(true,true);document.querySelector('#host-chip').before(document.querySelector('#panel-chip'));refreshLabels(true,true);document.querySelector('#panel-chip').click();document.querySelector('#host-chip').click()`);
-      assert.deepEqual(await evaluate(`[...document.querySelectorAll('.xrb-app-bar [data-maintenance]')].map(n=>n.dataset.maintenance)`),['restart','rebuild']);
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('.xrb-app-bar [data-maintenance]')].map(n=>n.dataset.maintenance)`),page==='/panel'?['restart','rebuild','update']:['restart','rebuild']);
       assert.equal(await evaluate('actions'),0,'ordering/status labels never invoke maintenance');
     }
   });
