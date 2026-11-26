@@ -30,7 +30,7 @@ The maintainer integration decision accepts these scenarios:
     "`GET /api/update` returns the core and workspace status and whether an update runs; `POST /api/update` starts job kind `update`.",
     "Remote URL credentials are redacted from the update's job output."
   ],
-  "archiveDigest": "bfa7fe72cff47d488669db1adb2d1dfc923c626d7c1a08ad797ff628f6e4d4db",
+  "archiveDigest": "d0dfbab802a43b0648e00db9b2667d25cb4a5191d10720109a38b66930efce03",
   "specDigest": "85f14aa3d4948b9d1ef07c2f0bffd7187dd1ce0a24de61a52c986c2319d63e6b",
   "tasksDigest": "b0115ee1023fd1104d1bc375a4b1844d17a7c86c5a420915efcf1b9211169dbe",
   "evidenceDigest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
