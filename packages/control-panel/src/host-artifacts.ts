@@ -15,6 +15,7 @@ export function hostPaths(repo: string) {
   return { hostDir, buildDir, releaseDir: path.join(buildDir, 'Release'), exe: path.join(buildDir, 'Release', 'xrb-host.exe'),
     sources: ['src', 'CMakeLists.txt', 'tests', 'testpages'].map(name => path.join(hostDir, name)).concat([
       path.join(repo, 'native/plugin-sdk/include'), path.join(repo, 'native/plugin-sdk/tests'), path.join(repo, 'tools/fetch-deps/deps.lock.json'),
+      ...['acquisition.h', 'acquisition_main.cpp', 'CMakeLists.txt', 'tests'].map(name => path.join(repo, 'native/provider-session', name)),
     ]) };
 }
 export function hostCachePaths(repo: string, workspace: string) {

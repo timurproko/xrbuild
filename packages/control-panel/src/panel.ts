@@ -1526,6 +1526,7 @@ export class Panel {
     try {
       await this.runner.start({
         projectId: p.id, mode, hostExe: fresh.exe, projectDir: p.dir, entryDir: bundledOutput?.entry ?? this.entryOf(p, m),
+        acquisitionHelper: selection.handPolicy === 'native' ? path.join(path.dirname(fresh.exe), 'xrb-acquisition.exe') : undefined,
         builtUrl: mode === 'built' && this.panelUrl
           ? `https://app.local/index.html?xrb-panel=${encodeURIComponent(this.panelUrl)}&xrb-project=${encodeURIComponent(p.id)}&xrb-mouse=${selection.inputs?.includes('mouse') ? '1' : '0'}&xrb-cursor=${cursor}&xrb-hand=${selection.handPolicy}&xrb-hand-profile-run=${nativeHands.envelope.runId}` : undefined,
         devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, panelUrl: this.panelUrl ?? undefined, mouseEnabled: selection.inputs?.includes('mouse') ?? true, handPolicy: selection.handPolicy, handProfileRunId: nativeHands.envelope.runId, cursor, flat, switchView: selection.display !== 'desktop', cameraView,

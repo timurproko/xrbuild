@@ -14,6 +14,10 @@ Hands SHALL put the global provider picker first, followed by purpose, availabil
 - **WHEN** a source is installed and enabled but no run has checked its device
 - **THEN** Hands says it is not started and does not claim that hardware is connected or running
 
+#### Scenario: Standalone live session not available
+- **WHEN** the standalone session runtime is missing, outdated or unsupported on this platform
+- **THEN** the hand view stays idle with the concrete unavailable/Rebuild reason, without starting a full host or fabricating provider frames
+
 #### Scenario: Explicit live delivery replaces page-only idle
 - **WHEN** the person starts the saved selected provider and valid session frames arrive
 - **THEN** the viewport shows those actual hands through the shared SDK adapter

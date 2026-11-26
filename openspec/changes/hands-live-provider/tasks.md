@@ -4,11 +4,11 @@ Each numbered group corresponds to one PR Implementation outcome, in the same or
 
 ## 1. Exclusive acquisition ownership for Hands and managed native apps
 
-- [ ] 1.1 Incorporate PR 51 with PR 50's profile/control integration into this branch after approval; re-read and reconcile their merged specs, verifying this delta preserves all unrelated requirements.
-- [ ] 1.2 Add the secured user/logon-session native lease and bounded advisory owner metadata, including a minimal CEF-free reservation/handoff helper; process tests cover cross-workspace/checkouts, competing providers, corrupt metadata and PID reuse.
-- [ ] 1.3 Gate managed built/dev native preparation and host input create on the same lease, with one-use child handoff under the transition gate; race/cancellation tests assert one owner and no competitor input/display startup.
-- [ ] 1.4 Keep input-free/browser XR launches outside the native lease, enforce updated host capabilities and refuse detected legacy host conflicts; runner/freshness tests cover busy-owner labels, no implicit Stop and old-runtime rebuild guidance.
-- [ ] 1.5 Cover abandoned owner recovery, inaccessible/live owner refusal and app exit cleanup with native multiprocess tests; document supported scope and standalone/legacy/cross-logon limits in docs/hand-provider-sessions.md.
+- [x] 1.1 Incorporate PR 51 with PR 50's profile/control integration into this branch after approval; re-read and reconcile their merged specs, verifying this delta preserves all unrelated requirements.
+- [x] 1.2 Add the secured user/logon-session native lease and bounded advisory owner metadata, including a minimal CEF-free reservation/handoff helper; process tests cover cross-workspace/checkouts, competing providers, corrupt metadata and PID reuse.
+- [x] 1.3 Gate managed built/dev native preparation and host input create on the same lease, with one-use child handoff under the transition gate; race/cancellation tests assert one owner and no competitor input/display startup.
+- [x] 1.4 Keep input-free/browser XR launches outside the native lease, enforce updated host capabilities and refuse detected legacy host conflicts; runner/freshness tests cover busy-owner labels, no implicit Stop and old-runtime rebuild guidance.
+- [x] 1.5 Cover abandoned owner recovery, inaccessible/live owner refusal and app exit cleanup with native multiprocess tests; document supported scope and standalone/legacy/cross-logon limits in docs/hand-provider-sessions.md.
 
 ## 2. Headless provider worker with unchanged input ABI
 

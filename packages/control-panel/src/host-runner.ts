@@ -11,6 +11,7 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { LineSplitter, stripAnsi } from './jobs.ts';
+import { reserveHandAcquisition, type HandAcquisitionReservation } from './hand-acquisition.ts';
 import type { CursorStyle } from '../../sdk/src/cursor-style.ts';
 
 export type RunMode = 'built' | 'dev';
@@ -84,6 +85,8 @@ export interface RunRequest {
   mouseEnabled?: boolean;
   handPolicy?: 'off' | 'native' | 'webxr';
   handProfileRunId?: string;
+  /** Required by managed native Hand launches; never passed to browser previews or Hand-off runs. */
+  acquisitionHelper?: string;
   cursor?: CursorStyle;
   /** dev mode: panel address exposed to apps that need the active workspace catalog */
   panelUrl?: string;
@@ -245,6 +248,9 @@ export function findHosts(): Promise<ForeignHost[]> {
 
 export class HostRunner extends EventEmitter {
   private host: ChildProcess | null = null;
+  private handReservation: HandAcquisitionReservation | null = null;
+  private startEpoch = 0;
+  reserveAcquisition = reserveHandAcquisition;
   private preview: ChildProcess | null = null;
   private previewStopping = false;
   private dev: ChildProcess | null = null;
@@ -369,9 +375,16 @@ export class HostRunner extends EventEmitter {
 
   async start(req: RunRequest): Promise<void> {
     if (this.busy) throw new Error(`${this.s.projectId} is already running; stop it first`);
+    const epoch = ++this.startEpoch;
+    const current = () => { if (epoch !== this.startEpoch) throw new Error('Native launch was cancelled'); };
+    let reservation: HandAcquisitionReservation | null = null;
     this.log = [];
     this.set({ projectId: req.projectId, mode: req.mode, flat: !!req.flat, switchable: false, switchView: !!req.switchView, cameraAvailable: req.cameraAvailable ?? !!req.cameraView, cameraView: !!req.cameraView, phase: 'starting', pid: null, startedMs: Date.now(), channelUrl: null, devUrl: null, status: null, warning: null, foreign: [] });
     try {
+      if (req.acquisitionHelper && req.handPolicy === 'native') {
+        reservation = await this.reserveAcquisition(req.acquisitionHelper, `App ${req.projectId}`);
+        this.handReservation = reservation; current();
+      }
       const args = [...req.hostArgs, '--status=stdout', ...(this.s.cameraAvailable ? ['--camera-view=on', `--camera-stream=${req.cameraView ? 'on' : 'off'}`] : [])];
       if (req.mode === 'dev') {
         const devUrl = new URL(await this.startDev(req));
@@ -391,20 +404,27 @@ export class HostRunner extends EventEmitter {
         args.push(`--app-dir=${req.entryDir}`);
         if (req.builtUrl) args.push(`--url=${req.builtUrl}`);
       }
+      current();
       this.addLog(`[panel] ${path.basename(req.hostExe)} ${args.join(' ')}`);
-      const host = spawn(req.hostExe, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      const { XRB_HAND_LEASE_TICKET: _ambientTicket, ...hostEnvironment } = process.env;
+      const host = spawn(req.hostExe, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...hostEnvironment, ...(reservation ? { XRB_HAND_LEASE_TICKET: reservation.ticket } : {}) } });
       this.host = host;
       const out = new LineSplitter((l) => this.onHostLine(l));
       host.stdout!.setEncoding('utf8').on('data', (d: string) => out.push(d));
       host.stderr!.setEncoding('utf8').on('data', (d: string) => out.push(d));
       host.on('error', (e) => this.addLog(`[panel] cannot start the host: ${e.message}`));
       host.on('close', (code) => void this.onHostExit(host, code, out));
-      this.set({ pid: host.pid ?? null, phase: 'running' });
+      this.set({ pid: host.pid ?? null });
+      if (reservation) { if (!host.pid) throw new Error('Native host did not start'); await reservation.handoff(host.pid); current(); }
+      if (this.host === host && host.exitCode === null) this.set({ phase: 'running' });
     } catch (e) {
       this.stopDev();
       this.addLog(`[panel] ${(e as Error).message}`);
       this.set({ phase: 'idle', last: { projectId: req.projectId, exitCode: null, endedMs: Date.now(), lines: this.log.slice(-30), forced: false }, warning: (e as Error).message });
       throw e;
+    } finally {
+      if (this.handReservation === reservation) this.handReservation = null;
+      await reservation?.close();
     }
   }
 
@@ -457,6 +477,9 @@ export class HostRunner extends EventEmitter {
 
   /** Clean stop; forced only if the host is still there after the grace period. */
   async stop(graceMs = STOP_GRACE_MS): Promise<void> {
+    this.startEpoch++;
+    const reservation = this.handReservation; this.handReservation = null;
+    await reservation?.close();
     const preview = this.preview;
     if (preview?.pid) {
       const projectId = this.s.projectId!;
