@@ -1,7 +1,7 @@
 import type {Point} from '../contracts.ts';
 import type {Packet,WireFrame,Calibration} from '../rgbd/protocol.ts';
 import {prepareGeometry} from '../rgbd/geometry.ts';
-import {samplePoint,pairing,DEPTH_DEFAULTS} from '../rgbd/reconstruction.ts';
+import {samplePoint,pairing,DEPTH_DEFAULTS} from '../rgbd/point-sampling.ts';
 import {markerPlane} from './marker.ts';
 import {calibrationMetadata,fitSpatialCalibration,FIT_LIMITS,type TargetSample,type TargetPair,type SpatialCalibration} from './calibration.ts';
 export type CameraSide='a'|'b';

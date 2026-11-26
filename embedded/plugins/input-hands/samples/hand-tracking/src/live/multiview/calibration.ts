@@ -2,7 +2,7 @@ import type { Point } from '../contracts.ts';
 import { prepareGeometry,projectPoint,type Pixel } from '../rgbd/geometry.ts';
 import { validateCalibration,validSerial,type Calibration,type Intrinsics,type Profile } from '../rgbd/protocol.ts';
 import { metadataHash,json } from '../recording/format.ts';
-import { immutable } from '../recording/depth-format.ts';
+import { immutable } from '../recording/immutable.ts';
 export interface TargetSample { point:Point;pixel:Pixel;frameNumber:number;sourceTimeMs:number;clockDomain:string;selectedPageMs:number;pageOriginMs:number }
 export interface TargetPair { id:string;use:'fit'|'check';a:TargetSample;b:TargetSample }
 export interface FitLimits { rmsM:number;maximumM:number;reprojectionPx:number }

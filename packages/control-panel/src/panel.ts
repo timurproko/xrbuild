@@ -40,6 +40,9 @@ import { discoverHandProviders, sameHandProvider, handRegistry, handProviderKey,
 import { isNativeLauncherDocument } from '../../sdk/src/launch-context.ts';
 import { LiveHands, sendHandProfile, observeHandProfile } from './hands-live.ts';
 import { HAND_APPEARANCE_DEFAULTS, type HandProfile } from '../../sdk/src/hand-profile.ts';
+import { discoverHandMeshPlugins } from './hand-mesh-plugins.ts';
+import { meshChoice, meshKey, saveMeshChoice } from './hand-mesh-state.ts';
+import { HandMeshRun } from './hand-mesh-run.ts';
 import { readHandsState, saveHandsState, saveHandAdjustments, selectedHandProvider, validHandProviderKey, prepareHandInput, resolveHandInput, type HandContext } from './hands-state.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
 import { archiveProject, readLayout, removeEmptyProjectSection, unarchiveProject } from './layout.ts';
@@ -212,6 +215,20 @@ export class Panel {
   readonly jobs = new JobRunner();
   private activeHandSource: HandProviderKey | null = null;
   private nativeHandPolicy: 'off' | 'native' | null = null;
+  private meshRun: HandMeshRun | null = null;
+  private meshStatus = 'None';
+  private activeMesh: { owner: string; id: string; label: string } | null = null;
+  private meshCleanup: Promise<void> = Promise.resolve();
+  private meshCleanupFailed = false;
+  private async stopMesh(): Promise<void> {
+    const run = this.meshRun; this.meshRun = null; this.activeMesh = null;
+    if (run) {
+      this.meshCleanup = run.stop().catch(() => {
+        this.meshCleanupFailed = true; this.meshStatus = 'Skeleton fallback: mesh child cleanup failed; restart the panel before using mesh';
+      });
+      await this.meshCleanup;
+    }
+  }
   private handRuntimeStates = new Map<string, string>();
   private savingHands = false;
   private preparingNativeRun = false;
@@ -231,6 +248,18 @@ export class Panel {
   onPluginSourcesChanged: (restartRequired?: boolean) => Promise<void> = async () => {};
   restartPending = false;
   restartWorkPending: () => boolean = () => false;
+  private captureOwner: { label: string } | null = null;
+  /** Shared exclusion for explicit acquisition tools and app launch preparation. */
+  acquireCapture(label: string): () => void {
+    if (this.captureOwner || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.restartPending || this.changingPlugins || this.maintainingCache || this.pluginConsumers || this.settingsWrites.size || this.jobs.active().length)
+      throw new HttpError(409, this.captureOwner ? `${this.captureOwner.label} owns capture. Stop it first.` : 'Another app or panel operation owns acquisition. Stop it first.');
+    const owner = { label }; this.captureOwner = owner;
+    let released = false;
+    return () => { if (!released && this.captureOwner === owner) this.captureOwner = null; released = true; };
+  }
+  private refuseCaptureConflict(): void {
+    if (this.captureOwner) throw new HttpError(409, `${this.captureOwner.label} owns capture. Stop it first.`);
+  }
   private readonly settingsWrites = new Set<string>();
   readonly runner = new HostRunner();
   desktopSetup: DesktopSetup;
@@ -297,7 +326,7 @@ export class Panel {
     });
     this.jobs.on('line', (j: Job, text: string) => hub.send('job-line', { id: j.id, text }));
     this.runner.on('state', (s) => {
-      if (s.phase === 'idle') { this.nativeHandPolicy = null; this.setLiveHands(null); this.previewProjection = null; }
+      if (s.phase === 'idle') { this.nativeHandPolicy = null; this.setLiveHands(null); this.previewProjection = null; void this.stopMesh().catch(() => { this.meshStatus = 'Skeleton fallback: mesh child cleanup failed'; }); }
       this.syncNativeHandObserver(s);
       hub.send('run', s);
       hub.send('projects-changed', { projectId: s.projectId });
@@ -392,6 +421,7 @@ export class Panel {
   }
 
   private async withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
+    this.refuseCaptureConflict();
     if (this.savingHands || this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop running apps and jobs and wait for launch/settings preparation before changing plugins');
     this.changingPlugins = true;
@@ -434,6 +464,7 @@ export class Panel {
   }
 
   async synchronizePluginServices(force = false): Promise<void> {
+    if (this.captureOwner) return;
     if (this.changingPlugins || !force && Date.now() - this.servicesCheckedMs < this.discoveryMaxAgeMs) return;
     if (this.servicesSync) return this.servicesSync;
     this.servicesSync = (async () => {
@@ -491,6 +522,7 @@ export class Panel {
   }
 
   private startJob(...args: Parameters<JobRunner['start']>): Job {
+    this.refuseCaptureConflict();
     if (this.restartPending) throw new HttpError(409, 'The panel is restarting');
     const [kind, projectId] = args;
     const originalWork = args[3];
@@ -927,6 +959,7 @@ export class Panel {
     if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !['action', 'revision', 'confirm'].includes(key))
       || body.confirm !== true || typeof body.action !== 'string' || !['toolchain', 'native-deps'].includes(body.action)) throw new HttpError(400, 'Confirm a supported desktop setup action before installing');
     const requireIdle = () => {
+      this.refuseCaptureConflict();
       if (this.restartPending || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
         throw new HttpError(409, 'Stop apps/jobs and wait for preparation before desktop setup');
     };
@@ -941,6 +974,7 @@ export class Panel {
   }
 
   cleanupWorkingCache(project: Project | undefined, body: Parameters<typeof cleanWorkingCache>[1]): Job {
+    this.refuseCaptureConflict();
     if (this.maintainingCache || this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop apps/jobs and wait for preparation before cache maintenance');
     return this.startJob('cache-cleanup', project?.id ?? null, 'remove reviewed working cache', async () => {
@@ -951,6 +985,7 @@ export class Panel {
   }
 
   setupBundledServices(): Job {
+    this.refuseCaptureConflict();
     if (this.changingPlugins || this.pluginConsumers || this.preparingNativeRun || this.preparingPreview || this.runner.busy || this.jobs.active().length || this.settingsWrites.size)
       throw new HttpError(409, 'Stop apps/jobs and wait for preparation before setting up bundled services');
     // Setup is the explicit recovery path for a failed/stale installed service snapshot.
@@ -1497,6 +1532,7 @@ export class Panel {
     this.refuseIfLaunchBlocked(p, this.launchState(p));
     if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before running');
     if (p.readOnly && !prepared) this.refuseIfBusy(p.id);
+    this.refuseCaptureConflict();
     this.preparingPreview = true;
     try {
       return await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
@@ -1586,6 +1622,7 @@ export class Panel {
     if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before running');
     if (this.jobs.active().some(job => job.kind === 'desktop-setup') || desktopSetupBusy) throw new HttpError(409, 'wait for desktop setup to finish before running');
     if (p.readOnly && !prepared) this.refuseIfBusy(p.id);
+    this.refuseCaptureConflict();
     this.preparingNativeRun = true;
     try {
       await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
@@ -1629,6 +1666,24 @@ export class Panel {
     const nativeHands = new LiveHands(selection.handProfile!, (await readHandsState(this.repo, this.workspace)).revision);
     this.setLiveHands(nativeHands);
     selection.handProfileRun = nativeHands.envelope;
+    await this.meshCleanup;
+    this.meshStatus = this.meshCleanupFailed ? 'Skeleton fallback: prior mesh cleanup failed; restart the panel before using mesh' : 'None';
+    let meshRuntime: import('../../sdk/src/hand-mesh-protocol.ts').MeshRuntime | null = null;
+    if (selection.handPolicy !== 'off' && !this.meshCleanupFailed) {
+      try {
+        const choice = meshChoice((await readHandsState(this.repo, this.workspace)).raw.postprocessing);
+        if (choice.selected) {
+          const registry = await discoverHandMeshPlugins(this.repo, this.workspace);
+          const plugin = registry.plugins.find(p => meshKey(p) === meshKey(choice.selected!));
+          const saved = choice.settings[meshKey(choice.selected)];
+          if (!plugin?.available || !saved || saved.version !== plugin.declaration.settingsVersion) throw new Error('Selected mesh plugin is missing, unavailable or needs settings review');
+          const run = new HandMeshRun(() => ['https://app.local', ...(this.panelUrl ? [new URL(this.panelUrl).origin] : []), ...(this.runner.state().devUrl ? [new URL(this.runner.state().devUrl!).origin] : [])], status => { if (this.meshRun === run) this.meshStatus = status; });
+          this.meshRun = run; this.activeMesh = { owner: plugin.owner, id: plugin.id, label: plugin.label }; this.meshStatus = 'Starting';
+          meshRuntime = await run.start(plugin, saved.values);
+        }
+      } catch (error) { this.meshStatus = `Skeleton fallback: ${(error as Error).message}`; await this.stopMesh(); }
+    }
+    const nativeSelection = { ...selection, ...(meshRuntime ? { handMeshRuntime: meshRuntime } : {}) };
     try {
       await this.runner.start({
         projectId: p.id, mode, hostExe: fresh.exe, projectDir: p.dir, entryDir: bundledOutput?.entry ?? this.entryOf(p, m),
@@ -1637,10 +1692,12 @@ export class Panel {
           ? `https://app.local/index.html?xrb-panel=${encodeURIComponent(this.panelUrl)}&xrb-project=${encodeURIComponent(p.id)}&xrb-mouse=${selection.inputs?.includes('mouse') ? '1' : '0'}&xrb-cursor=${cursor}&xrb-hand=${selection.handPolicy}&xrb-hand-profile-run=${nativeHands.envelope.runId}` : undefined,
         devScript: m.scripts?.dev, devEnv: embeddedProjectEnvironment(this.repo, this.projects, p) ?? this.appEnv(), devEnvIsolated: !!p.workingRoot, panelUrl: this.panelUrl ?? undefined, mouseEnabled: selection.inputs?.includes('mouse') ?? true, handPolicy: selection.handPolicy, handProfileRunId: nativeHands.envelope.runId, cursor, flat, switchView: selection.display !== 'desktop', cameraView,
         cameraAvailable: (selection.inputs ?? []).some((name) => !BUILTIN_PROVIDERS.has(name)),
-        hostArgs: [`--title=${m.name}`, `--camera-projection=${flat ? 'orthographic' : 'perspective'}`, ...(await this.hostArgs(p, m, desktop, selection)), ...(flat && selection.display !== 'desktop' ? ['--view=2d'] : [])],
+        hostArgs: [`--title=${m.name}`, `--camera-projection=${flat ? 'orthographic' : 'perspective'}`, ...(await this.hostArgs(p, m, desktop, nativeSelection)), ...(flat && selection.display !== 'desktop' ? ['--view=2d'] : [])],
       });
+      // start() includes dev-server preparation; sidecar readiness must not start the SDK deadline.
+      this.meshRun?.appStarted();
     } catch (e) {
-      this.nativeHandPolicy = null; this.setLiveHands(null);
+      this.nativeHandPolicy = null; this.setLiveHands(null); await this.stopMesh();
       const last = this.runner.state().last;
       const output = last?.projectId === p.id && last.endedMs >= attemptedAt ? last.lines : null;
       throw new HttpError(400, (e as Error).message, output?.length ? output.join('\n') : undefined);
@@ -1974,6 +2031,29 @@ export class Panel {
       return true;
     }
     switch (key) {
+      case 'GET hands/postprocessing': {
+        const [registry, state] = await Promise.all([discoverHandMeshPlugins(this.repo, this.workspace), readHandsState(this.repo, this.workspace)]);
+        let choice; let problem: string | null = null;
+        try { choice = meshChoice(state.raw.postprocessing); } catch (e) { problem = (e as Error).message; }
+        sendJson(res, 200, { plugins: registry.plugins.map(({ program, ...p }) => ({ ...p, declaration: { ...p.declaration, program: undefined, args: undefined } })),
+          revision: state.revision, registryRevision: registry.revision, choice, problem, status: this.meshRun?.status ?? this.meshStatus,
+          running: this.runner.busy && this.nativeHandPolicy !== null, active: this.activeMesh });
+        return true;
+      }
+      case 'PUT hands/postprocessing': {
+        if (this.savingHands || this.preparingNativeRun || this.preparingPreview || this.changingPlugins || this.pluginConsumers || this.jobs.active().length) throw new HttpError(409, 'Wait for Hands preparation before saving');
+        this.savingHands = true;
+        try {
+          const body = await readJson<{ selected?: unknown; values?: unknown; revision?: unknown; registryRevision?: unknown }>(req);
+          const registry = await discoverHandMeshPlugins(this.repo, this.workspace);
+          const state = await readHandsState(this.repo, this.workspace);
+          const initial = state.exists ? state.provider : selectedHandProvider(state, await discoverHandProviders(this.repo, this.workspace, this.nativeProviders), 'native').key;
+          const saved = await saveMeshChoice(this.repo, this.workspace, registry, body, initial);
+          this.hub.send('hands-changed', { revision: saved.revision });
+          sendJson(res, 200, { revision: saved.revision, choice: meshChoice(saved.raw.postprocessing) });
+        } finally { this.savingHands = false; }
+        return true;
+      }
       case 'GET hands': {
         const registry = await discoverHandProviders(this.repo, this.workspace, this.nativeProviders);
         const state = await readHandsState(this.repo, this.workspace);
@@ -2232,7 +2312,7 @@ export class Panel {
         if ((confirm !== undefined && typeof confirm !== 'boolean') || (ifIdle !== undefined && typeof ifIdle !== 'boolean')) throw new HttpError(400, 'Restart flags must be boolean');
         if (ifIdle && (confirm !== false || expectedInstanceId !== this.instanceId)) throw new HttpError(409, 'Automatic restart requires the current panel instance and cannot force active work');
         const busy = [this.runner.busy ? `${this.runner.projectId} is running` : '', ...this.jobs.active().map((j) => `${j.title} is ${j.state}`),
-          this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.settingsWrites.size || this.changingPlugins || this.maintainingCache || this.restartWorkPending() ? 'Panel work is preparing or changing' : ''].filter(Boolean);
+          this.preparingNativeRun || this.preparingPreview || this.pluginConsumers || this.settingsWrites.size || this.changingPlugins || this.maintainingCache || this.restartWorkPending() || this.captureOwner ? 'Panel work is preparing or changing' : ''].filter(Boolean);
         if (busy.length && !confirm) throw new HttpError(409, ifIdle ? 'Waiting for the panel to become idle' : `${busy.join('; ')}. Restart anyway? The host is stopped cleanly first.`, ifIdle ? { retryWhenIdle: true } : { needsConfirm: 'restart' });
         sendJson(res, 200, { restarting: true, pid: process.pid, instanceId: this.instanceId, repo: this.repo, workspace: this.workspace, projects: this.projects });
         if (!this.restartPending) {
@@ -2257,6 +2337,7 @@ export class Panel {
   }
 
   async dispose(): Promise<void> {
+    await this.stopMesh(); await this.meshCleanup;
     this.setLiveHands(null);
     if (this.runner.busy) await this.runner.stop();
   }

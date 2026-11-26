@@ -1,6 +1,6 @@
 # Hands
 
-`/hands/` is the core hand workspace: global skeleton provider, post-processing component slot,
+`/hands/` is the core hand workspace: global skeleton provider, optional desktop hand-mesh selector,
 SDK hand view, grouped global adjustments and Record. It opens without optional hand tools.
 Source changes apply on the next app launch; viewing this page never starts hardware.
 Until the separate live-session component is connected, the view is idle and Record says it needs a live hand session.
@@ -9,11 +9,17 @@ The former diagnostic and legacy hand-tracking page routes are removed (404, no 
 There is no generated preview, local fixture, fixture interaction target or laboratory navigation.
 Synthetic remains an ordinary installed provider choice, never a fallback.
 
+## Post-processing
+
+The Post-processing selector under Source offers None or an installed mesh plugin, with its settings and status underneath. Save affects the next desktop app run, not the current one; it does not save source or adjustment drafts. Selection/settings share the global Hands profile. The current desktop run's plugin/status is shown separately from the saved choice.
+
+A selected plugin adds only a mesh from the final processed skeleton, never changes input/gestures/interaction, and runs only for desktop apps launched from this panel. Missing, late or failed output uses the skeleton visibly. Browser previews, published web builds and offline packages remain skeleton-only. No actual mesh processor or model is bundled by this mechanism; see [plugin setup and contract](hand-mesh-plugins.md).
+
 ## Independent modules
 
-Camera calibration is **not** part of Hands. A following change extracts it as the separate Calibration module.
+Camera calibration is **not** part of Hands. Open the separate [Calibration module](calibration.md) at `/calibration/`.
 Its output is a B-to-A camera-space rigid transform, bound to both cameras' serials and exact profiles, not an app-hand offset.
-See the retained [camera calibration contract](../embedded/plugins/input-hands/samples/hand-tracking/camera-calibration.md) while that extraction is pending.
+The [stable output contract](calibration.md#stable-output-contract-version-1) is available to future hand providers.
 Existing calibration code and state remain intact. Browser landmark and two-view fusion algorithms are retained,
 unwired from product pages, as source for a future provider. No such provider is implemented here.
 
@@ -52,7 +58,7 @@ storage operations use `/api/hands/tools/`. No device/model/inference/fusion mod
 
 ## Data
 
-Global source and adjustments belong to workspace `config/hands/profile.json`.
+Global source, adjustments and mesh selection/settings belong to workspace `config/hands/profile.json`.
 The existing right-side component owns both groups, resets, Apply and revision/delivery handling;
 see [global adjustment behaviour](hand-adjustments.md).
 Legacy pose CSV remains in `.xrb/hand-tracking/recordings/`; optional calibration/preferences remain in

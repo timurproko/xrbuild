@@ -18,6 +18,10 @@ test('Hands has persistent tab panels, stable component mounts and scene-only co
   const shell = await fs.readFile(path.join(ui, 'hands-shell.js'), 'utf8');
   assert.match(shell, /resetView\(\)/); assert.match(shell, /requestFullscreen\(\)/); assert.match(shell, /ArrowLeft/);
   assert.doesNotMatch(shell, /fetch\(|innerHTML\s*=.*tabpanel|replaceChildren/);
+  const page = await fs.readFile(path.join(ui, 'hands.js'), 'utf8');
+  assert.match(page, /import \{ mountHandsPostprocessing \} from '\.\/hands-postprocessing\.js'/);
+  assert.equal((page.match(/mountHandsPostprocessing\(\$\('hands-postprocessing-root'\)\)/g) ?? []).length, 1);
+  assert.match(page, /postprocessing\.dispose\(\)/);
 });
 
 test('stale diagnostic tool declarations cannot register or return to navigation', () => {

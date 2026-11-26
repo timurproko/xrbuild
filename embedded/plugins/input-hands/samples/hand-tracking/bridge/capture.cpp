@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 #include "markers.hpp"
+#include "marker-schedule.hpp"
 #include <regex>
 using json = nlohmann::json;
 using Clock = std::chrono::steady_clock;
@@ -131,7 +132,7 @@ int capture(const std::string& serial,bool marker_enabled=false,const CaptureSha
     const auto device=active.get_device();if(info(device,RS2_CAMERA_INFO_SERIAL_NUMBER)!=serial)throw std::runtime_error("Selected serial mismatch");
     const float scale=device.first<rs2::depth_sensor>().get_depth_scale();if(!std::isfinite(scale)||scale<=0)throw std::runtime_error("Depth scale unavailable");
     rs2::align align(RS2_STREAM_COLOR);bool hello=false,havePrevious=false;uint64_t sequence=0,lastColor=0,lastDepth=0,colorGaps=0,depthGaps=0,colorRepeats=0,depthRepeats=0;
-    MarkerDetector markers(marker_enabled);std::string pending;double lastFrame=now_ms(),lastMarker=-1000;
+    MarkerDetector markers(marker_enabled);MarkerSchedule markerSchedule;std::string pending;double lastFrame=now_ms();
     while(controls(pending)) {
       rs2::frameset frames;if(!pipe.try_wait_for_frames(&frames,100)) {if(now_ms()-lastFrame>3000)throw std::runtime_error("RGB-D stream stalled or USB disconnected");continue;}
       const double received=now_ms();const auto color=frames.get_color_frame();const auto depth=frames.get_depth_frame();
@@ -155,7 +156,7 @@ int capture(const std::string& serial,bool marker_enabled=false,const CaptureSha
         {"color",stamp(color)},{"depth",stamp(depth)},{"alignedDepth",stamp(aligned)},
         {"colorGaps",colorGaps},{"depthGaps",depthGaps},{"colorRepeats",colorRepeats},{"depthRepeats",depthRepeats}};
       if(shape.key!="640x480@30")frame["profile"]=shape.key;
-      if(marker_enabled&&received-lastMarker>=200){frame["marker"]=markers.rgb(static_cast<const uint8_t*>(color.get_data()),color.get_stride_in_bytes(),cn,shape.width,shape.height);lastMarker=received;}
+      if(marker_enabled&&markerSchedule.due(color.get_timestamp()))frame["marker"]=markers.rgb(static_cast<const uint8_t*>(color.get_data()),color.get_stride_in_bytes(),cn,shape.width,shape.height);
       emit(frame,packed(color,3),packed(depth,2),packed(aligned,2));
     }
     pipe.stop();running=false;emit({{"type","stopped"}});return 0;
@@ -167,7 +168,7 @@ int main(int argc,char** argv) {
     if(rs2_get_api_version(nullptr)!=RS2_API_VERSION)throw std::runtime_error("Camera SDK header/runtime version mismatch");
     if(argc==2 && std::string(argv[1])=="--list") {std::cout<<enumerate().dump()<<std::endl;return 0;}
     if(argc==2 && std::string(argv[1])=="--geometry-vectors") {std::cout<<geometry_vectors().dump()<<std::endl;return 0;}
-    if(argc==2 && std::string(argv[1])=="--self-test") {std::array<uint8_t,4> b{};put32(b.data(),0xfedcba98);if(b!=std::array<uint8_t,4>{0x98,0xba,0xdc,0xfe})return 1;std::cout<<"native framing self-test passed\n";return 0;}
+    if(argc==2 && std::string(argv[1])=="--self-test") {std::array<uint8_t,4> b{};put32(b.data(),0xfedcba98);if(b!=std::array<uint8_t,4>{0x98,0xba,0xdc,0xfe}||!MarkerSchedule::self_test())return 1;std::cout<<"native framing self-test passed\n";return 0;}
     if(argc==2 && std::string(argv[1])=="--marker-self-test") {if(!MarkerDetector::self_test())return 1;std::cout<<"marker self-test passed\n";return 0;}
     if(argc==2 && std::string(argv[1]).rfind("--marker-svg=",0)==0){const auto id=std::string(argv[1]).substr(13);if(id.empty()||id.size()>3||!std::all_of(id.begin(),id.end(),[](unsigned char c){return std::isdigit(c);}))throw std::runtime_error("Invalid marker ID");std::cout<<MarkerDetector::svg(std::stoi(id));return 0;}
     if(argc>=2&&argc<=4 && std::string(argv[1]).rfind("--serial=",0)==0){bool marker=false,hasProfile=false;CaptureShape shape;for(int i=2;i<argc;i++){const std::string option=argv[i];if(option=="--marker=tag36h11"&&!marker)marker=true;else if(option.rfind("--profile=",0)==0&&!hasProfile){shape=capture_shape(option.substr(10));hasProfile=true;}else throw std::runtime_error("Unsupported/duplicate native option");}return capture(std::string(argv[1]).substr(9),marker,shape);}

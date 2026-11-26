@@ -172,11 +172,18 @@ retain the active host's captured source, while destinations without Hand still 
 execution marker is limited to the owning panel's local previews; published output keeps its checked browser
 policy. Normal SDK-consuming rebuilds are needed to acquire this SDK logic.
 
-Both ingress paths pass canonical frames through `hand-source.ts`'s identity `prepareHandFrame` stage before
-`HandInput` filtering/gestures. Future Hands layers attach there: position/size must affect interaction as well as
-drawing, while appearance attaches to processed hands and must not change touching. No layer loader, transform,
-profile controls or live laboratory is implemented here. Source/session disposal releases retired hands and pointer
-presses without waiting through dropout grace. Binary HANDS v1/v2 and recording layouts remain unchanged.
+Both ingress paths pass canonical frames through `hand-source.ts`'s shared adjustment transform before
+`HandInput` filtering/gestures; its default is exact identity. Source/session disposal releases retired hands and
+pointer presses without waiting through dropout grace. Binary HANDS v1/v2 and recording layouts remain unchanged.
+
+Panel-managed desktop runs may select one optional [mesh sidecar](../../docs/hand-mesh-plugins.md). The SDK
+sends copies of the final sampled pose asynchronously and standard hand drawing displays fresh validated geometry
+using the same panel mapping and global bone color/opacity. No app changes or provider-specific branches are
+needed. Mesh readiness/failure/latency never changes joints, gestures, pointer or interaction. A late result uses
+only a still-fresh prior mesh, otherwise the skeleton; no-hand frames invalidate mesh immediately, independently
+of skeleton grace. `handVisual:false` suppresses both standard drawings without disabling input. Mesh buffers
+are disposed on replacement/stop. Preview, publication, offline packages and unmanaged runs remain skeleton-only;
+no mesh runtime credential is portable. Rebuild the host and app SDK bundles to use this optional desktop path.
 
 - `xrb.currentHands`: tracked hands for this frame, smoothed (One Euro filter) and predicted to
   display time. Keypoints are in panel metres, in the common 21-point hand landmark order (`KP.INDEX_TIP` = 8, ...).

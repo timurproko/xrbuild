@@ -20,6 +20,8 @@ export interface HostInfo {
   handProfileRunId?: string;
   /** Portable frozen package profile, encoded to preserve arrays through the native bridge. */
   handProfileJson?: string;
+  /** Optional authenticated desktop-run mesh endpoint; absent from portable output. */
+  handMeshRuntimeJson?: string;
   /** Page-scoped native shell bridge; the host rejects non-fullscreen close requests. */
   requestClose?(): void;
   setCursorStyle?(style: 'system' | 'ring' | 'ring-dot'): void;
