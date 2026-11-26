@@ -87,11 +87,11 @@ function roots(core: string | undefined, workspace: string): Array<{ origin: Ext
 }
 
 /** No source wins by directory order. An explicit preference selects the entire plugin record. */
-export async function resolvePluginCatalog(workspace: string, core?: string, includeDisabled = false, preferences?: PluginPrefs): Promise<PluginCatalog> {
+export async function resolvePluginCatalog(workspace: string, core?: string, includeDisabled = false, preferences?: PluginPrefs, origins?: ReadonlyArray<ExtensionOrigin>): Promise<PluginCatalog> {
   const prefs = preferences ?? await readPluginPrefs(workspace), plugins: ResolvedPlugin[] = [], problems: string[] = [];
   const seenRoots = new Set<string>(), invalid = new Set<string>();
   let embeddedRoot: string | null = null;
-  for (const { origin, root } of roots(core, workspace)) {
+  for (const { origin, root } of roots(core, workspace).filter(item => !origins || origins.includes(item.origin))) {
     try {
       const workspaceRoot = await plainRoot(root);
       if (!workspaceRoot) continue;
@@ -133,6 +133,7 @@ export async function resolvePluginCatalog(workspace: string, core?: string, inc
     for (const candidate of candidates) candidate.legacyPreferences = candidates.length === 1 && !invalid.has(id);
     if (invalid.has(id)) { problems.push(`${id}: another instance is invalid; refusing implicit fallback`); continue; }
     const origin = Object.hasOwn(prefs.origins ?? {}, id) ? prefs.origins![id] : undefined;
+    if (origin && origins && !origins.includes(origin)) continue; // A scoped build never substitutes for an explicitly selected other origin.
     const choices = origin ? candidates.filter(candidate => candidate.origin === origin) : candidates;
     if (choices.length !== 1) {
       problems.push(`${id}: ${origin ? `selected origin ${origin} is unavailable or ambiguous` : 'choose an origin for conflicting plugins'} (${candidates.map(p => p.key).join(', ')})`);

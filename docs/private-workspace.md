@@ -151,8 +151,11 @@ at an unchanged HEAD; markers clear only after that work succeeds. A separate de
 fingerprint of public inputs last successfully installed, independently of the pending update's original commit.
 It is invalidated before installation and only renewed after success, so reverted dependency inputs on a later
 retry are prepared again even when they match the original commit. Missing receipts are conservatively prepared.
-A refusal in either source defers builds that would consume unsafe local work, without undoing the other source's
-successful pull.
+Follow-up records name completed, failed and deferred steps. A workspace source refusal does not defer frozen core
+setup, bundled-component preparation or core host/bundled-plugin builds. Only workspace-plugin work consuming that
+source is deferred. A core refusal can defer workspace builds that need its SDK. Completed independent native steps
+have source-keyed receipts, so fixing the other repository does not repeat those builds; component readiness is
+still rechecked on retry. No source refusal undoes the other source's successful pull.
 
 Update does **not** restart the running panel. Whenever core HEAD changes, its last job-output line explicitly says
 **Restart required**, including when setup, rebuild or the workspace fails afterwards. Workspace source changes also

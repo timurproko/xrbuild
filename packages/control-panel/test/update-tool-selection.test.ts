@@ -69,6 +69,13 @@ test('Update host and plugin builds reuse the checked bundled CMake despite comp
   calls.length = 0;
   assert.deepEqual(await rebuildForUpdate(core, workspace, ctx), ['fixture']);
   assert.ok(calls.every(call => !call.args.includes(path.join(core, 'native/host'))), 'host-current retry still uses validated tools for plugins');
+  await write('core/embedded/plugins/bundled/xrb-plugin.json', JSON.stringify({ title: 'Bundled', type: 'input', version: '1.0.0' }));
+  await write('core/embedded/plugins/bundled/CMakeLists.txt', 'project(bundled_plugin)');
+  await fs.writeFile(path.join(workspace, 'plugins/fixture/xrb-plugin.json'), '{invalid refused workspace source');
+  calls.length = 0;
+  assert.deepEqual(await rebuildForUpdate(core, workspace, ctx, 'core'), ['bundled']);
+  assert.ok(calls.some(call => call.args.includes(path.join(core, 'embedded/plugins/bundled'))));
+  assert.ok(calls.every(call => !call.args.some(arg => arg.startsWith(path.join(workspace, 'plugins')))), 'core scope never consumes refused workspace plugin source');
   compatible = false; calls.length = 0;
   await assert.rejects(rebuildForUpdate(core, workspace, ctx), /Desktop build tools are not ready/);
   assert.equal(calls.length, 0, 'no unvalidated fallback when the supported installation disappears');

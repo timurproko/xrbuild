@@ -7,6 +7,7 @@ import path from 'node:path';
 import { JobFailure, LineSplitter, type JobContext } from './jobs.ts';
 import { rebuildUpdatedSources, rebuildUpdatedServices, setupUpdatedCore } from './update-runtime.ts';
 import { checkoutFetchedCommit, resumeProtectedCheckout, CheckoutRefusal } from './update-checkout.ts';
+import { finishUpdateWork, type BuildScope, type FollowupStep } from './update-followup.ts';
 
 export interface GitResult { code: number; output: string }
 /** Runs `git <args>` in a folder; streamed lines go to onLine. Injectable so tests can stub `git lfs`. */
@@ -196,6 +197,7 @@ export interface UpdateResult {
   repositories: RepoOutcome[];
   coreDependencies: 'unchanged' | 'prepared' | 'failed' | 'deferred';
   rebuilt: string[];
+  steps: FollowupStep[];
   restartRequired: boolean;
   lastLine: string;
   summary: string;
@@ -213,7 +215,7 @@ export interface UpdateDeps {
   /** True when the core host is built and current, so only plugins need a rebuild. */
   coreHostCurrent?: () => Promise<boolean>;
   /** Injectable build boundary; production invokes the fetched recipe in a fresh Node process. */
-  rebuild?: (pluginsOnly: boolean, ctx: JobContext) => Promise<string[]>;
+  rebuild?: (pluginsOnly: boolean, ctx: JobContext, scope?: BuildScope) => Promise<string[]>;
   /** Injectable installer boundary; production uses the existing frozen public-core installer in a fresh process. */
   setupCore?: (core: string, ctx: JobContext) => Promise<void>;
   setupServices?: (core: string, workspace: string, ctx: JobContext) => Promise<void>;
@@ -453,72 +455,45 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
     }
   }
 
-  const work = repositories.filter(repo => repo.pending);
-  let coreDependencies: UpdateResult['coreDependencies'] = 'unchanged';
-  let rebuilt: string[] = [], buildError: string | null = null;
-  let componentsPending = false;
-  const prepareServices = async () => {
-    if (!deps.core || !await fs.access(path.join(deps.core, 'embedded')).then(() => true, () => false)) return;
-    ctx.line('step setup');
-    ctx.line('Rebuild: checking application components…');
-    componentsPending = true;
-    await (deps.setupServices ?? rebuildUpdatedServices)(deps.core, workspace, ctx);
-    componentsPending = false;
-  };
-  if (work.length) {
-    if (repositories.some(repo => repo.state === 'failed')) {
-      coreDependencies = 'deferred';
-      buildError = 'Setup/build deferred because a repository needs attention; resolve its problem and retry Update.';
-      ctx.line(buildError);
-    } else {
-      let stage: 'setup' | 'rebuild' = 'setup';
+  const { coreDependencies, rebuilt, steps } = await finishUpdateWork(repositories, ctx, {
+    git, sanitize: redactRemote,
+    prepareCore: async core => {
+      const fingerprint = await coreDependencyFingerprint(core, git);
+      const receipt = await markerPath(core.dir, readOnly(git), CORE_DEPENDENCIES_MARKER);
+      if (!receipt) throw new Error('Cannot locate the core dependency receipt');
+      let installed: unknown = null;
       try {
-        const core = work.find(repo => repo.role === 'core');
-        if (core) {
-          const fingerprint = await coreDependencyFingerprint(core, git);
-          const receipt = await markerPath(core.dir, readOnly(git), CORE_DEPENDENCIES_MARKER);
-          if (!receipt) throw new Error('Cannot locate the core dependency receipt');
-          let installed: unknown = null;
-          try {
-            const value: unknown = JSON.parse(await fs.readFile(receipt, 'utf8'));
-            if (value && typeof value === 'object' && 'fingerprint' in value) installed = value.fingerprint;
-          } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error; }
-          if (fingerprint && installed !== fingerprint) {
-            ctx.line('step setup');
-            // Installation can partially change node_modules even if it fails: invalidate the old proof first.
-            await fs.writeFile(receipt, '{}\n');
-            await (deps.setupCore ?? setupUpdatedCore)(core.dir, ctx);
-            await fs.writeFile(receipt, `${JSON.stringify({ fingerprint })}\n`);
-            coreDependencies = 'prepared';
-          } else ctx.line(fingerprint ? 'Core dependency inputs match the last successful preparation; no package install needed.'
-            : 'No public core dependency inputs; no package install needed.');
-        }
-        await prepareServices();
-        stage = 'rebuild';
-        ctx.line('step rebuild');
-        if (deps.rebuild) {
-          const pluginsOnly = await deps.coreHostCurrent?.() ?? false;
-          ctx.line(`Native rebuild: ${pluginsOnly ? 'plugins only (host current)' : 'host and plugins'}.`);
-          rebuilt = [...(pluginsOnly ? [] : ['xrb-host']), ...await deps.rebuild(pluginsOnly, ctx)];
-        } else {
-          if (!deps.core) throw new Error('Core checkout required for native rebuild');
-          rebuilt = await rebuildUpdatedSources(deps.core, workspace, ctx);
-        }
-        for (const repo of work) {
-          if (repo.marker) await fs.rm(repo.marker, { force: true });
-          repo.pending = false;
-        }
-      } catch (e) {
-        if (stage === 'setup') coreDependencies = 'failed';
-        buildError = `${stage === 'setup' ? 'Core dependency setup' : 'Rebuild'} failed: ${redactRemote((e as Error).message)}; fix it and retry Update.`;
-        ctx.line(buildError);
+        const value: unknown = JSON.parse(await fs.readFile(receipt, 'utf8'));
+        if (value && typeof value === 'object' && 'fingerprint' in value) installed = value.fingerprint;
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error; }
+      if (fingerprint && installed !== fingerprint) {
+        await fs.writeFile(receipt, '{}\n');
+        await (deps.setupCore ?? setupUpdatedCore)(core.dir, ctx);
+        await fs.writeFile(receipt, `${JSON.stringify({ fingerprint })}\n`);
+        return 'prepared';
       }
-    }
-  } else if (!repositories.some(repo => repo.state === 'failed')) {
-    // A manual pull or interrupted preparation can leave components stale even at an unchanged Git head.
-    try { await prepareServices(); }
-    catch (error) { buildError = `Application component rebuild failed: ${redactRemote((error as Error).message)}; retry Update.`; ctx.line(buildError); }
-  }
+      ctx.line(fingerprint ? 'Core dependency inputs match the last successful preparation; no package install needed.'
+        : 'No public core dependency inputs; no package install needed.');
+      return 'unchanged';
+    },
+    prepareComponents: async () => {
+      if (!deps.core || !await fs.access(path.join(deps.core, 'embedded')).then(() => true, () => false)) return;
+      ctx.line('Rebuild: checking application components…');
+      await (deps.setupServices ?? rebuildUpdatedServices)(deps.core, workspace, ctx);
+    },
+    build: async scope => {
+      if (deps.rebuild) {
+        const pluginsOnly = scope === 'workspace' || await deps.coreHostCurrent?.() || false;
+        ctx.line(`Native rebuild (${scope}): ${pluginsOnly ? 'plugins only (host current)' : 'host and plugins'}.`);
+        return [...(pluginsOnly ? [] : ['xrb-host']), ...await deps.rebuild(pluginsOnly, ctx, scope)];
+      }
+      if (!deps.core) throw new Error('Core checkout required for native rebuild');
+      return rebuildUpdatedSources(deps.core, workspace, ctx, undefined, scope);
+    },
+  });
+  const componentsPending = steps.some(step => step.id === 'components' && ['failed', 'deferred'].includes(step.state));
+  const buildError = steps.filter(step => ['failed', 'deferred'].includes(step.state))
+    .map(step => `${step.label}: ${step.state} — ${redactRemote(step.reason ?? 'retry Update')}`).join('; ') || null;
   for (const repo of repositories) {
     if ((repo.from && repo.to && repo.from !== repo.to) || (repo.updateFrom && repo.updateFrom !== repo.to))
       restartNeeded.add(await canonicalPath(repo.dir));
@@ -540,7 +515,7 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
   const buildSummary = buildError ?? `Rebuilt: ${rebuilt.length ? rebuilt.join(', ') : 'nothing'}.`;
   const summary = [...descriptions, setupSummary, buildSummary, lastLine].join(' ');
   const result: UpdateResult = { state: failed ? 'failed' : repositories.some(repo => repo.state === 'updated') ? 'updated' : 'up-to-date',
-    repositories, coreDependencies, rebuilt, restartRequired, lastLine, summary };
+    repositories, coreDependencies, rebuilt, steps, restartRequired, lastLine, summary };
   for (const description of descriptions) ctx.line(description);
   ctx.line(setupSummary);
   ctx.line(buildSummary);

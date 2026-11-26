@@ -9,9 +9,9 @@
 
 ## 2. Successful repositories complete independent follow-up
 
-- [ ] 2.1 Replace the aggregate refusal gate with named source-dependent steps and per-step retry state; focused setup tests prove core dependencies and bundled components prepare after workspace refusal and completed work does not rerun on unchanged retries.
-- [ ] 2.2 Partition fresh-process native builds by core/bundled/workspace source prerequisites using the merged preparation/toolchain behavior from pull request 54; injected build fixtures prove core host/bundled work continues safely while workspace-dependent work alone is deferred and named.
-- [ ] 2.3 Cover both refusal directions, independent setup/build failures and retained restart/resume state in targeted Update tests, and document the actual dependency/deferred-step behavior in docs/private-workspace.md.
+- [x] 2.1 Replace the aggregate refusal gate with named source-dependent steps and per-step retry state; focused setup tests prove core dependencies and bundled components prepare after workspace refusal and completed work does not rerun on unchanged retries.
+- [x] 2.2 Partition fresh-process native builds by core/bundled/workspace source prerequisites using the merged preparation/toolchain behavior from pull request 54; injected build fixtures prove core host/bundled work continues safely while workspace-dependent work alone is deferred and named.
+- [x] 2.3 Cover both refusal directions, independent setup/build failures and retained restart/resume state in targeted Update tests, and document the actual dependency/deferred-step behavior in docs/private-workspace.md.
 
 ## 3. Readable results and single-copy job output
 

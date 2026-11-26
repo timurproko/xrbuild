@@ -119,6 +119,24 @@ test('regression: reverted dependency inputs are prepared again after an interru
   });
 });
 
+test('core preparation and scoped native work complete after workspace source refusal and are reused on retry', async t => {
+  const f = await fixture(t), calls: string[] = [];
+  await fs.mkdir(path.join(f.core.publisher, 'embedded'));
+  await fs.writeFile(path.join(f.core.publisher, 'embedded/README.md'), 'fixture bundled sources');
+  await publishGraph(f.core); await f.workspace.publish('shared.txt', 'incoming source\n');
+  await fs.writeFile(path.join(f.workspace.checkout, 'shared.txt'), 'local source\n');
+  const deps = { core: f.core.checkout, git: f.runner,
+    setupCore: async () => { calls.push('dependencies'); }, setupServices: async () => { calls.push('components'); },
+    rebuild: async (_: boolean, __: unknown, scope?: string) => { calls.push(scope!); return []; } };
+  const first = await rejected(runUpdate(f.workspace.checkout, f.ctx, deps));
+  assert.deepEqual(calls, ['dependencies', 'components', 'core']);
+  assert.equal(first.coreDependencies, 'prepared'); assert.equal(first.repositories[0]!.pending, false);
+  assert.equal(first.steps.find(step => step.id === 'workspace-build')!.state, 'deferred');
+  await fs.writeFile(path.join(f.workspace.checkout, 'shared.txt'), 'one\n'); calls.length = 0;
+  const retry = await runUpdate(f.workspace.checkout, f.ctx, deps);
+  assert.deepEqual(calls, ['components', 'workspace']); assert.ok(retry.repositories.every(repo => !repo.pending));
+});
+
 test('fresh installer and native rebuild entry points use the fetched core paths and check child completion', async () => {
   const core = path.resolve('fixture-core'), workspace = path.join(core, '.xrbuild'), calls: unknown[] = [], lines: string[] = [];
   const ctx = { line: (line: string) => lines.push(line), run: async (...args: unknown[]) => { calls.push(args); } };

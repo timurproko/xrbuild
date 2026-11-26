@@ -67,7 +67,8 @@ for (const role of ['core', 'workspace'] as const) for (const state of ['dirty',
     const bad = result.repositories.find(repo => repo.role === role)!, good = result.repositories.find(repo => repo.role !== role)!;
     assert.equal(bad.state, 'failed'); assert.equal(bad.from, before.head); assert.equal(bad.to, before.head);
     assert.match(bad.error!, /retry.*Update/); assert.equal(good.state, 'updated'); assert.equal(good.to, nextOther);
-    assert.equal(f.rebuilds.length, 0, 'do not rebuild through a refused source'); assert.equal(good.pending, true);
+    assert.equal(f.rebuilds.length, role === 'workspace' ? 1 : 0, 'only core-owned builds can continue through workspace refusal');
+    assert.equal(good.pending, role === 'core', 'completed core follow-up clears its own marker');
     if (state === 'removed-upstream') assert.match(bad.error!, /removed.*switch safely to main tracking origin\/main/);
     if (role === 'workspace') assert.match(f.lines.at(-1)!, /Restart required/);
   });
