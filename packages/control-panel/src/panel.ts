@@ -16,7 +16,7 @@ import { prepareEmbeddedProject, prepareEmbeddedDependencies, projectWritableRoo
 import { effectiveInputFingerprint, effectiveProjectOutput, publishEffectiveOutput, markEffectiveBuildFailed } from './embedded-project-output.ts';
 import { metadataText } from './embedded-inputs.ts';
 import { stagePackagerInputs } from './package-staging.ts';
-import { setupEmbeddedServices, embeddedServiceRuntime } from './service-artifacts.ts';
+import { setupEmbeddedServices, embeddedServiceRuntime, embeddedServiceReadiness } from './service-artifacts.ts';
 import { pluginDiscoverySnapshot, type DiscoverySnapshot } from './plugin-discovery.ts';
 import { cleanWorkingCache, reviewWorkingCache } from './cache-maintenance.ts';
 import { requireProjectOutput, projectPreviewRoute } from './project-build.ts';
@@ -32,7 +32,7 @@ import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, 
 import { PluginConfigConflict, PluginConfigInvalid, readUserPluginConfigState, writeUserPluginConfig, type UserPluginConfigState } from './plugin-config.ts';
 import { pluginByReference, pluginEnabled, pluginOwnsPath, pluginPackageDirs, pluginPreferenceValues, resolvePluginCatalog, discoverProjectCatalog, containedPath, type PluginCatalog } from './extension-catalog.ts';
 import { HttpError, readJson, sendJson, type EventHub } from './http.ts';
-import { JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
+import { JobFailure, JobRefused, JobRunner, runProcess, type Job, type JobContext } from './jobs.ts';
 import { runUpdate, updateStatus, type UpdateDeps, type UpdateStatus } from './update.ts';
 import { discoverPackagers, packagerFor, platformsFor, targetOf, validSetupStatus, type BuildTarget, type IdentityField, type PackagerDiscovery, type PackagerSetupStatus, type RoleSelection } from './packagers.ts';
 import { PackageList } from './packages.ts';
@@ -340,10 +340,63 @@ export class Panel {
     if (live && url && !this.nativeHandObserver) this.nativeHandObserver = { live, url, close: observeHandProfile(url, live, this.nativeHandSocket) };
   }
 
+  /** Explicit Rebuild and automatic action preparation share this recipe. Discovery never installs. */
+  rebuildDeps = { setupServices: setupEmbeddedServices, rebuildNative: rebuildHost };
+  private preparingRebuild = false;
+
+  private async preparationNeeded(native = false): Promise<boolean> {
+    try { if ((await embeddedServiceReadiness(this.repo, this.workspace)).needsBuild) return true; }
+    catch { return true; } // Unsafe state is diagnosed in a logged job, never silently repaired.
+    return native && this.nativeRebuildNeeded();
+  }
+
+  private async actionProjectLock<T>(p: Project, ctx: JobContext | undefined, work: () => Promise<T>): Promise<T> {
+    return ctx ? withEmbeddedProjectLock(this.repo, this.projects, p, work, release => this.holdProjectRun(release)) : work();
+  }
+
+  private async nativeRebuildNeeded(): Promise<boolean> {
+    if (!await fs.access(path.join(this.repo, 'native/host/CMakeLists.txt')).then(() => true, () => false)) return false;
+    const fresh = await resolvedHostFreshness(this.repo, this.workspace);
+    return !fresh.exists || fresh.outdated;
+  }
+
+  private async prepareRebuild(ctx: JobContext, native: boolean, force = false): Promise<void> {
+    const services = await embeddedServiceReadiness(this.repo, this.workspace);
+    const buildNative = native && (force || await this.nativeRebuildNeeded());
+    if (!services.needsBuild && !buildNative && !this.servicesPending) return;
+    if (this.preparingRebuild || this.pluginConsumers || this.runner.busy || this.preparingNativeRun || this.preparingPreview || this.settingsWrites.size || this.jobs.active().length > 1)
+      throw new Error('Stop apps and other jobs, then retry Rebuild.');
+    this.preparingRebuild = true;
+    try {
+      if (services.needsBuild || this.servicesPending) {
+        ctx.line('Rebuild: preparing application components…');
+        this.changingPlugins = true;
+        try {
+          if (services.needsBuild) await this.rebuildDeps.setupServices(this.repo, this.workspace, ctx);
+          await this.refreshPluginServices();
+          this.hub.send('plugins-changed', {}); this.hub.send('projects-changed', {});
+        } finally { this.changingPlugins = false; }
+        ctx.line('Application components are ready.');
+      }
+      if (this.servicesPending) throw this.servicesRefusal();
+      if (buildNative) {
+        ctx.line('Rebuild: compiling the host and selected plugins…');
+        const tools = await this.desktopSetup.deps.tools();
+        if (!tools.cmake) throw new HttpError(409, 'Desktop prerequisites are missing; open Rebuild to complete Desktop setup.', { needsRebuild: true });
+        await this.rebuildDeps.rebuildNative(this.repo, this.workspace, ctx, { cmake: tools.cmake, generator: tools.generator });
+      }
+    } catch (error) {
+      // Keep the recovery instruction with the failed job, not just an HTTP refusal.
+      if (error instanceof HttpError && typeof error.details === 'object' && error.details !== null)
+        throw new JobFailure(error.message, error.details, error.message);
+      throw error;
+    } finally { this.preparingRebuild = false; }
+  }
+
   private async withPluginServices<T>(work: () => Promise<T>): Promise<T> {
     await this.synchronizePluginServices(true);
     if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before using plugin services');
-    if (this.savingHands || this.restartPending || this.changingPlugins || this.maintainingCache || this.servicesPending) throw this.servicesRefusal('Plugin services are changing; retry after the update');
+    if (this.savingHands || this.restartPending || this.changingPlugins || this.preparingRebuild || this.maintainingCache || this.servicesPending) throw this.servicesRefusal('Plugin services are changing; retry after the update');
     this.pluginConsumers++;
     try { return await work(); } finally { this.pluginConsumers--; }
   }
@@ -352,7 +405,7 @@ export class Panel {
   private servicesRefusal(fallback = 'Plugin services are unavailable'): HttpError {
     return this.servicesPending && this.servicesNeedRestart
       ? new HttpError(409, launchBlocker({ servicesPending: true, servicesNeedRestart: true })!.message, { reason: 'restart-required', restart: true })
-      : new HttpError(409, this.servicesProblem ?? fallback);
+      : new HttpError(409, this.servicesProblem ?? fallback, { needsRebuild: true });
   }
 
   private async withPluginMutation<T>(work: () => Promise<T>): Promise<T> {
@@ -456,9 +509,24 @@ export class Panel {
 
   private startJob(...args: Parameters<JobRunner['start']>): Job {
     if (this.restartPending) throw new HttpError(409, 'The panel is restarting');
-    const [kind, projectId, , work] = args;
-    // Git recovery does not consume the loaded plugin services; stale/unavailable services must not veto it.
-    if (this.servicesPending && kind !== 'update') throw this.servicesRefusal('Plugin discovery is awaiting refresh');
+    const [kind, projectId] = args;
+    const originalWork = args[3];
+    const work: typeof originalWork = async ctx => {
+      try {
+        if (['host-rebuild', 'run', 'preview-run', 'web-build', 'icon-render', 'package'].includes(kind))
+          await this.prepareRebuild(ctx, kind === 'host-rebuild' || kind === 'run', kind === 'host-rebuild');
+        return await originalWork(ctx);
+      } catch (error) {
+        if (error instanceof HttpError && typeof error.details === 'object' && error.details !== null)
+          throw new JobFailure(error.message, error.details, error.message);
+        throw error;
+      }
+    };
+    args[3] = work;
+    // These jobs own explicit preparation; ordinary input staleness must not veto their logs.
+    const prepares = ['host-rebuild', 'run', 'preview-run', 'web-build', 'icon-render', 'package'].includes(kind);
+    if (this.servicesPending && kind !== 'update' && !prepares) throw this.servicesRefusal('Plugin discovery is awaiting refresh');
+    if (this.preparingRebuild) throw new HttpError(409, 'Rebuild is preparing application components; wait for it to finish.');
     if (this.changingPlugins) throw new HttpError(409, 'Plugin services are changing; retry after the update');
     if (kind === 'update') {
       // Last synchronous admission point: JobRunner.start reserves the job before any status/Git await.
@@ -468,7 +536,7 @@ export class Panel {
         throw new HttpError(409, 'Wait for cache, plugin or settings work to finish before updating');
     }
     try {
-      if (projectId?.startsWith('bundled:') && kind !== 'cache-cleanup') {
+      if (projectId?.startsWith('bundled:') && !['cache-cleanup', 'run', 'preview-run'].includes(kind)) {
         args[3] = async ctx => {
           const p = (await discoverProjectCatalog(this.repo, this.workspace, this.projects)).projects.find(record => record.project.id === projectId)?.project;
           if (!p) throw new HttpError(409, 'Project organization changed before the job started');
@@ -1270,9 +1338,23 @@ export class Panel {
   }
 
   async packageBuild(p: Project, body: { version?: string; confirm?: string[] }): Promise<Job> {
-    return this.withPluginServices(async () => this.preparePackageBuild(await this.prepareProject(p), body));
+    if (this.changingPlugins || this.preparingRebuild) throw this.servicesRefusal('Plugin services are changing; retry after the update');
+    if (await this.preparationNeeded(buildTargetOf(this.manifestOf(p)) !== 'webxr')) {
+      p = await this.prepareProject(p);
+      return this.startJob('package', p.id, `build package: ${p.manifest?.name ?? p.id}`, async ctx => {
+        await this.prepareRebuild(ctx, buildTargetOf(this.manifestOf(p)) !== 'webxr');
+        return this.withPluginServices(async () => {
+          const recipe = await this.preparePackageBuild(await this.prepareProject(p), body);
+          return recipe.work(ctx);
+        });
+      });
+    }
+    return this.withPluginServices(async () => {
+      const recipe = await this.preparePackageBuild(await this.prepareProject(p), body);
+      return this.startJob('package', p.id, recipe.title, recipe.work);
+    });
   }
-  private async preparePackageBuild(p: Project, body: { version?: string; confirm?: string[] }): Promise<Job> {
+  private async preparePackageBuild(p: Project, body: { version?: string; confirm?: string[] }) {
     const m = this.editableManifest(p);
     const packaging = this.packagingOf(m);
     if (!packaging.available) throw new HttpError(409, `packaging unavailable: ${packaging.reason}`);
@@ -1313,7 +1395,7 @@ export class Panel {
     const launchUrl = publicationPublisher && m.publication ? publicationUrl(publicationPublisher.publisher, m.publication.slug) : undefined;
     const label = str('id') ?? m.name;
     const platform = packaging.platform;
-    return this.startJob('package', p.id, `build and package (${packager.name}): ${label} ${version}`, async (ctx: JobContext) => {
+    return { title: `build and package (${packager.name}): ${label} ${version}`, work: async (ctx: JobContext) => {
       await this.ensureBrowserBuild(p, m, ctx);
       ctx.line(headset
         ? `${packager.name} package of ${p.id} ${version}: WebXR headset app (no host)`
@@ -1337,7 +1419,7 @@ export class Panel {
       await this.updateManifest(p.id, (cur) => ({ ...cur, plugins: { ...cur.plugins, [platform]: { ...cur.plugins?.[platform], ...identity, lastPackaged: version, version: nextVersion(version) } } }));
       ctx.line(`package ${label} ${version}: ${r.file} (${(r.sizeBytes / 1e9).toFixed(2)} GB). Next version: ${nextVersion(version)}`);
       return { zip: r.file, sizeBytes: r.sizeBytes, version };
-    });
+    } };
   }
 
   renderIcon(p: Project): Job {
@@ -1399,7 +1481,7 @@ export class Panel {
   }
 
   /** Only an explicit catalog launch may prepare other apps; catalog GETs stay read-only. */
-  async prepareCatalogIcons(p: Project): Promise<void> {
+  async prepareCatalogIcons(p: Project, ctx?: JobContext): Promise<void> {
     if (!p.manifest?.catalog) return;
     const catalog = await discoverProjectCatalog(this.repo, this.workspace, this.projects);
     for (const { project } of catalog.projects) {
@@ -1407,23 +1489,36 @@ export class Panel {
       const icon = await projectIconSource(this.repo, project);
       if (!icon.authored || icon.generated) continue;
       // Jobs expose cold preparation in Activity; the managed build lane deduplicates current output.
-      const done = await this.jobs.wait(this.webBuild(project));
-      if (done.state === 'failed') log(`[panel] Library icon unavailable for ${project.id}: ${done.error}`);
+      if (ctx) {
+        try {
+          const effective = await this.prepareProject(project);
+          await this.ensureBrowserBuild(effective, this.editableManifest(effective), ctx);
+        } catch (error) {
+          // Other catalog entries are best-effort, just like their standalone icon jobs.
+          const warning = `Library icon unavailable for ${project.id}: ${(error as Error).message}`;
+          ctx.line(warning); log(`[panel] ${warning}`);
+        }
+      } else {
+        const done = await this.jobs.wait(this.webBuild(project));
+        if (done.state === 'failed') log(`[panel] Library icon unavailable for ${project.id}: ${done.error}`);
+      }
     }
   }
 
   /** Starts one panel-owned standalone WebXR browser preview and returns its app URL. */
-  async preview(p: Project, mode: RunMode, flat: boolean | undefined, token: string, options: { fullscreen?: boolean; monitor?: number; clientPort: number }): Promise<string> {
+  async preview(p: Project, mode: RunMode, flat: boolean | undefined, token: string, options: { fullscreen?: boolean; monitor?: number; clientPort: number }, prepared?: JobContext): Promise<string | Job> {
+    if (!prepared && await this.preparationNeeded())
+      return this.startJob('preview-run', p.id, `prepare and run: ${p.manifest?.name ?? p.id}`, async ctx => ({ url: await this.preview(p, mode, flat, token, options, ctx) }));
     if (mode === 'dev' && !p.manifest?.scripts?.dev) throw new HttpError(409, `${p.id} has no dev script`);
     await this.synchronizePluginServices(true);
     this.refuseIfLaunchBlocked(p, this.launchState(p));
     if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before running');
-    if (p.readOnly) this.refuseIfBusy(p.id);
+    if (p.readOnly && !prepared) this.refuseIfBusy(p.id);
     this.preparingPreview = true;
     try {
       return await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
         const effective = mode === 'dev' || p.workingRoot ? await this.prepareProject(p) : p;
-        await this.prepareCatalogIcons(effective);
+        await this.prepareCatalogIcons(effective, prepared);
         return this.preparePreview(effective, mode, flat ?? effective.runDefaults?.flat, token, options);
       }, release => this.holdProjectRun(release));
     }
@@ -1491,24 +1586,35 @@ export class Panel {
   }
 
   /** flat: Orthographic managed camera; non-desktop displays also start mono and may switch live. */
-  async run(p: Project, mode: RunMode, flat?: boolean, cameraView?: boolean, desktop?: { fullscreen?: boolean; monitor?: number }): Promise<void> {
+  async run(p: Project, mode: RunMode, flat?: boolean, cameraView?: boolean, desktop?: { fullscreen?: boolean; monitor?: number }, prepared?: JobContext): Promise<void | Job> {
+    if (p.manifest && buildTargetOf(p.manifest) === 'webxr') throw new HttpError(409, `${p.id} is a WebXR headset app: open it in a browser, or build a package for the headset`);
+    if (!prepared && await this.preparationNeeded(true)) {
+      if (await this.desktopSetup.isBusy()) throw new HttpError(409, 'Wait for desktop setup to finish before running.');
+      return this.startJob('run', p.id, `prepare and run: ${p.manifest?.name ?? p.id}`, async ctx => {
+        await this.run(p, mode, flat, cameraView, desktop, ctx);
+        return { launched: true };
+      });
+    }
     if (mode === 'dev' && !p.manifest?.scripts?.dev) throw new HttpError(409, `${p.id} has no dev script`);
     await this.synchronizePluginServices(true);
     const desktopSetupBusy = await this.desktopSetup.isBusy();
     this.refuseIfLaunchBlocked(p, this.launchState(p));
-    if (this.jobs.active().some(job => job.kind === 'host-rebuild')) throw new HttpError(409, 'wait for the native rebuild to finish before running');
+    if (this.jobs.active().some(job => job.kind === 'host-rebuild' || job.kind === 'run' && !prepared)) throw new HttpError(409, 'wait for the native rebuild to finish before running');
     if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before running');
     if (this.jobs.active().some(job => job.kind === 'desktop-setup') || desktopSetupBusy) throw new HttpError(409, 'wait for desktop setup to finish before running');
-    if (p.readOnly) this.refuseIfBusy(p.id);
+    if (p.readOnly && !prepared) this.refuseIfBusy(p.id);
     this.preparingNativeRun = true;
     try {
       await withEmbeddedProjectLock(this.repo, this.projects, p, async () => {
         if (mode === 'built' && p.readOnly && p.manifest?.host?.args?.length) {
           p = await this.prepareProject(p);
-          const done = await this.jobs.wait(this.webBuild(p));
-          if (done.state === 'failed') throw new HttpError(409, done.error ?? 'Project build failed');
+          if (prepared) await this.ensureBrowserBuild(p, this.editableManifest(p), prepared);
+          else {
+            const done = await this.jobs.wait(this.webBuild(p));
+            if (done.state === 'failed') throw new HttpError(409, done.error ?? 'Project build failed');
+          }
         } else if (mode === 'dev' || p.workingRoot) p = await this.prepareProject(p);
-        await this.prepareCatalogIcons(p);
+        await this.prepareCatalogIcons(p, prepared);
         const settings = p.readOnly ? await readProjectRunSettings(this.repo, this.workspace, p) : null;
         const screen = desktop || settings ? { fullscreen: desktop?.fullscreen ?? settings?.values.fullscreen ?? false, monitor: desktop?.monitor ?? settings?.values.monitor ?? 0 } : undefined;
         await this.runNative(settings ? withRunSettings(p, settings) : p, mode, flat ?? settings?.values.flat ?? p.runDefaults?.flat ?? false, cameraView ?? settings?.values.cameraView ?? p.runDefaults?.cameraView ?? false, screen);
@@ -1577,7 +1683,7 @@ export class Panel {
 
   private launchState(p: Project): LaunchState {
     return {
-      restartPending: this.restartPending, changingPlugins: this.changingPlugins, maintainingCache: this.maintainingCache,
+      restartPending: this.restartPending, changingPlugins: this.changingPlugins || this.preparingRebuild, maintainingCache: this.maintainingCache,
       servicesPending: this.servicesPending, servicesProblem: this.servicesProblem, servicesNeedRestart: this.servicesNeedRestart,
       preparingNativeRun: this.preparingNativeRun, preparingPreview: this.preparingPreview, settingsSaving: this.settingsWrites.has(p.id),
     };
@@ -1733,34 +1839,60 @@ export class Panel {
         if (p.readOnly) validateRunOverrides(Object.fromEntries(Object.entries({ flat, fullscreen, monitor }).filter(([, value]) => value !== undefined)));
         if (mode !== 'dev' && mode !== 'built') throw new HttpError(400, 'standalone preview mode must be built or dev');
         const runMode: RunMode = mode;
-        if (runMode === 'built' && p.origin === 'bundled' && (!p.readOnly || !(await requireProjectOutput(this.repo, this.workspace, p).catch(() => null)))) {
-          const done = await this.jobs.wait(this.webBuild(p));
-          if (done.state === 'failed') throw new HttpError(409, done.error ?? 'Project build failed');
-          p = await this.reloadPreparedProject(p);
-        }
         const previewToken = typeof token === 'string' && /^[a-zA-Z0-9-]{16,80}$/.test(token) ? token : randomUUID();
         const screen = Number.isInteger(monitor) && monitor! >= 0 && monitor! <= 255 ? monitor! : 0;
-        const url = await this.preview(p, runMode, p.readOnly && flat === undefined ? undefined : flat === true, previewToken, {
-          fullscreen: p.readOnly && fullscreen === undefined ? undefined : fullscreen === true,
-          monitor: p.readOnly && monitor === undefined ? undefined : screen, clientPort: req.socket.remotePort ?? 0,
+        const launch = (ctx?: JobContext) => this.actionProjectLock(p, ctx, async () => {
+          if (runMode === 'built' && p.origin === 'bundled' && (!p.readOnly || !(await requireProjectOutput(this.repo, this.workspace, p).catch(() => null)))) {
+            if (ctx) {
+              p = await this.prepareProject(p);
+              await this.ensureBrowserBuild(p, this.editableManifest(p), ctx);
+            } else {
+              const done = await this.jobs.wait(this.webBuild(p));
+              if (done.state === 'failed') throw new HttpError(409, done.error ?? 'Project build failed');
+            }
+            p = await this.reloadPreparedProject(p);
+          }
+          return this.preview(p, runMode, p.readOnly && flat === undefined ? undefined : flat === true, previewToken, {
+            fullscreen: p.readOnly && fullscreen === undefined ? undefined : fullscreen === true,
+            monitor: p.readOnly && monitor === undefined ? undefined : screen, clientPort: req.socket.remotePort ?? 0,
+          }, ctx);
         });
-        sendJson(res, 200, { url, fullscreen: this.previewProjection?.fullscreen ?? false, monitor: this.previewProjection?.monitor ?? 0 });
+        if (await this.preparationNeeded()) {
+          const job = this.startJob('preview-run', p.id, `prepare and run: ${p.manifest?.name ?? p.id}`, async ctx => ({ url: await launch(ctx) }));
+          sendJson(res, 202, jobSummary(job)); return true;
+        }
+        const url = await launch();
+        sendJson(res, typeof url === 'string' ? 200 : 202, typeof url === 'string' ? { url, fullscreen: this.previewProjection?.fullscreen ?? false, monitor: this.previewProjection?.monitor ?? 0 } : jobSummary(url));
         return true;
       }
       case 'run': {
+        if (buildTargetOf(this.manifestOf(p)) === 'webxr') throw new HttpError(409, `${p.id} is a WebXR headset app: open it in a browser, or build a package for the headset`);
         const { mode, flat, cameraView, fullscreen, monitor } = await readJson<{ mode?: RunMode; flat?: boolean; cameraView?: boolean; fullscreen?: boolean; monitor?: number }>(req);
         if (p.readOnly) validateRunOverrides(Object.fromEntries(Object.entries({ flat, cameraView, fullscreen, monitor }).filter(([, value]) => value !== undefined)));
         const runMode = mode === 'dev' ? 'dev' : 'built';
-        if (runMode === 'built' && (!p.readOnly || !(await requireProjectOutput(this.repo, this.workspace, p).catch(() => null)))) {
-          const build = this.webBuild(p);
-          const done = await this.jobs.wait(build);
-          if (done.state === 'failed') throw new HttpError(400, done.error ?? 'the app build failed');
-          if (p.origin === 'bundled') p = await this.reloadPreparedProject(p);
-        }
         const screen = Number.isInteger(monitor) && monitor! >= 0 && monitor! <= 255 ? monitor! : 0;
-        await this.run(p, runMode, p.readOnly && flat === undefined ? undefined : flat === true, p.readOnly && cameraView === undefined ? undefined : cameraView === true,
-          { fullscreen: p.readOnly && fullscreen === undefined ? undefined : fullscreen === true, monitor: p.readOnly && monitor === undefined ? undefined : screen });
-        sendJson(res, 200, this.runner.state());
+        const launch = (ctx?: JobContext) => this.actionProjectLock(p, ctx, async () => {
+          if (runMode === 'built' && (!p.readOnly || !(await requireProjectOutput(this.repo, this.workspace, p).catch(() => null)))) {
+            if (ctx) {
+              p = await this.prepareProject(p);
+              await this.ensureBrowserBuild(p, this.editableManifest(p), ctx);
+            } else {
+              const done = await this.jobs.wait(this.webBuild(p));
+              if (done.state === 'failed') throw new HttpError(400, done.error ?? 'the app build failed');
+            }
+            if (p.origin === 'bundled') p = await this.reloadPreparedProject(p);
+          }
+          return this.run(p, runMode, p.readOnly && flat === undefined ? undefined : flat === true, p.readOnly && cameraView === undefined ? undefined : cameraView === true,
+            { fullscreen: p.readOnly && fullscreen === undefined ? undefined : fullscreen === true, monitor: p.readOnly && monitor === undefined ? undefined : screen }, ctx);
+        });
+        if (await this.preparationNeeded(true)) {
+          if (await this.desktopSetup.isBusy()) throw new HttpError(409, 'Wait for desktop setup to finish before running.');
+          const job = this.startJob('run', p.id, `prepare and run: ${p.manifest?.name ?? p.id}`, async ctx => { await launch(ctx); return { launched: true }; });
+          sendJson(res, 202, jobSummary(job));
+        } else {
+          const job = await launch();
+          sendJson(res, job ? 202 : 200, job ? jobSummary(job) : this.runner.state());
+        }
         return true;
       }
     }
@@ -1975,7 +2107,7 @@ export class Panel {
         return true;
       }
       case 'GET host':
-        sendJson(res, 200, { ...await resolvedHostFreshness(this.repo, this.workspace), workspace: this.workspace });
+        sendJson(res, 200, { ...await resolvedHostFreshness(this.repo, this.workspace), componentsNeedRebuild: await this.preparationNeeded(), workspace: this.workspace });
         return true;
       case 'GET panel':
         sendJson(res, 200, this.panelFreshness());
@@ -2041,8 +2173,8 @@ export class Panel {
         if (this.preparingNativeRun || this.runner.busy) throw new HttpError(409, 'stop the running or starting host first: its exe must not overlap a rebuild');
         if (this.jobs.active().some(job => job.kind === 'update')) throw new HttpError(409, 'wait for the update to finish before rebuilding');
         sendJson(res, 202, jobSummary(this.startJob('host-rebuild', null, 'rebuild xrb-host', async ctx => {
-          const tools = await this.desktopSetup.deps.tools();
-          return rebuildHost(this.repo, this.workspace, ctx, { cmake: tools.cmake ?? undefined, generator: tools.generator });
+          ctx.line('Rebuild complete.');
+          return resolvedHostFreshness(this.repo, this.workspace);
         })));
         return true;
       case 'GET update': {

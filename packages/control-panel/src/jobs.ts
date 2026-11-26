@@ -3,7 +3,7 @@
 import { spawn, type SpawnOptions } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 
-export type JobKind = 'web-build' | 'package' | 'packager-setup' | 'tool-setup' | 'publication' | 'host-rebuild' | 'icon-render' | 'cache-cleanup' | 'desktop-setup' | 'update';
+export type JobKind = 'run' | 'preview-run' | 'web-build' | 'package' | 'packager-setup' | 'tool-setup' | 'publication' | 'host-rebuild' | 'icon-render' | 'cache-cleanup' | 'desktop-setup' | 'update';
 export type JobState = 'queued' | 'running' | 'done' | 'failed';
 export type JobOperation = 'publish' | 'update' | 'activate' | 'delete-release' | 'unpublish';
 
@@ -156,6 +156,7 @@ export class JobRunner extends EventEmitter {
     for (const j of this.active()) {
       if (kind === 'desktop-setup' || j.kind === 'desktop-setup') return `${j.title} is active: desktop setup cannot overlap other jobs`;
       if (kind === 'cache-cleanup' || j.kind === 'cache-cleanup') return `${j.title} is active: cache maintenance cannot overlap other jobs`;
+      if (['run', 'preview-run'].includes(kind) || ['run', 'preview-run'].includes(j.kind)) return `${j.title} is active: run preparation cannot overlap other jobs`;
       // An update changes the sources every other job reads, and ends with a native rebuild.
       if (kind === 'update' || j.kind === 'update') return `${j.title} is active: an update cannot overlap other jobs`;
       if (j.kind === kind) {

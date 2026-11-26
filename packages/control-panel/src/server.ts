@@ -43,6 +43,8 @@ import { assertEditableProject, assertUserRoot, assertWritablePath } from './pro
 import { projectRunSettingsFile, readProjectRunSettings, withRunSettings } from './project-run-settings.ts';
 import { publicationCard } from './publication.ts';
 import { ManagedTools } from './managed-tools.ts';
+import { isRetiredHandsPath } from '../ui/hands-routes.js';
+import { HandsTools } from './hands-tools.ts';
 import { handPolicyDocument } from './hand-policy-document.ts';
 import { listMonitors } from './monitors.ts';
 import { applyLayout, readLayout, validateLayout, type Layout } from './layout.ts';
@@ -52,7 +54,7 @@ export const APP_NAME = 'xrb-control-panel';
 const ICON_LIMIT = 8 * 1024 * 1024;
 const RESTART_SILENT = path.join(PANEL_DIR, 'src', 'restart-silent.vbs');
 /** SDK modules the icon preview page loads (`/sdk/<name>`); they import only `three`. */
-const SDK_MODULES = new Set(['icon.js', 'icon-object.js']);
+const SDK_MODULES = new Set(['icon.js', 'icon-object.js', 'hands.js', 'hand-source.js', 'hand-profile.js', 'hand-visual.js', 'one-euro.js', 'protocol.js', 'stereo.js', 'scene-hands.js', 'interaction/grab.js', 'interaction/core/interactor.js', 'interaction/core/targets.js', 'interaction/core/tuning.js']);
 
 export type WorkspaceKind = 'user' | 'repository' | 'explicit';
 
@@ -262,6 +264,7 @@ export async function describeProject(projects: string, p: Project, panel: Panel
     card: m ? publicationCard(m, iconModelMs !== null) : null,
     canDev: !!m?.scripts?.dev,
     archived: isArchivedId(p.id),
+    componentsNeedRebuild: panel.pluginServiceStatus().pending,
     packaging: panel.packagingOf(m),
     packagingChoices: panel.packagingChoicesOf(m),
     publication,
@@ -289,6 +292,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
   panel.restartWorkPending = () => activeMutations > 0 || managedTools.pendingWork();
   const managedTools = new ManagedTools({ core, workspace, projects, port, server: () => server, prepare: () => panel.prepareManagedTools(), available: () => { const status = panel.pluginServiceStatus(); return status.pending ? status.problem ?? 'Plugin services are changing; wait for setup/refresh to finish' : null; } });
   panel.onPluginSourcesChanged = async (restartRequired) => { if (restartRequired) managedTools.invalidatePluginRuntimes(); await managedTools.navigation(); };
+  const handsTools = new HandsTools(core, workspace);
   const autoRoute = opts.autoRoute;
   let autoRouteWork: Promise<string | null> | null = null;
 
@@ -318,6 +322,13 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
     if (closing || panel.restartPending && !['/api/ping', '/api/restart'].includes(url.pathname)) {
       res.setHeader('connection', 'close');
       return sendJson(res, 503, { error: 'The panel is restarting' });
+    }
+
+    if (isRetiredHandsPath(url.pathname) || /^\/__(?:handtracking|xrbuild)(?:\/|$)/.test(url.pathname)) throw new HttpError(404, 'not found');
+    if (url.pathname === '/api/hands/tools' && method === 'GET') return sendJson(res, 200, await handsTools.status());
+    if (url.pathname.startsWith('/hands/tools/') || url.pathname.startsWith('/api/hands/tools/')) {
+      if (await handsTools.handle(req, res)) return;
+      throw new HttpError(404, 'not found');
     }
 
     if (autoRoute && isDocumentRefresh(method, req, url.pathname) && !['api', 'preview', 'vendor', 'sdk'].includes(parts[0])) {
@@ -387,21 +398,24 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       }
       return serveStatic(res, entry, file);
     }
-    if (method === 'GET' && url.pathname === '/vendor/three.module.js') {
-      // three.js for the icon preview page (ui/icon-preview.html), from the SDK's own dependency.
-      return serveStatic(res, path.dirname(createRequire(path.join(core, 'packages', 'sdk', 'package.json')).resolve('three')), 'three.module.js');
+    if (method === 'GET' && ['/vendor/three.module.js', '/vendor/OrbitControls.js'].includes(url.pathname)) {
+      // Fixed core viewer dependencies, never a plugin build or arbitrary package path.
+      const require = createRequire(path.join(core, 'packages', 'sdk', 'package.json'));
+      return url.pathname === '/vendor/three.module.js'
+        ? serveStatic(res, path.dirname(require.resolve('three')), 'three.module.js')
+        : serveStatic(res, path.dirname(require.resolve('three/addons/controls/OrbitControls.js')), 'OrbitControls.js');
     }
-    if (method === 'GET' && parts[0] === 'sdk' && parts.length === 2 && SDK_MODULES.has(parts[1])) {
-      // The SDK's icon modules as browser JS (types stripped), so the preview page draws icons as apps do.
-      const source = await fs.readFile(path.join(core, 'packages', 'sdk', 'src', parts[1].replace(/\.js$/, '.ts')), 'utf8');
+    const sdkModule = parts.slice(1).join('/');
+    if (method === 'GET' && parts[0] === 'sdk' && SDK_MODULES.has(sdkModule)) {
+      // Exact core dependency closure only; no arbitrary source/package serving or build on navigation.
+      const source = await fs.readFile(path.join(core, 'packages', 'sdk', 'src', sdkModule.replace(/\.js$/, '.ts')), 'utf8');
       res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' });
-      res.end(stripTypeScriptTypes(source));
+      res.end(stripTypeScriptTypes(source).replace(/(from\s*['"]\.[^'"]*)\.ts(['"])/g, '$1.js$2'));
       return;
     }
     if (parts[0] !== 'api') {
-      if (['/hands', '/hands/', '/hand-tracking', '/hand-tracking/'].includes(url.pathname)) {
+      if (url.pathname === '/hands/') {
         if (!['GET', 'HEAD'].includes(method)) throw new HttpError(405, 'method not allowed');
-        if (url.pathname !== '/hands/') { res.writeHead(302, { location: `/hands/${url.search}`, 'cache-control': 'no-store' }); res.end(); return; }
         if (method === 'HEAD') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(); return; }
         return serveStatic(res, uiDir, 'hands.html');
       }
@@ -709,6 +723,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       const closed = new Promise<void>((resolve) => server.close(() => resolve()));
       hub.closeAll();
       await managedTools.close();
+      await handsTools.close();
       await panel.dispose();
       server.closeIdleConnections();
       await closed;

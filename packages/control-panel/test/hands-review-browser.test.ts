@@ -41,7 +41,7 @@ test('adjustment-only reload and Apply cannot rebase an outdated source picker a
       await waitFor(evaluate, `document.querySelector('[data-action="reload"]').hidden`);
       assert.equal(await evaluate(`document.querySelector('#hands-provider').value`), 'core/simulated');
       await evaluate(editX); await evaluate(`document.querySelector('[data-action="apply"]').click()`);
-      await waitFor(evaluate, `document.querySelector('#hands-adjustments').dataset.dirty==='false'`);
+      await waitFor(evaluate, `document.querySelector('#hands-adjustments-root').dataset.dirty==='false'`);
       assert.equal((await readHandsState(f.core, f.workspace)).profile.offsetMm.x, 25);
       await evaluate(`(()=>{const original=window.fetch;window.fetch=async (...args)=>{const response=await original(...args);if(args[0]==='/api/hands'&&args[1]?.method==='PUT')window.sourceSaveStatus=response.status;return response;};document.querySelector('#hands-save').click();})()`);
       await waitFor(evaluate, `window.sourceSaveStatus!==undefined`);
@@ -69,7 +69,7 @@ test('failed native delivery offers Retry Apply for unchanged persisted values a
       await evaluate(editX); await evaluate(`document.querySelector('[data-action="apply"]').click()`);
       await waitFor(evaluate, `/channel is unavailable/.test(document.querySelector('[data-status]').textContent)`);
       const saved = await readHandsState(f.core, f.workspace); assert.equal(saved.profile.offsetMm.x, 25);
-      assert.equal(await evaluate(`document.querySelector('#hands-adjustments').dataset.dirty`), 'false', 'persistence succeeded, so there is no unsaved edit');
+      assert.equal(await evaluate(`document.querySelector('#hands-adjustments-root').dataset.dirty`), 'false', 'persistence succeeded, so there is no unsaved edit');
       assert.equal(await evaluate(`document.querySelector('[data-action="apply"]').disabled`), false, 'the advertised retry must work without manufacturing an edit');
       assert.equal(await evaluate(`document.querySelector('[data-action="apply"]').textContent`), 'Retry Apply');
       panel.nativeHandSocket = Socket; panel.runner.s.channelUrl = 'ws://fixture/?token=owned';

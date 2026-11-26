@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { JobFailure, LineSplitter, type JobContext } from './jobs.ts';
-import { rebuildUpdatedSources, setupUpdatedCore } from './update-runtime.ts';
+import { rebuildUpdatedSources, rebuildUpdatedServices, setupUpdatedCore } from './update-runtime.ts';
 
 export interface GitResult { code: number; output: string }
 /** Runs `git <args>` in a folder; streamed lines go to onLine. Injectable so tests can stub `git lfs`. */
@@ -214,6 +214,7 @@ export interface UpdateDeps {
   rebuild?: (pluginsOnly: boolean, ctx: JobContext) => Promise<string[]>;
   /** Injectable installer boundary; production uses the existing frozen public-core installer in a fresh process. */
   setupCore?: (core: string, ctx: JobContext) => Promise<void>;
+  setupServices?: (core: string, workspace: string, ctx: JobContext) => Promise<void>;
 }
 
 /** Plugin ids from rebuilt native projects: a plugin's `<id>/runtime` subproject is the same plugin. */
@@ -443,6 +444,15 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
   const work = repositories.filter(repo => repo.pending);
   let coreDependencies: UpdateResult['coreDependencies'] = 'unchanged';
   let rebuilt: string[] = [], buildError: string | null = null;
+  let componentsPending = false;
+  const prepareServices = async () => {
+    if (!deps.core || !await fs.access(path.join(deps.core, 'embedded')).then(() => true, () => false)) return;
+    ctx.line('step setup');
+    ctx.line('Rebuild: checking application components…');
+    componentsPending = true;
+    await (deps.setupServices ?? rebuildUpdatedServices)(deps.core, workspace, ctx);
+    componentsPending = false;
+  };
   if (work.length) {
     if (repositories.some(repo => repo.state === 'failed')) {
       coreDependencies = 'deferred';
@@ -471,6 +481,7 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
           } else ctx.line(fingerprint ? 'Core dependency inputs match the last successful preparation; no package install needed.'
             : 'No public core dependency inputs; no package install needed.');
         }
+        await prepareServices();
         stage = 'rebuild';
         ctx.line('step rebuild');
         if (deps.rebuild) {
@@ -491,6 +502,10 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
         ctx.line(buildError);
       }
     }
+  } else if (!repositories.some(repo => repo.state === 'failed')) {
+    // A manual pull or interrupted preparation can leave components stale even at an unchanged Git head.
+    try { await prepareServices(); }
+    catch (error) { buildError = `Application component rebuild failed: ${redactRemote((error as Error).message)}; retry Update.`; ctx.line(buildError); }
   }
   for (const repo of repositories) {
     if ((repo.from && repo.to && repo.from !== repo.to) || (repo.updateFrom && repo.updateFrom !== repo.to))
@@ -498,9 +513,10 @@ export async function runUpdate(workspace: string, ctx: JobContext, deps: Update
   }
   const restartRequired = (await Promise.all(targets.map(target => canonicalPath(target.dir))))
     .some(dir => restartNeeded.has(dir));
-  const lastLine = restartRequired
+  const activationLine = restartRequired
     ? 'Restart required: restart the panel to load the updated code; Update did not restart the panel.'
     : 'Update did not restart the panel; no repository code changed in this run.';
+  const lastLine = componentsPending ? `Application components still need Rebuild; retry Update. ${activationLine}` : activationLine;
   const descriptions = repositories.map(repo => {
     const label = repo.roles.map(role => role === 'core' ? 'Core' : 'Workspace').join('/');
     const range = `${repo.from ?? 'unknown'} → ${repo.to ?? 'unknown'}`;
