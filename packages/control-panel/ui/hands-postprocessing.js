@@ -187,7 +187,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     finally { reading = false; }
   }
   function editField(field, committed = false) {
-    if (!snapshot || snapshot.problem || !plugin()?.available) return;
+    if (!snapshot || snapshot.problem || !(plugin()?.available || plugin()?.needsSetup)) return;
     const id = selected, name = field.dataset.meshField ?? field.dataset.meshRange;
     const f = plugin().declaration.settings.find(f => f.key === name); if (!f) return;
     const canonical = fields.querySelector(`[data-mesh-field="${name}"]`), range = fields.querySelector(`[data-mesh-range="${name}"]`);
@@ -236,7 +236,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
             || !equal(valueAt(current, target, edit.name), edit.base) && !equal(valueAt(current, target, edit.name), edit.value)).map(([name]) => name);
         if (conflicts.length) throw makeConflict(current, sent, conflicts);
         const p = plugin(current, target);
-        if (target && !p?.available) throw makeConflict(current, sent, [...sent.keys()], p?.reason ?? 'Selected plugin is unavailable.');
+        if (target && !p?.available && !p?.needsSetup) throw makeConflict(current, sent, [...sent.keys()], p?.reason ?? 'Selected plugin is unavailable.');
         const stored = current.choice?.settings?.[target];
         const needsReview = p && stored && (stored.version !== p.declaration.settingsVersion || Object.keys(stored.values).some(name => !p.declaration.settings.some(f => f.key === name)));
         if (needsReview && ![...sent.values()].every(edit => edit.reviewed)) throw makeConflict(current, sent, [...sent.keys()], 'Saved settings schema changed.');
