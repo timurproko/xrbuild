@@ -50,7 +50,8 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
     (async () => {
       try {
         plan = await post('/api/hands/postprocessing/setup-plan', { owner });
-        message.textContent = `${label}: downloads ${size(plan.downloadBytes)} in ${plan.items.length} files, about ${size(plan.installedBytes)} on disk.`;
+        const what = plan.label ? `${label} ${plan.label}` : label;
+        message.textContent = `${what}: downloads ${size(plan.downloadBytes)} in ${plan.items.length} files, about ${size(plan.installedBytes)} on disk.`;
         output.textContent = [`Destination: ${plan.destination}`, '', ...plan.items.map(i => `${i.publisher} · ${i.name} ${i.version} · ${size(i.bytes)} · ${i.licence}`),
           '', 'Files come from their publishers under the licences listed above.'].join('\n');
         install.disabled = false;

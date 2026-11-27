@@ -28,7 +28,7 @@ import { launchBlocker, restartBlocker, type LaunchState } from './launch-blocke
 import { log } from './env.ts';
 import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHost, clearProviderCache } from './host-build.ts';
 import { DesktopSetup } from './desktop-setup.ts';
-import { installMeshSetup, meshSetupOwners, meshSetupPlan, MeshSetupUnavailable } from './hand-mesh-setup.ts';
+import { installMeshSetup, meshSetupNeeded, meshSetupOwners, meshSetupPlan, MeshSetupUnavailable } from './hand-mesh-setup.ts';
 import { panelFreshness, panelSourceRoots, type PanelFreshness } from './panel-freshness.ts';
 import { HostRunner, type RunMode, type RunState } from './host-runner.ts';
 import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings, type PluginSetting, type SettingValue } from './plugin-manager.ts';
@@ -2092,7 +2092,9 @@ export class Panel {
         const active = delivery?.owner && delivery.id ? { owner: delivery.owner, id: delivery.id,
           label: registry.plugins.find(p => p.owner === delivery.owner && p.id === delivery.id)?.label ?? delivery.id } : null;
         const setups = await meshSetupOwners(this.repo, this.workspace);
-        sendJson(res, 200, { plugins: registry.plugins.map(({ program, launch, ...p }) => ({ ...p, setup: setups.has(p.owner), declaration: { ...p.declaration, program: undefined, args: undefined } })),
+        // A selected plugin with a setup reports which declared runtime its saved settings still need (for example GPU).
+        const needed = new Map(await Promise.all(registry.plugins.filter(p => setups.has(p.owner) && p.available).map(async p => [p.owner, await meshSetupNeeded(this.repo, this.workspace, p.owner)] as const)));
+        sendJson(res, 200, { plugins: registry.plugins.map(({ program, launch, ...p }) => ({ ...p, setup: setups.has(p.owner), setupNeeded: needed.get(p.owner) ?? null, declaration: { ...p.declaration, program: undefined, args: undefined } })),
           revision: state.revision, registryRevision: registry.revision, choice, problem, status: run?.status ?? (this.handSessions.meshStatus || this.meshStatus),
           running: this.handSessions.busy || this.runner.busy && this.nativeHandPolicy !== null, active, delivery });
         return true;
@@ -2111,9 +2113,10 @@ export class Panel {
         const owner = body.owner, consent = body.consent;
         const plan = await meshSetupPlan(this.repo, this.workspace, owner).catch(e => { throw e instanceof MeshSetupUnavailable ? new HttpError(404, e.message) : e; });
         if (plan.consent !== consent) throw new HttpError(409, 'The setup plan changed; review it again');
+        const kind = plan.kind;
         const abort = new AbortController(); this.meshSetupAbort = abort;
         const job = this.startJob('mesh-setup', null, 'install post-processing prerequisites', async ctx => {
-          try { await installMeshSetup(this.repo, this.workspace, owner, consent, ctx, abort.signal); }
+          try { await installMeshSetup(this.repo, this.workspace, owner, consent, ctx, abort.signal, kind); }
           catch (error) {
             if (abort.signal.aborted) { ctx.line('Install cancelled. Downloaded files are kept, so Install continues where it stopped.'); throw new Error('Install cancelled'); }
             throw error;

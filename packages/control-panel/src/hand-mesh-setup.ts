@@ -3,19 +3,27 @@ import { pathToFileURL } from 'node:url';
 import { resolvePluginCatalog } from './extension-catalog.ts';
 import { resolvePluginModule } from './component-resolver.ts';
 import type { JobContext } from './jobs.ts';
+import { readHandsState } from './hands-state.ts';
+import { meshChoice } from './hand-mesh-state.ts';
 
 /** A post-processing plugin may export its own consent-gated prerequisite installer under this name. */
 export const MESH_SETUP_EXPORT = 'mesh-runtime-setup';
 
 export interface MeshSetupItem { name: string; version: string; publisher: string; licence: string; bytes: number }
+/**
+ * Optional install kinds a setup declares (`export const setupKinds`): each kind is a separate runtime, needed always or
+ * only while one of the plugin's settings has a given value. Without it the setup has one kind, installed by `plan()`.
+ */
+export interface MeshSetupKind { id: string; label: string; requires?: { setting: string; value: unknown } }
 export interface MeshSetupPlan {
-  owner: string; consent: string; installed: boolean; destination: string;
+  owner: string; kind: string | null; label: string | null; consent: string; installed: boolean; destination: string;
   downloadBytes: number; installedBytes: number; licences: string[]; items: MeshSetupItem[];
 }
 interface SetupModule {
   plan(options?: object): { consent: string; destination: string; downloadBytes: number; installedBytes: number; licences: string[]; items: MeshSetupItem[] };
   install(options: object): Promise<unknown>;
-  status?(options?: object): Promise<{ cpu?: { installed?: boolean } | null }>;
+  status?(options?: object): Promise<Record<string, { installed?: boolean } | null | unknown>>;
+  setupKinds?: MeshSetupKind[];
 }
 export class MeshSetupUnavailable extends Error {}
 
@@ -37,12 +45,42 @@ export async function meshSetupOwners(core: string, workspace: string): Promise<
   return new Set(catalog.selected.filter(plugin => plugin.meta.handMesh && plugin.meta.exports?.[MESH_SETUP_EXPORT]).map(plugin => plugin.key));
 }
 
+const validKinds = (value: unknown): MeshSetupKind[] => Array.isArray(value) ? value.filter((k): k is MeshSetupKind => !!k && typeof k === 'object'
+  && typeof k.id === 'string' && /^[a-z][a-z0-9-]{0,31}$/.test(k.id) && typeof k.label === 'string' && k.label.length <= 60).slice(0, 8) : [];
+const installedKind = (status: Record<string, unknown> | null | undefined, kind: string) => {
+  const entry = status?.[kind]; return !!entry && typeof entry === 'object' && (entry as { installed?: unknown }).installed === true;
+};
+
+/** The saved settings of this plugin's mesh layer (empty when none are saved). */
+async function savedSettings(core: string, workspace: string, owner: string): Promise<Record<string, unknown>> {
+  try {
+    const choice = meshChoice((await readHandsState(core, workspace)).raw.postprocessing);
+    const entry = Object.entries(choice.settings).find(([key]) => key.startsWith(`${owner}/`));
+    return entry?.[1].values ?? {};
+  } catch { return {}; }
+}
+
+/** The first declared kind the current settings need that is not installed yet (null when everything needed is there). */
+export async function neededKind(module: SetupModule, settings: Record<string, unknown>): Promise<MeshSetupKind | null> {
+  const kinds = validKinds(module.setupKinds); if (!kinds.length) return null;
+  const status = await module.status?.({}).catch(() => null) as Record<string, unknown> | null;
+  return kinds.find(k => (!k.requires || settings[k.requires.setting] === k.requires.value) && !installedKind(status, k.id)) ?? null;
+}
+
+/** Which declared runtime the plugin's saved settings still need, for the layer card's Install. */
+export async function meshSetupNeeded(core: string, workspace: string, owner: string): Promise<{ kind: string; label: string } | null> {
+  try { const { module } = await setupModule(core, workspace, owner); const kind = await neededKind(module, await savedSettings(core, workspace, owner)); return kind && { kind: kind.id, label: kind.label }; }
+  catch { return null; }
+}
+
 /** What the setup would download, from where and under which licences. Downloads nothing. */
 export async function meshSetupPlan(core: string, workspace: string, owner: string): Promise<MeshSetupPlan> {
   const { module, plugin } = await setupModule(core, workspace, owner);
-  const plan = module.plan({});
-  const status = await module.status?.({}).catch(() => null);
-  return { owner: plugin.key, consent: plan.consent, installed: !!status?.cpu?.installed, destination: plan.destination,
+  const kinds = validKinds(module.setupKinds), needed = await neededKind(module, await savedSettings(core, workspace, owner));
+  const kind = needed ?? kinds[0] ?? null;
+  const plan = module.plan(kind ? { kind: kind.id } : {});
+  const status = await module.status?.({}).catch(() => null) as Record<string, unknown> | null;
+  return { owner: plugin.key, kind: kind?.id ?? null, label: kind?.label ?? null, consent: plan.consent, installed: kind ? !needed && installedKind(status, kind.id) : installedKind(status, 'cpu'), destination: plan.destination,
     downloadBytes: plan.downloadBytes, installedBytes: plan.installedBytes, licences: plan.licences,
     items: plan.items.map(({ name, version, publisher, licence, bytes }) => ({ name, version, publisher, licence, bytes })) };
 }
@@ -83,11 +121,11 @@ export function formatSetupProgress(event: SetupProgress & { percent: number | n
 }
 
 /** Runs the plugin's installer for the exact plan the person agreed to, reporting progress as job lines. */
-export async function installMeshSetup(core: string, workspace: string, owner: string, consent: string, ctx: JobContext, signal?: AbortSignal): Promise<void> {
+export async function installMeshSetup(core: string, workspace: string, owner: string, consent: string, ctx: JobContext, signal?: AbortSignal, kind: string | null = null): Promise<void> {
   const { module, plugin } = await setupModule(core, workspace, owner);
   let last = '';
   ctx.line(`Installing ${plugin.meta.title ?? plugin.id}.`);
-  await module.install({ consent, core, workspace, owner: plugin.key, signal, onProgress: (raw: unknown) => {
+  await module.install({ ...(kind ? { kind } : {}), consent, core, workspace, owner: plugin.key, signal, onProgress: (raw: unknown) => {
     const event = setupProgress(raw); if (!event) return;
     // Byte counters fire per chunk: log a new line only when the visible text changes.
     const line = formatSetupProgress(event.unit === 'bytes' ? { ...event, detail: undefined } : event);

@@ -99,7 +99,9 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     layer.hidden = !selected;
     layer.querySelector('[data-mesh-layer-title]').textContent = p?.label ?? (selected ? `${selected} (missing)` : '');
     // Like Build prerequisites: a small Install while setup is missing, Ready once the plugin can run.
-    install.hidden = !(p?.needsSetup && p.setup);
+    // Install shows while the runtime is missing, or while the current settings need another declared runtime (GPU).
+    install.hidden = !(p?.setup && (p.needsSetup || p.setupNeeded));
+    install.querySelector('span').textContent = p?.setupNeeded && !p.needsSetup ? `Install ${p.setupNeeded.label}` : 'Install';
     onLayer(p && snapshot.choice?.enabled !== false ? p.label : null);
     // The switch shows the saved state; off keeps the layer and its settings but runs nothing.
     if (!switching) layerOn.checked = snapshot.choice?.enabled !== false;
@@ -173,7 +175,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     const logged = state === 'preparing' ? 'Preparing' : state === 'applied' ? 'Running' : state === 'applying' ? 'Starting' : ['failed', 'unsupported'].includes(state) ? text : '';
     if (p && logged && !root.querySelector('[data-mesh-layer]').hidden) handsLog(logged, { source: p.label.split(/\s+/)[0], level: state === 'failed' ? 'err' : state === 'unsupported' ? 'warn' : '' });
     status.textContent = text; status.hidden = true; root.dataset.meshState = state;
-    deliveryRetry.hidden = !d || state !== 'failed';
+    deliveryRetry.hidden = !d || state !== 'failed' || !!plugin()?.setupNeeded; // Install, not Retry, while a runtime is missing
     deliveryRetry.disabled = busy || retrying || pending || !!snapshot?.problem;
   }
   function incorporate(data) {

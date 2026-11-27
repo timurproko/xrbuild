@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { meshSetupOwners, meshSetupPlan, installMeshSetup, MeshSetupUnavailable, setupProgress, formatSetupProgress } from '../src/hand-mesh-setup.ts';
+import { meshSetupOwners, meshSetupPlan, installMeshSetup, MeshSetupUnavailable, setupProgress, formatSetupProgress, neededKind } from '../src/hand-mesh-setup.ts';
 import { handMeshRegistry } from '../src/hand-mesh-plugins.ts';
 import { resolvePluginCatalog } from '../src/extension-catalog.ts';
 import { restartBlocker } from '../src/launch-blockers.ts';
@@ -55,4 +55,15 @@ test('every setup reports progress through one shape that core validates and for
     assert.equal(setupProgress(bad), null, JSON.stringify(bad));
   assert.equal(setupProgress({ step: 'x', done: 9, total: 4, unit: 'items' })?.done, 4, 'done never passes total');
   assert.equal(setupProgress({ step: 'x', detail: 'ab'.padEnd(200, 'c') })?.detail?.length, 80, 'detail is single-line and bounded');
+});
+
+test('a setup with install kinds needs the kind its saved settings call for', async () => {
+  const kinds = [{ id: 'cpu', label: 'CPU runtime' }, { id: 'gpu', label: 'GPU runtime', requires: { setting: 'device', value: 'gpu' } }];
+  const module = (installed: string[]) => ({ setupKinds: kinds, plan: () => ({}) as any, install: async () => {},
+    status: async () => Object.fromEntries(kinds.map(k => [k.id, { installed: installed.includes(k.id) }])) });
+  assert.equal((await neededKind(module([]), { device: 'cpu' }))?.id, 'cpu', 'the CPU runtime first');
+  assert.equal(await neededKind(module(['cpu']), { device: 'cpu' }), null, 'nothing more for the CPU device');
+  assert.equal((await neededKind(module(['cpu']), { device: 'gpu' }))?.id, 'gpu', 'the GPU device needs the GPU runtime');
+  assert.equal(await neededKind(module(['cpu', 'gpu']), { device: 'gpu' }), null);
+  assert.equal(await neededKind({ plan: () => ({}) as any, install: async () => {} }, {}), null, 'no declared kinds: the single setup');
 });
