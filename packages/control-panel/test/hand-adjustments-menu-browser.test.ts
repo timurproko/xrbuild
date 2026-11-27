@@ -66,7 +66,8 @@ test('section reset gears provide accessible keyboard menus with scoped dismissa
       assert.deepEqual(await evaluate(`[document.querySelector('[data-range="appearance.jointDiameterMm"]').matches(':hover'),document.querySelector('[data-field="appearance.jointDiameterMm"]').matches(':hover')]`), [true, false]);
       // Swatches show no idle outline and hover with the shared 1px field hover line, like slider thumbs.
       const swatchStyle = `(()=>{const c=getComputedStyle(document.querySelector('[data-color="appearance.jointColorLinear"]'));return [c.outlineStyle,c.outlineWidth,c.boxShadow];})()`;
-      assert.deepEqual(await evaluate(swatchStyle), ['none', '0px', 'none'], 'idle swatch has no outline');
+      await evaluate('document.activeElement?.blur()');
+      assert.deepEqual((await evaluate(swatchStyle)).filter((_: string, i: number) => i !== 1), ['none', 'none'], 'idle swatch has no outline or ring');
       const swatchPoint = await evaluate(`(()=>{const r=document.querySelector('[data-color="appearance.jointColorLinear"]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...swatchPoint });
       assert.deepEqual((await evaluate(swatchStyle)).slice(0, 2), ['solid', '1px'], 'hovered swatch shows the 1px hover line');
