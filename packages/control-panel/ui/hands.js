@@ -106,7 +106,6 @@ try {
   const { createHandsView } = await import('./hands-view.js');
   view = createHandsView({ canvas: $('hands-canvas'), viewport: $('hands-viewport'),
     onMetrics: metrics => { const render = metrics.renderFps.toFixed(1); if ($('hands-render-fps').textContent !== render) $('hands-render-fps').textContent = render; },
-    onTestFeedback: status => { const node = $('hands-test-feedback'); if (node) { const text = `Pinch: ${status.pinch.phase} · Drag: ${status.drag.phase}`; if (node.textContent !== text) node.textContent = text; } },
     onStatus: status => {
       const hidden = status.phase === 'replay' || status.phase === 'running' && status.hands > 0;
       if ($('hands-view-empty').hidden !== hidden) $('hands-view-empty').hidden = hidden;

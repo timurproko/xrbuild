@@ -186,6 +186,7 @@ input[type="checkbox"]:disabled { opacity: .5; }
 .xrb-segmented.xrb-segmented-fill { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; overflow: visible; }
 .xrb-segmented.xrb-segmented-fill > button { min-width: 0; }
 .xrb-switch { display: inline-flex; align-items: center; gap: 10px; font-size: .85rem; color: var(--fg); cursor: pointer; white-space: nowrap; }
+.xrb-field-label > .xrb-switch { justify-self: start; }
 .xrb-switch input[type="checkbox"] { position: relative; width: 40px; height: 24px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); transition: background-color .12s; }
 .xrb-switch input[type="checkbox"]::before { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border: 0; border-radius: 50%; background: var(--muted); opacity: 1; transform: none; transition: transform .12s, background-color .12s; }
 .xrb-switch input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }

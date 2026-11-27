@@ -12,7 +12,8 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   const prefix = `hands-adjustments-${++mounts}`;
   const number = (key, label, min, max, step, hint = '', swatch = '') => renderField(label,
     `<span class="hands-number-row${swatch ? ' hands-number-row--colour' : ''}"><input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required><input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">${swatch}</span>`, { hint });
-  const toggle = (key, label) => `<label class="xrb-switch"><input type="checkbox" data-field="appearance.${key}"><span>${label}</span></label>`;
+  // Switches carry their label on top, like every other field.
+  const toggle = (key, label) => renderField(label, `<span class="xrb-switch"><input type="checkbox" data-field="appearance.${key}"></span>`);
   const colour = (key, label) => `<span class="xrb-inline-icons"><input type="color" data-field="appearance.${key}" aria-label="${label}" hidden><button type="button" class="xrb-swatch" data-colour="appearance.${key}" aria-label="Choose ${label.toLowerCase()}" aria-haspopup="dialog" aria-pressed="true"></button></span>`;
   const resetMenu = (section, label) => `<button type="button" class="xrb-icon-button" id="${prefix}-${section}-settings" data-reset-menu="${section}" aria-label="${label} settings" aria-haspopup="menu" aria-controls="${prefix}-${section}-menu" aria-expanded="false">${iconSvg('settings')}</button><div class="menu" id="${prefix}-${section}-menu" role="menu" aria-labelledby="${prefix}-${section}-settings" hidden><button type="button" role="menuitem" data-reset="${section}">Reset to defaults</button></div>`;
   // Position and Visual are tabs in the card's tab bar; each tab's reset menu sits at the bar's end.
