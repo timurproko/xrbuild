@@ -67,24 +67,21 @@ function IconView({entry,fallback}:{entry:Entry;fallback:React.RefObject<LabelOb
   return <group ref={root}/>;
 }
 
-export function LauncherCard({entry,index,x,launching,onLaunch}:{entry:Entry;index:number;x:number;launching:number|null;onLaunch:(index:number)=>void}) {
+export function LauncherCard({entry,index,x,launching,onLaunch}:{entry:Entry;index:number;x:number;launching:number|null;onLaunch:(index:number,launchUrl:string)=>void}) {
   const app=useXrb(),root=useRef<THREE.Group>(null),content=useRef<THREE.Group>(null);
   const fallback=useRef<LabelObject>(null),button=useRef<ButtonObject>(null),spinner=useRef<THREE.Object3D|null>(null);
   const animation=useRef({launching:false,startedAt:0,origin:new THREE.Vector3(),lift:0});
-  const navigation=useRef<ReturnType<typeof setTimeout>|null>(null);
   const action=useReleaseAction(()=>{
     const state=animation.current;if(state.launching)return;
     state.launching=true;state.startedAt=performance.now();state.origin.copy(root.current!.position);root.current!.renderOrder=10;
     button.current?.setEnabled(false);if(button.current)button.current.visible=false;
     if(spinner.current?.parent)spinner.current.parent.visible=true;
-    onLaunch(index);
     const launchUrl=appLaunchUrl(entry.launchUrl,{returnUrl:location.href,projection:app.projection});
-    navigation.current=setTimeout(()=>location.assign(launchUrl),1150);
+    onLaunch(index,launchUrl);
   });
   useLayoutEffect(()=>{
     transparent(content.current!);
     root.current!.userData.launcherCard={entry,index};
-    return()=>{if(navigation.current!==null)clearTimeout(navigation.current);};
   },[]);
   useXrbFrame(({timeMs:now,deltaSeconds})=>{
     const dt=Math.min(0.1,deltaSeconds),state=animation.current,group=root.current;
@@ -126,6 +123,12 @@ export function LauncherScene() {
   const [catalog,setCatalog]=useState<{apps:Entry[];loaded:boolean;error:boolean;revision:number}>({apps:[],loaded:false,error:false,revision:0});
   const [page,setPage]=useState(0),[launching,setLaunching]=useState<number|null>(null),[xrAvailable,setXrAvailable]=useState(false);
   const latest=useRef({catalog,page}),revealStartedAt=useRef(0),tilt=useRef(new THREE.Vector2()),sliding=useRef(false);
+  // Accepted navigation belongs to the scene, not a catalog card that polling can replace.
+  const navigation=useRef<ReturnType<typeof setTimeout>|null>(null);
+  useLayoutEffect(()=>()=>{
+    if(navigation.current!==null)clearTimeout(navigation.current);
+    navigation.current=null;
+  },[app]);
   const totalPages=Math.max(1,Math.ceil(catalog.apps.length/PAGE_SIZE)),paged=totalPages>1;
   useLayoutEffect(()=>{latest.current={catalog,page};});
   const changePage=(value:number,direction:number)=>{cards.current!.position.x=direction*0.16;setPage(value);};
@@ -182,7 +185,9 @@ export function LauncherScene() {
   });
   const visible=catalog.apps.slice(page*PAGE_SIZE,page*PAGE_SIZE+PAGE_SIZE);
   const cardPlaneWidth=FRAME.width*(camera.position.z-CARD_REST_LIFT)/(camera.position.z+0.025),gap=(cardPlaneWidth-visible.length*CARD_WIDTH)/(visible.length+1);
-  const beginLaunch=(index:number)=>{
+  const beginLaunch=(index:number,launchUrl:string)=>{
+    if(navigation.current!==null)return;
+    navigation.current=setTimeout(()=>{navigation.current=null;location.assign(launchUrl);},1150);
     // Immediate visibility change precedes React's discrete commit, as in the baseline.
     for(const child of cards.current!.children)if(child.userData.launcherCard&&child.userData.launcherCard.index!==index)child.visible=false;
     if(previous.current)previous.current.visible=false;if(next.current)next.current.visible=false;if(dots.current)dots.current.visible=false;setLaunching(index);

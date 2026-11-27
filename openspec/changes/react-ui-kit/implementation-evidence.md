@@ -17,6 +17,12 @@ Repeated product-default MSAA captures exposed low-bit edge noise, not shifted/m
 
 Actual Vite HMR retains one runtime/canvas and the original target/frame registration counts for all three apps. Explicit teardown leaves zero canvases and targets. Production pages open at nested relative routes and standalone icon imports create no additional application.
 
+## Combined CI/review repair
+
+The delivery refusal on the original implementation head came from the authored `acceptance.md` colliding with the generated acceptance manifest. The proof record now uses `implementation-evidence.md`. Dry-run preparation with the exact shared workflow revision and pinned OpenSpec 2.1.1 reproduces the old digest refusal and verifies the renamed evidence and generated manifest without finalizing this checkout.
+
+Accepted Launcher navigation now belongs to the scene, retaining its original URL, projection and 1150 ms deadline across card replacement, catalog errors and removal. Only scene teardown cancels it. Eight refresh regressions failed before the fix; all 17 Launcher component cases pass afterward, including accepted-navigation teardown cancellation. The complete Launcher package passes 42 cases; the seven CI-policy cases and two delivery-preparation regressions also pass. The reviewer's adapted reproduction retains the navigation timer after polling and navigates once.
+
 ## Limits
 
 Physical display, tracker and headset acceptance is not claimed; hand/stereo checks use deterministic replay and host/browser fixtures. Native code was not changed or built. Broad CI and review run after publication and are not replaced by these local checks.

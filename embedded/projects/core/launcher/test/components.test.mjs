@@ -55,6 +55,39 @@ test('native swipe, right-button tilt/reset and explicit XR entry retain authore
  }finally{await state.dispose();}
 });
 
+for(const refresh of ['description','icon revision','error','removal'])for(const finish of ['navigate','teardown'])test(`accepted navigation survives catalog ${refresh}; ${finish}`,async()=>{
+ let description='original',revision=1,available=true,present=true;
+ const state=await componentApp(root,{href,fetch:async()=>available?Response.json({projects:present?[{id:'scene-1',entryExists:true,icon:{mtimeMs:revision},manifest:{kind:'app',name:'Scene 1',description}}]:[]}):new Response('',{status:503})});
+ try{
+  state.app.setProjection('orthographic');for(let n=0;n<=60;n++)state.tick(n*1000/60);
+  const original=cards(state)[0],button=controls(state).find(c=>c.title.text==='Open Scene 1');
+  mousePress(state,button);await state.fire(60);
+  const accepted=[...state.pending].find(([,timer])=>timer.delay===1150);assert.ok(accepted,'release accepts one navigation');
+  if(refresh==='description')description='changed during navigation';
+  if(refresh==='icon revision')revision++;
+  if(refresh==='error')available=false;
+  if(refresh==='removal')present=false;
+  await state.fire(1000);
+  assert.ok(!cards(state).includes(original),'the poll actually retires the launching card');
+  assert.equal(state.pending.get(accepted[0]),accepted[1],'card reconciliation must neither cancel nor restart the accepted deadline');
+  state.app.setProjection('perspective');
+  if(finish==='teardown'){
+   await state.exports.dispose();assert.equal(state.pending.size,0);await state.fire(1150);assert.ok(!state.calls.some(c=>c.startsWith('navigate:')));
+  }else{
+   await state.fire(1150);await state.fire(1150);
+   const navigations=state.calls.filter(c=>c.startsWith('navigate:'));assert.equal(navigations.length,1);
+   const destination=new URL(navigations[0].slice(9));assert.equal(destination.pathname,'/preview/scene-1/');assert.equal(destination.searchParams.get('xrb-camera'),'orthographic','accepted projection stays frozen across refresh');assert.equal(destination.searchParams.get('xrb-return'),href);
+  }
+ }finally{await state.dispose();}
+});
+
+test('scene teardown cancels navigation after the release delay has accepted it',async()=>{
+ const state=await componentApp(root,{href,fetch:fetchCatalog});try{
+  for(let n=0;n<=60;n++)state.tick(n*1000/60);mousePress(state,controls(state).find(c=>c.title.text==='Open Scene 1'));await state.fire(60);
+  assert.ok([...state.pending.values()].some(timer=>timer.delay===1150));await state.exports.dispose();await state.fire(1150);assert.equal(state.pending.size,0);assert.ok(!state.calls.some(c=>c.startsWith('navigate:')));
+ }finally{await state.dispose();}
+});
+
 test('unmount retires held release actions and pending launch navigation',async()=>{
  const state=await componentApp(root,{href,fetch:fetchCatalog});try{
   for(let n=0;n<=60;n++)state.tick(n*1000/60);const button=controls(state).find(c=>c.title.text==='Open Scene 1');mousePress(state,button);await state.exports.dispose();await state.fire(60);await state.fire(1150);assert.ok(!state.calls.some(c=>c.startsWith('navigate:')));assert.equal(state.pending.size,0);
