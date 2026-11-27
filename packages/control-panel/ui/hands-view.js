@@ -34,9 +34,8 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   scene.add(new THREE.HemisphereLight('#e8f4ff', '#162338', 2.8));
   const light = new THREE.DirectionalLight('#ffffff', 3); light.position.set(.2, .4, .6); scene.add(light);
   const panelCentre = new THREE.Vector3();
-  let showOffset = false;
-  /** Off: hands where they physically are relative to the screen. On: with the Position offset, as apps receive them. */
-  function placeHands() { const d = showOffset || !profile ? { x: 0, y: 0, z: 0 } : profile.offsetMm; panelCentre.set(-d.x / 1000, -d.y / 1000, -d.z / 1000); }
+  /** Hands are drawn where they physically are relative to the screen: the Position offset only changes what apps receive. */
+  function placeHands() { const d = profile ? profile.offsetMm : { x: 0, y: 0, z: 0 }; panelCentre.set(-d.x / 1000, -d.y / 1000, -d.z / 1000); }
   // Endless grid in the panel plane (z = 0, the monitor's plane): 5 cm cells drawn in a shader, fading with distance.
   const grid = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
@@ -168,7 +167,6 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     setViewOptions(options) { grid.visible = options.includes('grid'); axes.visible = options.includes('axes'); monitorShown = options.includes('monitor'); monitor.visible = monitorShown && monitor.children.length > 0; tests.setVisible(options.includes('object')); },
     setMonitor,
     setObject(kind) { return tests.setShape(kind); },
-    setShowOffset(value) { showOffset = !!value; placeHands(); },
     setObjectPosition(x, y, z) { tests.setPosition(x, y, z); },
     /** Grid line color (hex) and opacity (0-1). */
     setGrid({ color, opacity }) { if (color) grid.material.uniforms.color.value.set(color); if (Number.isFinite(opacity)) grid.material.uniforms.opacity.value = opacity; },

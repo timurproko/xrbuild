@@ -72,3 +72,8 @@
 .hands-xyz-field > .xrb-number-control, .hands-xyz-field > input { min-width: 0; flex: 1; }
 .hands-xyz.hands-xyz--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 #hands-custom-resolution[hidden] { display: none; }
+/* Preset row: the dropdown fills the row, save and delete icons follow it; naming appears inline. */
+.hands-preset-row, .hands-preset-name { display: flex; align-items: center; gap: var(--xrb-space-field); }
+.hands-preset-row > select, .hands-preset-row > .dropdown { flex: 1; min-width: 0; }
+.hands-preset-name > input { flex: 1; min-width: 0; }
+.hands-preset-name[hidden] { display: none; }

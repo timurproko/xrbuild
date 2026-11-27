@@ -16,6 +16,17 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   const prefix = `hands-adjustments-${++mounts}`;
   const number = (key, label, min, max, step, hint = '', swatch = '') => renderField(label,
     `<span class="hands-number-row${swatch ? ' hands-number-row--color' : ''}"><input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required><input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">${swatch}</span>`, { hint, tag: 'div' });
+  // Presets: Default, saved presets, and Custom while the values match none. Saved in this browser.
+  const presetRow = section => renderField('Preset', `<span class="hands-preset-row" data-preset-row="${section}">
+      <select data-preset="${section}" aria-label="${section === 'geometry' ? 'Position' : 'Visual'} preset"></select>
+      <button type="button" class="xrb-icon-button" data-preset-save="${section}" aria-label="Save as preset" data-xrb-icon="plus" data-no-tooltip></button>
+      <button type="button" class="xrb-icon-button" data-preset-delete="${section}" aria-label="Delete preset" data-xrb-icon="trash" data-no-tooltip></button>
+    </span>
+    <span class="hands-preset-name" data-preset-name-row="${section}" hidden>
+      <input type="text" data-preset-name="${section}" aria-label="Preset name" placeholder="Preset name" maxlength="40">
+      <button type="button" class="small" data-preset-confirm="${section}">Save</button>
+      <button type="button" class="small" data-preset-cancel="${section}">Cancel</button>
+    </span>`, { tag: 'div' });
   // What the skeleton shows is one multi-select; hidden checkboxes stay the saved fields behind it.
   const DISPLAY = { showJoints: 'Joints', showBones: 'Bones', showPinchGrabIndicator: 'Pinch/grab' };
   const displayField = () => renderField('Display', `<div class="dropdown" data-multi="true" data-display-toggles data-options="${Object.keys(DISPLAY).join('|')}" data-labels='${JSON.stringify(DISPLAY)}'><input type="hidden" data-display-value value="[]"><button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false">None</button></div>${Object.keys(DISPLAY).map(key => `<input type="checkbox" data-field="appearance.${key}" aria-label="${DISPLAY[key]}" hidden>`).join('')}`);
@@ -38,11 +49,12 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   const pagePanels = adopted ? [...tabs.parentElement.querySelectorAll(':scope > [data-tab-panel]')] : [];
   root.innerHTML = `<form class="xrb-stack hands-adjustment-sections" aria-label="Hand adjustments">
     <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-geometry" aria-labelledby="${prefix}-tab-geometry"${setup ? ' hidden' : ''}>
-      ${renderField('Show offset in view', '<span class="xrb-switch"><input type="checkbox" id="hands-offset-preview"></span>')}
+      ${presetRow('geometry')}
       ${number('offsetMm.x', 'X (mm)', -150, 150, 1)}${number('offsetMm.y', 'Y (mm)', -150, 150, 1)}${number('offsetMm.z', 'Z (mm)', -150, 150, 1)}
       ${number('sizeFactor', 'Size', .5, 1.5, .01)}
     </section>
     <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-appearance" aria-labelledby="${prefix}-tab-appearance" hidden>
+      ${presetRow('appearance')}
       ${displayField()}
       ${number('appearance.jointDiameterMm', 'Joint diameter (mm)', 1, 40, 1, '', color('jointColorLinear', 'Joint color'))}
       ${number('appearance.boneDiameterMm', 'Bone diameter (mm)', 1, 30, 1, '', color('boneColorLinear', 'Bone color'))}
@@ -81,6 +93,41 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   document.defaultView.addEventListener('resize', () => closeMenu(), { signal: menuEvents.signal });
   disposers.push(() => { closeMenu(); menuEvents.abort(); });
   const read = (data, key) => key.startsWith('appearance.') ? data.profile.appearance[key.slice(11)] ?? data.appearanceDefaults[key.slice(11)] : key.startsWith('offsetMm.') ? data.profile.offsetMm[key.slice(9)] : data.profile[key];
+  const PRESET_KEY = 'xrb.hands.presets';
+  const sectionOf = key => key.startsWith('appearance.') ? 'appearance' : 'geometry';
+  const sectionFields = section => fields.filter(field => sectionOf(field.dataset.field) === section);
+  const defaultValue = key => key.startsWith('appearance.') ? state.appearanceDefaults[key.slice(11)] : key === 'sizeFactor' ? 1 : 0;
+  const currentValue = key => edits.has(key) ? edits.get(key).value : read(state, key);
+  const loadPresets = () => { try { const saved = JSON.parse(localStorage.getItem(PRESET_KEY) || '{}'); return { geometry: saved.geometry ?? [], appearance: saved.appearance ?? [] }; } catch { return { geometry: [], appearance: [] }; } };
+  const savePresets = value => { try { localStorage.setItem(PRESET_KEY, JSON.stringify(value)); } catch { /* Storage may be blocked. */ } };
+  const sameValues = (values, section) => sectionFields(section).every(field => { const key = field.dataset.field; return key in values && equal(values[key], currentValue(key)); });
+  function renderPresets() {
+    if (!state) return;
+    const presets = loadPresets();
+    for (const section of ['geometry', 'appearance']) {
+      const select = root.querySelector(`[data-preset="${section}"]`); if (!select) continue;
+      const defaults = Object.fromEntries(sectionFields(section).map(field => [field.dataset.field, defaultValue(field.dataset.field)]));
+      const match = sameValues(defaults, section) ? 'default' : presets[section].find(preset => sameValues(preset.values, section))?.name;
+      const options = [['default', 'Default'], ...presets[section].map(preset => [`saved:${preset.name}`, preset.name]), ...(match ? [] : [['custom', 'Custom']])];
+      const signature = JSON.stringify(options);
+      if (select.dataset.options !== signature) { select.replaceChildren(...options.map(([value, label]) => new Option(label, value))); select.dataset.options = signature; }
+      select.value = match === 'default' ? 'default' : match ? `saved:${match}` : 'custom';
+      root.querySelector(`[data-preset-delete="${section}"]`).disabled = !select.value.startsWith('saved:');
+    }
+  }
+  /** Apply values to one section as one committed edit, like Reset to defaults. */
+  function applySection(section, valueFor) {
+    for (const field of sectionFields(section)) {
+      const key = field.dataset.field, value = valueFor(key);
+      if (value === undefined) continue;
+      const previous = edits.get(key), sent = inFlight?.get(key);
+      const base = sent && sent.version === previous?.version ? sent.value : previous?.base ?? sent?.value ?? read(state, key);
+      edits.set(key, { value: structuredClone(value), base, committed: true, version: ++version });
+      if (field.type === 'checkbox') field.checked = value; else field.value = field.type === 'color' ? linearToHex(value) : String(value);
+      setFieldError(field);
+    }
+    render(); if (!conflict) { failure = null; void flush(); }
+  }
   function buttons() {
     root.dataset.dirty = String(edits.size > 0);
     root.dataset.saving = String(busy);
@@ -109,6 +156,7 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     const display = root.querySelector('[data-display-toggles]');
     display.querySelector('[data-display-value]').value = JSON.stringify(Object.keys(DISPLAY).filter(key => root.querySelector(`[data-field="appearance.${key}"]`).checked));
     display.querySelector('.dropdown-btn').disabled = !state; refreshDropdown(display);
+    renderPresets();
     buttons();
   }
   function refresh(next, { discard: discardEdits = false } = {}) {
@@ -183,6 +231,13 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   // Sliders apply while dragging: each move commits, and the save queue keeps one request in flight, then sends the latest.
   const input = event => { const field = event.target.closest('[data-field],[data-range]'); if (field && root.contains(field)) field.matches('[data-range]') ? commit(field) : edit(field); };
   const change = event => {
+    const preset = event.target.closest?.('[data-preset]');
+    if (preset && state) {
+      const section = preset.dataset.preset;
+      if (preset.value === 'default') applySection(section, defaultValue);
+      else if (preset.value.startsWith('saved:')) { const found = loadPresets()[section].find(item => `saved:${item.name}` === preset.value); if (found) applySection(section, key => found.values[key]); }
+      return;
+    }
     if (event.target.matches?.('[data-display-value]')) {
       // Each changed choice commits through its own field, exactly like the former switches.
       const on = new Set(JSON.parse(event.target.value || '[]'));
@@ -196,6 +251,8 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     const field = event.target.closest('[data-field],[data-range]'); if (field && root.contains(field)) commit(field);
   };
   const keydown = event => {
+    const name = event.target.closest?.('[data-preset-name]');
+    if (name && (event.key === 'Enter' || event.key === 'Escape')) { event.preventDefault(); root.querySelector(`[data-preset-${event.key === 'Enter' ? 'confirm' : 'cancel'}="${name.dataset.presetName}"]`).click(); return; }
     const button = event.target.closest('[data-reset-menu]');
     if (button && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); showMenu(button); return; }
     if (activeMenu && (activeMenu.menu.contains(event.target) || event.key === 'Escape')) {
@@ -235,6 +292,22 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
       if (activeMenu?.button === menuButton) closeMenu(); else showMenu(menuButton);
       return;
     }
+    const save = event.target.closest('[data-preset-save]'), remove = event.target.closest('[data-preset-delete]');
+    const confirm = event.target.closest('[data-preset-confirm]'), cancel = event.target.closest('[data-preset-cancel]');
+    if (save && state) { const section = save.dataset.presetSave, row = root.querySelector(`[data-preset-name-row="${section}"]`); row.hidden = false; row.querySelector('input').value = ''; row.querySelector('input').focus(); return; }
+    if (cancel) { root.querySelector(`[data-preset-name-row="${cancel.dataset.presetCancel}"]`).hidden = true; return; }
+    if (confirm && state) {
+      const section = confirm.dataset.presetConfirm, input = root.querySelector(`[data-preset-name="${section}"]`), name = input.value.trim();
+      if (!name || name.toLowerCase() === 'default' || name.toLowerCase() === 'custom') { input.focus(); return; }
+      const presets = loadPresets(), values = Object.fromEntries(sectionFields(section).map(field => [field.dataset.field, structuredClone(currentValue(field.dataset.field))]));
+      presets[section] = [...presets[section].filter(preset => preset.name !== name), { name, values }]; savePresets(presets);
+      root.querySelector(`[data-preset-name-row="${section}"]`).hidden = true; renderPresets(); return;
+    }
+    if (remove && state) {
+      const section = remove.dataset.presetDelete, select = root.querySelector(`[data-preset="${section}"]`);
+      if (!select.value.startsWith('saved:')) return;
+      const presets = loadPresets(); presets[section] = presets[section].filter(preset => `saved:${preset.name}` !== select.value); savePresets(presets); renderPresets(); return;
+    }
     const swatch = event.target.closest('[data-color]');
     if (swatch && state) {
       // The shared color popover replaces the browser picker; previews edit, closing commits.
@@ -242,20 +315,7 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
       openColorPopover(swatch, { value: field.value, onInput: hex => { field.value = hex; field.dispatchEvent(new Event('input', { bubbles: true })); }, onClose: () => field.dispatchEvent(new Event('change', { bubbles: true })) });
     }
     const reset = event.target.closest('[data-reset]');
-    if (reset && state) {
-      closeMenu(true);
-      for (const field of fields) {
-        const key = field.dataset.field, appearance = key.startsWith('appearance.');
-        if (appearance !== (reset.dataset.reset === 'appearance')) continue;
-        const value = appearance ? state.appearanceDefaults[key.slice(11)] : key === 'sizeFactor' ? 1 : 0;
-        const previous = edits.get(key), sent = inFlight?.get(key);
-        const base = sent && sent.version === previous?.version ? sent.value : previous?.base ?? sent?.value ?? read(state, key);
-        edits.set(key, { value, base, committed: true, version: ++version });
-        if (field.type === 'checkbox') field.checked = value; else field.value = field.type === 'color' ? linearToHex(value) : String(value);
-        setFieldError(field);
-      }
-      render(); if (!conflict) { failure = null; void flush(); }
-    }
+    if (reset && state) { closeMenu(true); applySection(reset.dataset.reset, defaultValue); }
     if (event.target === retry && !busy) {
       if (conflict) {
         // The displayed saved values were explicitly reviewed. A newer unseen change still conflicts.
