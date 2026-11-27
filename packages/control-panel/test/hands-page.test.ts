@@ -21,7 +21,7 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   const markup = await fs.readFile(path.join(ui, 'hands.html'), 'utf8');
   for (const id of ['hands-view-reset', 'hands-fullscreen']) assert.match(markup, new RegExp(`id="${id}"[^>]*data-no-tooltip`));
   assert.match(markup, /aria-label="View options" data-no-tooltip/);
-  assert.match(markup, /<section id="hands-viewport"[\s\S]*<section class="xrb-card hands-panel" aria-label="Hand setup and adjustments">\s*<div id="hands-setup" class="xrb-sidebar-content xrb-stack hands-source">/, 'setup moved into the single right card after the viewer');
+  assert.match(markup, /<section id="hands-viewport"[\s\S]*<section class="xrb-card hands-panel" aria-label="Hand setup and adjustments">[\s\S]*?role="tablist"[\s\S]*?<\/div>\s*<div id="hands-setup" class="xrb-sidebar-content xrb-stack hands-source">/, 'setup moved into the single right card after the viewer');
   assert.equal((markup.match(/class="xrb-card hands-panel"/g) ?? []).length, 1);
   assert.match(markup, /class="hands-view-tools xrb-controls-small">\s*<div id="hands-session-actions" class="hands-session-actions" hidden><\/div>\s*<span class="hands-tool-separator"/, 'Start leads the viewer toolbar, set apart by a separator');
   assert.match(markup, /<div id="hands-header-status" class="hands-header-status"><\/div>/);

@@ -1,4 +1,4 @@
-import { mountToolNavigation } from './navigation.js';
+import { mountToolNavigation, isPanelUnavailable } from './navigation.js';
 import { mountHandsShell } from './hands-shell.js';
 import { mountProviderRecorder } from './hands-recorder.js';
 import { mountHandsPostprocessing } from './hands-postprocessing.js';
@@ -68,7 +68,7 @@ async function load(discard = false) {
     adjustments?.refresh(data, { discard });
     adjustments?.updateDelivery(data.delivery, data.deliveryState, data.revision, epoch);
     await applyViewProfile(data, generation);
-  } catch (error) { if (!disposed && read === readGeneration && !sourceEdit) { sourceReadError = true; message(error.message); $('hands-source-recovery').hidden = false; } }
+  } catch (error) { if (isPanelUnavailable(error)) return; if (!disposed && read === readGeneration && !sourceEdit) { sourceReadError = true; message(error.message); $('hands-source-recovery').hidden = false; } }
 }
 async function saveSource(review = false) {
   if (!sourceEdit || sourceBusy) return;

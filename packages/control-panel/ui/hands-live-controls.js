@@ -1,3 +1,4 @@
+import { isPanelUnavailable } from './navigation.js';
 const key = source => source ? `${source.owner}/${source.id}` : '';
 /** Only acquisition controls: no source writes, status paragraphs, recorder or adjustment editor. */
 export function mountHandsLiveControls({ session, view, load, provider = document.getElementById('hands-provider') }) {
@@ -83,7 +84,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
         ? { ...current, phase: 'cleanup', cleanupPending: true, reason: current.reason || 'Previous owned Hands acquisition is draining; retry cleanup before Start.' }
         : { ...current, phase: 'occupied', reason: current.reason || 'Another live Hands page owns acquisition. Take over stops it before starting here.' }
         : current.owns ? current : { phase: 'not-started', diagnostic: current.diagnostic });
-    } catch (error) { if (!closed && own === generation && !starting && !session.active) update({ phase: 'failed', reason: error.message }); }
+    } catch (error) { if (!closed && own === generation && !starting && !session.active && !isPanelUnavailable(error)) update({ phase: 'failed', reason: error.message }); }
     finally { polling = false; }
   };
   const timer = setInterval(() => { if (session.active) render(); else void poll(); }, 1000);

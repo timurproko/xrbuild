@@ -44,6 +44,8 @@ export function managedToolDestination(route,origin) {
   return new URL(route,safe).href;
 }
 /** A stale panel already has one actionable state: restart to load its newer code. */
+/** The panel is briefly unreachable (restarting or updating) rather than refusing the request; background reads just try again. */
+export function isPanelUnavailable(error){return error instanceof TypeError&&/fetch|network/i.test(error.message)||error?.status===503||/panel is restarting/i.test(String(error?.message??''));}
 /** A request refused because the panel is mid-restart; the restart flow reloads the page, so it is not an error. */
 export function isRestartingResponse(error){return error?.status===503&&error?.data?.error==='The panel is restarting';}
 export function shouldReportNavigationError(error,panelFreshness) {

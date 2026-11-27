@@ -6,7 +6,8 @@ import { withBrowser, sleep } from './browser-fixture.ts';
 
 test('mounted controls keep rejection kind, joint and count visible across healthy and terminal states', { skip: !process.env.XRB_TEST_BROWSER, timeout: 30000 }, async () => {
   const server = http.createServer((req, res) => { void (async () => {
-    if (req.url === '/hands-live-controls.js') { res.setHeader('content-type', 'text/javascript'); res.end(await fs.readFile(new URL('../ui/hands-live-controls.js', import.meta.url))); return; }
+    // Serve the controls and the UI modules they import.
+    if (/^\/[\w-]+\.js$/.test(req.url ?? '')) { res.setHeader('content-type', 'text/javascript'); res.end(await fs.readFile(new URL(`../ui${req.url}`, import.meta.url))); return; }
     res.setHeader('content-type', 'text/html'); res.end(`<label><select id="hands-provider"><option value="core/fixture">Fixture</option></select></label><b id="hands-tracking-fps"></b><div id="hands-view-empty"><span></span></div><script type="module">
       import {mountHandsLiveControls} from '/hands-live-controls.js';
       window.session={active:false,stopping:false,subscribeLifecycle(fn){window.update=fn;return()=>{}},async status(){return {supported:true,owns:false,busy:false}}};

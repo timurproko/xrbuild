@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {test} from 'node:test';
 import {readToolLinks,validateToolLinks,TOOLS_FILE} from '../src/navigation.ts';
-import {panelOrigin,panelDestination,toolDestination,managedToolDestination,navigationItems,requestedNavigation,menuKeyboard,shouldReportNavigationError,isRestartingResponse,isReplacementPanel,replaceActiveDocument} from '../ui/navigation.js';
+import {panelOrigin,panelDestination,toolDestination,managedToolDestination,navigationItems,requestedNavigation,menuKeyboard,shouldReportNavigationError,isRestartingResponse,isPanelUnavailable,isReplacementPanel,replaceActiveDocument} from '../ui/navigation.js';
 const fixture={id:'tracker',label:'Hand Tracking',url:'http://127.0.0.1:5220/'};
 test('tool links are bounded local navigation metadata, not commands or credentials',()=>{
   assert.deepEqual(validateToolLinks({tools:[{...fixture,command:'ignored'}]}),[fixture]);
@@ -85,4 +85,12 @@ test('panel keeps navigation above maintenance and runs restart and rebuild in p
   assert.match(app,/on\('plugins-changed',[\s\S]*?loadNavigation\(\)\.catch\(report\)/);
   assert.match(app,/on\('plugins-changed',[\s\S]*?loadPlugins\(\)\.catch\(report\)/);
   assert.doesNotMatch(app,/api\('PUT', `\/api\/plugins\/manage\/[\s\S]{0,300}await loadNavigation\(\)/);
+});
+
+test('a panel that is briefly unreachable is not a failure for background reads',()=>{
+  assert.equal(isPanelUnavailable(new TypeError('Failed to fetch')),true);
+  assert.equal(isPanelUnavailable(new TypeError('NetworkError when attempting to fetch resource.')),true);
+  assert.equal(isPanelUnavailable(Object.assign(new Error('The panel is restarting'),{status:503})),true);
+  assert.equal(isPanelUnavailable(new TypeError("Cannot read properties of undefined (reading 'x')")),false,'code errors still surface');
+  assert.equal(isPanelUnavailable(Object.assign(new Error('Provider failed'),{status:500})),false);
 });
