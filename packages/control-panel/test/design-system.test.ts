@@ -52,3 +52,8 @@ test('a multi-select without a summary names one choice and counts several',asyn
   const js=await (await import('node:fs/promises')).readFile(new URL('../ui/design-system.js',import.meta.url),'utf8');
   assert.ok(js.includes("label=owner.dataset.summary||(chosen.length>1?`${chosen.length} selected`:chosen[0]?.label)||'None';"));
 });
+
+test('slider thumbs hover with the shared field hover line',async()=>{
+  const css=await (await import('node:fs/promises')).readFile(new URL('../ui/design-system.css',import.meta.url),'utf8');
+  for(const thumb of ['-webkit-slider-thumb','-moz-range-thumb'])assert.ok(css.includes('input.xrb-range:hover:not(:disabled)::'+thumb+' { box-shadow: 0 0 0 1px var(--accent), 0 0 0 3px var(--surface), 0 0 0 4px var(--field-hover-line); }'));
+});

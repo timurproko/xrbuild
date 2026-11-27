@@ -203,8 +203,9 @@ input[type="checkbox"]:disabled { opacity: .5; }
 input.xrb-range { min-width: 0; width: 100%; height: 16px; margin: 0; padding: 0; appearance: none; border: 0; background: transparent; }
 input.xrb-range:hover { border-color: transparent; }
 input.xrb-range:focus, input.xrb-range:focus-visible { outline: none; box-shadow: none; }
-input.xrb-range:hover:not(:disabled)::-webkit-slider-thumb { box-shadow: 0 0 0 1px var(--accent), 0 0 0 5px var(--accent-soft); }
-input.xrb-range:hover:not(:disabled)::-moz-range-thumb { box-shadow: 0 0 0 1px var(--accent), 0 0 0 5px var(--accent-soft); }
+/* Slider hover uses the same 1px hover line as every other field. */
+input.xrb-range:hover:not(:disabled)::-webkit-slider-thumb { box-shadow: 0 0 0 1px var(--accent), 0 0 0 3px var(--surface), 0 0 0 4px var(--field-hover-line); }
+input.xrb-range:hover:not(:disabled)::-moz-range-thumb { box-shadow: 0 0 0 1px var(--accent), 0 0 0 3px var(--surface), 0 0 0 4px var(--field-hover-line); }
 input.xrb-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--accent); }
 input.xrb-range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--accent); }
 input.xrb-range::-webkit-slider-runnable-track { width: 100%; height: 4px; border: 1px solid color-mix(in srgb, var(--muted) 58%, var(--line)); border-radius: 2px; background: linear-gradient(to right, var(--accent) 0 var(--range-progress, 0%), var(--surface) var(--range-progress, 0%) 100%); }
