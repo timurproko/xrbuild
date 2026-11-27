@@ -157,7 +157,7 @@ function renderList(state){const selected=selectedValues(state.a);state.list.rep
 function focusOption(state){const buttons=[...state.list.querySelectorAll('[role="option"]:not(:disabled)')];if(!buttons.length)return;state.index=Math.max(0,Math.min(state.index,buttons.length-1));buttons[state.index].focus();}
 /** Floating layers inside a fullscreen element must live in it; the browser shows nothing else while fullscreen. */
 export function floatingHost(owner){const full=owner.ownerDocument.fullscreenElement;return full&&full.contains(owner)?full:owner.ownerDocument.body;}
-/* Colour popover: a saturation/brightness area, a hue slider and a hex field, styled like the other menus. */
+/* Color popover: a saturation/brightness area, a hue slider and a hex field, styled like the other menus. */
 export function hexToHsv(hex){const n=parseInt(String(hex).replace('#',''),16),r=(n>>16&255)/255,g=(n>>8&255)/255,b=(n&255)/255,max=Math.max(r,g,b),d=max-Math.min(r,g,b);let h=0;if(d)h=max===r?((g-b)/d)%6:max===g?(b-r)/d+2:(r-g)/d+4;return[(h*60+360)%360,max?d/max:0,max];}
 export function hsvToHex(h,s,v){const f=n=>{const k=(n+h/60)%6;return Math.round(255*(v-v*s*Math.max(0,Math.min(k,4-k,1))));};return'#'+[f(5),f(3),f(1)].map(x=>x.toString(16).padStart(2,'0')).join('');}
 let activeColor=null;
@@ -167,8 +167,8 @@ export function openColorPopover(anchor,{value='#000000',onInput=()=>{},onClose=
  if(activeColor?.anchor===anchor){activeColor.close();return null;}
  closeColorPopover();
  const doc=anchor.ownerDocument,pop=doc.createElement('div');
- pop.className='menu xrb-color-popover';pop.setAttribute('role','dialog');pop.setAttribute('aria-label','Choose colour');
- pop.innerHTML='<div class="xrb-color-area" tabindex="0" role="slider" aria-label="Saturation and brightness"><span class="xrb-color-thumb"></span></div><input type="range" class="xrb-range xrb-hue" min="0" max="359" step="1" aria-label="Hue"><div class="xrb-color-row"><span class="xrb-color-preview"></span><input type="text" class="xrb-color-hex" maxlength="7" spellcheck="false" aria-label="Hex colour"></div>';
+ pop.className='menu xrb-color-popover';pop.setAttribute('role','dialog');pop.setAttribute('aria-label','Choose color');
+ pop.innerHTML='<div class="xrb-color-area" tabindex="0" role="slider" aria-label="Saturation and brightness"><span class="xrb-color-thumb"></span></div><input type="range" class="xrb-range xrb-hue" min="0" max="359" step="1" aria-label="Hue"><div class="xrb-color-row"><span class="xrb-color-preview"></span><input type="text" class="xrb-color-hex" maxlength="7" spellcheck="false" aria-label="Hex color"></div>';
  floatingHost(anchor).append(pop);
  const area=pop.querySelector('.xrb-color-area'),thumb=pop.querySelector('.xrb-color-thumb'),hue=pop.querySelector('.xrb-hue'),hex=pop.querySelector('.xrb-color-hex'),preview=pop.querySelector('.xrb-color-preview');
  let[h,s,v]=hexToHsv(value),current=String(value).toLowerCase();

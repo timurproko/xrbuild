@@ -11,11 +11,11 @@ let mounts = 0;
 export function mountHandAdjustments(root, { load, apply, serialize = operation => operation(), setup = null }) {
   const prefix = `hands-adjustments-${++mounts}`;
   const number = (key, label, min, max, step, hint = '', swatch = '') => renderField(label,
-    `<span class="hands-number-row${swatch ? ' hands-number-row--colour' : ''}"><input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required><input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">${swatch}</span>`, { hint });
+    `<span class="hands-number-row${swatch ? ' hands-number-row--color' : ''}"><input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required><input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">${swatch}</span>`, { hint });
   // What the skeleton shows is one multi-select; hidden checkboxes stay the saved fields behind it.
   const DISPLAY = { showJoints: 'Joints', showBones: 'Bones', showPinchGrabIndicator: 'Pinch/grab' };
   const displayField = () => renderField('Display', `<div class="dropdown" data-multi="true" data-display-toggles data-options="${Object.keys(DISPLAY).join('|')}" data-labels='${JSON.stringify(DISPLAY)}'><input type="hidden" data-display-value value="[]"><button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false">None</button></div>${Object.keys(DISPLAY).map(key => `<input type="checkbox" data-field="appearance.${key}" aria-label="${DISPLAY[key]}" hidden>`).join('')}`);
-  const colour = (key, label) => `<span class="xrb-inline-icons"><input type="color" data-field="appearance.${key}" aria-label="${label}" hidden><button type="button" class="xrb-swatch" data-colour="appearance.${key}" aria-label="Choose ${label.toLowerCase()}" aria-haspopup="dialog" aria-pressed="true"></button></span>`;
+  const color = (key, label) => `<span class="xrb-inline-icons"><input type="color" data-field="appearance.${key}" aria-label="${label}" hidden><button type="button" class="xrb-swatch" data-color="appearance.${key}" aria-label="Choose ${label.toLowerCase()}" aria-haspopup="dialog" aria-pressed="true"></button></span>`;
   const resetMenu = (section, label) => `<button type="button" class="xrb-icon-button" id="${prefix}-${section}-settings" data-reset-menu="${section}" aria-label="${label} settings" data-no-tooltip aria-haspopup="menu" aria-controls="${prefix}-${section}-menu" aria-expanded="false">${iconSvg('settings')}</button><div class="menu" id="${prefix}-${section}-menu" role="menu" aria-labelledby="${prefix}-${section}-settings" hidden><button type="button" role="menuitem" data-reset="${section}">Reset to defaults</button></div>`;
   // Position and Visual are tabs in the card's tab bar; each tab's reset menu sits at the bar's end.
   const tab = (section, label, selected) => `<button type="button" class="xrb-tab" role="tab" id="${prefix}-tab-${section}" data-tab="${section}" aria-controls="${prefix}-panel-${section}" aria-selected="${selected}" tabindex="${selected ? 0 : -1}">${label}</button>`;
@@ -37,10 +37,10 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     </section>
     <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-appearance" aria-labelledby="${prefix}-tab-appearance" hidden>
       ${displayField()}
-      ${number('appearance.jointDiameterMm', 'Joint diameter (mm)', 1, 40, 1, '', colour('jointColorLinear', 'Joint colour'))}
-      ${number('appearance.boneDiameterMm', 'Bone diameter (mm)', 1, 30, 1, '', colour('boneColorLinear', 'Bone colour'))}
+      ${number('appearance.jointDiameterMm', 'Joint diameter (mm)', 1, 40, 1, '', color('jointColorLinear', 'Joint color'))}
+      ${number('appearance.boneDiameterMm', 'Bone diameter (mm)', 1, 30, 1, '', color('boneColorLinear', 'Bone color'))}
       ${number('appearance.opacity', 'Skeleton opacity', 0, 1, .001)}
-      ${number('appearance.indicatorDiameterMm', 'Indicator diameter (mm)', 1, 60, 1, '', colour('indicatorColorLinear', 'Indicator colour'))}
+      ${number('appearance.indicatorDiameterMm', 'Indicator diameter (mm)', 1, 60, 1, '', color('indicatorColorLinear', 'Indicator color'))}
       ${number('appearance.indicatorOpacity', 'Indicator opacity', 0, 1, .01)}
     </section>
     <div class="xrb-stack" data-recovery hidden><p class="field-error" data-status role="alert"></p><div class="xrb-button-row"><button type="button" class="small" data-action="retry">Retry</button><button type="button" class="small" data-action="discard" hidden>Use saved</button></div></div>
@@ -90,9 +90,9 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
       else field.value = field.type === 'color' ? linearToHex(value) : String(value);
       setFieldError(field);
     }
-    for (const swatch of root.querySelectorAll('[data-colour]')) {
+    for (const swatch of root.querySelectorAll('[data-color]')) {
       swatch.disabled = !state;
-      if (state) swatch.style.backgroundColor = linearToHex(edits.get(swatch.dataset.colour)?.value ?? read(state, swatch.dataset.colour));
+      if (state) swatch.style.backgroundColor = linearToHex(edits.get(swatch.dataset.color)?.value ?? read(state, swatch.dataset.color));
     }
     for (const range of root.querySelectorAll('[data-range]')) {
       range.disabled = !state;
@@ -118,18 +118,18 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     let value = field.type === 'checkbox' ? field.checked : field.type === 'color' ? hexToLinear(field.value) : field.valueAsNumber;
     const previous = edits.get(key), sent = inFlight?.get(key);
     const base = sent && sent.version === previous?.version ? sent.value : previous?.base ?? sent?.value ?? read(state, key);
-    // Opening, cancelling or returning a colour preview to its initial swatch preserves exact linear values.
+    // Opening, cancelling or returning a color preview to its initial swatch preserves exact linear values.
     if (field.type === 'color' && field.value.toLowerCase() === linearToHex(base).toLowerCase()) value = structuredClone(base);
     if (field.type === 'range') root.querySelector(`[data-field="${key}"]`).value = field.value;
     else if (field.type === 'number' && field.validity.valid) root.querySelector(`[data-range="${key}"]`).value = value;
     if (previous && equal(value, previous.value)) return key;
     if (!sent && equal(value, base) && equal(read(state, key), base)) {
       edits.delete(key); setFieldError(field);
-      if (field.type === 'color') root.querySelector(`[data-colour="${key}"]`).style.backgroundColor = field.value;
+      if (field.type === 'color') root.querySelector(`[data-color="${key}"]`).style.backgroundColor = field.value;
       buttons(); return key;
     }
     edits.set(key, { value, base, committed: false, version: ++version });
-    if (field.type === 'color') root.querySelector(`[data-colour="${key}"]`).style.backgroundColor = field.value;
+    if (field.type === 'color') root.querySelector(`[data-color="${key}"]`).style.backgroundColor = field.value;
     setFieldError(field); buttons(); return key;
   }
   function commit(field) {
@@ -225,10 +225,10 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
       if (activeMenu?.button === menuButton) closeMenu(); else showMenu(menuButton);
       return;
     }
-    const swatch = event.target.closest('[data-colour]');
+    const swatch = event.target.closest('[data-color]');
     if (swatch && state) {
-      // The shared colour popover replaces the browser picker; previews edit, closing commits.
-      event.preventDefault(); const field = root.querySelector(`[data-field="${swatch.dataset.colour}"]`);
+      // The shared color popover replaces the browser picker; previews edit, closing commits.
+      event.preventDefault(); const field = root.querySelector(`[data-field="${swatch.dataset.color}"]`);
       openColorPopover(swatch, { value: field.value, onInput: hex => { field.value = hex; field.dispatchEvent(new Event('input', { bubbles: true })); }, onClose: () => field.dispatchEvent(new Event('change', { bubbles: true })) });
     }
     const reset = event.target.closest('[data-reset]');
@@ -260,35 +260,35 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
       failure = conflict = null; refresh(current); render(); void flush();
     }
   };
-  // Right-click a swatch to copy its colour or paste one copied from another swatch (or the clipboard).
-  let copiedColour = '', menuSwatch = null;
-  const colourMenu = document.createElement('div');
-  colourMenu.className = 'menu'; colourMenu.setAttribute('role', 'menu'); colourMenu.setAttribute('aria-label', 'Colour'); colourMenu.hidden = true;
-  colourMenu.innerHTML = '<button type="button" role="menuitem" data-colour-action="copy">Copy colour</button><button type="button" role="menuitem" data-colour-action="paste">Paste colour</button>';
-  root.append(colourMenu);
-  const hideColourMenu = () => { colourMenu.hidden = true; menuSwatch = null; };
+  // Right-click a swatch to copy its color or paste one copied from another swatch (or the clipboard).
+  let copiedColor = '', menuSwatch = null;
+  const colorMenu = document.createElement('div');
+  colorMenu.className = 'menu'; colorMenu.setAttribute('role', 'menu'); colorMenu.setAttribute('aria-label', 'Color'); colorMenu.hidden = true;
+  colorMenu.innerHTML = '<button type="button" role="menuitem" data-color-action="copy">Copy color</button><button type="button" role="menuitem" data-color-action="paste">Paste color</button>';
+  root.append(colorMenu);
+  const hideColorMenu = () => { colorMenu.hidden = true; menuSwatch = null; };
   const contextmenu = event => {
-    const swatch = event.target.closest('[data-colour]');
+    const swatch = event.target.closest('[data-color]');
     if (!swatch || !state || swatch.disabled) return;
     event.preventDefault(); closeMenu(); closeColorPopover(); menuSwatch = swatch;
-    colourMenu.hidden = false; positionFloating(colourMenu, { x: event.clientX, y: event.clientY });
-    colourMenu.querySelector('[data-colour-action]').focus();
+    colorMenu.hidden = false; positionFloating(colorMenu, { x: event.clientX, y: event.clientY });
+    colorMenu.querySelector('[data-color-action]').focus();
   };
-  const colourAction = async event => {
-    const action = event.target.closest('[data-colour-action]')?.dataset.colourAction, swatch = menuSwatch;
+  const colorAction = async event => {
+    const action = event.target.closest('[data-color-action]')?.dataset.colorAction, swatch = menuSwatch;
     if (!action || !swatch) return;
-    const field = root.querySelector(`[data-field="${swatch.dataset.colour}"]`); hideColourMenu();
-    if (action === 'copy') { copiedColour = field.value; await navigator.clipboard?.writeText(field.value).catch(() => {}); return; }
+    const field = root.querySelector(`[data-field="${swatch.dataset.color}"]`); hideColorMenu();
+    if (action === 'copy') { copiedColor = field.value; await navigator.clipboard?.writeText(field.value).catch(() => {}); return; }
     const clip = (await navigator.clipboard?.readText().catch(() => '')) ?? '';
-    const text = (/^#?[0-9a-f]{6}$/i.test(clip.trim()) ? clip.trim() : copiedColour).toLowerCase();
+    const text = (/^#?[0-9a-f]{6}$/i.test(clip.trim()) ? clip.trim() : copiedColor).toLowerCase();
     if (!/^#?[0-9a-f]{6}$/.test(text)) return;
     field.value = text.startsWith('#') ? text : `#${text}`;
     field.dispatchEvent(new Event('input', { bubbles: true })); field.dispatchEvent(new Event('change', { bubbles: true }));
   };
-  const colourOutside = event => { if (!colourMenu.hidden && !colourMenu.contains(event.target)) hideColourMenu(); };
-  const colourKey = event => { if (event.key === 'Escape') { const swatch = menuSwatch; hideColourMenu(); swatch?.focus(); } else menuKeyboard(event, colourMenu, () => hideColourMenu()); };
-  root.addEventListener('contextmenu', contextmenu); colourMenu.addEventListener('click', event => void colourAction(event)); colourMenu.addEventListener('keydown', colourKey);
-  document.addEventListener('pointerdown', colourOutside, { capture: true, signal: menuEvents.signal });
+  const colorOutside = event => { if (!colorMenu.hidden && !colorMenu.contains(event.target)) hideColorMenu(); };
+  const colorKey = event => { if (event.key === 'Escape') { const swatch = menuSwatch; hideColorMenu(); swatch?.focus(); } else menuKeyboard(event, colorMenu, () => hideColorMenu()); };
+  root.addEventListener('contextmenu', contextmenu); colorMenu.addEventListener('click', event => void colorAction(event)); colorMenu.addEventListener('keydown', colorKey);
+  document.addEventListener('pointerdown', colorOutside, { capture: true, signal: menuEvents.signal });
   const beforeunload = event => { if (edits.size || busy) { event.preventDefault(); event.returnValue = ''; } };
   addEventListener('beforeunload', beforeunload);
   form.addEventListener('input', input); form.addEventListener('change', change); form.addEventListener('keydown', keydown); form.addEventListener('submit', submit); root.addEventListener('click', click); tabs.addEventListener('click', click); tabs.addEventListener('keydown', tabKeydown);
@@ -298,5 +298,5 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     updateDelivery(_text, deliveryState, revision, epoch) {
       if (epoch === deliveryEpoch && revision === state?.revision && !edits.size && !busy) { retryDelivery = deliveryState === 'failed'; buttons(); }
     },
-    dispose() { disposed = true; removeEventListener('beforeunload', beforeunload); form.removeEventListener('input', input); form.removeEventListener('change', change); form.removeEventListener('keydown', keydown); form.removeEventListener('submit', submit); root.removeEventListener('click', click); root.removeEventListener('contextmenu', contextmenu); closeColorPopover(); colourMenu.remove(); tabs.removeEventListener('click', click); tabs.removeEventListener('keydown', tabKeydown); if (adopted) tabs.querySelectorAll('[data-tab-extra],[data-tab-action]').forEach(node => node.remove()); else tabs.remove(); if (setup) { setup.hidden = false; setup.removeAttribute('role'); setup.removeAttribute('aria-labelledby'); root.hidden = false; } disposers.reverse().forEach(fn => fn()); root.replaceChildren(); } };
+    dispose() { disposed = true; removeEventListener('beforeunload', beforeunload); form.removeEventListener('input', input); form.removeEventListener('change', change); form.removeEventListener('keydown', keydown); form.removeEventListener('submit', submit); root.removeEventListener('click', click); root.removeEventListener('contextmenu', contextmenu); closeColorPopover(); colorMenu.remove(); tabs.removeEventListener('click', click); tabs.removeEventListener('keydown', tabKeydown); if (adopted) tabs.querySelectorAll('[data-tab-extra],[data-tab-action]').forEach(node => node.remove()); else tabs.remove(); if (setup) { setup.hidden = false; setup.removeAttribute('role'); setup.removeAttribute('aria-labelledby'); root.hidden = false; } disposers.reverse().forEach(fn => fn()); root.replaceChildren(); } };
 }

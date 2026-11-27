@@ -266,7 +266,7 @@ a.xrb-path:hover, a.xrb-path:focus-visible { color: var(--accent); text-decorati
 
 /* Menus */
 .menu { position: fixed; z-index: 10; min-width: 150px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 14px 40px rgba(0, 0, 0, .25); display: flex; flex-direction: column; }
-/* Colour popover (openColorPopover): a menu holding a saturation/brightness area, hue slider and hex field. */
+/* Color popover (openColorPopover): a menu holding a saturation/brightness area, hue slider and hex field. */
 .menu.xrb-color-popover { width: 224px; padding: 10px; gap: 10px; }
 .xrb-color-area { position: relative; height: 140px; border-radius: 6px; cursor: crosshair; touch-action: none; outline: none; }
 .xrb-color-area:focus-visible { box-shadow: 0 0 0 2px var(--accent); }

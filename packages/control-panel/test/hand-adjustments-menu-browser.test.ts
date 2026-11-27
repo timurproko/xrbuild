@@ -50,22 +50,22 @@ test('section reset gears provide accessible keyboard menus with scoped dismissa
         await key('Tab', 'Tab', 9);
         assert.equal(await evaluate(`document.querySelector('${item}').parentElement.hidden`), true, 'Tab leaves without trapping focus');
       }
-      // Colour swatches open the shared popover under the swatch; right-click copies and pastes between swatches.
+      // Color swatches open the shared popover under the swatch; right-click copies and pastes between swatches.
       await evaluate(`document.querySelector('[data-tab="appearance"]').click()`);
-      const popover = await evaluate(`(()=>{const swatch=document.querySelector('[data-colour="appearance.jointColorLinear"]');swatch.click();const pop=document.querySelector('.xrb-color-popover'),r=pop.getBoundingClientRect(),s=swatch.getBoundingClientRect();return {open:!!pop,right:Math.round(s.right-r.right),clear:r.top>=s.bottom||r.bottom<=s.top,hex:pop.querySelector('.xrb-color-hex').value,field:document.querySelector('[data-field="appearance.jointColorLinear"]').value};})()`);
+      const popover = await evaluate(`(()=>{const swatch=document.querySelector('[data-color="appearance.jointColorLinear"]');swatch.click();const pop=document.querySelector('.xrb-color-popover'),r=pop.getBoundingClientRect(),s=swatch.getBoundingClientRect();return {open:!!pop,right:Math.round(s.right-r.right),clear:r.top>=s.bottom||r.bottom<=s.top,hex:pop.querySelector('.xrb-color-hex').value,field:document.querySelector('[data-field="appearance.jointColorLinear"]').value};})()`);
       assert.equal(popover.open, true); assert.equal(popover.right, 0, 'popover is right-aligned with its swatch'); assert.equal(popover.clear, true, 'popover opens beside the swatch without covering it'); assert.equal(popover.hex, popover.field);
       await key('Escape', 'Escape', 27);
       assert.equal(await evaluate(`!!document.querySelector('.xrb-color-popover')`), false, 'Escape closes the popover');
-      await evaluate(`document.querySelector('[data-colour="appearance.jointColorLinear"]').click()`);
+      await evaluate(`document.querySelector('[data-color="appearance.jointColorLinear"]').click()`);
       assert.equal(await evaluate(`!!document.querySelector('.xrb-color-popover')`), true);
-      await evaluate(`document.querySelector('[data-colour="appearance.jointColorLinear"]').click()`);
+      await evaluate(`document.querySelector('[data-color="appearance.jointColorLinear"]').click()`);
       assert.equal(await evaluate(`!!document.querySelector('.xrb-color-popover')`), false, 'clicking the open swatch again closes its popover');
-      const menuFor = (key: string) => `(()=>{const s=document.querySelector('[data-colour="appearance.${key}"]'),r=s.getBoundingClientRect();s.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+2,clientY:r.top+2}));return !document.querySelector('[data-colour-action="copy"]').closest('.menu').hidden;})()`;
-      assert.equal(await evaluate(menuFor('jointColorLinear')), true, 'right-click opens the colour menu');
-      await evaluate(`document.querySelector('[data-colour-action="copy"]').click()`); await sleep(50);
+      const menuFor = (key: string) => `(()=>{const s=document.querySelector('[data-color="appearance.${key}"]'),r=s.getBoundingClientRect();s.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+2,clientY:r.top+2}));return !document.querySelector('[data-color-action="copy"]').closest('.menu').hidden;})()`;
+      assert.equal(await evaluate(menuFor('jointColorLinear')), true, 'right-click opens the color menu');
+      await evaluate(`document.querySelector('[data-color-action="copy"]').click()`); await sleep(50);
       assert.equal(await evaluate(menuFor('indicatorColorLinear')), true);
-      await evaluate(`document.querySelector('[data-colour-action="paste"]').click()`); await sleep(100);
-      assert.equal(await evaluate(`document.querySelector('[data-field="appearance.indicatorColorLinear"]').value`), popover.field, 'paste copies the colour between pickers');
+      await evaluate(`document.querySelector('[data-color-action="paste"]').click()`); await sleep(100);
+      assert.equal(await evaluate(`document.querySelector('[data-field="appearance.indicatorColorLinear"]').value`), popover.field, 'paste copies the color between pickers');
       assert.equal(await evaluate(`document.querySelector('#hands-view-reset').textContent.trim()`), 'Reset');
       assert.equal(await evaluate(`document.querySelector('#hands-view-reset').hasAttribute('data-reset-menu')`), false);
       await evaluate(`(async()=>{const {mountHandAdjustments}=await import('/hands-adjustments.js'),data=await (await fetch('/api/hands')).json();window.mounts=[];for(let i=0;i<2;i++){const holder=document.createElement('section'),root=document.createElement('aside');root.id='extra-adjustments-'+i;holder.append(root);document.body.append(holder);const editor=mountHandAdjustments(root,{load:async()=>data,apply:async()=>data});editor.refresh(data);mounts.push({root:holder,editor});}})()`);
