@@ -31,6 +31,7 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
     const output = dialog.querySelector('[data-setup-output]'), cancel = dialog.querySelector('[data-setup-cancel]'), install = dialog.querySelector('[data-setup-install]');
     let plan = null, running = false, done = false;
     // No status icon while reviewing the plan, so the title lines up with the details below.
+    new MutationObserver(() => { message.title = message.textContent; }).observe(message, { childList: true, characterData: true, subtree: true });
     const state = value => { status.dataset.state = value; status.hidden = value === 'idle'; };
     const finish = () => { if (running) return; if (dialog.open) dialog.close(); dialog.remove(); resolve(done); };
     cancel.addEventListener('click', finish);
