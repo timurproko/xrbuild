@@ -1,4 +1,5 @@
 import { mountToolNavigation, isPanelUnavailable } from './navigation.js';
+import { openColorPopover } from './design-system.js';
 import { mountHandsShell } from './hands-shell.js';
 import { mountProviderRecorder } from './hands-recorder.js';
 import { mountHandsPostprocessing } from './hands-postprocessing.js';
@@ -111,7 +112,9 @@ $('hands-source-retry').addEventListener('click', () => { if (sourceEdit) void s
 $('hands-source-discard').addEventListener('click', () => { sourceEdit = sourceConflict = null; message(); void load(); });
 const navigation = mountToolNavigation($('hands-menu-button'), $('hands-menu'), { origin: location.origin, current: 'hands' });
 // Monitor frame: pick a monitor in Setup (remembered in this browser); its EDID size draws the frame.
-const MONITOR_KEY = 'xrb.hands.monitor';
+const MONITOR_KEY = 'xrb.hands.monitor', MONITOR_SIZE_KEY = 'xrb.hands.monitorSize';
+/** Frame the last monitor before the first frame; the live list (about a second later) then only confirms it. */
+function restoreMonitorFrame() { try { const size = JSON.parse(localStorage.getItem(MONITOR_SIZE_KEY) || 'null'); if (size?.widthMm) view?.setMonitor(size); } catch { /* No remembered size. */ } }
 async function loadMonitors() {
   const select = $('hands-monitor');
   let monitors = [];
@@ -124,9 +127,28 @@ async function loadMonitors() {
     option.disabled = !m.widthMm; return option;
   }));
   select.value = saved; select.disabled = !sized.length;
-  const apply = () => { view?.setMonitor(monitors.find(m => m.device === select.value) ?? null); };
+  const apply = () => {
+    const monitor = monitors.find(m => m.device === select.value) ?? null;
+    try { localStorage.setItem(MONITOR_SIZE_KEY, monitor?.widthMm ? JSON.stringify({ widthMm: monitor.widthMm, heightMm: monitor.heightMm }) : ''); } catch { /* Storage may be blocked. */ }
+    view?.setMonitor(monitor);
+  };
   select.addEventListener('change', () => { try { localStorage.setItem(MONITOR_KEY, select.value); } catch { /* Storage may be blocked. */ } apply(); });
   apply();
+}
+// Object shape and grid color are viewer preferences, remembered in this browser only.
+const stored = key => { try { return localStorage.getItem(key) ?? ''; } catch { return ''; } };
+const store = (key, value) => { try { localStorage.setItem(key, value); } catch { /* Storage may be blocked. */ } };
+function mountViewPreferences() {
+  const object = $('hands-object'), swatch = $('hands-grid-color'), label = $('hands-grid-color-value');
+  object.value = ['cube', 'sphere', 'suzanne'].includes(stored('xrb.hands.object')) ? stored('xrb.hands.object') : 'cube';
+  object.addEventListener('change', () => { store('xrb.hands.object', object.value); void view?.setObject(object.value); });
+  void view?.setObject(object.value);
+  const themeLine = () => { const probe = document.createElement('span'); probe.style.color = 'var(--line)'; document.body.append(probe); const rgb = getComputedStyle(probe).color.match(/\d+/g) ?? ['0', '0', '0']; probe.remove(); return '#' + rgb.slice(0, 3).map(n => Number(n).toString(16).padStart(2, '0')).join(''); };
+  const show = color => { swatch.style.backgroundColor = color || themeLine(); label.textContent = color || 'Theme'; };
+  const apply = color => { view?.setGridColor(color); show(color); };
+  apply(/^#[0-9a-f]{6}$/i.test(stored('xrb.hands.gridColor')) ? stored('xrb.hands.gridColor') : '');
+  swatch.addEventListener('click', () => openColorPopover(swatch, { value: stored('xrb.hands.gridColor') || themeLine(),
+    onInput: color => apply(color), onClose: color => { store('xrb.hands.gridColor', color); apply(color); } }));
 }
 const disposeShell = mountHandsShell({ resetView: () => view?.resetView(), setViewOptions: options => view?.setViewOptions(options) });
 const postprocessing = mountHandsPostprocessing($('hands-postprocessing-root'));
@@ -141,7 +163,8 @@ try {
   });
   // Grid, axes and the monitor frame follow the View menu from the first frame (all on by default).
   view.setViewOptions(JSON.parse($('hands-view-options').value));
-  void loadMonitors();
+  restoreMonitorFrame(); void loadMonitors();
+  mountViewPreferences();
 } catch (error) { $('hands-view-error').hidden = false; $('hands-view-error').textContent = `3D view unavailable: ${error.message}`; }
 // Retained integration API only: no recorder nodes or legacy tools enter the simplified page.
 const recorder = mountProviderRecorder({ actions: document.createElement('div'), status: document.createElement('p'), view,

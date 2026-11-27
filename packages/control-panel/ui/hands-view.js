@@ -16,7 +16,8 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(40, 1, .005, 10);
   const controls = new OrbitControls(camera, canvas); controls.enableDamping = true; controls.minDistance = .3; controls.maxDistance = 2;
-  controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+  // Like 3D tools: left drag orbits, middle drag pans, right drag zooms.
+  controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.DOLLY };
   scene.add(new THREE.HemisphereLight('#e8f4ff', '#162338', 2.8));
   const light = new THREE.DirectionalLight('#ffffff', 3); light.position.set(.2, .4, .6); scene.add(light);
   const grid = new THREE.GridHelper(.6, 12); grid.rotation.x = Math.PI / 2; grid.position.z = -.02; scene.add(grid);
@@ -25,6 +26,8 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   const monitor = new THREE.Group(); monitor.visible = false; scene.add(monitor);
   let monitorShown = true;
   function setMonitor(value) {
+    // The same size again (the live list confirming the remembered one) changes nothing, so the view never jumps.
+    if (value?.widthMm && monitorSize && Math.abs(monitorSize.w - value.widthMm / 1000) < 1e-6 && Math.abs(monitorSize.h - value.heightMm / 1000) < 1e-6) return;
     for (const object of [...monitor.children]) { object.geometry.dispose(); object.material.dispose(); monitor.remove(object); }
     if (!value?.widthMm || !value?.heightMm) { monitor.visible = false; monitorSize = null; return; }
     const w = value.widthMm / 1000, h = value.heightMm / 1000, color = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#86a4ff';
@@ -61,12 +64,13 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
       ingress.profile = next; visual.applyAppearance(next.appearance); profile = next; stream.setReady(true); resolve(true);
     } }; });
   }
+  let gridColor = '';
   function theme() {
     const css = getComputedStyle(document.documentElement);
     scene.background = new THREE.Color(css.getPropertyValue('--log-bg').trim());
     tests.theme(css.getPropertyValue('--accent').trim());
     for (const material of Array.isArray(grid.material) ? grid.material : [grid.material]) {
-      material.color.set(css.getPropertyValue('--line').trim()); material.transparent = true; material.opacity = .5;
+      material.color.set(gridColor || css.getPropertyValue('--line').trim()); material.transparent = true; material.opacity = gridColor ? 1 : .5;
     }
   }
   theme(); const observer = new MutationObserver(theme); observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
@@ -130,8 +134,11 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     },
     clearLegacy() { clearLegacy(); if (!stream.active) onStatus({ phase: 'idle', hands: null }); },
     resetView,
-    setViewOptions(options) { grid.visible = options.includes('grid'); axes.visible = options.includes('axes'); monitorShown = options.includes('monitor'); monitor.visible = monitorShown && monitor.children.length > 0; },
+    setViewOptions(options) { grid.visible = options.includes('grid'); axes.visible = options.includes('axes'); monitorShown = options.includes('monitor'); monitor.visible = monitorShown && monitor.children.length > 0; tests.setVisible(options.includes('object')); },
     setMonitor,
+    setObject(kind) { return tests.setShape(kind); },
+    /** A custom grid color, or '' for the theme's line color. */
+    setGridColor(color) { gridColor = color || ''; theme(); },
     dispose() {
       if (closed) return; closed = true; pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; stream.dispose(); tests.dispose(); clearLegacy(); cancelAnimationFrame(frameId); resize.disconnect(); observer.disconnect(); system.removeEventListener('change', theme); controls.dispose();
       scene.traverse(object => { object.geometry?.dispose(); for (const material of object.material ? Array.isArray(object.material) ? object.material : [object.material] : []) material.dispose(); });

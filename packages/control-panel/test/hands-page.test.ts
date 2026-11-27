@@ -32,7 +32,7 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.doesNotMatch(markup, /hands-view-empty/, 'the viewer carries no centre text');
   assert.match(markup, /data-tab="log"[^>]*>Log<\/button>/);
   assert.match(markup, /<div id="hands-log-panel"[^>]*data-tab-panel="log" hidden>\s*<div id="hands-log-empty" class="empty-note">No log entries yet\.<\/div>\s*<pre id="hands-log" class="log"/, 'diagnostics live in a Log tab, not in Setup');
-  assert.match(markup, /id="hands-view-options" type="hidden" value='\["grid","axes","monitor"\]'/, 'axes and the monitor frame show by default');
+  assert.match(markup, /id="hands-view-options" type="hidden" value='\["grid","axes","monitor","object"\]'/, 'axes, the monitor frame and the object show by default');
   const viewSource = await fs.readFile(path.join(ui, 'hands-view.js'), 'utf8'), gizmo = await fs.readFile(path.join(ui, 'hands-axis-gizmo.js'), 'utf8');
   assert.match(viewSource, /renderer\.render\(scene, camera\); axes\.render\(renderer, camera\);/, 'axes render as a corner widget after the scene');
   assert.doesNotMatch(viewSource, /AxesHelper/);
@@ -42,6 +42,13 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(gizmo, /renderer\.getViewport\(full\)[\s\S]*renderer\.setViewport\(full\);/, 'the main viewport is restored in the same CSS units');
   assert.doesNotMatch(gizmo, /getPixelRatio/, 'no pixel-ratio rescaling that would shrink the main view on scaled displays');
   assert.match(markup, /<select id="hands-monitor" aria-label="Monitor"/, 'Setup chooses the monitor to frame');
+  assert.match(markup, /<select id="hands-object" aria-label="Object"><option value="cube">Cube<\/option><option value="sphere">Sphere<\/option><option value="suzanne">Suzanne<\/option>/, 'Setup chooses one centre object');
+  assert.match(markup, /id="hands-grid-color" class="xrb-swatch"/, 'Setup chooses the grid color');
+  const targetsSource = await fs.readFile(path.join(ui, 'hands-targets.js'), 'utf8');
+  assert.match(targetsSource, /new PinchTarget\(object[\s\S]*new GrabTarget\(object/, 'one object carries both hand checks');
+  const mesh = JSON.parse(await fs.readFile(path.join(ui, 'hands-suzanne.json'), 'utf8'));
+  assert.equal(mesh.format, 'xrbuild-mesh'); assert.equal(mesh.positions.length % 3, 0); assert.equal(mesh.indices.length % 3, 0);
+  assert.ok(Math.max(...mesh.indices) < mesh.positions.length / 3, 'mesh indices stay in range');
   assert.match(markup, /data-options="grid\|axes\|monitor/, 'View toggles the monitor frame');
   assert.match(viewSource, /new THREE\.LineLoop\(/, 'the monitor draws as a frame in the panel plane');
   assert.match(await fs.readFile(path.join(ui, '..', 'src', 'list-monitors.ps1'), 'utf8'), /function Get-EdidSizeMm/, 'physical size comes from the monitor EDID');
