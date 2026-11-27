@@ -1,6 +1,6 @@
 import type { Hand } from './hands.ts';
 import { meshMotion, MESH_MAX_RESIDUAL_M } from './hand-mesh-motion.ts';
-import { decodeMeshResult, MESH_MAX_SOURCE_AGE_MS, MESH_CAPABILITIES, validMeshCapabilities, validMeshState, unknownMeshObservations, MESH_MAX_BYTES, type MeshFrame, type MeshRuntime, type MeshState, type MeshSurface, type MeshDrawSurface } from './hand-mesh-protocol.ts';
+import { decodeMeshResult, MESH_MAX_SOURCE_AGE_MS, MESH_HOLD_LIMIT_MS, MESH_CAPABILITIES, validMeshCapabilities, validMeshState, unknownMeshObservations, MESH_MAX_BYTES, type MeshFrame, type MeshRuntime, type MeshState, type MeshSurface, type MeshDrawSurface } from './hand-mesh-protocol.ts';
 
 export function meshRuntime(value: string | undefined): MeshRuntime | null {
   if (!value) return null;
@@ -13,6 +13,13 @@ export function meshRuntime(value: string | undefined): MeshRuntime | null {
 /** Optional drawing transport, deliberately independent of HandInput/filter/gesture state. */
 export class HandMeshClient {
   status = 'Starting';
+  /** How old a mesh result may be and how far the hand may have moved before it is hidden (defaults: 100 ms, 10 mm). */
+  private maxAgeMs = MESH_MAX_SOURCE_AGE_MS;
+  private maxResidualM = MESH_MAX_RESIDUAL_M;
+  setDrawLimits({ maxAgeMs, maxResidualM }: { maxAgeMs?: number; maxResidualM?: number }): void {
+    if (Number.isFinite(maxAgeMs)) this.maxAgeMs = Math.round(Math.min(MESH_HOLD_LIMIT_MS, Math.max(MESH_MAX_SOURCE_AGE_MS, maxAgeMs!)));
+    if (Number.isFinite(maxResidualM)) this.maxResidualM = Math.min(.1, Math.max(.001, maxResidualM!));
+  }
   /** Why the first connection failed, for diagnostics (null while connecting or once connected). */
   connectError: string | null = null;
   private runtime: MeshRuntime;
@@ -28,7 +35,7 @@ export class HandMeshClient {
   get state(): MeshState | null {
     if (!this.configuration) return null;
     const c = this.configuration, d = this.drawing, age = d ? this.sourceAge(d.frame) : Infinity;
-    const current = !this.closed && d && age >= 0 && age <= MESH_MAX_SOURCE_AGE_MS && d.frame.revision === this.revision && c.phase === 'Ready'
+    const current = !this.closed && d && age >= 0 && age <= this.maxAgeMs && d.frame.revision === this.revision && c.phase === 'Ready'
       && c.drawingGeneration === d.generation && c.appliedGeneration === d.generation && c.requestedGeneration === d.generation;
     return { ...c, drawingGeneration: current ? d.generation : null };
   }
@@ -77,6 +84,7 @@ export class HandMeshClient {
   private frame(hands: Hand[], sampleMs: number): MeshFrame {
     const frame: MeshFrame = { type: 'frame', epoch: this.epoch, sequence: this.sequence++, revision: this.revision, sentMs: this.now(), sampleMs,
       ...(this.protocol === 2 ? { version: 2, runId: this.runId, settingsGeneration: this.settingsGeneration } : {}),
+      ...(this.maxAgeMs !== MESH_MAX_SOURCE_AGE_MS ? { maxAgeMs: this.maxAgeMs } : {}),
       hands: hands.slice(0, 2).map(h => ({ id: h.id, handedness: h.handedness, keypoints: h.keypoints.map(p => [...p]),
         ...(this.protocol === 2 ? { observations: h.observations ? structuredClone(h.observations) : unknownMeshObservations() } : {}) })) };
     this.sampledAt.set(frame, this.now()); return frame;
@@ -93,11 +101,11 @@ export class HandMeshClient {
     const shown = hands.filter(h => !h.coasting).slice(0, 2);
     let meshes: MeshDrawSurface[] = [];
     const accepted = this.accepted, age = accepted ? this.sourceAge(accepted.frame) : Infinity;
-    if (accepted && age >= 0 && age <= MESH_MAX_SOURCE_AGE_MS && accepted.frame.revision === this.revision) {
+    if (accepted && age >= 0 && age <= this.maxAgeMs && accepted.frame.revision === this.revision) {
       for (const surface of accepted.meshes) {
         const hand = shown.find(h => h.id === surface.id), input = accepted.frame.hands.find(h => h.id === surface.id);
         const motion = hand && input ? meshMotion(input, hand) : null;
-        if (motion && motion.residualM <= MESH_MAX_RESIDUAL_M) meshes.push({ ...surface, ...motion, sourceAgeMs: age });
+        if (motion && motion.residualM <= this.maxResidualM) meshes.push({ ...surface, ...motion, sourceAgeMs: age });
       }
     }
     if (!shown.length) { this.accepted = null; this.topologies.clear(); }
@@ -131,7 +139,7 @@ export class HandMeshClient {
         const r = await reader.read(); if (r.done) break;
         length += r.value.length; if (length > MESH_MAX_BYTES) { await reader.cancel(); throw new Error('oversized mesh'); } parts.push(r.value);
       }
-      if (this.closed || frame.revision !== this.revision || this.sourceAge(frame) < 0 || this.sourceAge(frame) > MESH_MAX_SOURCE_AGE_MS
+      if (this.closed || frame.revision !== this.revision || this.sourceAge(frame) < 0 || this.sourceAge(frame) > this.maxAgeMs
         || this.protocol === 2 && (frame.settingsGeneration !== this.settingsGeneration || this.configuration && (this.configuration.phase !== 'Ready' || this.configuration.appliedGeneration !== this.settingsGeneration))) return;
       const bytes = new Uint8Array(length); let offset = 0; for (const p of parts) { bytes.set(p, offset); offset += p.length; }
       const result = decodeMeshResult(bytes);

@@ -2,7 +2,7 @@ import http from 'node:http';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { HandMeshProcess } from './hand-mesh-process.ts';
-import { meshPacket, readMeshPacket, decodeMeshResult, encodeMeshResult, validMeshFrame, validMeshCapabilities, MESH_CAPABILITIES, MESH_PREPARATION_STEPS, MESH_MAX_BYTES, MESH_MAX_SOURCE_AGE_MS,
+import { meshPacket, readMeshPacket, decodeMeshResult, encodeMeshResult, validMeshFrame, validMeshCapabilities, meshMaxAge, MESH_CAPABILITIES, MESH_PREPARATION_STEPS, MESH_MAX_BYTES, MESH_MAX_SOURCE_AGE_MS,
   type MeshFrame, type MeshRuntime, type MeshState } from '../../sdk/src/hand-mesh-protocol.ts';
 import type { HandMeshPlugin } from './hand-mesh-plugins.ts';
 import { handMeshSettings, handMeshAppliedSettings, meshPreparationAllowance } from './hand-mesh-contract.ts';
@@ -19,7 +19,7 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
     promise.then(value => { signal.removeEventListener('abort', abort); resolve(value); }, error => { signal.removeEventListener('abort', abort); reject(error); });
   });
 }
-type Work = { frame: MeshFrame; response: http.ServerResponse; at: number; stage: Stage; timers: ReturnType<typeof setTimeout>[]; done: () => void };
+type Work = { frame: MeshFrame; response: http.ServerResponse; at: number; maxAgeMs: number; stage: Stage; timers: ReturnType<typeof setTimeout>[]; done: () => void };
 const failureReasons: Record<string, string> = { 'configuration-rejected': 'Mesh configuration rejected', 'preparation-failed': 'Mesh preparation failed',
   'runtime-unavailable': 'Mesh runtime unavailable; prepare explicitly', 'unsupported-setting': 'Mesh setting unsupported' };
 const coreReasons = new Set([...Object.values(failureReasons), 'Mesh preparation timed out', 'Mesh live configuration timed out', 'Processor does not support live configuration; relaunch', 'Previous mesh cleanup is not verified; retry cleanup']);
@@ -67,7 +67,9 @@ export class HandMeshRun {
     this.server = http.createServer((req, res) => { void this.request(req, res).catch(() => { if (!res.headersSent) res.writeHead(400); res.end(); }); });
     this.server.requestTimeout = 3000; this.server.headersTimeout = 3000;
   }
-  state(): MeshState { return { ...this.data, drawingGeneration: performance.now() - this.deliveredAt <= MESH_MAX_SOURCE_AGE_MS ? this.data.drawingGeneration : null }; }
+  /** The age limit the viewer last asked for (its mesh hold). */
+  private viewerMaxAgeMs = MESH_MAX_SOURCE_AGE_MS;
+  state(): MeshState { return { ...this.data, drawingGeneration: performance.now() - this.deliveredAt <= this.viewerMaxAgeMs ? this.data.drawingGeneration : null }; }
   private setStatus(value: string) { if (this.status !== value) { this.status = value; this.changed(value); } }
   private later(fn: () => void, ms: number) {
     const timer = setTimeout(() => { this.timers.delete(timer); fn(); }, ms); this.timers.add(timer); return timer;
@@ -251,7 +253,7 @@ export class HandMeshRun {
         hands: f.hands.map(({ id, handedness, keypoints }) => ({ id, handedness, keypoints })) };
     }
     stage.owned?.child.stdin.write(meshPacket(work.frame));
-    work.timers.push(this.later(() => { if (this.current === work) { this.setStatus('Skeleton fallback: mesh is late'); this.reply(work); } }, MESH_MAX_SOURCE_AGE_MS));
+    work.timers.push(this.later(() => { if (this.current === work) { this.setStatus('Skeleton fallback: mesh is late'); this.reply(work); } }, work.maxAgeMs));
     work.timers.push(this.later(() => { if (this.current === work) this.failStage(stage, 'sidecar frame timeout'); }, 2000));
   }
   private output(stage: Stage, chunk: Buffer) {
@@ -302,7 +304,7 @@ export class HandMeshRun {
         if (!work || work.stage !== stage || result.epoch !== work.frame.epoch || result.sequence !== work.frame.sequence || result.revision !== work.frame.revision
           || result.meshes.some(m => !work.frame.hands.some(h => h.id === m.id))) throw new Error('association');
         if (stage.plugin.declaration.version === 2 && (result.version !== 2 || result.runId !== this.runId || result.settingsGeneration !== work.frame.settingsGeneration)) throw new Error('settings association');
-        if (result.epoch === this.epoch && performance.now() - work.at <= MESH_MAX_SOURCE_AGE_MS && (stage.generation === this.data.requestedGeneration || this.modernConsumer === false) && this.data.phase === 'Ready') {
+        if (result.epoch === this.epoch && performance.now() - work.at <= work.maxAgeMs && (stage.generation === this.data.requestedGeneration || this.modernConsumer === false) && this.data.phase === 'Ready') {
           if (!this.data.reason) this.setStatus('Running');
           if (result.meshes.length) { this.deliveredGeneration = stage.generation; this.deliveredAt = work.at; }
           this.reply(work, encodeMeshResult({ ...result, ...(this.modernConsumer ? { version: 2 as const, runId: this.runId, settingsGeneration: stage.generation } : { version: undefined }) }));
@@ -336,12 +338,13 @@ export class HandMeshRun {
     this.lastSequence = frame.sequence; this.lastRequest = performance.now();
     if (this.modernConsumer && (frame.version !== 2 || frame.runId !== this.runId || frame.settingsGeneration !== this.data.requestedGeneration)) { this.headers(res); res.writeHead(204); res.end(); return; }
     if (!frame.hands.length) this.deliveredGeneration = null;
-    this.data.drawingGeneration = this.modernConsumer && frame.hands.length > 0 && performance.now() - this.deliveredAt <= MESH_MAX_SOURCE_AGE_MS && frame.drawingGeneration === this.data.appliedGeneration && frame.drawingGeneration === this.deliveredGeneration
+    this.viewerMaxAgeMs = meshMaxAge(frame);
+    this.data.drawingGeneration = this.modernConsumer && frame.hands.length > 0 && performance.now() - this.deliveredAt <= this.viewerMaxAgeMs && frame.drawingGeneration === this.data.appliedGeneration && frame.drawingGeneration === this.deliveredGeneration
       && frame.drawingGeneration === this.data.requestedGeneration ? frame.drawingGeneration! : null;
     const stage = this.stage;
     if (stage?.plugin.declaration.capabilities?.includes('final-pose-observations-v1') && (!this.modernConsumer || frame.hands.some(h => !h.observations))) this.setStatus('Skeleton fallback: rebuild/relaunch for observation support');
     else if (stage?.ready && this.data.phase === 'Ready') {
-      this.reply(this.pending); this.pending = { frame, response: res, at: performance.now(), stage, timers: [], done: () => {} }; this.pump(); return;
+      this.reply(this.pending); this.pending = { frame, response: res, at: performance.now(), maxAgeMs: meshMaxAge(frame), stage, timers: [], done: () => {} }; this.pump(); return;
     }
     this.headers(res); res.writeHead(204); res.end();
   }

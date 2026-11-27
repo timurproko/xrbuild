@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
 import { HandMeshClient, meshRuntime } from '../src/hand-mesh-client.ts';
-import { encodeMeshResult, decodeMeshResult, meshPacket, MESH_MAX_BYTES, type MeshFrame } from '../src/hand-mesh-protocol.ts';
+import { encodeMeshResult, decodeMeshResult, meshPacket, MESH_MAX_BYTES, validMeshFrame, type MeshFrame } from '../src/hand-mesh-protocol.ts';
 import { HandVisual } from '../src/hand-visual.ts';
 import { HandInput } from '../src/hands.ts';
 import { PanelFrame } from '../src/stereo.ts';
@@ -81,4 +81,20 @@ test('the default fetch is called the way browsers require, not as a method of t
     assert.equal(client.connectError, null, 'the connection is not refused by the browser');
     client.close();
   } finally { globalThis.fetch = original; }
+});
+
+test('a viewer can hold mesh results longer, and the frame tells the server within bounds', async () => {
+  const sent: any[] = [];
+  const fetcher = (async (_url: unknown, init?: RequestInit) => { sent.push(JSON.parse(String(init?.body))); return new Response(null, { status: 204 }); }) as typeof fetch;
+  const client = new HandMeshClient({ version: 1, url: 'http://127.0.0.1:1234', token: 'a'.repeat(64) }, fetcher);
+  client.setDrawLimits({ maxAgeMs: 500, maxResidualM: .02 });
+  client.observed([1]); client.update([], 0); await tick(); await tick();
+  const frame = { type: 'frame', epoch: 'e', sequence: 1, revision: 1, sentMs: 0, sampleMs: 0, hands: [] };
+  assert.equal(validMeshFrame({ ...frame, maxAgeMs: 500 }), true);
+  assert.equal(validMeshFrame({ ...frame, maxAgeMs: 50 }), false, 'never stricter than the default');
+  assert.equal(validMeshFrame({ ...frame, maxAgeMs: 5000 }), false, 'bounded');
+  assert.equal(validMeshFrame(frame), true, 'absent keeps the 100 ms default');
+  client.setDrawLimits({ maxAgeMs: 99999 });
+  assert.ok(sent.every(f => f.maxAgeMs === undefined || f.maxAgeMs <= 2000));
+  client.close();
 });

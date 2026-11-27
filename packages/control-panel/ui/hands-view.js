@@ -151,7 +151,9 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
       const descriptor = meshRuntime(JSON.stringify(value));
       if (descriptor?.token === meshDescriptor?.token && descriptor?.url === meshDescriptor?.url) return true;
       closeMesh();
-      if (descriptor) { meshDescriptor = descriptor; meshClient = new HandMeshClient(descriptor); }
+      // CPU fits often take longer than 100 ms: keep each mesh until the next arrives (up to 500 ms) and allow small finger
+      // movement, so the mesh does not blink off between results; it still hides when the hand moves away from it.
+      if (descriptor) { meshDescriptor = descriptor; meshClient = new HandMeshClient(descriptor); meshClient.setDrawLimits({ maxAgeMs: 500, maxResidualM: .02 }); }
       return !!descriptor;
     },
     get meshState() { return meshClient?.state ?? null; },
