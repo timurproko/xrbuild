@@ -187,6 +187,12 @@ try {
   // Grid, axes and the monitor frame follow the View menu from the first frame (all on by default).
   view.setViewOptions(JSON.parse($('hands-view-options').value));
   mountResolution();
+  { let on = false; try { on = localStorage.getItem('xrb.hands.showOffset') === '1'; } catch { /* Storage may be blocked. */ }
+    view.setShowOffset(on);
+    const sync = () => { const box = $('hands-offset-preview'); if (box) box.checked = on; };
+    new MutationObserver(sync).observe($('hands-adjustments-root'), { childList: true, subtree: true }); sync();
+    document.addEventListener('change', event => { if (event.target?.id !== 'hands-offset-preview') return; on = event.target.checked;
+      try { localStorage.setItem('xrb.hands.showOffset', on ? '1' : '0'); } catch { /* Storage may be blocked. */ } view?.setShowOffset(on); }); }
   mountViewPreferences();
 } catch (error) { $('hands-view-error').hidden = false; $('hands-view-error').textContent = `3D view unavailable: ${error.message}`; }
 // Retained integration API only: no recorder nodes or legacy tools enter the simplified page.

@@ -38,6 +38,7 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   const pagePanels = adopted ? [...tabs.parentElement.querySelectorAll(':scope > [data-tab-panel]')] : [];
   root.innerHTML = `<form class="xrb-stack hands-adjustment-sections" aria-label="Hand adjustments">
     <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-geometry" aria-labelledby="${prefix}-tab-geometry"${setup ? ' hidden' : ''}>
+      ${renderField('Show offset in view', '<span class="xrb-switch"><input type="checkbox" id="hands-offset-preview"></span>')}
       ${number('offsetMm.x', 'X (mm)', -150, 150, 1)}${number('offsetMm.y', 'Y (mm)', -150, 150, 1)}${number('offsetMm.z', 'Z (mm)', -150, 150, 1)}
       ${number('sizeFactor', 'Size', .5, 1.5, .01)}
     </section>
