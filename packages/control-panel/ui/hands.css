@@ -90,9 +90,8 @@
 .hands-mesh-layer-header { align-items: center; gap: 8px; }
 .hands-mesh-layer-header strong { min-width: 0; overflow-wrap: anywhere; }
 /* Viewer / side panel splitter. */
-.hands-splitter { position: relative; cursor: col-resize; touch-action: none; outline: none; }
-.hands-splitter::after { content: ""; position: absolute; inset: 0 calc(50% - 1px); border-radius: 1px; background: transparent; transition: background-color .12s; }
-.hands-splitter:hover::after, .hands-splitter:focus-visible::after, .hands-resizing .hands-splitter::after { background: var(--accent); }
+/* Only the cursor shows the split; no line. */
+.hands-splitter { cursor: col-resize; touch-action: none; outline: none; }
 .hands-resizing, .hands-resizing * { cursor: col-resize !important; user-select: none; }
 .hands-resizing canvas { pointer-events: none; }
 /* Tabs that do not fit collapse into the more menu. */
