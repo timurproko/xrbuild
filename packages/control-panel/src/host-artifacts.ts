@@ -14,6 +14,7 @@ export function hostPaths(repo: string) {
   const hostDir = path.join(repo, 'native', 'host'), buildDir = path.join(hostDir, 'build');
   return { hostDir, buildDir, releaseDir: path.join(buildDir, 'Release'), exe: path.join(buildDir, 'Release', 'xrb-host.exe'),
     sources: ['src', 'CMakeLists.txt', 'tests', 'testpages'].map(name => path.join(hostDir, name)).concat([
+      ...['main.cpp', 'CMakeLists.txt'].map(name => path.join(repo, 'native/mesh-supervisor', name)),
       path.join(repo, 'native/plugin-sdk/include'), path.join(repo, 'native/plugin-sdk/tests'), path.join(repo, 'tools/fetch-deps/deps.lock.json'),
       ...['acquisition.h', 'acquisition_main.cpp', 'main.cpp', 'supervise.cpp', 'published_frame.h', 'input_registry.cpp', 'CMakeLists.txt', 'tests'].map(name => path.join(repo, 'native/provider-session', name)),
     ]) };

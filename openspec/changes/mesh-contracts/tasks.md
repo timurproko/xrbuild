@@ -8,9 +8,9 @@
 
 ## 2. Bounded contained process-tree lifecycle
 
-- [ ] 2.1 Add a standalone CEF-free mesh supervisor with birth-time job containment, exact owner/child handles, byte-safe pipes and separate authoritative lifecycle receipts; verify targeted native fake-child tests cover argument boundaries, binary packets, assignment-before-resume and foreign-process isolation.
-- [ ] 2.2 Route mesh stage spawn/Stop/cancellation/crash/panel disposal through verified contained teardown with bounded graceful and forced waits; verify uncooperative children/grandchildren, owner/supervisor death, startup races and retryable cleanup failure in isolated real-process tests.
-- [ ] 2.3 Add the helper to checked core runtime build/fingerprint/staging paths and document missing-helper fallback and stop bounds; verify focused artifact tests and a standalone helper build without altering provider ABI, acquisition ownership or the person's installed runtime.
+- [x] 2.1 Add a standalone CEF-free mesh supervisor with birth-time job containment, exact owner/child handles, byte-safe pipes and separate authoritative lifecycle receipts; verify targeted native fake-child tests cover argument boundaries, binary packets, assignment-before-resume and foreign-process isolation.
+- [x] 2.2 Route mesh stage spawn/Stop/cancellation/crash/panel disposal through verified contained teardown with bounded graceful and forced waits; verify uncooperative children/grandchildren, owner/supervisor death, startup races and retryable cleanup failure in isolated real-process tests.
+- [x] 2.3 Add the helper to checked core runtime build/fingerprint/staging paths and document missing-helper fallback and stop bounds; verify focused artifact tests and a standalone helper build without altering provider ABI, acquisition ownership or the person's installed runtime.
 
 ## 3. Checked plugin-owned writable runtimes
 

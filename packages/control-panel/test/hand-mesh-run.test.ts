@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test as baseTest, type TestContext } from 'node:test';
+const test = (name: string, fn: (t: TestContext) => unknown) => baseTest(name, { skip: !process.env.XRB_TEST_MESH_SUPERVISOR }, fn);
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -18,7 +19,7 @@ const plugin = (mode = 'normal', delay = 0, vertices = 2859) => ({ owner: 'works
     { key: 'vertices', label: 'Vertices', type: 'number', min: 3, max: 2859, default: vertices },
   ] }) });
 async function start(t: any, mode = 'normal', delay = 0, timings: { startupMs?: number; connectMs?: number } = {}) {
-  const run = new HandMeshRun(() => ['https://app.local'], () => {}, timings); t.after(() => run.stop());
+  const run = new HandMeshRun(() => ['https://app.local'], () => {}, { ...timings, supervisor: process.env.XRB_TEST_MESH_SUPERVISOR }); t.after(() => run.stop());
   const descriptor = await run.start(plugin(mode, delay), {});
   const request = (route: string, body = frame(), token = descriptor.token, origin = 'https://app.local') => fetch(descriptor.url + route, { method: 'POST', headers: { origin, authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   for (let i = 0; i < 200 && run.status === 'Starting'; i++) await wait(10);
@@ -52,7 +53,7 @@ test('slow sidecar never blocks a request indefinitely and pending work is newes
   assert.match(f.run.status, /late/);
 });
 test('missing runtime and an old client degrade without making startup wait', async t => {
-  const missing = new HandMeshRun(() => ['https://app.local']); t.after(() => missing.stop());
+  const missing = new HandMeshRun(() => ['https://app.local'], () => {}, { supervisor: process.env.XRB_TEST_MESH_SUPERVISOR }); t.after(() => missing.stop());
   const descriptor = await missing.start({ ...plugin(), program: fixture + '.not-installed' }, {});
   assert.ok(descriptor.token);
   for (let i = 0; i < 100 && !missing.status.startsWith('Skeleton fallback'); i++) await wait(10);
@@ -72,7 +73,7 @@ test('owner process death closes the private pipe and the real child exits', asy
   const root = await fs.mkdtemp(path.join(parent, 'mesh-owner-')); let childPid = 0;
   const script = path.join(root, 'owner.mjs');
   await fs.writeFile(script, `import {HandMeshRun} from ${JSON.stringify(new URL('../src/hand-mesh-run.ts', import.meta.url).href)};
-    const run = new HandMeshRun(()=>['https://app.local']); await run.start(${JSON.stringify(plugin('normal', 0, 3))}, {});
+    const run = new HandMeshRun(()=>['https://app.local'],()=>{}, {supervisor:${JSON.stringify(process.env.XRB_TEST_MESH_SUPERVISOR)}}); await run.start(${JSON.stringify(plugin('normal', 0, 3))}, {});
     console.log(run.child.pid);`);
   const owner = spawn(process.execPath, [script], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   t.after(async () => { owner.kill(); if (childPid) { try { process.kill(childPid); } catch {} } await fs.rm(root, { recursive: true, force: true }); });

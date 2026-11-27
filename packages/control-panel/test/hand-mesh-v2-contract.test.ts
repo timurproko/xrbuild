@@ -19,8 +19,8 @@ test('modern declaration is opt-in, bounded and rejects unknown capability/chang
   assert.throws(() => handMeshDeclaration({ ...d, version: 1 }));
 });
 
-test('actual modern child/consumer negotiate and exchange versioned final poses', async t => {
-  const run = new HandMeshRun(() => ['https://app.local']); t.after(() => run.stop());
+test('actual modern child/consumer negotiate and exchange versioned final poses', { skip: !process.env.XRB_TEST_MESH_SUPERVISOR }, async t => {
+  const run = new HandMeshRun(() => ['https://app.local'], () => {}, { supervisor: process.env.XRB_TEST_MESH_SUPERVISOR }); t.after(() => run.stop());
   const descriptor = await run.start(modernPlugin(), {});
   const request = (route: string, body: unknown) => fetch(descriptor.url + route, { method: 'POST', headers: { origin: 'https://app.local', authorization: `Bearer ${descriptor.token}` }, body: JSON.stringify(body) });
   const connect = await request('/connect', { ...meshFrame(), protocolVersion: 2, capabilities: MESH_CAPABILITIES });

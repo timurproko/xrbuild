@@ -8,10 +8,10 @@ import { createXrbApp } from '../../sdk/src/index.ts';
 import { FakeSocket, handsMessage, openHand } from '../../sdk/test/fixtures.ts';
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-test('real fake sidecar draws two mid-detail meshes through standard SDK drawing without app code', async () => {
+test('real fake sidecar draws two mid-detail meshes through standard SDK drawing without app code', { skip: !process.env.XRB_TEST_MESH_SUPERVISOR }, async () => {
   const keys = ['innerWidth', 'innerHeight', '__XRB_HOST__', 'WebSocket', 'location', 'fetch'];
   const g = globalThis as any, previous = Object.fromEntries(keys.map(k => [k, g[k]])), fetcher = fetch;
-  const run = new HandMeshRun(() => ['https://app.local']); let app: ReturnType<typeof createXrbApp> | null = null;
+  const run = new HandMeshRun(() => ['https://app.local'], () => {}, { supervisor: process.env.XRB_TEST_MESH_SUPERVISOR }); let app: ReturnType<typeof createXrbApp> | null = null;
   const descriptor = await run.start({ owner: 'workspace:fixture', id: 'mesh', label: 'Fixture', available: true, reason: '', program: process.execPath,
     declaration: handMeshDeclaration({ version: 1, id: 'mesh', label: 'Fixture', program: 'runtime.exe', args: [fileURLToPath(new URL('./fixtures/hand-mesh-sidecar.mjs', import.meta.url))], settingsVersion: 1,
       settings: [{ key: 'vertices', label: 'Vertices', type: 'number', min: 3, max: 2859, default: 2859 }] }) }, {});

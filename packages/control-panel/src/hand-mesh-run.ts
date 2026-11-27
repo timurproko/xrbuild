@@ -1,5 +1,6 @@
 import http from 'node:http';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import { HandMeshProcess } from './hand-mesh-process.ts';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { meshPacket, readMeshPacket, decodeMeshResult, encodeMeshResult, validMeshFrame, validMeshCapabilities, MESH_CAPABILITIES, MESH_MAX_BYTES, type MeshFrame, type MeshRuntime } from '../../sdk/src/hand-mesh-protocol.ts';
@@ -13,6 +14,8 @@ export class HandMeshRun {
   readonly server: http.Server;
   descriptor: MeshRuntime | null = null;
   private child: ChildProcessWithoutNullStreams | null = null;
+  private owned: HandMeshProcess | null = null;
+  private supervisor: string | undefined;
   private ready = false;
   private protocol: 1 | 2 = 1;
   private needsObservations = false;
@@ -46,8 +49,8 @@ export class HandMeshRun {
   }
   private changed: (status: string) => void;
   private origins: () => string[];
-  constructor(origins: () => string[], changed: (status: string) => void = () => {}, timings: { startupMs?: number; connectMs?: number } = {}) {
-    this.origins = origins; this.changed = changed;
+  constructor(origins: () => string[], changed: (status: string) => void = () => {}, timings: { startupMs?: number; connectMs?: number; supervisor?: string } = {}) {
+    this.origins = origins; this.changed = changed; this.supervisor = timings.supervisor;
     this.startupTimeoutMs = timings.startupMs ?? 90000;
     this.connectTimeoutMs = timings.connectMs ?? 30000;
     this.server = http.createServer((req, res) => { void this.request(req, res).catch(() => { if (!res.headersSent) res.writeHead(400); res.end(); }); });
@@ -66,11 +69,13 @@ export class HandMeshRun {
     const address = this.server.address();
     if (!address || typeof address === 'string') throw new Error('No mesh endpoint');
     this.descriptor = { version: 1, url: `http://127.0.0.1:${address.port}`, token: randomBytes(32).toString('hex') };
-    const child = spawn(plugin.program, plugin.declaration.args, { cwd: path.dirname(plugin.program), windowsHide: true, shell: false, stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '', PYTHONSTARTUP: '', HF_HUB_OFFLINE: '1' } });
-    this.child = child;
+    const descriptor = this.descriptor;
+    try { this.owned = await HandMeshProcess.start(this.supervisor, plugin.program, plugin.declaration.args, path.dirname(plugin.program), () => this.closed); }
+    catch { this.fail('mesh containment/program unavailable; Rebuild the host'); return descriptor; }
+    if (this.closed) { await this.owned.stop(); throw new Error('Mesh start cancelled'); }
+    const child = this.owned.child; this.child = child;
     child.stdin.on('error', () => this.fail('sidecar pipe closed'));
-    child.stderr.resume(); // Never forward untrusted logs or credentials to the panel.
+    // Supervisor stderr is authoritative lifecycle only; processor stderr goes to NUL.
     child.stdout.on('data', (chunk: Buffer) => this.output(chunk));
     child.once('error', () => this.fail('sidecar could not start'));
     child.once('exit', () => { if (!this.closed) this.fail('sidecar exited'); });
@@ -164,24 +169,18 @@ export class HandMeshRun {
   stop(stopped = true): Promise<void> {
     if (this.stopping) return this.stopping;
     this.closed = true; this.descriptor = null; this.ready = false;
-    if (stopped) this.setStatus('Stopped');
+    if (stopped) this.setStatus('Stopping');
     for (const t of this.timers) clearTimeout(t); this.timers.clear();
     this.reply(this.current); this.reply(this.pending); this.current = this.pending = null;
     this.server.closeAllConnections(); this.server.close();
-    const child = this.child; this.child = null;
-    this.stopping = (async () => {
-      if (!child || child.exitCode !== null || child.signalCode !== null) return;
-      await new Promise<void>((resolve, reject) => {
-        let timer: ReturnType<typeof setTimeout>;
-        const done = () => { clearTimeout(timer); resolve(); };
-        child.once('exit', done);
-        timer = setTimeout(() => {
-          child.kill();
-          timer = setTimeout(() => reject(new Error('Mesh child did not exit after termination')), 2000);
-        }, 2000);
-        child.stdin.end(meshPacket({ type: 'stop' }));
-      });
+    const owned = this.owned;
+    const operation = (async () => {
+      await owned?.stop(meshPacket({ type: 'stop' }));
+      if (this.owned === owned) { this.owned = null; this.child = null; }
+      if (stopped) this.setStatus('Stopped');
     })();
-    return this.stopping;
+    this.stopping = operation;
+    void operation.catch(() => { if (this.stopping === operation) this.stopping = null; this.setStatus('Skeleton fallback: mesh child cleanup failed'); });
+    return operation;
   }
 }

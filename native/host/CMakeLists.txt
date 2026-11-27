@@ -20,6 +20,7 @@ ADD_LOGICAL_TARGET("libcef_lib" "${CEF_LIB_DEBUG}" "${CEF_LIB_RELEASE}")
 set(XRB_PLUGIN_SDK "${CMAKE_CURRENT_SOURCE_DIR}/../plugin-sdk")
 # Acquisition reservation helper also has a standalone, CEF-free configure entry.
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../provider-session" provider-session)
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../mesh-supervisor" mesh-supervisor)
 
 set(HOST_SOURCES
   src/main.cpp
@@ -48,7 +49,7 @@ add_dependencies(xrb-host libcef_dll_wrapper)
 target_link_libraries(xrb-host PRIVATE
   libcef_lib libcef_dll_wrapper ${CEF_STANDARD_LIBS}
   d3d11 dxgi d3dcompiler ws2_32 bcrypt windowscodecs ole32 dxgi advapi32)
-add_dependencies(xrb-host xrb-acquisition xrb-provider-session xrb-provider-supervisor)
+add_dependencies(xrb-host xrb-acquisition xrb-provider-session xrb-provider-supervisor xrb-mesh-supervisor)
 # GUI subsystem (entry still main()): a console exe opens a terminal window for itself and for
 # every CEF sub-process (same exe) when a station agent starts it. Logs go to the log file.
 set_target_properties(xrb-host PROPERTIES LINK_FLAGS "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup")

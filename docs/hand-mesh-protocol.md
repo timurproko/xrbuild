@@ -12,7 +12,15 @@ A v2 processor receives the modern `start` and echoes its run/generation and dec
 
 Only a panel-managed desktop run with Hand starts one selected mesh sidecar. It is optional: acquisition and interaction never wait for ready or results. Settings are pinned at launch; changing them or selecting None takes effect next run. Other execution contexts get no endpoint. No program, environment or model is installed or downloaded by this protocol.
 
-## Ownership and lifecycle
+## Contained process ownership (all versions)
+
+Windows managed runs require checked `xrb-mesh-supervisor.exe` beside the selected host runtime. Missing/unsafe containment gives mesh-only Rebuild guidance, never direct-process fallback. The supervisor creates only the optional processor tree in a kill-on-close job at process birth, verifies membership before resume, and monitors the exact owning process handle. Binary processor stdin/stdout are separate from authoritative supervisor lifecycle receipts; processor stderr is discarded. Normal child exit also drains descendants.
+
+Stop sends processor Stop plus EOF, permits two seconds of grace, then terminates only its owned job and allows five seconds to verify all processes ended. The panel bounds an unresponsive supervisor and uses read-only exact-identity/job verification if its receipt is lost. Failed verification remains retryable and blocks reuse; it is never labelled Stopped. Owner/supervisor death cannot leave an uncontained processor. No provider/acquisition job or unrelated process is touched. Other platforms need equivalent containment, not a claim that cooperative EOF is crash-safe.
+
+Standalone focused build: `cmake -S native/mesh-supervisor -B <isolated-output> -A x64`, then `cmake --build <isolated-output> --config Release`. Set `XRB_TEST_MESH_SUPERVISOR` to that executable for actual fake-child/grandchild tests. A skipped check is not containment evidence.
+
+## Legacy ownership and lifecycle
 
 The panel starts the contained program directly, with the declared argument array and no shell. Its cwd is the program's directory. Native launch metadata has an optional `handMeshRuntimeJson` with `{version:1,url,token}`; the URL is an ephemeral `http://127.0.0.1:<port>` service and the token is run-owned. This is not part of a portable Hands profile or package. Existing hosts/bundles without this feature remain skeleton-only and show rebuild/relaunch guidance in mesh status. Host input is never gated on it.
 

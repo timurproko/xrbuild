@@ -62,7 +62,7 @@ jobs:
           echo "$files"
           # A change to CI itself selects all PR-eligible jobs; the host lane remains nightly/manual.
           match() { echo "$files" | grep -qE "$1" && echo true || echo false; }
-          echo "node=$(match '^(packages/|tools/|templates/|embedded/|native/plugin-sdk/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig\.json$|\.github/)')" >> "$GITHUB_OUTPUT"
+          echo "node=$(match '^(packages/|tools/|templates/|embedded/|native/(plugin-sdk|mesh-supervisor)/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig\.json$|\.github/)')" >> "$GITHUB_OUTPUT"
           echo "embedded=$(match '^(embedded/|native/host/|native/plugin-sdk/|packages/(control-panel|desktop-package|sdk|ui-kit|app-icon)/|tools/(embedded|fetch-deps)/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|tsconfig\.json$|\.github/)')" >> "$GITHUB_OUTPUT"
 
   names:
@@ -88,6 +88,8 @@ jobs:
 
   node:
     name: Node tests
+    env:
+      XRB_TEST_MESH_SUPERVISOR: ${{ github.workspace }}/.artifacts/mesh-supervisor/Release/xrb-mesh-supervisor.exe
     needs: [readiness, changes]
     if: needs.readiness.outputs.ready == 'true' && needs.changes.outputs.node == 'true'
     runs-on: windows-latest
@@ -107,6 +109,9 @@ jobs:
           persist-credentials: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:types
+      # Small CEF-free optional-stage containment fixture, not the full host build.
+      - run: cmake -S native/mesh-supervisor -B .artifacts/mesh-supervisor -A x64
+      - run: cmake --build .artifacts/mesh-supervisor --config Release
       # pnpm/action-setup does not populate Corepack's separate cache. Bootstrap the root-pinned
       # manager here, not during a timed fixture's first real frozen install (even an empty graph).
       - run: corepack install
