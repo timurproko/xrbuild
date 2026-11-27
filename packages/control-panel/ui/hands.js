@@ -29,7 +29,10 @@ function renderSource() {
   if (!snapshot) return;
   const select = $('hands-provider'), selected = sourceEdit?.value ?? key(snapshot.selected);
   const missing = selected && !snapshot.providers.some(p => key(p) === selected);
-  const options = [null, ...snapshot.providers, ...(missing ? [{ owner: selected.split('/')[0], id: selected.split('/')[1], label: `${selected} (missing)`, available: false }] : [])];
+  // Only real trackers installed in the workspace are offered; built-in synthetic, replay and WebXR sources stay
+  // hidden unless one is already the saved choice.
+  const listed = snapshot.providers.filter(p => p.owner.startsWith('workspace:') || key(p) === selected);
+  const options = [null, ...listed, ...(missing ? [{ owner: selected.split('/')[0], id: selected.split('/')[1], label: `${selected} (missing)`, available: false }] : [])];
   const signature = JSON.stringify(options);
   if (select.dataset.options !== signature) {
     select.replaceChildren();
