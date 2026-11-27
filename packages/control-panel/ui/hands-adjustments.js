@@ -20,12 +20,16 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   // Position and Visual are tabs in the card's tab bar; each tab's reset menu sits at the bar's end.
   const tab = (section, label, selected) => `<button type="button" class="xrb-tab" role="tab" id="${prefix}-tab-${section}" data-tab="${section}" aria-controls="${prefix}-panel-${section}" aria-selected="${selected}" tabindex="${selected ? 0 : -1}">${label}</button>`;
   const tabAction = (section, label, selected) => `<span class="hands-tab-action" data-tab-action="${section}"${selected ? '' : ' hidden'}>${resetMenu(section, label)}</span>`;
-  const tabs = root.ownerDocument.createElement('div');
-  tabs.className = 'xrb-tabs hands-adjustment-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Hand adjustments'); tabs.dataset.xrbTabsId = 'hands-adjustments';
-  // An optional Setup panel (provider and session) comes first; it has no reset menu.
-  tabs.innerHTML = `${setup ? tab('setup', 'Setup', true) : ''}${tab('geometry', 'Position', !setup)}${tab('appearance', 'Visual', false)}<span class="spacer"></span>${tabAction('geometry', 'Position', !setup)}${tabAction('appearance', 'Visual', false)}`;
+  // The page may already hold the tab bar (shown before this editor loads); adopt it instead of rebuilding.
+  const adopted = setup?.parentElement?.querySelector(':scope > .hands-adjustment-tabs') ?? null;
+  const tabs = adopted ?? root.ownerDocument.createElement('div');
+  if (!adopted) {
+    tabs.className = 'xrb-tabs hands-adjustment-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Hand adjustments'); tabs.dataset.xrbTabsId = 'hands-adjustments';
+    tabs.innerHTML = `${setup ? tab('setup', 'Setup', true) : ''}${tab('geometry', 'Position', !setup)}${tab('appearance', 'Visual', false)}`;
+  } else for (const item of tabs.querySelectorAll('[data-tab]')) { item.id = `${prefix}-tab-${item.dataset.tab}`; item.setAttribute('aria-controls', `${prefix}-panel-${item.dataset.tab}`); }
+  tabs.insertAdjacentHTML('beforeend', `<span class="spacer" data-tab-extra></span>${tabAction('geometry', 'Position', !setup)}${tabAction('appearance', 'Visual', false)}`);
   if (setup) { setup.id ||= `${prefix}-panel-setup`; setup.setAttribute('role', 'tabpanel'); setup.setAttribute('aria-labelledby', `${prefix}-tab-setup`); tabs.querySelector('[data-tab="setup"]').setAttribute('aria-controls', setup.id); root.hidden = true; }
-  (setup ?? root).before(tabs);
+  if (!adopted) (setup ?? root).before(tabs);
   root.innerHTML = `<form class="xrb-stack hands-adjustment-sections" aria-label="Hand adjustments">
     <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-geometry" aria-labelledby="${prefix}-tab-geometry"${setup ? ' hidden' : ''}>
       ${number('offsetMm.x', 'X (mm)', -150, 150, 1)}${number('offsetMm.y', 'Y (mm)', -150, 150, 1)}${number('offsetMm.z', 'Z (mm)', -150, 150, 1)}
@@ -261,5 +265,5 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     updateDelivery(_text, deliveryState, revision, epoch) {
       if (epoch === deliveryEpoch && revision === state?.revision && !edits.size && !busy) { retryDelivery = deliveryState === 'failed'; buttons(); }
     },
-    dispose() { disposed = true; removeEventListener('beforeunload', beforeunload); form.removeEventListener('input', input); form.removeEventListener('change', change); form.removeEventListener('keydown', keydown); form.removeEventListener('submit', submit); root.removeEventListener('click', click); tabs.removeEventListener('click', click); tabs.removeEventListener('keydown', tabKeydown); tabs.remove(); if (setup) { setup.hidden = false; setup.removeAttribute('role'); setup.removeAttribute('aria-labelledby'); root.hidden = false; } disposers.reverse().forEach(fn => fn()); root.replaceChildren(); } };
+    dispose() { disposed = true; removeEventListener('beforeunload', beforeunload); form.removeEventListener('input', input); form.removeEventListener('change', change); form.removeEventListener('keydown', keydown); form.removeEventListener('submit', submit); root.removeEventListener('click', click); tabs.removeEventListener('click', click); tabs.removeEventListener('keydown', tabKeydown); if (adopted) tabs.querySelectorAll('[data-tab-extra],[data-tab-action]').forEach(node => node.remove()); else tabs.remove(); if (setup) { setup.hidden = false; setup.removeAttribute('role'); setup.removeAttribute('aria-labelledby'); root.hidden = false; } disposers.reverse().forEach(fn => fn()); root.replaceChildren(); } };
 }

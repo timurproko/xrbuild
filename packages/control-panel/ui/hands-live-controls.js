@@ -18,14 +18,16 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     button.textContent = current; if (widest) button.style.minWidth = `${widest}px`; };
   provider.title = 'Provider changes are saved for the next Start or app launch; the active session is not switched.';
   let status = { phase: 'not-started' }, data = null, supported = true, starting = false, stopping = false, closed = false, polling = false, generation = 0, lastDiagnostic = '';
-  const rates = document.getElementById('hands-tracking-fps'), overlay = document.getElementById('hands-view-empty');
+  const rates = document.getElementById('hands-tracking-fps');
   function render() {
     if (closed) return;
     lockWidth();
     const active = session.active || starting, phase = status.phase;
     document.body.dataset.handsSession = active ? 'live' : '';
     lastDiagnostic = status.diagnostic || lastDiagnostic;
-    diagnostic.textContent = lastDiagnostic; diagnostic.hidden = !lastDiagnostic;
+    // Failure reasons appear beside the provider; the viewer itself carries no text.
+    const shown = ['failed', 'occupied', 'cleanup'].includes(status.phase) && status.reason ? status.reason : lastDiagnostic;
+    diagnostic.textContent = shown; diagnostic.hidden = !shown;
     const source = data?.providers?.find(p => key(p) === provider.value);
     const unavailable = !supported ? 'Standalone Hands currently supports Windows x64 only.' : !view?.profile ? 'Wait for the shared SDK view and valid profile.' : !source ? 'Choose an available skeleton provider.' : source.transport !== 'native' ? 'WebXR requires its explicit app XR session.' : !source.available ? source.reason : '';
     const cleanupPending = session.blocked || status.cleanupPending;
@@ -37,17 +39,9 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     if (active && status.source && key(status.source) !== provider.value) label += ` · ${status.source.label}`;
     if (state.textContent !== label) state.textContent = label;
     state.classList.toggle('warn', ['failed', 'occupied', 'stalled'].includes(phase));
-    // The viewer message shows failure reasons; Start and its status label carry no hover hint.
-    const detail = status.reason || (active && status.source ? `Active provider: ${status.source.label}` : unavailable || 'Opening this page starts no capture.');
     const fps = Number.isFinite(status.trackingFps) && ['running', 'no-hands'].includes(phase) ? status.trackingFps.toFixed(1) : '—';
     if (rates.textContent !== fps) rates.textContent = fps;
     rates.parentElement.dataset.tooltip = fps === '—' ? 'No fresh live provider frames' : `Unique received frames/s · Capture age ${status.frameAgeMs?.toFixed(1)} ms ± ${status.uncertaintyMs?.toFixed(1)} ms · Delivery gaps ${status.dropped ?? 0} · Provider-reported ${status.reportedHz ?? '—'} Hz`;
-    if (!view?.replaying) {
-      // Idle needs no prompt: the viewer stays empty until there is something to report.
-      const message = status.filtered && phase === 'no-hands' ? 'Malformed observation dropped; no admitted hands this frame.' : phase === 'no-hands' ? 'No hands detected.' : phase === 'waiting' ? 'Waiting for fresh provider frames…' : phase === 'stalled' ? 'Tracking stalled. Hands and holds cleared.' : phase === 'starting' ? 'Starting provider…' : phase === 'stopping' ? 'Stopping provider…' : phase === 'failed' || phase === 'occupied' || phase === 'cleanup' ? detail : view?.profile ? unavailable || '' : '';
-      if (overlay.firstElementChild.textContent !== message) overlay.firstElementChild.textContent = message;
-      overlay.hidden = phase === 'running' || !message;
-    }
   }
   function update(next) { status = next.phase === 'retired' ? { ...next, phase: next.reason ? 'failed' : 'stopping' } : next; render(); }
   const unsubscribe = session.subscribeLifecycle(update);

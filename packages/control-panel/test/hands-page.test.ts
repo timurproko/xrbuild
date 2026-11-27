@@ -13,11 +13,10 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.doesNotMatch(html, /hands-save|hands-reload|hands-availability|hands-session-status|hands-previous-session|hands-record/);
   assert.match(html, /id="hands-postprocessing-root" hidden/);
   assert.doesNotMatch(html, /hands-diagnostics|Acquisition diagnostics|Local fixture|Motion \+ pinch|Pause|Restart|Capture|Calibration/);
-  assert.equal((html.match(/role="tab"/g) ?? []).length, 0);
+  assert.equal((html.match(/role="tab"/g) ?? []).length, 3, 'only the Setup, Position and Visual tabs');
   const live = await fs.readFile(path.join(ui, 'hands-live-controls.js'), 'utf8');
   assert.match(live, /next Start or app launch/);
   assert.match(live, /active session is not switched/);
-  assert.match(live, /Opening this page starts no capture/);
   assert.doesNotMatch(live, /button\.title = state\.title/, 'Start and its status label have no hover hint');
   const markup = await fs.readFile(path.join(ui, 'hands.html'), 'utf8');
   for (const id of ['hands-view-reset', 'hands-fullscreen']) assert.match(markup, new RegExp(`id="${id}"[^>]*data-no-tooltip`));
@@ -28,6 +27,8 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(markup, /<div id="hands-header-status" class="hands-header-status"><\/div>/);
   assert.match(markup, /<div id="hands-adjustments-root" class="xrb-sidebar-content xrb-stack" hidden><\/div>/, 'adjustments stay hidden until their editor mounts');
   assert.doesNotMatch(markup, /unavailable in this version/);
+  assert.match(markup, /class="xrb-tabs hands-adjustment-tabs" role="tablist"[^>]*>\s*<button[^>]*data-tab="setup"[^>]*>Setup<\/button>\s*<button[^>]*data-tab="geometry"[^>]*>Position<\/button>\s*<button[^>]*data-tab="appearance"[^>]*>Visual<\/button>/, 'tabs exist before the editor loads');
+  assert.doesNotMatch(markup, /hands-view-empty/, 'the viewer carries no centre text');
   assert.match(live, /for \(const label of \['Start', 'Stop'\]\)/, 'Start keeps one width for every label');
   assert.match(live, /button\.id = 'hands-start-stop'; button\.className = 'primary';/);
   assert.doesNotMatch(live, /Press Start to track the saved provider/);

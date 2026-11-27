@@ -21,14 +21,12 @@ test('mounted controls keep rejection kind, joint and count visible across healt
       await evaluate(`session.active=true;update({phase:'no-hands',filtered:true,diagnostic:${JSON.stringify(diagnostic)}})`);
       assert.equal(await evaluate(`document.querySelector('#hands-live-diagnostic').textContent`), diagnostic);
       assert.equal(await evaluate(`document.querySelector('#hands-live-diagnostic').hidden`), false);
-      assert.match(await evaluate(`document.querySelector('#hands-view-empty').textContent`), /Malformed observation dropped/);
       await evaluate(`update({phase:'running',trackingFps:60});session.active=false;update({phase:'failed',reason:'Persistent malformed output'})`);
-      assert.equal(await evaluate(`document.querySelector('#hands-live-diagnostic').textContent`), diagnostic);
+      assert.equal(await evaluate(`document.querySelector('#hands-live-diagnostic').textContent`), 'Persistent malformed output', 'a failure reason replaces the last diagnostic');
       assert.equal(await evaluate(`document.querySelector('#hands-start-stop').textContent`), 'Start');
       await evaluate(`window.remote={busy:true,owns:true,phase:'failed',sessionId:'old',cleanupPending:true};session.status=async()=>remote;session.recover=async()=>{remote={busy:false,owns:true,phase:'stopped'};return remote}`);
       await sleep(1100);
       assert.equal(await evaluate(`document.querySelector('#hands-start-stop').textContent`), 'Retry cleanup');
-      assert.doesNotMatch(await evaluate(`document.querySelector('#hands-view-empty').textContent`), /Another.*page/);
       await evaluate(`document.querySelector('#hands-start-stop').click()`); await sleep(50);
       assert.equal(await evaluate(`document.querySelector('#hands-start-stop').textContent`), 'Start');
       await evaluate(`remote={busy:true,owns:false,phase:'running',sessionId:'foreign-live',takeoverAvailable:true};session.start=async selection=>{window.chosen=selection;session.active=true;update({phase:'running'})}`);

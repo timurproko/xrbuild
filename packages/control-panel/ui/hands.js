@@ -109,10 +109,6 @@ try {
     // The view is ready once it renders; its rate is shown only while a hand session runs.
     onMetrics: metrics => { document.body.dataset.handsView = 'ready'; const render = document.body.dataset.handsSession === 'live' ? metrics.renderFps.toFixed(1) : '—'; if ($('hands-render-fps').textContent !== render) $('hands-render-fps').textContent = render; },
     onStatus: status => {
-      const hidden = status.phase === 'replay' || status.phase === 'running' && status.hands > 0;
-      if ($('hands-view-empty').hidden !== hidden) $('hands-view-empty').hidden = hidden;
-      const text = status.phase === 'running' ? 'No hands detected.' : 'No live hand session.';
-      if ($('hands-view-empty').firstElementChild.textContent !== text) $('hands-view-empty').firstElementChild.textContent = text;
       if (status.phase === 'idle') { profileKey = ''; $('hands-tracking-fps').textContent = '—'; }
     },
   });

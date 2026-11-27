@@ -39,10 +39,15 @@
         <span class="spacer"></span>
         <button id="hands-fullscreen" type="button" class="xrb-icon-button" data-xrb-icon="fullscreen" aria-label="Enter fullscreen" data-no-tooltip></button>
       </div>
-      <div id="hands-view-empty" class="xrb-overlay-empty" role="status"><span>No live hand session.</span></div>
       <p id="hands-view-error" class="field-error hands-view-error" role="alert" hidden></p>
     </section>
     <section class="xrb-card hands-panel" aria-label="Hand setup and adjustments">
+      <!-- Present from the first paint; the adjustment editor adopts these tabs when it loads. -->
+      <div class="xrb-tabs hands-adjustment-tabs" role="tablist" aria-label="Hand adjustments" data-xrb-tabs-id="hands-adjustments">
+        <button type="button" class="xrb-tab" role="tab" data-tab="setup" aria-selected="true" tabindex="0">Setup</button>
+        <button type="button" class="xrb-tab" role="tab" data-tab="geometry" aria-selected="false" tabindex="-1">Position</button>
+        <button type="button" class="xrb-tab" role="tab" data-tab="appearance" aria-selected="false" tabindex="-1">Visual</button>
+      </div>
       <div id="hands-setup" class="xrb-sidebar-content xrb-stack hands-source">
         <form id="hands-form" class="xrb-stack">
           <label class="xrb-field-label" for="hands-provider">Skeleton provider<select id="hands-provider" name="provider" aria-label="Skeleton provider" disabled></select></label>
