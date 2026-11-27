@@ -1,4 +1,6 @@
-import { renderField, installNumberSteppers } from './design-system.js';
+import { renderField, installNumberSteppers, iconSvg, openFloating, positionFloating } from './design-system.js';
+import { menuKeyboard } from './navigation.js';
+let mounts = 0;
 import { handsEditorRevisions } from './hands-editor-revisions.js';
 const key = p => p ? `${p.owner}/${p.id}` : '';
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -8,8 +10,11 @@ async function request(method, body) {
 }
 /** Independent of the page/source/adjustment forms; mount into #hands-postprocessing-root. */
 export function mountHandsPostprocessing(root, { load = () => request('GET'), save = body => request('PUT', body), pollMs = 1000 } = {}) {
+  const prefix = `hands-postprocessing-${++mounts}`;
   root.hidden = true;
-  root.innerHTML = `<form class="xrb-stack" aria-label="Hand post-processing"><h2>Post-processing</h2>
+  root.innerHTML = `<form class="xrb-stack hands-postprocessing" aria-label="Hand post-processing"><div class="row"><h2>Post-processing</h2><span class="spacer"></span>
+    <button type="button" class="xrb-icon-button" id="${prefix}-settings" data-mesh-gear aria-label="Post-processing settings" aria-haspopup="menu" aria-controls="${prefix}-menu" aria-expanded="false">${iconSvg('settings')}</button>
+    <div class="menu" id="${prefix}-menu" role="menu" aria-labelledby="${prefix}-settings" hidden><button type="button" role="menuitem" data-mesh-reset>Reset to defaults</button></div></div>
     <label class="xrb-field-label">Hand mesh<select data-mesh-selector aria-label="Hand mesh"></select></label>
     <p class="xrb-help" data-mesh-empty hidden>No post-processing plugins installed.</p>
     <div class="xrb-stack" data-mesh-fields></div><p class="xrb-help" data-mesh-readiness></p>
@@ -19,12 +24,30 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     <p class="xrb-help" data-mesh-runtime role="status" aria-live="polite"></p><p class="xrb-help" data-mesh-message role="status" aria-live="polite"></p></form>`;
   const form = root.querySelector('form'), select = root.querySelector('[data-mesh-selector]'), fields = root.querySelector('[data-mesh-fields]');
   const button = root.querySelector('[data-mesh-save]'), reload = root.querySelector('[data-mesh-reload]'), message = root.querySelector('[data-mesh-message]');
+  const gear = root.querySelector('[data-mesh-gear]'), menu = root.querySelector('[role="menu"]'), reset = root.querySelector('[data-mesh-reset]');
+  const events = new AbortController(), document = root.ownerDocument;
+  const closeMenu = (focus = false) => { menu.hidden = true; gear.setAttribute('aria-expanded', 'false'); if (focus) gear.focus(); };
+  const showMenu = () => { if (!gear.disabled) { gear.setAttribute('aria-expanded', 'true'); openFloating(menu, { anchor: gear }); } };
+  gear.addEventListener('click', () => menu.hidden ? showMenu() : closeMenu(), { signal: events.signal });
+  gear.addEventListener('keydown', event => { if (['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); showMenu(); } }, { signal: events.signal });
+  root.addEventListener('keydown', event => { if (!menu.hidden) menuKeyboard(event, menu, () => closeMenu(true)); }, { signal: events.signal });
+  const outside = event => { if (!gear.contains(event.target) && !menu.contains(event.target)) closeMenu(); };
+  document.addEventListener('click', outside, { signal: events.signal });
+  document.addEventListener('focusin', outside, { signal: events.signal });
+  document.addEventListener('scroll', () => { if (!menu.hidden) positionFloating(menu, { anchor: gear }); }, { capture: true, signal: events.signal });
+  document.defaultView.addEventListener('resize', () => closeMenu(), { signal: events.signal });
+  reset.addEventListener('click', () => {
+    if (reset.disabled) return;
+    drafts[selected] = Object.fromEntries(plugin().declaration.settings.map(f => [f.key, f.default]));
+    dirty = true; closeMenu(true); renderFields();
+  }, { signal: events.signal });
   const revisions = handsEditorRevisions();
   let snapshot = null, selected = '', drafts = {}, dirty = false, busy = false, disposed = false, reads = 0, stepperDispose = () => {};
   const plugin = () => snapshot?.plugins.find(p => key(p) === selected);
   const buttons = () => {
     button.disabled = !snapshot || !!snapshot.problem || !dirty || busy || revisions.stale || !!selected && !plugin()?.available;
     reload.disabled = busy; select.disabled = busy;
+    gear.disabled = reset.disabled = busy || !plugin()?.available || !plugin()?.declaration.settings.length;
     for (const control of fields.querySelectorAll('input, select, button')) control.disabled = busy;
     root.dataset.dirty = String(dirty);
   };
@@ -35,13 +58,14 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
       let input;
       if (f.type === 'boolean') input = `<label class="xrb-switch"><input type="checkbox" data-mesh-field="${f.key}" aria-label="${esc(f.label)}"><span>${esc(f.label)}</span></label>`;
       else if (f.type === 'select') input = `<select data-mesh-field="${f.key}" aria-label="${esc(f.label)}">${f.options.map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('')}</select>`;
-      else input = `<input type="number" data-mesh-field="${f.key}" aria-label="${esc(f.label)}" min="${f.min}" max="${f.max}" step="${f.step ?? 'any'}" required>`;
+      else input = `<span class="hands-number-row"><input type="number" data-mesh-field="${f.key}" aria-label="${esc(f.label)}" min="${f.min}" max="${f.max}" step="${f.step ?? 'any'}" required><input type="range" class="xrb-range" data-mesh-range="${f.key}" aria-label="${esc(f.label)} slider" min="${f.min}" max="${f.max}" step="${f.step ?? 'any'}"></span>`;
       return f.type === 'boolean' ? `${input}${f.hint ? `<p class="xrb-help">${esc(f.hint)}</p>` : ''}` : renderField(esc(f.label), input, { hint: f.hint ?? '' });
     }).join('');
     for (const input of fields.querySelectorAll('[data-mesh-field]')) {
       const f = p.declaration.settings.find(f => f.key === input.dataset.meshField), v = values[f.key] ?? f.default;
       if (input.type === 'checkbox') input.checked = v; else input.value = v;
     }
+    for (const range of fields.querySelectorAll('[data-mesh-range]')) range.value = fields.querySelector(`[data-mesh-field="${range.dataset.meshRange}"]`).value;
     root.querySelector('[data-mesh-readiness]').textContent = snapshot?.problem ?? (selected ? p?.reason ?? 'Selected plugin is missing; desktop apps use the skeleton.' : 'None selected.');
     root.querySelector('[data-mesh-empty]').hidden = !!snapshot?.plugins.length || !!selected;
     stepperDispose = installNumberSteppers(fields); buttons();
@@ -82,8 +106,11 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   };
   const input = event => {
     if (busy || disposed) return;
-    const f = plugin()?.declaration.settings.find(f => f.key === event.target.dataset.meshField); if (!f) return;
-    drafts[selected] ??= {}; drafts[selected][f.key] = f.type === 'boolean' ? event.target.checked : f.type === 'number' ? event.target.valueAsNumber : event.target.value;
+    const field = event.target, f = plugin()?.declaration.settings.find(f => f.key === (field.dataset.meshField ?? field.dataset.meshRange)); if (!f) return;
+    const canonical = fields.querySelector(`[data-mesh-field="${f.key}"]`), range = fields.querySelector(`[data-mesh-range="${f.key}"]`);
+    if (field.type === 'range') canonical.value = field.value;
+    else if (range && field.validity.valid) range.value = field.value;
+    drafts[selected] ??= {}; drafts[selected][f.key] = f.type === 'boolean' ? field.checked : f.type === 'number' ? field.valueAsNumber : field.value;
     dirty = true; buttons();
   };
   const submit = async event => {
@@ -104,7 +131,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   const timer = pollMs ? setInterval(() => { if (!busy) void read(); }, pollMs) : null;
   void read(true);
   return { refresh, reload: reloadClick, dispose() {
-    disposed = true; reads++; if (timer) clearInterval(timer); stepperDispose(); select.removeEventListener('change', change);
+    disposed = true; reads++; if (timer) clearInterval(timer); closeMenu(); events.abort(); stepperDispose(); select.removeEventListener('change', change);
     fields.removeEventListener('input', input); fields.removeEventListener('change', input); form.removeEventListener('submit', submit); reload.removeEventListener('click', reloadClick);
   } };
 }

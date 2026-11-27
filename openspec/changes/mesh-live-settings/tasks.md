@@ -2,10 +2,10 @@
 
 ## 1. Generic declared controls and section reset
 
-- [ ] 1.1 Capture the existing production post-processing component using a fake mixed settings declaration before editing; retain light/dark normal/narrow baseline pictures outside the checkout in the assigned task folder.
-- [ ] 1.2 Render declared numbers as synchronized labelled number-left/slider-right rows, selects as dropdowns and booleans as switches; verify arbitrary keys, bounds, optional steps, hints, defaults and metadata escaping in focused component/browser tests.
-- [ ] 1.3 Add the shared-style Post-processing gear and single Reset to defaults menu, retaining selection and resetting only current declared values; verify keyboard focus, Escape, outside dismissal, unique mounts, None/unavailable behavior and teardown in targeted tests.
-- [ ] 1.4 Preserve installed/None/missing visibility rules and add only post-processing-scoped styles; verify no horizontal overflow at normal and 320-pixel sidebar widths in light/dark and retain final pictures matching the baseline matrix.
+- [x] 1.1 Capture the existing production post-processing component using a fake mixed settings declaration before editing; retain light/dark normal/narrow baseline pictures outside the checkout in the assigned task folder.
+- [x] 1.2 Render declared numbers as synchronized labelled number-left/slider-right rows, selects as dropdowns and booleans as switches; verify arbitrary keys, bounds, optional steps, hints, defaults and metadata escaping in focused component/browser tests.
+- [x] 1.3 Add the shared-style Post-processing gear and single Reset to defaults menu, retaining selection and resetting only current declared values; verify keyboard focus, Escape, outside dismissal, unique mounts, None/unavailable behavior and teardown in targeted tests.
+- [x] 1.4 Preserve installed/None/missing visibility rules and add only post-processing-scoped styles; verify no horizontal overflow at normal and 320-pixel sidebar widths in light/dark and retain final pictures matching the baseline matrix.
 
 ## 2. Conflict-safe immediate persistence
 
