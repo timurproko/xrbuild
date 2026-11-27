@@ -1,25 +1,14 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import {readFile} from 'node:fs/promises';
 import path from 'node:path';
-import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
-
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const core = process.env.XRB_CORE;
-
-const publicImports = (source) => {
-  const match = source.match(/import\s*\{([^}]*)\}\s*from\s*['"]@xr-build\/ui-kit['"]/s);
-  return match ? match[1].split(',').map((name) => name.trim()).filter(Boolean) : [];
-};
-
-test('launcher consumes UI Kit components only through the public API', async () => {
-  assert.ok(core, 'XRB_CORE is required for the UI Kit API contract test');
-  const [api, main] = await Promise.all([
-    readFile(path.join(core, 'packages/ui-kit/src/index.ts'), 'utf8'),
-    readFile(path.join(root, 'src/main.js'), 'utf8'),
-  ]);
-  const used = new Set(publicImports(main));
-  assert.deepEqual([...used].sort(), ['Button', 'COLORS', 'Dialog', 'Label', 'material', 'roundedBox', 'roundedDisc'].sort());
-  for (const name of used) assert.match(api, new RegExp(`\\b${name}\\b`), `${name} must be exported by @xr-build/ui-kit`);
-  assert.doesNotMatch(main, /@xr-build\/ui-kit\//);
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import {test} from 'node:test';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const {componentApp}=await import(pathToFileURL(path.join(process.env.XRB_CORE,'packages/react/test/component-app.fixture.mjs')));
+test('Launcher imports public UI Kit app components, never its bootstrap or private controls',async()=>{
+ const source=await readFile(path.join(root,'src/scene.tsx'),'utf8');
+ const names=source.match(/import\s*\{([^}]+)\}\s*from '@xr-build\/ui-kit-app'/)[1].split(',').map(s=>s.trim()).sort();assert.deepEqual(names,['Board','Button','Dialog','Label']);
+ assert.doesNotMatch(source,/new (Button|Dialog|Label)|ui-kit\/src|ui-kit-app\/|main\.tsx/);
+ let fetches=0;const imported=await componentApp(root,{entry:'index.ts',fetch:()=>{fetches++;throw Error('import must not fetch');}});
+ assert.equal(typeof imported.exports.LauncherScene,'function');assert.equal(typeof imported.exports.LauncherCard,'function');assert.equal(imported.app,undefined);assert.equal(imported.pending.size,0);assert.equal(fetches,0);assert.deepEqual(imported.calls,[]);
 });

@@ -44,6 +44,7 @@ function useObject<T extends Owned>(create: () => T, props: ComponentProps<T>, u
     object.current = owned;
     host.current!.add(owned);
     props.configure?.(owned);
+    if (props.visible !== undefined) owned.visible = props.visible;
     if (owned instanceof Kit.Control) {
       if (props.compact) owned.title.visible = owned.status.visible = false;
       owned.setEnabled(props.enabled ?? true);
@@ -65,6 +66,7 @@ function useObject<T extends Owned>(create: () => T, props: ComponentProps<T>, u
   useLayoutEffect(() => {
     const owned = object.current;
     if (!owned) return;
+    if (props.visible !== undefined) owned.visible = props.visible;
     if (owned instanceof Kit.Control) {
       owned.setEnabled(props.enabled ?? true);
       if (props.interactive === false) owned.detach();

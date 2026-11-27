@@ -20,12 +20,12 @@
 
 ## 3. Launcher composes the UI Kit app's public React exports
 
-- [ ] 3.1 Export instance-local Launcher scene/card components with a separate run entry; build-time imports of shared Board, Button, Dialog and Label come from the UI Kit app public entry, proven by public-API and import-only tests rather than private source imports.
-- [ ] 3.2 Preserve board/card dimensions, lights, compact controls, transparency, branding, icons, dots and spinner; runtime tests cover visual-only card dialogs with no new blocker and paired fixed-clock pictures retain initial/settled, paged and launch states in all view modes.
-- [ ] 3.3 Retain catalog routing/order/refresh/errors, icon fallback and late-load handling, release/navigation timing, return/projection URLs and explicit XR availability; focused existing and new tests cover refresh during interaction, cancelled/unmounted delayed actions and late-result disposal.
-- [ ] 3.4 Recreate swipe/tilt and frame animations through owned effects/SDK frames with exact thresholds, capture phases, timing and easing; baseline mouse/hand replays cover paging, tilt/reset, launch, Mouse-off and stereo hand selection without duplicate actions.
-- [ ] 3.5 Own and clean DOM listeners, polling, fetch aborts, timers and icon resources; lifecycle/HMR tests prove no surviving work after removal, and app-local production/publication/icon tests preserve relative routes and standalone output.
-- [ ] 3.6 Update Launcher build aliases/dependencies/lock and README for its UI Kit app import and exported scene; frozen production build and a separate consumer bundle prove no showcase bootstrap or second runtime.
+- [x] 3.1 Export instance-local Launcher scene/card components with a separate run entry; build-time imports of shared Board, Button, Dialog and Label come from the UI Kit app public entry, proven by public-API and import-only tests rather than private source imports.
+- [x] 3.2 Preserve board/card dimensions, lights, compact controls, transparency, branding, icons, dots and spinner; runtime tests cover visual-only card dialogs with no new blocker and paired fixed-clock pictures retain initial/settled, paged and launch states in all view modes.
+- [x] 3.3 Retain catalog routing/order/refresh/errors, icon fallback and late-load handling, release/navigation timing, return/projection URLs and explicit XR availability; focused existing and new tests cover refresh during interaction, cancelled/unmounted delayed actions and late-result disposal.
+- [x] 3.4 Recreate swipe/tilt and frame animations through owned effects/SDK frames with exact thresholds, capture phases, timing and easing; baseline mouse/hand replays cover paging, tilt/reset, launch, Mouse-off and stereo hand selection without duplicate actions.
+- [x] 3.5 Own and clean DOM listeners, polling, fetch aborts, timers and icon resources; lifecycle/HMR tests prove no surviving work after removal, and app-local production/publication/icon tests preserve relative routes and standalone output.
+- [x] 3.6 Update Launcher build aliases/dependencies/lock and README for its UI Kit app import and exported scene; frozen production build and a separate consumer bundle prove no showcase bootstrap or second runtime.
 
 ## 4. New app template generates a runnable React component library
 

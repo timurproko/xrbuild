@@ -2,7 +2,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createContext, SourceTextModule, SyntheticModule } from 'node:vm';
 import React from 'react';
 import * as jsx from 'react/jsx-runtime';
@@ -16,7 +16,7 @@ import '../../ui-kit/test/dom-shim.ts';
 import { fixture, settle } from './fixture.ts';
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
-const core = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/(.:)/,'$1')), '../../..');
+const core = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
 export async function componentApp(root, options = {}) {
   Object.assign(globalThis, { innerWidth: 800, innerHeight: 450 });
@@ -38,7 +38,7 @@ export async function componentApp(root, options = {}) {
   const dependencies = { react:{...React,default:React}, 'react/jsx-runtime':jsx, three:THREE,
     '@react-three/fiber':Fiber, '@xr-build/sdk':sdk, '@xr-build/ui-kit':kit, '@xr-build/ui-kit/react':controls,
     '@xr-build/react':{...bridge,mountXrbApp(container,children,config){
-      app=sdk.createXrbApp(state.renderer,{...config,autoStart:false});
+      app=sdk.createXrbApp(state.renderer,{...config,xrb:{...config.xrb,...options.input},autoStart:false});
       handle=bridge.mountXrbApp(container,children,{...config,app});return handle;
     }},
     lucide: await import(pathToFileURL(createRequire(path.join(core,'packages/ui-kit/package.json')).resolve('lucide')).href),
