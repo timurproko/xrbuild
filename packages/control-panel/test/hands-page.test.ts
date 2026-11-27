@@ -41,7 +41,7 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(gizmo, /camera\.quaternion\.copy\(viewCamera\.quaternion\)/, 'the widget turns with the view camera');
   assert.match(gizmo, /renderer\.getViewport\(full\)[\s\S]*renderer\.setViewport\(full\);/, 'the main viewport is restored in the same CSS units');
   assert.doesNotMatch(gizmo, /getPixelRatio/, 'no pixel-ratio rescaling that would shrink the main view on scaled displays');
-  assert.match(markup, /<select id="hands-resolution" aria-label="Resolution"><option value="4k">4K · 3840 × 2160<\/option><option value="2k">2K · 2560 × 1440<\/option><option value="custom">Custom<\/option>/, 'the frame follows the resolution, 4K first');
+  assert.match(markup, /<select id="hands-resolution" aria-label="Monitor resolution"><option value="4k">4K · 3840 × 2160<\/option><option value="2k">2K · 2560 × 1440<\/option><option value="custom">Custom<\/option>/, 'the frame follows the resolution, 4K first');
   assert.match(markup, /id="hands-custom-resolution" hidden/, 'custom width and height show only for Custom');
   assert.match(markup, /<select id="hands-object" aria-label="Object"><option value="cube">Cube<\/option><option value="sphere">Sphere<\/option><option value="suzanne">Suzanne<\/option>/, 'Setup chooses one centre object');
   assert.match(markup, /id="hands-grid-color" class="xrb-swatch"/, 'Setup chooses the grid color');
