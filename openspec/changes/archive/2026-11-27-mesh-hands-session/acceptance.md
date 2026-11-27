@@ -19,7 +19,7 @@ The maintainer integration decision accepts these scenarios:
   "archive": "openspec/changes/archive/2026-11-27-mesh-hands-session/",
   "acceptanceManifest": "openspec/changes/archive/2026-11-27-mesh-hands-session/acceptance.md",
   "finalizedDate": "2026-11-27",
-  "specBaseSha": "a3549fd6c5c846e2a23f383815b2828cc52b7a3d",
+  "specBaseSha": "3d7288be5dbfca3c93e5c8613cd8855b10d33600",
   "acceptanceScenarios": [
     "Explicit Hands sessions own optional mesh gateways; idle navigation and configuration saves start no provider or processor.",
     "Hands GET, PUT and retry operations follow the active session without restarting acquisition or sharing its camera lease with mesh.",
@@ -29,7 +29,7 @@ The maintainer integration decision accepts these scenarios:
     "Fast articulation can still omit skin under the residual guard; rigid compensation does not provide newly fitted fingers."
   ],
   "archiveDigest": "23783ee94ee232face6d1a9efbece9363bbc1ad372d5d796a4ec6a72bf417620",
-  "specDigest": "c41112c76d81008184541ec7a9abad98acadd8cd7e75c86769a005f58f90028e",
+  "specDigest": "54ad0b22f19ed76cdb26a44bb355d3b88bf8f2cae329236661c9dc3e5df8d755",
   "tasksDigest": "f177289b9394a10e7b3636605c52e65ce4398dc7007d3d241c90b35319087bc2",
   "evidenceDigest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "knownGaps": []
