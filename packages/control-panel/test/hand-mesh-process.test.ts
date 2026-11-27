@@ -24,7 +24,9 @@ for (const mode of ['tree', 'crash-tree', 'supervisor-loss']) test(`contained ${
   await p.stop(); await dead(owned.pid); await dead(owned.leaf);
 });
 test('supervisor forwards binary bytes unchanged and Stop is idempotent', { skip: !supervisor }, async () => {
-  const p = await HandMeshProcess.start(supervisor, process.execPath, [childFile, 'echo'], path.dirname(childFile));
+  let created: HandMeshProcess | null = null;
+  const p = await HandMeshProcess.start(supervisor, process.execPath, [childFile, 'echo'], path.dirname(childFile), () => false, owned => { created = owned; });
+  assert.equal(created, p, 'ownership is bound at birth, before the awaited spawn returns');
   try {
     const bytes = Buffer.from([0, 255, 13, 10, 127, 0, 3]); const reply = once(p.child.stdout, 'data');
     p.child.stdin.write(bytes); assert.deepEqual((await reply)[0], bytes);

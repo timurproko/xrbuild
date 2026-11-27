@@ -21,7 +21,14 @@ export class HandMeshClient {
   private runId = '';
   private settingsGeneration = 1;
   private configuration: MeshState | null = null;
-  get state(): MeshState | null { return this.configuration ? { ...this.configuration } : null; }
+  private drawing: { generation: number; frame: MeshFrame } | null = null;
+  get state(): MeshState | null {
+    if (!this.configuration) return null;
+    const c = this.configuration, d = this.drawing, age = d ? this.now() - d.frame.sentMs : Infinity;
+    const current = !this.closed && d && age >= 0 && age <= 33 && d.frame.revision === this.revision && c.phase === 'Ready'
+      && c.drawingGeneration === d.generation && c.appliedGeneration === d.generation && c.requestedGeneration === d.generation;
+    return { ...c, drawingGeneration: current ? d.generation : null };
+  }
   private epoch = crypto.randomUUID();
   private sequence = 0;
   private revision = 0;
@@ -55,7 +62,7 @@ export class HandMeshClient {
     if (value.requestedGeneration < this.settingsGeneration) return;
     if (value.requestedGeneration !== this.settingsGeneration) { this.settingsGeneration = value.requestedGeneration; this.invalidate(); }
     this.configuration = { ...value };
-    if (value.phase !== 'Ready' || value.appliedGeneration !== value.requestedGeneration) { this.accepted = null; this.topologies.clear(); }
+    if (value.phase !== 'Ready' || value.appliedGeneration !== value.requestedGeneration) { this.accepted = null; this.drawing = null; this.topologies.clear(); }
   }
   private frame(hands: Hand[], sampleMs: number): MeshFrame {
     return { type: 'frame', epoch: this.epoch, sequence: this.sequence++, revision: this.revision, sentMs: this.now(), sampleMs,
@@ -68,7 +75,7 @@ export class HandMeshClient {
     const key = [...ids].sort((a, b) => a - b).join(',');
     if (key !== this.ids) { this.ids = key; this.invalidate(); }
   }
-  invalidate(): void { this.revision++; this.pending = null; this.accepted = null; this.topologies.clear(); }
+  invalidate(): void { this.revision++; this.pending = null; this.accepted = null; this.drawing = null; this.topologies.clear(); }
   update(hands: Hand[], sampleMs: number, generation = 0, drawingEnabled = true): MeshSurface[] {
     if (this.closed) return [];
     if (generation !== this.generation) { this.generation = generation; this.invalidate(); }
@@ -84,8 +91,10 @@ export class HandMeshClient {
     if (!shown.length) { this.accepted = null; this.topologies.clear(); }
     this.status = meshes.length ? 'Running' : this.configuration?.phase === 'Preparing' ? 'Preparing'
       : this.configuration?.reason ? `Skeleton fallback: ${this.configuration.reason}` : 'Skeleton fallback: mesh not ready or current';
+    this.drawing = this.protocol === 2 && meshes.length && drawingEnabled && accepted
+      ? { generation: this.settingsGeneration, frame: accepted.frame } : null;
     this.pending = this.frame(shown, sampleMs);
-    if (this.protocol === 2) this.pending.drawingGeneration = meshes.length && drawingEnabled ? this.settingsGeneration : null;
+    if (this.protocol === 2) this.pending.drawingGeneration = this.drawing?.generation ?? null;
     this.pump();
     return meshes;
   }
@@ -125,9 +134,9 @@ export class HandMeshClient {
       }
       this.topologies = new Map(result.meshes.map(m => [m.id, m]));
       this.accepted = { frame, meshes: result.meshes };
-    })().catch(() => { if (!this.closed) { this.accepted = null; this.status = 'Skeleton fallback: mesh unavailable or invalid'; } }).finally(() => {
+    })().catch(() => { if (!this.closed) { this.accepted = null; this.drawing = null; this.status = 'Skeleton fallback: mesh unavailable or invalid'; } }).finally(() => {
       clearTimeout(timer); if (this.inFlight === frame) this.inFlight = null; if (!this.closed) this.pump();
     });
   }
-  close(): void { this.closed = true; this.controller?.abort(); this.pending = null; this.accepted = null; this.topologies.clear(); }
+  close(): void { this.closed = true; this.controller?.abort(); this.pending = null; this.accepted = null; this.drawing = null; this.topologies.clear(); }
 }

@@ -1,19 +1,38 @@
 // The only test processor. No model, device, download or product installation.
 import { meshPacket, readMeshPacket, encodeMeshResult } from '../../../sdk/src/hand-mesh-protocol.ts';
-let bytes = Buffer.alloc(0), settings = {}, start;
-process.stdin.on('end', () => process.exit(0));
+let bytes = Buffer.alloc(0), settings = {}, start, lastControl, stopping = false;
+const flag = name => process.argv.includes(`--${name}`);
+process.stdin.on('end', () => { if (!flag('ignore-stop') && !(flag('late-ack-on-stop') && stopping)) process.exit(0); });
 process.stdin.on('error', () => process.exit(0));
 process.stdout.on('error', () => process.exit(0));
-const ack = (m, type) => ({ type, version: m.version, ...(m.version === 2 ? { runId: m.runId, owner: m.owner, id: m.id, settingsVersion: m.settingsVersion,
-  settingsGeneration: m.settingsGeneration, settings: m.settings, ...(type === 'ready' ? { capabilities: m.capabilities } : {}) } : {}) });
+const ack = (m, type) => {
+  const reply = { type, version: m.version, ...(m.version === 2 ? { runId: m.runId, owner: m.owner, id: m.id, settingsVersion: m.settingsVersion,
+    settingsGeneration: m.settingsGeneration, settings: { ...m.settings }, ...(type === 'ready' ? { capabilities: m.capabilities } : {}) } : {}) };
+  if (flag(`empty-${type}-settings`)) reply.settings = {};
+  const omitted = process.argv.find(arg => arg.startsWith(`--omit-${type}=`))?.split('=')[1];
+  if (omitted) delete reply[omitted];
+  const setting = process.argv.find(arg => arg.startsWith(`--omit-${type}-setting=`))?.split('=')[1];
+  if (setting && reply.settings) delete reply.settings[setting];
+  return reply;
+};
 process.stdin.on('data', chunk => {
   bytes = Buffer.concat([bytes, chunk]);
   while (bytes.length >= 12) {
     const size = 12 + bytes.readUInt32LE(4) + bytes.readUInt32LE(8); if (bytes.length < size) break;
     const { meta: m } = readMeshPacket(bytes.subarray(0, size)); bytes = bytes.subarray(size);
-    if (m.type === 'stop') process.exit(0);
+    if (m.type === 'stop') {
+      stopping = true;
+      if (flag('ignore-stop')) continue;
+      if (flag('late-ack-on-stop') && lastControl) {
+        process.stdout.write(meshPacket(ack(lastControl, lastControl.type === 'start' ? 'ready' : 'configured')));
+        setTimeout(() => process.exit(0), 50); continue;
+      }
+      process.exit(0);
+    }
     if (m.type === 'start' || m.type === 'configure') {
-      settings = m.settings; if (m.type === 'start') start = m;
+      lastControl = m;
+      if (m.type === 'start' || !flag('retain-configured-settings')) settings = m.settings;
+      if (m.type === 'start') start = m;
       const reply = ack(m, m.type === 'start' ? 'ready' : 'configured');
       if (settings.mode === 'bad-ack') reply.runId = 'foreign';
       if (m.type === 'configure' && settings.mode === 'stale-ack') process.stdout.write(meshPacket({ ...reply, settingsGeneration: m.settingsGeneration - 1 }));

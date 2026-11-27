@@ -52,12 +52,15 @@ export class HandMeshProcess {
     });
     child.stdin.write(bootstrap);
   }
-  static async start(supervisor: string | undefined, program: string, args: string[], cwd: string, cancelled = () => false): Promise<HandMeshProcess> {
+  static async start(supervisor: string | undefined, program: string, args: string[], cwd: string, cancelled = () => false, created: (owned: HandMeshProcess) => void = () => {}): Promise<HandMeshProcess> {
     if (process.platform !== 'win32' || !supervisor || !path.isAbsolute(supervisor)) throw new Error('Mesh containment unavailable; Rebuild the host');
     const stat = await fs.lstat(supervisor);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new Error('Mesh supervisor is unsafe; Rebuild the host');
     if (cancelled()) throw new Error('Mesh start cancelled');
-    return new HandMeshProcess(supervisor, program, args, cwd);
+    const owned = new HandMeshProcess(supervisor, program, args, cwd);
+    // Bind ownership in the same turn as process birth, before a cancellable await can discard it.
+    try { created(owned); } catch (error) { await owned.stop(); throw error; }
+    return owned;
   }
   stop(packet?: Uint8Array): Promise<void> {
     if (this.stopping) return this.stopping;

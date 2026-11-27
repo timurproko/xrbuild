@@ -44,8 +44,8 @@ test('managed mesh gateway survives dev startup, follows None and keeps missing 
   assert.equal((await put({ selected: null, revision: data.revision, registryRevision: data.registryRevision })).status, 409);
   // The runtime substitute is test-only: use the existing Node executable to run the single fake sidecar.
   const start = HandMeshProcess.start;
-  t.mock.method(HandMeshProcess, 'start', function (_supervisor, _program, _args, cwd, cancelled) {
-    return start.call(this, process.env.XRB_TEST_MESH_SUPERVISOR, process.execPath, [fileURLToPath(new URL('./fixtures/hand-mesh-sidecar.mjs', import.meta.url))], cwd, cancelled);
+  t.mock.method(HandMeshProcess, 'start', function (_supervisor, _program, _args, cwd, cancelled, created) {
+    return start.call(this, process.env.XRB_TEST_MESH_SUPERVISOR, process.execPath, [fileURLToPath(new URL('./fixtures/hand-mesh-sidecar.mjs', import.meta.url))], cwd, cancelled, created);
   });
   let config: any, delayedStart = false;
   panel.ensureDevInstalled = async () => {}; // No install/Vite/host: only the real fake mesh child runs.

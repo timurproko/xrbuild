@@ -82,13 +82,23 @@ function validValue(field: PluginSetting, value: unknown): value is SettingValue
   if (field.type === 'select') return typeof value === 'string' && !!field.options?.some(o => o.value === value);
   return field.type === 'number' && typeof value === 'number' && Number.isFinite(value) && value >= field.min! && value <= field.max!;
 }
-/** Values are small data, not paths, credentials or commands. Unknown values require schema review. */
+/** Configuration input may inherit declaration defaults; application evidence must never do so. */
 export function handMeshSettings(declaration: HandMeshDeclaration, value: unknown): Record<string, SettingValue> {
+  return settingsValues(declaration, value, true);
+}
+/** Every declared setting must be explicitly echoed, including values equal to defaults. */
+export function handMeshAppliedSettings(declaration: HandMeshDeclaration, value: unknown): Record<string, SettingValue> {
+  return settingsValues(declaration, value, false);
+}
+/** Values are small data, not paths, credentials or commands. Unknown values require schema review. */
+function settingsValues(declaration: HandMeshDeclaration, value: unknown, defaults: boolean): Record<string, SettingValue> {
   if (!object(value) || new TextEncoder().encode(JSON.stringify(value)).length > 2048
     || Object.keys(value).some(k => !declaration.settings.some(s => s.key === k))) return fail();
   const result: Record<string, SettingValue> = {};
   for (const field of declaration.settings) {
-    const v = Object.hasOwn(value, field.key) ? value[field.key] : field.default;
+    const present = Object.hasOwn(value, field.key);
+    if (!present && !defaults) return fail();
+    const v = present ? value[field.key] : field.default;
     if (!validValue(field, v)) return fail();
     result[field.key] = v;
   }

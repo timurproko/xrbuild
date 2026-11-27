@@ -5,10 +5,20 @@ import { HandMeshProcess } from './hand-mesh-process.ts';
 import { meshPacket, readMeshPacket, decodeMeshResult, encodeMeshResult, validMeshFrame, validMeshCapabilities, MESH_CAPABILITIES, MESH_PREPARATION_STEPS, MESH_MAX_BYTES,
   type MeshFrame, type MeshRuntime, type MeshState } from '../../sdk/src/hand-mesh-protocol.ts';
 import type { HandMeshPlugin } from './hand-mesh-plugins.ts';
-import { handMeshSettings, meshPreparationAllowance } from './hand-mesh-contract.ts';
+import { handMeshSettings, handMeshAppliedSettings, meshPreparationAllowance } from './hand-mesh-contract.ts';
 
 type Target = { plugin: HandMeshPlugin | null; values: Record<string, unknown>; generation: number; savedRevision: string | null; failure?: string };
-type Stage = { plugin: HandMeshPlugin; owned: HandMeshProcess | null; bytes: Buffer; generation: number; values: Record<string, unknown>; ready: boolean; retired: boolean; draining?: Promise<void> };
+type Stage = { plugin: HandMeshPlugin; owned: HandMeshProcess | null; bytes: Buffer; generation: number; values: Record<string, unknown>;
+  ready: boolean; preparing: boolean; retired: boolean; validation: AbortController; draining?: Promise<void> };
+const superseded = new Error('Mesh control superseded');
+/** Cancellation wins even when a passive launch validator has not yet returned. */
+function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(superseded);
+    if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true });
+    promise.then(value => { signal.removeEventListener('abort', abort); resolve(value); }, error => { signal.removeEventListener('abort', abort); reject(error); });
+  });
+}
 type Work = { frame: MeshFrame; response: http.ServerResponse; at: number; stage: Stage; timers: ReturnType<typeof setTimeout>[]; done: () => void };
 const failureReasons: Record<string, string> = { 'configuration-rejected': 'Mesh configuration rejected', 'preparation-failed': 'Mesh preparation failed',
   'runtime-unavailable': 'Mesh runtime unavailable; prepare explicitly', 'unsupported-setting': 'Mesh setting unsupported' };
@@ -28,7 +38,6 @@ export class HandMeshRun {
   private pendingTarget: Target | null = null;
   private control: Promise<void> | null = null;
   private ack: Ack | null = null;
-  private validation = new AbortController();
   private closed = false;
   private stopping: Promise<void> | null = null;
   private openingReject: (() => void) | null = null;
@@ -113,7 +122,16 @@ export class HandMeshRun {
     this.data = { ...this.data, requestedGeneration: generation, savedRevision, drawingGeneration: null, progress: null, step: null, reason: null, phase: 'Preparing' };
     this.deliveredGeneration = null;
     this.reply(this.current); this.reply(this.pending); this.pending = null;
-    this.setStatus(plugin ? 'Preparing' : 'None'); this.kickControl();
+    const stage = this.stage;
+    const samePlugin = stage && plugin && stage.plugin.owner === plugin.owner && stage.plugin.id === plugin.id
+      && JSON.stringify(stage.plugin.declaration) === JSON.stringify(plugin.declaration);
+    this.setStatus(plugin ? 'Preparing' : stage ? 'Stopping mesh' : 'Preparing');
+    if (stage && !stage.retired && (!plugin || !stage.ready && stage.preparing
+      || !samePlugin && (!stage.ready || this.modernConsumer !== false && stage.plugin.declaration.version === 2))) {
+      // None, replacement and any changed setting interrupt cold/device preparation now, not at its ACK deadline.
+      void this.drain(stage).catch(() => this.cleanupFailed());
+    }
+    this.kickControl();
   }
   retry(): void { const d = this.desired; if (d) this.configure(d.plugin, d.values, d.savedRevision, true); }
   /** An unavailable saved choice must not leave old mesh masquerading as the new selection. */
@@ -122,17 +140,20 @@ export class HandMeshRun {
   }
   private kickControl() {
     if (this.control || this.closed) return;
-    const control = this.controls(); this.control = control;
+    // Install the serialization barrier before status callbacks can submit a reentrant control.
+    const control = Promise.resolve().then(() => this.controls()); this.control = control;
     void control.finally(() => { if (this.control === control) this.control = null; if (this.pendingTarget && !this.closed) this.kickControl(); });
   }
   private async controls(): Promise<void> {
     while (this.pendingTarget && !this.closed) {
       const target = this.pendingTarget; this.pendingTarget = null;
+      let stage: Stage | null = null;
       try {
         if (this.current) await new Promise<void>(resolve => { const old = this.current!.done; this.current!.done = () => { old(); resolve(); }; });
         if (this.closed) return;
-        let stage = this.stage;
-        if (stage && (this.modernConsumer === false || stage.plugin.declaration.version === 1) && target.plugin) {
+        if (target.generation !== this.data.requestedGeneration) continue;
+        stage = this.stage;
+        if (stage && !stage.retired && (this.modernConsumer === false || stage.plugin.declaration.version === 1) && target.plugin) {
           this.data.phase = this.modernConsumer === false ? 'Ready' : 'Failed'; this.data.reason = 'Saved; rebuild/relaunch for live mesh configuration'; this.setStatus(`Skeleton fallback: ${this.data.reason}`); continue;
         }
         const same = stage && target.plugin && stage.plugin.owner === target.plugin.owner && stage.plugin.id === target.plugin.id
@@ -140,6 +161,7 @@ export class HandMeshRun {
         if (!same) {
           if (stage) await this.drain(stage);
           if (this.closed) return;
+          if (target.generation !== this.data.requestedGeneration) continue;
           if (!target.plugin) {
             this.data.owner = this.data.id = null;
             if (target.failure) { this.data.phase = 'Failed'; this.data.reason = target.failure; this.data.appliedGeneration = null; this.setStatus(`Skeleton fallback: ${target.failure}`); continue; }
@@ -147,13 +169,16 @@ export class HandMeshRun {
             if (target.generation === this.data.requestedGeneration) { this.data.phase = 'Ready'; this.setStatus('None'); }
             continue;
           }
-          stage = { plugin: target.plugin, owned: null, bytes: Buffer.alloc(0), generation: target.generation, values: target.values, ready: false, retired: false };
+          stage = { plugin: target.plugin, owned: null, bytes: Buffer.alloc(0), generation: target.generation, values: target.values, ready: false, preparing: true, retired: false, validation: new AbortController() };
           this.stage = stage; this.data.owner = target.plugin.owner; this.data.id = target.plugin.id;
           this.setStatus(target.plugin.declaration.version === 1 ? 'Starting' : 'Preparing');
-          const launch = target.plugin.launch ? await target.plugin.launch(this.validation.signal) : { program: target.plugin.program!, cwd: path.dirname(target.plugin.program!) };
-          if (this.closed || stage.retired) return;
-          stage.owned = await HandMeshProcess.start(this.options.supervisor, launch.program, target.plugin.declaration.args, launch.cwd, () => this.closed || stage!.retired);
-          if (this.closed || stage.retired) { await stage.owned.stop(); return; }
+          const signal = stage.validation.signal;
+          const launch = await abortable(target.plugin.launch ? target.plugin.launch(signal) : Promise.resolve({ program: target.plugin.program!, cwd: path.dirname(target.plugin.program!) }), signal);
+          if (this.closed || stage.retired) throw superseded;
+          const spawningStage = stage;
+          stage.owned = await abortable(HandMeshProcess.start(this.options.supervisor, launch.program, target.plugin.declaration.args, launch.cwd,
+            () => this.closed || spawningStage.retired, owned => { spawningStage.owned = owned; }), signal);
+          if (this.closed || stage.retired) { await stage.owned.stop(); throw superseded; }
           const child = stage.owned.child, currentStage = stage;
           child.stdout.on('data', (chunk: Buffer) => this.output(currentStage, chunk));
           child.once('error', () => this.failStage(currentStage, 'mesh containment/program unavailable; Rebuild the host'));
@@ -167,20 +192,24 @@ export class HandMeshRun {
           const active = stage!;
           if (!active.plugin.declaration.capabilities?.includes('live-configure-v1')) throw new Error('Processor does not support live configuration; relaunch');
           const reprepare = active.plugin.declaration.settings.some(s => s.changeMode !== 'live' && active.values[s.key] !== target.values[s.key]);
-          active.ready = false;
+          active.ready = false; active.preparing = reprepare;
           await this.expectAck(active, target, 'configured', () => active.owned!.child.stdin.write(meshPacket({ type: 'configure', version: 2,
             runId: this.runId, owner: active.plugin.owner, id: active.plugin.id, settingsVersion: active.plugin.declaration.settingsVersion,
             settingsGeneration: target.generation, savedRevision: target.savedRevision, settings: target.values, mode: reprepare ? 'reprepare' : 'live' })), reprepare ? meshPreparationAllowance(active.plugin.declaration) : 2000, reprepare);
         }
         if (this.closed || !stage || stage.retired) continue;
-        stage.generation = target.generation; stage.values = target.values; stage.ready = true;
+        stage.generation = target.generation; stage.values = target.values; stage.ready = true; stage.preparing = false;
         this.data.appliedGeneration = target.generation;
         if (target.generation === this.data.requestedGeneration) { this.data.phase = 'Ready'; this.data.reason = null; this.data.progress = null; this.data.step = null; this.setStatus('Ready; app mesh not started'); this.pump(); }
       } catch (error) {
         if (this.closed) return;
+        if (error === superseded || target.generation !== this.data.requestedGeneration) {
+          if (stage) { try { await this.drain(stage); } catch { this.cleanupFailed(); } }
+          continue;
+        }
         this.data.phase = 'Failed'; this.data.reason = error instanceof Error && coreReasons.has(error.message) ? error.message : 'Mesh preparation or configuration failed';
         this.setStatus(`Skeleton fallback: ${this.data.reason}`);
-        if (this.stage) { try { await this.drain(this.stage); } catch { this.data.reason = 'Mesh child cleanup failed; retry cleanup'; this.setStatus(`Skeleton fallback: ${this.data.reason}`); this.pendingTarget = null; } }
+        if (stage) { try { await this.drain(stage); } catch { this.cleanupFailed(); } }
       }
     }
   }
@@ -254,13 +283,16 @@ export class HandMeshRun {
         if (meta.type === 'ready' || meta.type === 'configured') {
           const ack = this.ack;
           if (stage.plugin.declaration.version === 2) {
+            const required = ['type', 'version', 'runId', 'owner', 'id', 'settingsVersion', 'settingsGeneration', 'settings', ...(meta.type === 'ready' ? ['capabilities'] : [])];
+            if (required.some(key => !Object.hasOwn(meta, key))) throw new Error('incomplete ack');
             if (meta.version !== 2 || meta.runId !== this.runId || meta.owner !== stage.plugin.owner || meta.id !== stage.plugin.id
               || meta.settingsVersion !== stage.plugin.declaration.settingsVersion || !Number.isSafeInteger(meta.settingsGeneration) || payload.length) throw new Error('ack identity');
-            if (!ack || meta.settingsGeneration !== ack.target.generation) continue; // stale/duplicate ACK cannot advance state
-            if (meta.type !== ack.type || JSON.stringify(handMeshSettings(stage.plugin.declaration, meta.settings)) !== JSON.stringify(ack.target.values)) throw new Error('ack values');
+            if (!ack || ack.stage !== stage || meta.settingsGeneration !== ack.target.generation) continue; // stale/duplicate ACK cannot advance state
+            if (meta.type !== ack.type || JSON.stringify(handMeshAppliedSettings(stage.plugin.declaration, meta.settings)) !== JSON.stringify(ack.target.values)) throw new Error('ack values');
             if (meta.type === 'ready' && (!validMeshCapabilities(meta.capabilities) || meta.capabilities.length !== stage.plugin.declaration.capabilities!.length
               || !meta.capabilities.every((c: typeof MESH_CAPABILITIES[number]) => stage.plugin.declaration.capabilities!.includes(c)))) throw new Error('capabilities');
-          } else if (!ack || meta.type !== 'ready' || meta.version !== 1) throw new Error('legacy ack');
+          } else if (!ack || ack.stage !== stage || !Object.hasOwn(meta, 'type') || !Object.hasOwn(meta, 'version')
+            || meta.type !== 'ready' || meta.version !== 1) throw new Error('legacy ack');
           this.ack?.resolve(); continue;
         }
         const result = decodeMeshResult(packet), work = this.current;
@@ -316,9 +348,16 @@ export class HandMeshRun {
     this.reply(this.current); this.reply(this.pending); this.pending = null; this.finishWork();
     void this.drain(stage).catch(() => { this.data.reason = 'Mesh child cleanup failed; retry cleanup'; this.setStatus(`Skeleton fallback: ${this.data.reason}`); });
   }
+  private cleanupFailed(): void {
+    this.data.phase = 'Failed'; this.data.reason = 'Mesh child cleanup failed; retry cleanup'; this.pendingTarget = null;
+    this.setStatus(`Skeleton fallback: ${this.data.reason}`);
+  }
   private drain(stage: Stage): Promise<void> {
     if (stage.draining) return stage.draining;
-    stage.retired = true; stage.ready = false;
+    stage.retired = true; stage.ready = false; stage.validation.abort(superseded);
+    if (this.ack?.stage === stage) this.ack.reject(superseded);
+    if (this.current?.stage === stage) { this.reply(this.current); this.finishWork(); }
+    if (this.pending?.stage === stage) { this.reply(this.pending); this.pending = null; }
     const operation = (async () => { await stage.owned?.stop(meshPacket({ type: 'stop' })); if (this.stage === stage) this.stage = null; })();
     stage.draining = operation;
     void operation.catch(() => { if (stage.draining === operation) stage.draining = undefined; });
@@ -327,7 +366,7 @@ export class HandMeshRun {
   private failRun(reason: string) { this.data.phase = 'Failed'; this.data.reason = reason; this.setStatus(`Skeleton fallback: ${reason}`); void this.stop(false).catch(() => {}); }
   stop(stopped = true): Promise<void> {
     if (this.stopping) return this.stopping;
-    this.closed = true; this.descriptor = null; this.pendingTarget = null; this.validation.abort();
+    this.closed = true; this.descriptor = null; this.pendingTarget = null;
     this.openingReject?.(); this.openingReject = null;
     if (this.ack) this.ack.reject(new Error('Mesh stopped'));
     for (const t of this.timers) clearTimeout(t); this.timers.clear();
