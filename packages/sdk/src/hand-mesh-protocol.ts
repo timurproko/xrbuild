@@ -1,6 +1,8 @@
 import type { Vec3 } from './protocol.ts';
 import type { HandObservations } from './hands.ts';
 
+/** Source snapshot lifetime for compensated skin. See docs/hand-mesh-motion.md for 33/66/100-ms measurements. */
+export const MESH_MAX_SOURCE_AGE_MS = 100;
 export const MESH_PROTOCOL_VERSION = 2;
 export const MESH_CAPABILITIES = ['final-pose-observations-v1', 'live-configure-v1', 'preparation-progress-v1'] as const;
 export type MeshCapability = typeof MESH_CAPABILITIES[number];
@@ -31,6 +33,8 @@ export interface MeshState {
   owner: string | null; id: string | null;
 }
 export interface MeshSurface { id: number; topology: string; positions: Float32Array; normals?: Float32Array; indices: Uint32Array }
+/** SDK-local drawing metadata; never encoded by the processor result codec. */
+export interface MeshDrawSurface extends MeshSurface { transform?: number[]; sourceAgeMs?: number; residualM?: number }
 export interface MeshResult { type: 'result'; epoch: string; sequence: number; revision: number; meshes: MeshSurface[]; version?: 2; runId?: string; settingsGeneration?: number }
 export function validMeshState(v: unknown): v is MeshState {
   return object(v) && typeof v.runId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(v.runId)

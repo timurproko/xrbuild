@@ -7,6 +7,8 @@ import { prepareHandSession, type SessionSelectionRequest } from './hand-session
 import { validHandProviderKey } from './hands-state.ts';
 import { reserveHandAcquisition } from './hand-acquisition.ts';
 import { LiveHands } from './hands-live.ts';
+import type { HandMeshRun } from './hand-mesh-run.ts';
+import { HandMeshRetirement } from './hand-mesh-retirement.ts';
 const secret = () => randomBytes(32).toString('hex');
 const pause = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 /** The helper checks creation identity and waits on an exact handle; it never kills the queried PID. */
@@ -16,6 +18,9 @@ const joinOwnedWorker = (exe: string, pid: number, birth: string) => new Promise
 export interface SessionDependencies {
   prepare(request: SessionSelectionRequest): ReturnType<typeof prepareHandSession>;
   acquire(): () => void;
+  /** Optional, synchronous gateway allocation; processor startup must use the shared reuse fence. */
+  mesh?(prepared: Awaited<ReturnType<typeof prepareHandSession>>): HandMeshRun;
+  meshRetirement?: HandMeshRetirement;
   origin(): string;
   reserve?: typeof reserveHandAcquisition;
   spawn?: typeof spawn;
@@ -35,12 +40,24 @@ export class HandSessions {
   private pages = new Map<string, number>();
   private continuities = new Map<string, { owner: string; document: string }>();
   private current: Running | null = null;
+  private meshRetirement: HandMeshRetirement;
+  private sessionMesh: { session: Running; run: HandMeshRun } | null = null;
+  private meshReason = '';
+  get meshRun(): HandMeshRun | null { const m = this.sessionMesh; return m && !m.session.cancelled && !m.session.ended ? m.run : null; }
+  get meshStatus(): string { return this.meshRun?.status ?? this.meshReason; }
+  private retireMesh(): Promise<void> {
+    const m = this.sessionMesh; this.sessionMesh = null;
+    return (m ? this.meshRetirement.retire(m.run) : this.meshRetirement.drain()).then(drained => {
+      this.meshReason = drained ? '' : 'Skeleton fallback: mesh cleanup failed; retry cleanup';
+    });
+  }
   private closed = false;
   private closing: Promise<void> | null = null;
   private timer: ReturnType<typeof setInterval>;
   private deps: SessionDependencies;
   constructor(deps: SessionDependencies) {
     this.deps = deps;
+    this.meshRetirement = deps.meshRetirement ?? new HandMeshRetirement();
     this.timer = setInterval(() => { const s = this.current; if (s && this.busy && performance.now() - s.heartbeat > (deps.heartbeatMs ?? 5000) && performance.now() >= (s.retryAfter ?? 0)) void this.stop(s, 'Owning Hands page heartbeat expired'); }, 100);
     this.timer.unref();
   }
@@ -51,6 +68,8 @@ export class HandSessions {
     const s = this.current, owns = !!s && s.owner === owner;
     return { supported: (this.deps.platform ?? process.platform) === 'win32', phase: s?.phase ?? 'not-started', reason: [s?.reason, this.busy && s?.cleanupReason].filter(Boolean).join('; '), source: s?.source ?? null, busy: this.busy, owns,
       sessionId: s?.id ?? null, diagnostic: s?.diagnostic ?? '',
+      meshCleanupPending: this.meshRetirement.blocked, meshStatus: this.meshStatus,
+      ...(owns && this.busy && !s?.cancelled ? { handMeshRuntime: this.meshRun?.descriptor ?? null } : {}),
       cleanupPending: this.busy && !!s && (owns || s.cancelled || s.phase === 'failed' || performance.now() - s.heartbeat > (this.deps.heartbeatMs ?? 5000)),
       takeoverAvailable: this.busy && !!s && !owns && !s.cancelled && s.phase !== 'failed' && performance.now() - s.heartbeat <= (this.deps.heartbeatMs ?? 5000), ...(owns && this.busy ? { profile: s?.live?.envelope } : {}),
       delivery: s?.live?.delivery, deliveryState: s?.live?.deliveryState };
@@ -129,6 +148,13 @@ export class HandSessions {
       const prepared = await this.deps.prepare(request);
       if (s.cancelled || this.closed) throw new Error('Hands Start cancelled');
       s.source = prepared.source; s.live = new LiveHands(prepared.profile, prepared.revision, s.id, 'Hands session');
+      // Allocate only a gateway here. Its processor-start hook enforces the shared reuse fence.
+      // Neither a previous optional tree's join nor failure can delay the skeleton worker.
+      void this.retireMesh();
+      if (this.deps.mesh) {
+        try { const run = this.deps.mesh(prepared); this.sessionMesh = { session: s, run }; this.meshReason = ''; }
+        catch { this.meshReason = 'Skeleton fallback: mesh runtime unavailable'; }
+      }
       // Reserve before DLL create, reject legacy hosts, then transfer under the native transition gate.
       reservation = await (this.deps.reserve ?? reserveHandAcquisition)(prepared.helperExe, 'Hands provider session', { checkLegacyHost: true, ...(this.deps.testScope ? { testScope: this.deps.testScope } : {}) });
       if (s.cancelled || this.closed) throw new Error('Hands Start cancelled');
@@ -141,6 +167,7 @@ export class HandSessions {
         s.launcherClosed = true;
         if (!s.cancelled) { s.cancelled = true; s.token = ''; s.phase = 'failed'; s.reason ||= 'Provider worker exited unexpectedly'; }
         s.live?.close();
+        if (this.sessionMesh?.session === s) void this.retireMesh();
         void this.verifyEnded(s);
       });
       child.stdout.setEncoding('utf8').on('data', (text: string) => {
@@ -178,6 +205,7 @@ export class HandSessions {
       if (handoff) await handoff;
       if (s.cancelled || s.ended) throw new Error(s.reason || 'Hands Start cancelled');
       s.phase = 'running';
+      this.meshRun?.appStarted(); // Attachment allowance starts after provider startup, not mesh readiness.
       return { ...this.status(owner), epoch: s.epoch, url: s.url, observer: s.token, profile: s.live.envelope };
     } catch (e) {
       await reservation?.close(); reservation = null; s.preparing = false;
@@ -214,6 +242,7 @@ export class HandSessions {
     s.reason ||= reason;
     if (s.stop) return s.stop;
     s.cancelled = true; s.token = ''; s.live?.close(); s.reason ||= reason; s.phase = 'stopping';
+    const meshCleanup = this.retireMesh();
     const attempt = (async () => {
       const preparingBy = performance.now() + 31000;
       while (s.preparing && !s.child && performance.now() < preparingBy) await pause(20);
@@ -232,6 +261,7 @@ export class HandSessions {
       // During asynchronous preparation, Start's cancellation check must drain before ownership is free.
       if (!s.child) this.finishDrained(s);
       s.phase = s.reason ? 'failed' : 'stopped';
+      await meshCleanup;
     })().catch(() => { this.unverified(s); }).finally(() => {
       if (s.stop === attempt) s.stop = undefined;
       if (!s.ended || s.preparing) s.retryAfter = performance.now() + 1000;
@@ -247,6 +277,7 @@ export class HandSessions {
         await this.stop(this.current);
         if (this.busy) await pause(1000);
       }
+      do { await this.retireMesh(); if (this.meshRetirement.blocked) await pause(1000); } while (this.meshRetirement.blocked);
       this.pages.clear(); this.continuities.clear();
     })().finally(() => { if (this.closing === attempt) this.closing = null; });
     return this.closing = attempt;

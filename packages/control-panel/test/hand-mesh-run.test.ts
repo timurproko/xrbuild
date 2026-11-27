@@ -53,6 +53,11 @@ test('slow sidecar never blocks a request indefinitely and pending work is newes
   assert.equal((await a).status, 204); assert.equal((await c).status, 204);
   assert.match(f.run.status, /late/);
 });
+test('a 50-ms processor result reaches the compensated SDK instead of being dropped at 33 ms', async t => {
+  const f = await start(t, 'normal', 50); await f.request('/connect');
+  const response = await f.request('/frame', frame(1));
+  assert.equal(response.status, 200); assert.equal(decodeMeshResult(new Uint8Array(await response.arrayBuffer())).meshes.length, 2);
+});
 test('missing runtime and an old client degrade without making startup wait', async t => {
   const missing = new HandMeshRun(() => ['https://app.local'], () => {}, { supervisor: process.env.XRB_TEST_MESH_SUPERVISOR }); t.after(() => missing.stop());
   const descriptor = await missing.start({ ...plugin(), program: fixture + '.not-installed' }, {});

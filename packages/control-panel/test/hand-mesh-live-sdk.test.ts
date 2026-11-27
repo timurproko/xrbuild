@@ -36,6 +36,14 @@ test('modern managed SDK keeps a pinch hold through quality, reprepare, None, re
     target.on(e => events.push(e.type)); points[4] = [...points[8]]; for (let i = 0; i < 4; i++) render();
     assert.ok(events.includes('start')); const before = structuredClone(app.xrb.currentHands[0].keypoints), at = events.length;
     run.configure(p, { vertices: 6 }, 'quality'); await until(() => meshCount() === 6 && app!.xrb.handMeshState?.appliedGeneration === 2);
+    for (const showJoints of [true, false]) for (const showBones of [true, false]) {
+      app.xrb.handsObject.applyAppearance({ showJoints, showBones, opacity: 0 }); render();
+      assert.equal(app.xrb.handsObject.children[0].visible, showJoints); assert.equal(app.xrb.handsObject.children[1].visible, showBones);
+      const skin = app.xrb.handsObject.getObjectByName('xrb-hand-mesh')!.children[0] as THREE.Mesh;
+      const material = skin.material as THREE.MeshStandardMaterial;
+      assert.equal(material.opacity, 1); assert.equal(material.transparent, false); assert.equal(material.depthWrite, true); assert.equal(material.side, 0);
+      assert.equal(events.slice(at).includes('end'), false); assert.deepEqual(app.xrb.currentHands[0].keypoints, before);
+    }
     app.xrb.handsObject.applyAppearance({ showJoints: false, showBones: false });
     run.configure(p, { vertices: 9, device: 'secondary', ackDelay: 150 }, 'device');
     await until(() => app!.xrb.handMeshState?.phase === 'Preparing'); assert.equal(meshCount(), 0);

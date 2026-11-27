@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import * as THREE from 'three';
 import { HandVisual } from '../src/hand-visual.ts';
 import { HandInput } from '../src/hands.ts';
 import { PanelFrame } from '../src/stereo.ts';
@@ -17,7 +18,8 @@ for (const showJoints of [true, false]) for (const showBones of [true, false]) t
       assert.equal(visual.children[0].visible, showJoints); assert.equal(visual.children[1].visible, showBones);
       const mesh = visual.getObjectByName('xrb-hand-mesh')!; assert.equal(mesh.visible, !!surfaces.length);
       assert.equal(visual.visible, true, 'hiding skeleton components must not hide the mesh parent');
-      if (surfaces.length) { const material = (mesh.children[0] as any).material; assert.equal(material.opacity, .4); assert.equal(material.color.g, .2); }
+      if (surfaces.length) { const material = (mesh.children[0] as any).material; assert.equal(material.opacity, 1); assert.equal(material.transparent, false); assert.equal(material.depthWrite, true); assert.equal(material.side, THREE.FrontSide); assert.equal(material.color.g, .2);
+        visual.applyAppearance({ showJoints, showBones, boneColorLinear: [.1, .2, .3], opacity: 0 }); visual.updateMeshes(surfaces, panel); assert.equal(material.opacity, 1); }
       assert.deepEqual(hands, before);
     }
   } finally { visual.disposeMeshes(); }

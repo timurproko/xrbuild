@@ -46,6 +46,7 @@ export async function prepareHandSession(core: string, workspace: string, expect
   return {
     source: { owner: row.owner, id: row.id, label: row.label, version },
     runtimeName: row.runtimeName!, pluginPath, workerExe, helperExe, revision: state.revision, profile: state.profile,
+    postprocessing: structuredClone(state.raw.postprocessing),
     config: { ...settings, xrb: { pluginDir, exeDir: runtime.releaseDir, debugImages: false, view: '3d' } },
   };
 }

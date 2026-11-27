@@ -45,7 +45,7 @@ test('mesh client fences late replies, bounds pending frames and never mutates i
   assert.equal(sent.length, 2); assert.equal(sent[1].sampleMs, 10, 'only newest pending retained');
   assert.equal(client.update(hands, 11).length, 1);
   assert.deepEqual(frame, before); assert.deepEqual(a.sample(0), b.sample(0)); assert.deepEqual(ea, eb);
-  now = 34; assert.equal(client.update(hands, 12).length, 0, 'old mesh expires rather than stalls');
+  now = 101; assert.equal(client.update(hands, 12).length, 0, 'old mesh expires rather than stalls');
   client.invalidate(); respond!(reply(sent[1])); await tick(); await tick();
   assert.equal(client.update(hands, 13).length, 0, 'retired-revision result cannot revive mesh');
   client.observed([]); assert.equal(client.update([], 14).length, 0);
@@ -61,7 +61,7 @@ test('mesh visual maps the final pose once, respects appearance and disposes top
   const group = visual.getObjectByName('xrb-hand-mesh')!, mesh = group.children[0] as THREE.Mesh;
   assert.deepEqual((mesh.geometry.getAttribute('position').array as Float32Array), surface().positions);
   assert.deepEqual(group.matrix.elements, panel.toWorld.elements);
-  const material = mesh.material as THREE.MeshStandardMaterial; assert.equal(material.opacity, .6); assert.equal(material.color.g, .2);
+  const material = mesh.material as THREE.MeshStandardMaterial; assert.equal(material.opacity, 1); assert.equal(material.transparent, false); assert.equal(material.side, THREE.FrontSide); assert.equal(material.color.g, .2);
   let disposed = false; mesh.geometry.addEventListener('dispose', () => { disposed = true; });
   visual.updateMeshes([], panel); assert.equal(disposed, true); assert.equal(group.children.length, 0);
   visual.disposeMeshes(); assert.equal(visual.children.length, original);

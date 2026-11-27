@@ -180,12 +180,14 @@ pointer presses without waiting through dropout grace. Binary HANDS v1/v2 and re
 
 Panel-managed desktop runs may select one optional [mesh sidecar](../../docs/hand-mesh-plugins.md). The SDK
 sends copies of the final sampled pose asynchronously and standard hand drawing displays fresh validated geometry
-using the same panel mapping and global bone color/opacity. No app changes or provider-specific branches are
+using the same panel mapping and global bone colour, with opaque single-sided lit skin independent of skeleton opacity. No app changes or provider-specific branches are
 needed. Mesh readiness/failure/latency never changes joints, gestures, pointer or interaction. A late result uses
 only a still-fresh prior mesh, otherwise the skeleton; no-hand frames invalidate mesh immediately, independently
 of skeleton grace. `handVisual:false` suppresses both standard drawings without disabling input. Mesh buffers
 are disposed on replacement/stop. Preview, publication, offline packages and unmanaged runs remain skeleton-only;
 no mesh runtime credential is portable. Rebuild the host and app SDK bundles to use this optional desktop path.
+
+Between processor replies, the shared mesh visual re-anchors immutable source geometry to the current sampled wrist position and orientation every render. Source-snapshot reuse is capped by named `MESH_MAX_SOURCE_AGE_MS` (100 ms), with a 10 mm residual limit after compensation, not raw displacement. Original sample age is never refreshed by dispatch or rendering. See [policy, 33/66/100-ms measurements and limitations](../../docs/hand-mesh-motion.md); rigid compensation does not update finger articulation or establish real anatomical quality.
 
 Mesh on/off is the post-processing selection, independent of skeleton Joints/Bones switches. Neither automatically hides the other. The v2 SDK fences geometry/topology on settings-generation changes and exposes `xrb.handMeshState` separately from `xrb.handMeshStatus`: saved/requested, processor-applied and drawing generations are distinct. Preparing/repreparing uses the skeleton with the person's existing appearance choices and never resets a held interaction. Legacy peers negotiate only their supported contract.
 

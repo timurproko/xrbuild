@@ -130,6 +130,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
         if (status.owns) { s.sessionId ??= status.sessionId; status = await request('/heartbeat', { sessionId: s.sessionId }); }
         if (s.retired || current !== s) return;
         s.diagnostic = status.diagnostic || s.diagnostic;
+        if (status.owns && status.sessionId === s.sessionId && view.active && Object.hasOwn(status, 'handMeshRuntime')) view.setMeshRuntime?.(status.handMeshRuntime);
         if (s.sessionId && (!status.owns || status.sessionId !== s.sessionId || ['failed', 'stopped'].includes(status.phase))) { void stop(status.reason || 'Provider session ended'); return; }
         if (status.profile && s.sessionId) { try { await applyProfile(s, status.profile); } catch { /* Persistence and actual SDK delivery remain separate; keep the last valid snapshot. */ } }
       } catch (error) { if (!s.retired && current === s) void stop(error.message); } finally { polling = false; }
@@ -141,6 +142,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
       if (!await applyProfile(s, result.profile) && !s.retired) throw new Error('Initial hand profile was not applied');
       if (s.retired || disposed) return;
       if (!view.beginSession({ epoch: s.epoch })) throw new Error('Hand viewport did not accept its session');
+      if (Object.hasOwn(result, 'handMeshRuntime')) view.setMeshRuntime?.(result.handMeshRuntime);
       const socket = new Socket(result.url); s.socket = socket; s.consumerStarted = now(); socket.binaryType = 'arraybuffer';
       const ping = () => { if (!s.retired && socket.readyState === 1) { const p0 = now(); s.pings.add(p0); if (s.pings.size > 8) s.pings.delete(s.pings.values().next().value); const data = new ArrayBuffer(9), v = new DataView(data); v.setUint8(0, 111); v.setFloat64(1, p0, true); socket.send(data); } };
       socket.onopen = () => { if (s.retired) { socket.close(); return; } socket.send(new TextEncoder().encode(result.observer)); result.observer = ''; ping(); s.pingTimer = setInterval(ping, 2000); };
