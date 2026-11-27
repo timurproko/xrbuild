@@ -70,7 +70,10 @@ export class HandMeshRun {
     if (!address || typeof address === 'string') throw new Error('No mesh endpoint');
     this.descriptor = { version: 1, url: `http://127.0.0.1:${address.port}`, token: randomBytes(32).toString('hex') };
     const descriptor = this.descriptor;
-    try { this.owned = await HandMeshProcess.start(this.supervisor, plugin.program, plugin.declaration.args, path.dirname(plugin.program), () => this.closed); }
+    try {
+      const launch = plugin.launch ? await plugin.launch() : { program: plugin.program, cwd: path.dirname(plugin.program) };
+      this.owned = await HandMeshProcess.start(this.supervisor, launch.program, plugin.declaration.args, launch.cwd, () => this.closed);
+    }
     catch { this.fail('mesh containment/program unavailable; Rebuild the host'); return descriptor; }
     if (this.closed) { await this.owned.stop(); throw new Error('Mesh start cancelled'); }
     const child = this.owned.child; this.child = child;

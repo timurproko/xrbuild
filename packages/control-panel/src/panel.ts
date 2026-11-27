@@ -2067,7 +2067,7 @@ export class Panel {
         const [registry, state] = await Promise.all([discoverHandMeshPlugins(this.repo, this.workspace), readHandsState(this.repo, this.workspace)]);
         let choice; let problem: string | null = null;
         try { choice = meshChoice(state.raw.postprocessing); } catch (e) { problem = (e as Error).message; }
-        sendJson(res, 200, { plugins: registry.plugins.map(({ program, ...p }) => ({ ...p, declaration: { ...p.declaration, program: undefined, args: undefined } })),
+        sendJson(res, 200, { plugins: registry.plugins.map(({ program, launch, ...p }) => ({ ...p, declaration: { ...p.declaration, program: undefined, args: undefined } })),
           revision: state.revision, registryRevision: registry.revision, choice, problem, status: this.meshRun?.status ?? this.meshStatus,
           running: this.runner.busy && this.nativeHandPolicy !== null, active: this.activeMesh });
         return true;

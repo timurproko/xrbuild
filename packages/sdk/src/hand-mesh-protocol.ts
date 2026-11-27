@@ -96,5 +96,5 @@ export function decodeMeshResult(bytes: Uint8Array): MeshResult {
   });
   if (offset !== payload.length) throw new Error('Unexpected mesh bytes');
   return { type: 'result', epoch: m.epoch, sequence: m.sequence, revision: m.revision, meshes,
-    ...(m.version === 2 ? { version: 2 as const, runId: m.runId, settingsGeneration: m.settingsGeneration } : {}) };
+    ...(m.version === 2 ? { version: 2 as const, runId: m.runId as string, settingsGeneration: m.settingsGeneration as number } : {}) };
 }

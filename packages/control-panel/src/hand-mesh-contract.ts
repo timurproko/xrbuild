@@ -7,6 +7,8 @@ export interface HandMeshDeclaration {
   version: 1 | 2;
   capabilities?: MeshCapability[];
   preparationTimeoutMs?: number;
+  /** Prepared user-home generation, never a workspace or absolute path. */
+  runtime?: { id: string; generation: string };
   id: string;
   label: string;
   program: string;
@@ -23,7 +25,12 @@ const keys = (v: Record<string, unknown>, allowed: string[]) => { if (Object.key
 /** Pure metadata parser. In particular this never resolves or imports the program. */
 export function handMeshDeclaration(value: unknown): HandMeshDeclaration {
   if (!object(value)) return fail();
-  keys(value, ['version', 'id', 'label', 'program', 'args', 'settingsVersion', 'settings', ...(value.version === 2 ? ['capabilities', 'preparationTimeoutMs'] : [])]);
+  keys(value, ['version', 'id', 'label', 'program', 'args', 'settingsVersion', 'settings', ...(value.version === 2 ? ['capabilities', 'preparationTimeoutMs', 'runtime'] : [])]);
+  if (value.runtime !== undefined) {
+    if (!object(value.runtime)) return fail();
+    keys(value.runtime, ['id', 'generation']);
+    if (!id(value.runtime.id) || !id(value.runtime.generation)) return fail();
+  }
   if (value.version === 2 && (!validMeshCapabilities(value.capabilities) || value.preparationTimeoutMs !== undefined
     && (!Number.isSafeInteger(value.preparationTimeoutMs) || (value.preparationTimeoutMs as number) < 1000 || (value.preparationTimeoutMs as number) > 120000))) return fail();
   if (value.version !== 1 && value.version !== 2 || !id(value.id) || !text(value.label, 80)
@@ -60,6 +67,7 @@ export function handMeshDeclaration(value: unknown): HandMeshDeclaration {
   });
   if (new Set(settings.map(s => s.key)).size !== settings.length) return fail();
   return { version: value.version as 1 | 2, id: value.id, label: value.label, program: value.program,
+    ...(value.runtime ? { runtime: { ...(value.runtime as { id: string; generation: string }) } } : {}),
     ...(value.version === 2 ? { capabilities: [...value.capabilities as MeshCapability[]], preparationTimeoutMs: value.preparationTimeoutMs as number ?? 30000 } : {}),
     args: [...(value.args as string[] ?? [])], settingsVersion: value.settingsVersion as number, settings };
 }

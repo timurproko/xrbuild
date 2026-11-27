@@ -14,9 +14,9 @@
 
 ## 3. Checked plugin-owned writable runtimes
 
-- [ ] 3.1 Add an opt-in bounded runtime reference/receipt contract and owned generation resolution while preserving legacy source-contained programs; verify fake plugin tests resolve a prepared runtime outside source and keep discovery passive and server-private.
-- [ ] 3.2 Add pre-spawn receipt/input/output integrity and containment revalidation; verify targeted tests refuse missing/stale/foreign/incomplete receipts, altered files, traversal, symlinks/junctions, hard links and check-to-launch mutation without PATH fallback or file deletion.
-- [ ] 3.3 Document receipt publication/resolution for later explicit plugin setup/rebuild, with no installer or implicit downloads; verify examples parse against the neutral contract and portable metadata/package tests exclude resolved paths and credentials.
+- [x] 3.1 Add an opt-in bounded runtime reference/receipt contract and owned generation resolution while preserving legacy source-contained programs; verify fake plugin tests resolve a prepared runtime outside source and keep discovery passive and server-private.
+- [x] 3.2 Add pre-spawn receipt/input/output integrity and containment revalidation; verify targeted tests refuse missing/stale/foreign/incomplete receipts, altered files, traversal, symlinks/junctions, hard links and check-to-launch mutation without PATH fallback or file deletion.
+- [x] 3.3 Document receipt publication/resolution for later explicit plugin setup/rebuild, with no installer or implicit downloads; verify examples parse against the neutral contract and portable metadata/package tests exclude resolved paths and credentials.
 
 ## 4. Live configuration and settings-generation fences
 
