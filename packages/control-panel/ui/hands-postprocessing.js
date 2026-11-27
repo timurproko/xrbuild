@@ -96,7 +96,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     layer.hidden = !selected;
     layer.querySelector('[data-mesh-layer-title]').textContent = p?.label ?? (selected ? `${selected} (missing)` : '');
     // Like Build prerequisites: a small Install while setup is missing, Ready once the plugin can run.
-    install.hidden = !(p?.needsSetup && p.setup); ready.hidden = !p?.available;
+    install.hidden = !(p?.needsSetup && p.setup);
     // The switch shows the saved state; off keeps the layer and its settings but runs nothing.
     if (!switching) layerOn.checked = snapshot.choice?.enabled !== false;
     layer.classList.toggle('is-off', !layerOn.checked);
@@ -158,6 +158,14 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     } else if ((d && d.phase !== 'Stopped') || snapshot?.running) { text = 'Saved; application not confirmed.'; state = 'applying'; }
     // While the layer only waits for Install, the header says so; no extra status line.
     if (plugin()?.needsSetup && state !== 'saving') text = '';
+    // The layer badge carries the live state; the line below only explains a failure or an unsupported change.
+    const p = plugin(), badge = root.querySelector('[data-mesh-ready]');
+    const percent = /(\d+)%/.exec(text)?.[1];
+    const [label, tone] = !p?.available ? ['', ''] : snapshot?.choice?.enabled === false ? ['Off', 'neutral'] : state === 'preparing' ? [percent ? `Preparing ${percent}%` : 'Preparing', 'busy']
+      : state === 'applying' ? ['Starting', 'busy'] : state === 'applied' ? ['Running', 'ok'] : state === 'failed' ? ['Failed', 'err']
+      : state === 'saving' ? ['Saving', 'neutral'] : ['Ready', 'ok'];
+    badge.textContent = label; badge.className = `state ${tone}`; badge.hidden = !label || root.querySelector('[data-mesh-layer]').hidden;
+    if (!['failed', 'unsupported', 'unknown'].includes(state)) text = '';
     status.textContent = text; status.hidden = !text; root.dataset.meshState = state;
     deliveryRetry.hidden = !d || state !== 'failed';
     deliveryRetry.disabled = busy || retrying || pending || !!snapshot?.problem;
