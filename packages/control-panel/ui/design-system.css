@@ -4,7 +4,7 @@
 :root {
   --bg: #f4f6f9; --surface: #ffffff; --surface-2: #edf0f5; --fg: #1a2230; --muted: #5b6677; --line: #d7dce5;
   --accent: #2c58cf; --accent-soft: #e5ebfb; --test: #3b7a20; --test-soft: #e5f1de;
-  --ok: #23724a; --ok-soft: #dff1e6; --warn: #9a6200; --warn-soft: #fbefd6; --rebuild: #7a45c9; --rebuild-soft: #eee7fa; --err: #b0261d; --err-soft: #fbe3e0;
+  --ok: #23724a; --ok-soft: #dff1e6; --warn: #9a6200; --warn-soft: #fbefd6; --rebuild: #7a45c9; --rebuild-soft: #eee7fa; --update: #0b7285; --update-soft: #daf1f4; --err: #b0261d; --err-soft: #fbe3e0;
   --scrim: rgba(20, 28, 40, .35); --on-accent: #ffffff; --log-bg: #f8f9fb;
   --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
@@ -27,7 +27,7 @@
 :root[data-theme="dark"] {
   --bg: #0f131a; --surface: #161c25; --surface-2: #1d2531; --fg: #e3e8ef; --muted: #97a2b3; --line: #2b3441;
   --accent: #86a4ff; --accent-soft: #1c2747; --test: #91c86f; --test-soft: #1b2d15;
-  --ok: #71c995; --ok-soft: #14301f; --warn: #e3aa3f; --warn-soft: #33270d; --rebuild: #b99bff; --rebuild-soft: #2b2140; --err: #ff8f85; --err-soft: #3b1b18;
+  --ok: #71c995; --ok-soft: #14301f; --warn: #e3aa3f; --warn-soft: #33270d; --rebuild: #b99bff; --rebuild-soft: #2b2140; --update: #5ccfe0; --update-soft: #0f2c32; --err: #ff8f85; --err-soft: #3b1b18;
   --scrim: rgba(0, 0, 0, .55); --on-accent: #0f131a; --log-bg: #0b0f15;
   --xrb-glyph-filter: brightness(0) saturate(100%) invert(70%) sepia(39%) saturate(1071%) hue-rotate(194deg) brightness(101%) contrast(103%);
   --xrb-glyph-detail-filter: grayscale(1) brightness(.58) sepia(1) saturate(1.7) hue-rotate(196deg);
@@ -37,7 +37,7 @@
   :root:not([data-theme="light"]) {
     --bg: #0f131a; --surface: #161c25; --surface-2: #1d2531; --fg: #e3e8ef; --muted: #97a2b3; --line: #2b3441;
     --accent: #86a4ff; --accent-soft: #1c2747; --test: #91c86f; --test-soft: #1b2d15;
-    --ok: #71c995; --ok-soft: #14301f; --warn: #e3aa3f; --warn-soft: #33270d; --rebuild: #b99bff; --rebuild-soft: #2b2140; --err: #ff8f85; --err-soft: #3b1b18;
+    --ok: #71c995; --ok-soft: #14301f; --warn: #e3aa3f; --warn-soft: #33270d; --rebuild: #b99bff; --rebuild-soft: #2b2140; --update: #5ccfe0; --update-soft: #0f2c32; --err: #ff8f85; --err-soft: #3b1b18;
     --scrim: rgba(0, 0, 0, .55); --on-accent: #0f131a; --log-bg: #0b0f15;
     --xrb-glyph-filter: brightness(0) saturate(100%) invert(70%) sepia(39%) saturate(1071%) hue-rotate(194deg) brightness(101%) contrast(103%);
     --xrb-glyph-detail-filter: grayscale(1) brightness(.58) sepia(1) saturate(1.7) hue-rotate(196deg);
@@ -111,6 +111,7 @@ small { font-weight: normal; }
 .panel-menu #host-rebuild, .panel-menu #panel-restart { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .menu-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--warn); }
 .menu-dot.rebuild { background: var(--rebuild); }
+.menu-dot.update { background: var(--update); }
 
 /* Compact inline navigation, without card/button chrome on every choice. */
 .xrb-choice-list { display: grid; gap: 2px; }
@@ -250,6 +251,7 @@ a.xrb-path:hover, a.xrb-path:focus-visible { color: var(--accent); text-decorati
 .state.neutral { background: var(--surface-2); color: var(--muted); }
 .state.busy, .chip.warn { background: var(--warn-soft); color: var(--warn); border: 0; }
 .state.rebuild, .chip.rebuild { background: var(--rebuild-soft); color: var(--rebuild); border: 0; }
+.chip.update { background: var(--update-soft); color: var(--update); border: 0; }
 .state.ok, .chip.good { background: var(--ok-soft); color: var(--ok); border: 0; }
 .state.err, .chip.bad { background: var(--err-soft); color: var(--err); border: 0; }
 .state.live { background: var(--accent-soft); color: var(--accent); }
