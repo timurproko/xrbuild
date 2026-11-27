@@ -1,5 +1,6 @@
 import type { Hand } from './hands.ts';
-import { decodeMeshResult, MESH_CAPABILITIES, validMeshCapabilities, validMeshState, unknownMeshObservations, MESH_MAX_BYTES, type MeshFrame, type MeshRuntime, type MeshState, type MeshSurface } from './hand-mesh-protocol.ts';
+import { meshMotion, MESH_MAX_RESIDUAL_M } from './hand-mesh-motion.ts';
+import { decodeMeshResult, MESH_MAX_SOURCE_AGE_MS, MESH_CAPABILITIES, validMeshCapabilities, validMeshState, unknownMeshObservations, MESH_MAX_BYTES, type MeshFrame, type MeshRuntime, type MeshState, type MeshSurface, type MeshDrawSurface } from './hand-mesh-protocol.ts';
 
 export function meshRuntime(value: string | undefined): MeshRuntime | null {
   if (!value) return null;
@@ -24,11 +25,13 @@ export class HandMeshClient {
   private drawing: { generation: number; frame: MeshFrame } | null = null;
   get state(): MeshState | null {
     if (!this.configuration) return null;
-    const c = this.configuration, d = this.drawing, age = d ? this.now() - d.frame.sentMs : Infinity;
-    const current = !this.closed && d && age >= 0 && age <= 33 && d.frame.revision === this.revision && c.phase === 'Ready'
+    const c = this.configuration, d = this.drawing, age = d ? this.sourceAge(d.frame) : Infinity;
+    const current = !this.closed && d && age >= 0 && age <= MESH_MAX_SOURCE_AGE_MS && d.frame.revision === this.revision && c.phase === 'Ready'
       && c.drawingGeneration === d.generation && c.appliedGeneration === d.generation && c.requestedGeneration === d.generation;
     return { ...c, drawingGeneration: current ? d.generation : null };
   }
+  private sampledAt = new WeakMap<MeshFrame, number>();
+  private sourceAge(frame: MeshFrame): number { return this.now() - (this.sampledAt.get(frame) ?? -Infinity); }
   private epoch = crypto.randomUUID();
   private sequence = 0;
   private revision = 0;
@@ -65,10 +68,11 @@ export class HandMeshClient {
     if (value.phase !== 'Ready' || value.appliedGeneration !== value.requestedGeneration) { this.accepted = null; this.drawing = null; this.topologies.clear(); }
   }
   private frame(hands: Hand[], sampleMs: number): MeshFrame {
-    return { type: 'frame', epoch: this.epoch, sequence: this.sequence++, revision: this.revision, sentMs: this.now(), sampleMs,
+    const frame: MeshFrame = { type: 'frame', epoch: this.epoch, sequence: this.sequence++, revision: this.revision, sentMs: this.now(), sampleMs,
       ...(this.protocol === 2 ? { version: 2, runId: this.runId, settingsGeneration: this.settingsGeneration } : {}),
       hands: hands.slice(0, 2).map(h => ({ id: h.id, handedness: h.handedness, keypoints: h.keypoints.map(p => [...p]),
         ...(this.protocol === 2 ? { observations: h.observations ? structuredClone(h.observations) : unknownMeshObservations() } : {}) })) };
+    this.sampledAt.set(frame, this.now()); return frame;
   }
   /** Empty acquisition invalidates meshes immediately, independent of the skeleton grace period. */
   observed(ids: number[]): void {
@@ -76,17 +80,18 @@ export class HandMeshClient {
     if (key !== this.ids) { this.ids = key; this.invalidate(); }
   }
   invalidate(): void { this.revision++; this.pending = null; this.accepted = null; this.drawing = null; this.topologies.clear(); }
-  update(hands: Hand[], sampleMs: number, generation = 0, drawingEnabled = true): MeshSurface[] {
+  update(hands: Hand[], sampleMs: number, generation = 0, drawingEnabled = true): MeshDrawSurface[] {
     if (this.closed) return [];
     if (generation !== this.generation) { this.generation = generation; this.invalidate(); }
     const shown = hands.filter(h => !h.coasting).slice(0, 2);
-    let meshes: MeshSurface[] = [];
-    const accepted = this.accepted;
-    if (accepted && this.now() - accepted.frame.sentMs <= 33 && accepted.frame.revision === this.revision) {
-      meshes = accepted.meshes.filter(m => {
-        const hand = shown.find(h => h.id === m.id), input = accepted.frame.hands.find(h => h.id === m.id);
-        return hand && input && hand.handedness === input.handedness && hand.keypoints.every((p, i) => Math.hypot(...p.map((n, a) => n - input.keypoints[i][a])) <= .01);
-      });
+    let meshes: MeshDrawSurface[] = [];
+    const accepted = this.accepted, age = accepted ? this.sourceAge(accepted.frame) : Infinity;
+    if (accepted && age >= 0 && age <= MESH_MAX_SOURCE_AGE_MS && accepted.frame.revision === this.revision) {
+      for (const surface of accepted.meshes) {
+        const hand = shown.find(h => h.id === surface.id), input = accepted.frame.hands.find(h => h.id === surface.id);
+        const motion = hand && input ? meshMotion(input, hand) : null;
+        if (motion && motion.residualM <= MESH_MAX_RESIDUAL_M) meshes.push({ ...surface, ...motion, sourceAgeMs: age });
+      }
     }
     if (!shown.length) { this.accepted = null; this.topologies.clear(); }
     this.status = meshes.length ? 'Running' : this.configuration?.phase === 'Preparing' ? 'Preparing'
@@ -119,7 +124,7 @@ export class HandMeshClient {
         const r = await reader.read(); if (r.done) break;
         length += r.value.length; if (length > MESH_MAX_BYTES) { await reader.cancel(); throw new Error('oversized mesh'); } parts.push(r.value);
       }
-      if (this.closed || frame.revision !== this.revision || this.now() - frame.sentMs > 33
+      if (this.closed || frame.revision !== this.revision || this.sourceAge(frame) < 0 || this.sourceAge(frame) > MESH_MAX_SOURCE_AGE_MS
         || this.protocol === 2 && (frame.settingsGeneration !== this.settingsGeneration || this.configuration && (this.configuration.phase !== 'Ready' || this.configuration.appliedGeneration !== this.settingsGeneration))) return;
       const bytes = new Uint8Array(length); let offset = 0; for (const p of parts) { bytes.set(p, offset); offset += p.length; }
       const result = decodeMeshResult(bytes);

@@ -5,7 +5,7 @@ import { HAND_APPEARANCE_DEFAULTS, type HandAppearance } from './hand-profile.ts
 import type { Hand } from './hands.ts';
 import type { PanelFrame } from './stereo.ts';
 import { HandMeshVisual } from './hand-mesh-visual.ts';
-import type { MeshSurface } from './hand-mesh-protocol.ts';
+import type { MeshDrawSurface } from './hand-mesh-protocol.ts';
 
 const BONES = [
   [0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
@@ -49,7 +49,7 @@ export class HandVisual extends THREE.Group {
   private showBones = true;
   private showIndicator = true;
   private meshVisual: HandMeshVisual | null = null;
-  updateMeshes(surfaces: MeshSurface[], panel: PanelFrame): void {
+  updateMeshes(surfaces: MeshDrawSurface[], panel: PanelFrame): void {
     if (!this.meshVisual && !surfaces.length) return;
     if (!this.meshVisual) { this.meshVisual = new HandMeshVisual(); this.add(this.meshVisual); }
     this.meshVisual.update(surfaces, panel, this.style);

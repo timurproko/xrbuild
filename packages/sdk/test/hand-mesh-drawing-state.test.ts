@@ -44,15 +44,15 @@ for (const field of ['protocolVersion', 'capabilities', 'runId', 'settingsGenera
   assert.deepEqual(client.update([], 0), []); assert.equal(requests, 1, 'failed handshake cannot borrow request fields and dispatch frames');
 });
 test('SDK drawing diagnostics expire on its injected clock even without another response or render', async t => {
-  const f = await fixture(t); f.now(34); assert.equal(f.client.state?.drawingGeneration, null);
+  const f = await fixture(t); f.now(101); assert.equal(f.client.state?.drawingGeneration, null);
   f.now(10000); assert.equal(f.client.update(f.hands, 10000).length, 0); assert.equal(f.client.state?.drawingGeneration, null);
   assert.match(f.client.status, /fallback/);
 });
-for (const action of ['pose-displacement', 'no-hands', 'visual-opt-out', 'invalidation', 'transport-failure', 'disposal'] as const) {
+for (const action of ['articulation-residual', 'no-hands', 'visual-opt-out', 'invalidation', 'transport-failure', 'disposal'] as const) {
   test(`${action} clears local drawing evidence, not just drawable geometry`, async t => {
     const f = await fixture(t);
-    if (action === 'pose-displacement') {
-      const moved = f.hands.map(h => ({ ...h, keypoints: h.keypoints.map(p => [p[0] + .02, p[1], p[2]] as [number, number, number]) }));
+    if (action === 'articulation-residual') {
+      const moved = f.hands.map(h => ({ ...h, keypoints: h.keypoints.map((p, i) => [p[0] + (i === 8 ? .02 : 0), p[1], p[2]] as [number, number, number]) }));
       assert.equal(f.client.update(moved, 0).length, 0);
     } else if (action === 'no-hands') assert.equal(f.client.update([], 0).length, 0);
     else if (action === 'visual-opt-out') assert.equal(f.client.update(f.hands, 0, 0, false).length, 1);

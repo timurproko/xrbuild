@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { MeshSurface } from './hand-mesh-protocol.ts';
+import type { MeshSurface, MeshDrawSurface } from './hand-mesh-protocol.ts';
 import type { PanelFrame } from './stereo.ts';
 import type { HandVisualStyle } from './hand-visual.ts';
 
@@ -8,7 +8,7 @@ export class HandMeshVisual extends THREE.Group {
   private material = new THREE.MeshStandardMaterial({ transparent: true, depthWrite: false, roughness: .5, side: THREE.DoubleSide });
   private records = new Map<number, { surface: MeshSurface; mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> }>();
   constructor() { super(); this.name = 'xrb-hand-mesh'; this.matrixAutoUpdate = false; }
-  update(surfaces: MeshSurface[], panel: PanelFrame, style: HandVisualStyle): void {
+  update(surfaces: MeshDrawSurface[], panel: PanelFrame, style: HandVisualStyle): void {
     this.matrix.copy(panel.toWorld); this.matrixWorldNeedsUpdate = true;
     this.material.color.set(style.boneColor); this.material.opacity = style.opacity;
     const ids = new Set(surfaces.map(s => s.id));
@@ -23,9 +23,12 @@ export class HandMeshVisual extends THREE.Group {
         geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(surface.positions.length), 3).setUsage(THREE.DynamicDrawUsage));
         geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(surface.positions.length), 3).setUsage(THREE.DynamicDrawUsage));
         geometry.setIndex(new THREE.BufferAttribute(surface.indices, 1));
-        const mesh = new THREE.Mesh(geometry, this.material); mesh.frustumCulled = false; mesh.renderOrder = 19;
+        const mesh = new THREE.Mesh(geometry, this.material); mesh.frustumCulled = false; mesh.renderOrder = 19; mesh.matrixAutoUpdate = false;
         record = { mesh, surface: { ...surface, positions: new Float32Array() } }; this.records.set(surface.id, record); this.add(mesh);
       }
+      // Rigid re-anchoring rotates normals through the normal matrix without per-frame buffer uploads.
+      if (surface.transform) record.mesh.matrix.fromArray(surface.transform); else record.mesh.matrix.identity();
+      record.mesh.matrixWorldNeedsUpdate = true;
       if (record.surface.positions !== surface.positions) {
         const geometry = record.mesh.geometry, positions = geometry.getAttribute('position') as THREE.BufferAttribute;
         positions.copyArray(surface.positions); positions.needsUpdate = true;

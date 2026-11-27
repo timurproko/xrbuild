@@ -45,7 +45,7 @@ test('mesh client fences late replies, bounds pending frames and never mutates i
   assert.equal(sent.length, 2); assert.equal(sent[1].sampleMs, 10, 'only newest pending retained');
   assert.equal(client.update(hands, 11).length, 1);
   assert.deepEqual(frame, before); assert.deepEqual(a.sample(0), b.sample(0)); assert.deepEqual(ea, eb);
-  now = 34; assert.equal(client.update(hands, 12).length, 0, 'old mesh expires rather than stalls');
+  now = 101; assert.equal(client.update(hands, 12).length, 0, 'old mesh expires rather than stalls');
   client.invalidate(); respond!(reply(sent[1])); await tick(); await tick();
   assert.equal(client.update(hands, 13).length, 0, 'retired-revision result cannot revive mesh');
   client.observed([]); assert.equal(client.update([], 14).length, 0);
