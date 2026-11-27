@@ -30,18 +30,29 @@ export function createHandTestTargets(scene, interaction, onFeedback = () => {})
   const states = targets.map(() => ({ phase: 'Ready', starts: 0, moves: 0, releases: 0 }));
   const feedback = () => onFeedback({ pinch: { ...states[0], held: targets[0].state.held }, drag: { ...states[1], held: targets[1].state.held } });
   const enable = () => targets.forEach(target => { target.enabled = active && shown; });
+  // Pinch or grab picks the object up: it keeps its offset from the hand and turns with the palm.
+  let holder = -1;
+  const offset = new THREE.Vector3(), turn = new THREE.Quaternion(), palm = new THREE.Quaternion();
   targets.forEach((target, index) => target.on(event => {
     if (!active || !event.hand || event.source === 'mouse') return;
     const state = states[index];
-    if (event.type === 'start') { state.phase = 'Held'; state.starts++; }
-    if (event.type === 'move') { state.moves++; if (index === 1) object.position.copy(event.world); }
+    if (event.type === 'start') {
+      state.phase = 'Held'; state.starts++; holder = index;
+      offset.copy(object.position).sub(event.world);
+      turn.copy(event.hand.palm.quaternion).invert().multiply(object.quaternion);
+    }
+    if (event.type === 'move') {
+      state.moves++;
+      if (index === holder) { object.position.copy(event.world).add(offset); object.quaternion.copy(palm.copy(event.hand.palm.quaternion).multiply(turn)); }
+    }
+    if (event.type === 'end' && index === holder) holder = -1;
     if (event.type === 'end') { state.phase = event.reason === 'release' ? 'Released' : 'Ready'; if (event.reason === 'release') state.releases++; }
     const held = targets.some(item => item.state.held);
     object.material.emissive.copy(object.material.color).multiplyScalar(held && event.type !== 'end' ? .3 : 0);
     feedback();
   }));
   function reset() {
-    object.position.copy(START); object.material.emissive.set(0);
+    object.position.copy(START); object.quaternion.identity(); holder = -1; object.material.emissive.set(0);
     states.forEach(state => Object.assign(state, { phase: 'Ready', starts: 0, moves: 0, releases: 0 })); feedback();
   }
   async function setShape(kind) {
