@@ -9,6 +9,8 @@ nominal viewer position, so you can develop without the rig. Displays and inputs
 plugins (see the [main README](../../README.md#plugins)); the SDK only sees what the host channel
 reports.
 
+`Hand.observations` optionally exposes copied 21-joint `confidence`, `supported` and `ageMs` arrays for geometry-only consumers. Null entries mean unknown; age is measured at the requested sample time from the last supported mapped capture, not dispatch or prediction time. Existing Hand constructors remain compatible. See [mesh protocol](../../docs/hand-mesh-protocol.md) for negotiated wire capabilities.
+
 ## Getting the SDK into an app
 
 There is nothing to install or publish: apps (in your workspace, logically separate from the core) take the SDK and
@@ -184,6 +186,8 @@ only a still-fresh prior mesh, otherwise the skeleton; no-hand frames invalidate
 of skeleton grace. `handVisual:false` suppresses both standard drawings without disabling input. Mesh buffers
 are disposed on replacement/stop. Preview, publication, offline packages and unmanaged runs remain skeleton-only;
 no mesh runtime credential is portable. Rebuild the host and app SDK bundles to use this optional desktop path.
+
+Mesh on/off is the post-processing selection, independent of skeleton Joints/Bones switches. Neither automatically hides the other. The v2 SDK fences geometry/topology on settings-generation changes and exposes `xrb.handMeshState` separately from `xrb.handMeshStatus`: saved/requested, processor-applied and drawing generations are distinct. Preparing/repreparing uses the skeleton with the person's existing appearance choices and never resets a held interaction. Legacy peers negotiate only their supported contract.
 
 - `xrb.currentHands`: tracked hands for this frame, smoothed (One Euro filter) and predicted to
   display time. Keypoints are in panel metres, in the common 21-point hand landmark order (`KP.INDEX_TIP` = 8, ...).

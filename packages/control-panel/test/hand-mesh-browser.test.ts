@@ -8,7 +8,7 @@ import { freePort } from '../src/host-runner.ts';
 import { readHandsState, saveHandsState } from '../src/hands-state.ts';
 import { withBrowser, sleep } from './browser-fixture.ts';
 
-test('Hands mounts its selector once, preserves drafts, saves next-run only and disposes polling', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async () => {
+test('Hands mounts its selector once, preserves drafts, saves independently and disposes polling', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async () => {
   const parent = path.resolve(process.env.XRB_TEST_ROOT ?? '.artifacts'); await fs.mkdir(parent, { recursive: true });
   const root = await fs.mkdtemp(path.join(parent, 'mesh-ui-')), core = path.resolve(import.meta.dirname, '../../..'), workspace = path.join(root, 'user'), plugin = path.join(workspace, 'plugins/example');
   await fs.mkdir(plugin, { recursive: true });
@@ -50,7 +50,7 @@ test('Hands mounts its selector once, preserves drafts, saves next-run only and 
       assert.equal(await evaluate(`document.querySelector('#hands-provider').value`), 'core/simulated');
       assert.equal(await evaluate(`document.querySelector('#hands-postprocessing-root').hidden`), false);
       assert.equal(await evaluate(`document.querySelector('[data-field="sizeFactor"]').valueAsNumber`), 0.9);
-      assert.match(await evaluate(`document.querySelector('[data-mesh-message]').textContent`), /Saved.*next desktop run/);
+      assert.match(await evaluate(`document.querySelector('[data-mesh-message]').textContent`), /Saved.*update asynchronously/);
       // Capture the real production mount in the page-owned slot, without injecting or moving controls.
       if (process.env.XRB_PROOF_DIR) {
         await fs.mkdir(process.env.XRB_PROOF_DIR, { recursive: true });

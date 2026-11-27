@@ -14,7 +14,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     <p class="xrb-help" data-mesh-empty hidden>No post-processing plugins installed.</p>
     <div class="xrb-stack" data-mesh-fields></div><p class="xrb-help" data-mesh-readiness></p>
     <div class="xrb-button-row"><button type="submit" data-mesh-save disabled>Save post-processing</button><button type="button" data-mesh-reload>Reload</button></div>
-    <p class="xrb-help">Applies on next desktop run.</p>
+    <p class="xrb-help">Compatible running desktop apps follow saved changes; older apps need relaunch.</p>
     <p class="xrb-help">Post-processing is used only in desktop apps run from this panel, not browser previews, published web builds or offline packages.</p>
     <p class="xrb-help" data-mesh-runtime role="status" aria-live="polite"></p><p class="xrb-help" data-mesh-message role="status" aria-live="polite"></p></form>`;
   const form = root.querySelector('form'), select = root.querySelector('[data-mesh-selector]'), fields = root.querySelector('[data-mesh-fields]');
@@ -94,7 +94,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
       if (disposed) return;
       snapshot = { ...snapshot, revision: result.revision, choice: result.choice }; revisions.incorporate(result.revision); dirty = false;
       renderFields(); // Restore the submitted snapshot even after a synthetic event on a disabled input.
-      message.textContent = revisions.stale ? 'Saved; another change needs Reload/review.' : 'Saved. Applies on next desktop run.';
+      message.textContent = revisions.stale ? 'Saved; another change needs Reload/review.' : 'Saved. Compatible running desktop apps update asynchronously.';
     } catch (e) { if (!disposed) message.textContent = `${e.message} Reload to review; your draft is preserved.`; }
     finally { busy = false; if (!disposed) buttons(); }
   };

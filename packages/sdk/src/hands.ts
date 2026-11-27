@@ -74,6 +74,15 @@ export const DEFAULT_HAND_INPUT: Settings & { smoothing: OneEuroParams } = {
   nativeGrab: true,
 };
 
+export interface HandObservations {
+  /** Provider scores, not calibrated probabilities; null means unknown. */
+  confidence: (number | null)[];
+  /** Current observation support, not support inferred from prediction. */
+  supported: (boolean | null)[];
+  /** Age at the requested sample time since last supported capture; null if unknown. */
+  ageMs: (number | null)[];
+}
+
 export interface Hand {
   id: number;
   handedness: 'left' | 'right' | 'unknown';
@@ -81,6 +90,8 @@ export interface Hand {
   keypoints: Vec3[];
   /** raw keypoints of the newest result */
   rawKeypoints: Vec3[];
+  /** Optional for source compatibility with custom/older Hand producers. */
+  observations?: HandObservations;
   pinching: boolean;
   /** 0 with thumb and index open (`pinchOpenM` apart), 1 at the pinch enter distance and while pinching */
   pinchStrength: number;
@@ -110,6 +121,8 @@ interface Track {
   /** low-passed frame-to-frame velocity per keypoint ('window' prediction) */
   windowVelocity: Vec3[];
   captureTime: number;
+  confidence: (number | null)[];
+  supportedAt: (number | null)[];
   lastSeen: number;
   nativePinch: boolean;
   grab: boolean;
@@ -170,7 +183,8 @@ export class HandInput {
         t = {
           id: wire.id, handedness: wire.handedness, filters: [], raw: [], smoothed: [],
           velocity: zeros(NUM_KEYPOINTS), windowVelocity: zeros(NUM_KEYPOINTS),
-          captureTime: capturePageMs, lastSeen: capturePageMs, nativePinch: false, grab: false,
+          captureTime: capturePageMs, confidence: Array(NUM_KEYPOINTS).fill(null), supportedAt: Array(NUM_KEYPOINTS).fill(null),
+          lastSeen: capturePageMs, nativePinch: false, grab: false,
           distancePinch: false, pinchCount: 0, curlGrab: false, grabCount: 0, pinching: false, grabbing: false,
         };
         if (this.opts.smoothing) for (let i = 0; i < NUM_KEYPOINTS * 3; i++) t.filters.push(new OneEuro(this.opts.smoothing));
@@ -181,6 +195,12 @@ export class HandInput {
       if (this.opts.predictionVelocity === 'window') this.updateWindowVelocity(track, raw, capturePageMs);
       track.handedness = wire.handedness;
       track.captureTime = capturePageMs;
+      track.confidence = Array.from({ length: NUM_KEYPOINTS }, (_, i) => {
+        const score = wire.scores[i];
+        const valid = Number.isFinite(score) && score >= 0 && score <= 1;
+        if (valid && score > 0 && Number.isFinite(capturePageMs)) track.supportedAt[i] = capturePageMs;
+        return valid ? score : null;
+      });
       track.lastSeen = capturePageMs;
       track.raw = raw;
       if (this.opts.smoothing) {
@@ -308,6 +328,11 @@ export class HandInput {
       handedness: t.handedness === 0 ? 'left' : t.handedness === 1 ? 'right' : 'unknown',
       keypoints,
       rawKeypoints: t.raw,
+      observations: {
+        confidence: [...t.confidence],
+        supported: t.confidence.map(score => score === null ? null : !coasting && score > 0),
+        ageMs: t.supportedAt.map(at => at === null || !Number.isFinite(displayPageMs) ? null : Math.max(0, displayPageMs - at)),
+      },
       pinching: t.pinching,
       pinchStrength: t.pinching ? 1 : Math.min(1, Math.max(0, strength)),
       grabbing: t.grabbing,

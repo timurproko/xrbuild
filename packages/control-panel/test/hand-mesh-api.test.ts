@@ -8,6 +8,7 @@ import { freePort } from '../src/host-runner.ts';
 import { readHandsState, saveHandsState } from '../src/hands-state.ts';
 import { readProject } from '../src/projects.ts';
 import { HandMeshRun } from '../src/hand-mesh-run.ts';
+import { HandMeshProcess } from '../src/hand-mesh-process.ts';
 import { fileURLToPath } from 'node:url';
 import { HandMeshClient } from '../../sdk/src/hand-mesh-client.ts';
 import { HandInput } from '../../sdk/src/hands.ts';
@@ -16,7 +17,7 @@ import { PanelFrame } from '../../sdk/src/stereo.ts';
 import { decodeMessage, type HandsMessage } from '../../sdk/src/protocol.ts';
 import { handsMessage } from '../../sdk/test/fixtures.ts';
 
-test('mesh survives delayed managed dev startup, pins next-run choices and missing plugins fail open', async t => {
+test('managed mesh gateway survives dev startup, follows None and keeps missing choices without blocking input', { skip: !process.env.XRB_TEST_MESH_SUPERVISOR }, async t => {
   const parent = path.resolve(process.env.XRB_TEST_ROOT ?? '.artifacts'); await fs.mkdir(parent, { recursive: true });
   const root = await fs.mkdtemp(path.join(parent, 'mesh-api-')), core = path.join(root, 'core'), workspace = path.join(root, 'user');
   const write = async (file: string, value: unknown) => { await fs.mkdir(path.dirname(file), { recursive: true }); await fs.writeFile(file, typeof value === 'string' ? value : JSON.stringify(value)); };
@@ -42,9 +43,9 @@ test('mesh survives delayed managed dev startup, pins next-run choices and missi
   assert.equal((await put({ selected, values: { quality: 3 }, revision: data.revision, registryRevision: data.registryRevision })).status, 200);
   assert.equal((await put({ selected: null, revision: data.revision, registryRevision: data.registryRevision })).status, 409);
   // The runtime substitute is test-only: use the existing Node executable to run the single fake sidecar.
-  const start = HandMeshRun.prototype.start;
-  t.mock.method(HandMeshRun.prototype, 'start', function (plugin, settings) {
-    return start.call(this, { ...plugin, program: process.execPath, declaration: { ...plugin.declaration, args: [fileURLToPath(new URL('./fixtures/hand-mesh-sidecar.mjs', import.meta.url))] } }, settings);
+  const start = HandMeshProcess.start;
+  t.mock.method(HandMeshProcess, 'start', function (_supervisor, _program, _args, cwd, cancelled, created) {
+    return start.call(this, process.env.XRB_TEST_MESH_SUPERVISOR, process.execPath, [fileURLToPath(new URL('./fixtures/hand-mesh-sidecar.mjs', import.meta.url))], cwd, cancelled, created);
   });
   let config: any, delayedStart = false;
   panel.ensureDevInstalled = async () => {}; // No install/Vite/host: only the real fake mesh child runs.
@@ -53,7 +54,7 @@ test('mesh survives delayed managed dev startup, pins next-run choices and missi
     if (!delayedStart) {
       delayedStart = true; assert.equal(request.mode, 'dev');
       panel.runner.s = { ...panel.runner.s, phase: 'starting', projectId: 'example' }; panel.runner.emit('state', panel.runner.state());
-      for (let i = 0; i < 200 && panel.meshRun.status === 'Starting'; i++) await new Promise(resolve => setTimeout(resolve, 10));
+      for (let i = 0; i < 200 && (panel.meshRun.state().phase !== 'Ready' || !panel.meshRun.state().owner); i++) await new Promise(resolve => setTimeout(resolve, 10));
       assert.match(panel.meshRun.status, /Ready/);
       // Regression: Vite/host startup can outlast three seconds AFTER a healthy child says ready.
       await new Promise(resolve => setTimeout(resolve, 3200));
@@ -78,15 +79,18 @@ test('mesh survives delayed managed dev startup, pins next-run choices and missi
   assert.deepEqual(input.sample(performance.now())[0].keypoints, points.hands[0].keypoints, 'mesh generation does not change input');
   data = await get(); const token = config.handMeshRuntime.token;
   assert.equal((await put({ selected: null, revision: data.revision, registryRevision: data.registryRevision })).status, 200);
-  assert.equal(config.handMeshRuntime.token, token, 'Save does not reconfigure the running app');
+  assert.equal(config.handMeshRuntime.token, token, 'configuration uses the same authenticated gateway');
+  for (let i = 0; i < 100 && panel.meshRun.state().owner; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(panel.meshRun.state().owner, null, 'None drains the optional processor only');
   client.close(); visual.disposeMeshes();
   panel.runner.s.phase = 'idle'; panel.runner.emit('state', panel.runner.state());
-  await panel.run(project, 'built'); assert.equal(config.handMeshRuntime, undefined, 'next run uses None');
+  await panel.run(project, 'built'); assert.equal(config.handMeshRuntime.version, 1, 'None retains a processor-free gateway for later enablement');
   panel.runner.s.phase = 'idle'; panel.runner.emit('state', panel.runner.state());
   data = await get(); assert.equal((await put({ selected, revision: data.revision, registryRevision: data.registryRevision })).status, 200);
   await fs.unlink(path.join(plugin, 'missing-runtime.exe'));
-  await panel.run(project, 'built'); assert.equal(config.handMeshRuntime, undefined);
+  await panel.run(project, 'built'); assert.equal(config.handMeshRuntime.version, 1);
   assert.match((await get()).status, /Skeleton fallback/);
+  assert.equal((await get()).delivery.phase, 'Failed');
   assert.deepEqual((await get()).choice.selected, selected, 'missing selected identity is preserved');
   panel.runner.s.phase = 'idle'; panel.runner.emit('state', panel.runner.state());
   panel.meshRun = { stop: async () => { throw new Error('simulated owned cleanup failure'); } };
