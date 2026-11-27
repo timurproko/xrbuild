@@ -113,7 +113,7 @@ $('hands-source-retry').addEventListener('click', () => { if (sourceEdit) void s
 $('hands-source-discard').addEventListener('click', () => { sourceEdit = sourceConflict = null; message(); void load(); });
 const navigation = mountToolNavigation($('hands-menu-button'), $('hands-menu'), { origin: location.origin, current: 'hands' });
 // Monitor frame: pick a monitor in Setup (remembered in this browser); its EDID size draws the frame.
-const MONITOR_KEY = 'xrb.hands.monitor', MONITOR_SIZE_KEY = 'xrb.hands.monitorSize';
+const MONITOR_KEY = 'xrb.hands.monitor', MONITOR_SIZE_KEY = 'xrb.hands.monitorSize', MONITOR_RESOLUTION_KEY = 'xrb.hands.monitorResolution';
 /** Frame the last monitor before the first frame; the live list (about a second later) then only confirms it. */
 function restoreMonitorFrame() { try { const size = JSON.parse(localStorage.getItem(MONITOR_SIZE_KEY) || 'null'); if (size?.widthMm) view?.setMonitor(size); } catch { /* No remembered size. */ } }
 async function loadMonitors() {
@@ -128,13 +128,26 @@ async function loadMonitors() {
     option.disabled = !m.widthMm; return option;
   }));
   select.value = saved; select.disabled = !sized.length;
-  const apply = () => {
-    const monitor = monitors.find(m => m.device === select.value) ?? null;
-    try { localStorage.setItem(MONITOR_SIZE_KEY, monitor?.widthMm ? JSON.stringify({ widthMm: monitor.widthMm, heightMm: monitor.heightMm }) : ''); } catch { /* Storage may be blocked. */ }
-    view?.setMonitor(monitor);
+  // Resolution scales the frame: its pixels times the monitor's millimetres per pixel (the current mode is full size).
+  const resolution = $('hands-monitor-resolution');
+  const COMMON = [[3840, 2160], [2560, 1440], [1920, 1080], [1600, 900], [1280, 720]];
+  const fillResolutions = monitor => {
+    const modes = monitor?.widthMm ? [[monitor.width, monitor.height], ...COMMON.filter(([w, h]) => w < monitor.width && h <= monitor.height)] : [];
+    resolution.replaceChildren(...modes.map(([w, h], i) => new Option(`${w} × ${h}${i ? '' : ' (current)'}`, `${w}x${h}`)));
+    let saved = ''; try { saved = localStorage.getItem(MONITOR_RESOLUTION_KEY) ?? ''; } catch { /* Storage may be blocked. */ }
+    resolution.value = modes.some(([w, h]) => `${w}x${h}` === saved) ? saved : modes[0] ? `${modes[0][0]}x${modes[0][1]}` : '';
+    resolution.disabled = !modes.length;
   };
-  select.addEventListener('change', () => { try { localStorage.setItem(MONITOR_KEY, select.value); } catch { /* Storage may be blocked. */ } apply(); });
-  apply();
+  const apply = (options = {}) => {
+    const monitor = monitors.find(m => m.device === select.value) ?? null;
+    const [w, h] = resolution.value.split('x').map(Number);
+    const frame = monitor?.widthMm && w && h ? { widthMm: Math.round(monitor.widthMm * w / monitor.width), heightMm: Math.round(monitor.heightMm * h / monitor.height) } : null;
+    try { localStorage.setItem(MONITOR_SIZE_KEY, frame ? JSON.stringify(frame) : ''); } catch { /* Storage may be blocked. */ }
+    view?.setMonitor(frame, options);
+  };
+  resolution.addEventListener('change', () => { try { localStorage.setItem(MONITOR_RESOLUTION_KEY, resolution.value); } catch { /* Storage may be blocked. */ } apply({ keepView: true }); });
+  select.addEventListener('change', () => { try { localStorage.setItem(MONITOR_KEY, select.value); localStorage.removeItem(MONITOR_RESOLUTION_KEY); } catch { /* Storage may be blocked. */ } fillResolutions(monitors.find(m => m.device === select.value)); apply(); });
+  fillResolutions(monitors.find(m => m.device === select.value)); apply();
 }
 // Object shape and grid color are viewer preferences, remembered in this browser only.
 const stored = key => { try { return localStorage.getItem(key) ?? ''; } catch { return ''; } };

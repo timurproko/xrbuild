@@ -16,8 +16,21 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(40, 1, .005, 10);
   const controls = new OrbitControls(camera, canvas); controls.enableDamping = true; controls.minDistance = .3; controls.maxDistance = 2;
-  // Like 3D tools: left drag orbits, middle drag pans, right drag zooms.
-  controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.DOLLY };
+  // Like 3D tools: left drag orbits, middle drag pans, right drag zooms (right/up in, left/down out).
+  controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: null };
+  let zoomDrag = null;
+  const zoomOffset = new THREE.Vector3();
+  canvas.addEventListener('pointerdown', event => { if (event.button !== 2) return; zoomDrag = { x: event.clientX, y: event.clientY }; canvas.setPointerCapture(event.pointerId); });
+  canvas.addEventListener('pointermove', event => {
+    if (!zoomDrag) return;
+    const delta = (event.clientX - zoomDrag.x) - (event.clientY - zoomDrag.y); zoomDrag = { x: event.clientX, y: event.clientY };
+    zoomOffset.copy(camera.position).sub(controls.target);
+    zoomOffset.setLength(THREE.MathUtils.clamp(zoomOffset.length() * Math.pow(.995, delta), controls.minDistance, controls.maxDistance));
+    camera.position.copy(controls.target).add(zoomOffset);
+  });
+  const endZoom = () => { zoomDrag = null; };
+  canvas.addEventListener('pointerup', endZoom); canvas.addEventListener('pointercancel', endZoom);
+  canvas.addEventListener('contextmenu', event => event.preventDefault());
   scene.add(new THREE.HemisphereLight('#e8f4ff', '#162338', 2.8));
   const light = new THREE.DirectionalLight('#ffffff', 3); light.position.set(.2, .4, .6); scene.add(light);
   // Endless grid in the panel plane (z = 0, the monitor's plane): 5 cm cells drawn in a shader, fading with distance.
@@ -39,7 +52,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   // viewer, origin at the screen), so the frame shows where hands are relative to the screen.
   const monitor = new THREE.Group(); monitor.visible = false; scene.add(monitor);
   let monitorShown = true;
-  function setMonitor(value) {
+  function setMonitor(value, { keepView = false } = {}) {
     // The same size again (the live list confirming the remembered one) changes nothing, so the view never jumps.
     if (value?.widthMm && monitorSize && Math.abs(monitorSize.w - value.widthMm / 1000) < 1e-6 && Math.abs(monitorSize.h - value.heightMm / 1000) < 1e-6) return;
     for (const object of [...monitor.children]) { object.geometry.dispose(); object.material.dispose(); monitor.remove(object); }
@@ -48,7 +61,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     const corners = [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]].map(([x, y]) => new THREE.Vector3(x, y, 0));
     monitor.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(corners), new THREE.LineBasicMaterial({ color })));
     monitor.add(new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .06, depthWrite: false, side: THREE.DoubleSide })));
-    monitor.visible = monitorShown; monitorSize = { w, h }; resetView();
+    monitor.visible = monitorShown; monitorSize = { w, h }; if (!keepView) resetView();
   }
   // Axes appear as an orientation widget in the bottom-left corner (View › Axes), not at the origin.
   const axes = createAxisGizmo(); axes.visible = false;

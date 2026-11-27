@@ -42,6 +42,7 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(gizmo, /renderer\.getViewport\(full\)[\s\S]*renderer\.setViewport\(full\);/, 'the main viewport is restored in the same CSS units');
   assert.doesNotMatch(gizmo, /getPixelRatio/, 'no pixel-ratio rescaling that would shrink the main view on scaled displays');
   assert.match(markup, /<select id="hands-monitor" aria-label="Monitor"/, 'Setup chooses the monitor to frame');
+  assert.match(markup, /<select id="hands-monitor-resolution" aria-label="Resolution"/, 'a resolution scales the monitor frame');
   assert.match(markup, /<select id="hands-object" aria-label="Object"><option value="cube">Cube<\/option><option value="sphere">Sphere<\/option><option value="suzanne">Suzanne<\/option>/, 'Setup chooses one centre object');
   assert.match(markup, /id="hands-grid-color" class="xrb-swatch"/, 'Setup chooses the grid color');
   const targetsSource = await fs.readFile(path.join(ui, 'hands-targets.js'), 'utf8');
