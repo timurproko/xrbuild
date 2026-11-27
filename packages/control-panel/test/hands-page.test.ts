@@ -26,6 +26,8 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.equal((markup.match(/class="xrb-card hands-panel"/g) ?? []).length, 1);
   assert.match(markup, /class="hands-view-tools xrb-controls-small">\s*<div id="hands-session-actions" class="hands-session-actions" hidden><\/div>\s*<span class="hands-tool-separator"/, 'Start leads the viewer toolbar, set apart by a separator');
   assert.match(markup, /<div id="hands-header-status" class="hands-header-status"><\/div>/);
+  assert.match(markup, /<div id="hands-adjustments-root" class="xrb-sidebar-content xrb-stack" hidden><\/div>/, 'adjustments stay hidden until their editor mounts');
+  assert.doesNotMatch(markup, /unavailable in this version/);
   assert.match(live, /for \(const label of \['Start', 'Stop'\]\)/, 'Start keeps one width for every label');
   assert.match(live, /button\.id = 'hands-start-stop'; button\.className = 'primary';/);
   assert.doesNotMatch(live, /Press Start to track the saved provider/);

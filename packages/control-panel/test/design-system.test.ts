@@ -42,3 +42,8 @@ test('data-no-tooltip keeps the accessible name but suppresses the hover hint',a
   const js=await (await import('node:fs/promises')).readFile(new URL('../ui/design-system.js',import.meta.url),'utf8');
   assert.match(js,/return element&&!element\.closest\('\[data-no-tooltip\]'\)\?element:null/);
 });
+
+test('an empty single-choice dropdown keeps its height with a blank label',async()=>{
+  const js=await (await import('node:fs/promises')).readFile(new URL('../ui/design-system.js',import.meta.url),'utf8');
+  assert.ok(js.includes("label=current?.label||'"+String.fromCharCode(92)+"u00a0';"));
+});
