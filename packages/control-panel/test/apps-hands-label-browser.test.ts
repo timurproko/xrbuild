@@ -31,10 +31,10 @@ test('Apps Input shows Hands in option and summary, persists hand and retains it
       for (let i = 0; i < 100 && await evaluate('inputSaveStatus===null'); i++) await sleep(30);
       assert.equal(await evaluate('inputSaveStatus'), 200);
       const saved = JSON.parse(await fs.readFile(file, 'utf8'));
-      assert.deepEqual(saved.inputs, ['mouse', 'hand']); assert.match(await summary(), /Hands/);
+      assert.deepEqual(saved.inputs, ['mouse', 'hand']); assert.equal(await summary(), '2 selected', 'several choices are counted');
       available = false;
       await navigate(app.url, `document.querySelector('#settings [name="inputs"]')?.closest('.dropdown').querySelector('.dropdown-btn').textContent.includes('unavailable')`);
-      assert.match(await summary(), /Hands \(unavailable\)/);
+      assert.equal(await summary(), '2 selected · Hands (unavailable)', 'an unavailable choice stays named in the count');
       assert.equal(await evaluate(`JSON.parse(document.querySelector('#settings [name="inputs"]').value).includes('hand')`), true);
       assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')).inputs, ['mouse', 'hand']);
     });

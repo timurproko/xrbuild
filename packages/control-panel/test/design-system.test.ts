@@ -48,9 +48,9 @@ test('an empty single-choice dropdown keeps its height with a blank label',async
   assert.ok(js.includes("label=current?.label||'"+String.fromCharCode(92)+"u00a0';"));
 });
 
-test('a multi-select without a summary names one choice and counts several',async()=>{
+test('a multi-select without a summary names one choice, counts several and names unavailable choices',async()=>{
   const js=await (await import('node:fs/promises')).readFile(new URL('../ui/design-system.js',import.meta.url),'utf8');
-  assert.ok(js.includes("label=owner.dataset.summary||(chosen.length>1?`${chosen.length} selected`:chosen[0]?.label)||'None';"));
+  assert.ok(js.includes("label=owner.dataset.summary||(chosen.length>1?`${chosen.length} selected${off.length?` · ${off.map(o=>o.label).join(', ')}`:''}`:chosen[0]?.label)||'None';"));
 });
 
 test('slider thumbs hover with the shared field hover line',async()=>{
