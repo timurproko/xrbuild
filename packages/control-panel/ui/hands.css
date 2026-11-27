@@ -99,3 +99,5 @@
 .hands-adjustment-tabs > .xrb-tab { flex: none; white-space: nowrap; }
 .hands-adjustment-tabs > .hands-tab-more { display: flex; align-items: center; flex: none; }
 .hands-adjustment-tabs > .hands-tab-more[hidden], .hands-adjustment-tabs > .xrb-tab[hidden] { display: none; }
+/* Install dialog: no status icon until the install runs. */
+.hands-mesh-setup .xrb-progress-status-icon[hidden] { display: none; }
