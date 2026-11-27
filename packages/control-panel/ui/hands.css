@@ -4,7 +4,7 @@
 .hands-panel { min-width: 0; min-height: 0; margin: 0; display: flex; flex-direction: column; }
 .hands-source { overflow: auto; }
 .hands-adjustment-sections { gap: var(--xrb-space-section); }
-.hands-number-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 18px; align-items: center; gap: var(--xrb-space-stack); min-width: 0; }
+.hands-number-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 24px; align-items: center; gap: var(--xrb-space-stack); min-width: 0; }
 /* Every row reserves the swatch column so all sliders share one width. */
 .hands-number-row > .xrb-number-control { min-width: 0; grid-column: 1; grid-row: 1; }
 .hands-number-row > .xrb-range { grid-column: 2; grid-row: 1; }
@@ -50,3 +50,7 @@
   #hands-workspace { grid-template-columns: minmax(0, 1fr); }
   .hands-view-tools { gap: var(--xrb-space-field); }
 }
+/* Swatches end exactly at the content edge: the selected ring is drawn inside the swatch, not around it. */
+.hands-number-row button.xrb-swatch { width: 24px; height: 24px; border: 2px solid var(--fg); }
+.hands-number-row button.xrb-swatch[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--surface); }
+.hands-number-row button.xrb-swatch:hover:not(:disabled), .hands-number-row button.xrb-swatch:focus-visible { transform: none; border-color: var(--accent); }

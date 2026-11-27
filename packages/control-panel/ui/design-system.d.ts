@@ -25,3 +25,7 @@ export function enhanceSelects(root?:Document|Element):()=>void;
 export function installDropdowns(root?:Document|Element):()=>void;
 export function floatingHost(owner:Element):HTMLElement;
 export function refreshDropdown(owner:Element):void;
+export function hexToHsv(hex:string):[number,number,number];
+export function hsvToHex(h:number,s:number,v:number):string;
+export function closeColorPopover():void;
+export function openColorPopover(anchor:HTMLElement,options?:{value?:string;onInput?:(hex:string)=>void;onClose?:(hex:string)=>void}):{pop:HTMLElement;close():void};

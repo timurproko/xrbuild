@@ -34,7 +34,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     const unavailable = !supported ? 'Standalone Hands currently supports Windows x64 only.' : !view?.profile ? 'Wait for the shared SDK view and valid profile.' : !source ? 'Choose an available skeleton provider.' : source.transport !== 'native' ? 'WebXR requires its explicit app XR session.' : !source.available ? source.reason : '';
     const cleanupPending = session.blocked || status.cleanupPending;
     const stoppingNow = stopping || session.stopping || phase === 'stopping';
-    button.textContent = cleanupPending && !stopping ? 'Retry cleanup' : stoppingNow ? 'Stopping…' : active ? 'Stop' : status.takeoverAvailable ? 'Take over' : 'Start';
+    button.textContent = cleanupPending && !stopping ? 'Retry cleanup' : stoppingNow ? 'Stop' : active ? 'Stop' : status.takeoverAvailable ? 'Take over' : 'Start';
     button.disabled = stopping || !cleanupPending && (stoppingNow || !active && (!!unavailable || phase === 'occupied' && !status.takeoverAvailable || !!view?.replaying));
     const labels = { 'not-started': 'Not started', starting: 'Starting…', waiting: 'Waiting', running: 'Running', 'no-hands': 'No hands', rejected: 'Observation dropped', stalled: 'Stalled', stopping: 'Stopping…', stopped: 'Stopped', failed: 'Failed', cleanup: 'Cleanup', occupied: 'Busy' };
     let label = labels[phase] ?? 'Not started';

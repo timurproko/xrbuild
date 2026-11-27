@@ -1,5 +1,5 @@
 import { commitHandsFields } from './hands-commits.js';
-import { renderField, setFieldError, installNumberSteppers, enhanceHelpText, iconSvg, openFloating, positionFloating, refreshDropdown } from './design-system.js';
+import { renderField, setFieldError, installNumberSteppers, enhanceHelpText, iconSvg, openFloating, positionFloating, refreshDropdown, openColorPopover, closeColorPopover } from './design-system.js';
 import { menuKeyboard } from './navigation.js';
 
 export const linearToHex = rgb => '#' + rgb.map(v => Math.round(255 * (v <= .0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - .055)).toString(16).padStart(2, '0')).join('');
@@ -198,7 +198,7 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   };
   const submit = event => event.preventDefault();
   function selectTab(section, focus = false) {
-    closeMenu();
+    closeMenu(); closeColorPopover();
     for (const item of tabs.querySelectorAll('[data-tab]')) {
       const selected = item.dataset.tab === section;
       item.setAttribute('aria-selected', String(selected)); item.tabIndex = selected ? 0 : -1;
@@ -226,7 +226,11 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
       return;
     }
     const swatch = event.target.closest('[data-colour]');
-    if (swatch && state) { event.preventDefault(); root.querySelector(`[data-field="${swatch.dataset.colour}"]`).click(); }
+    if (swatch && state) {
+      // The shared colour popover replaces the browser picker; previews edit, closing commits.
+      event.preventDefault(); const field = root.querySelector(`[data-field="${swatch.dataset.colour}"]`);
+      openColorPopover(swatch, { value: field.value, onInput: hex => { field.value = hex; field.dispatchEvent(new Event('input', { bubbles: true })); }, onClose: () => field.dispatchEvent(new Event('change', { bubbles: true })) });
+    }
     const reset = event.target.closest('[data-reset]');
     if (reset && state) {
       closeMenu(true);
@@ -256,6 +260,35 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
       failure = conflict = null; refresh(current); render(); void flush();
     }
   };
+  // Right-click a swatch to copy its colour or paste one copied from another swatch (or the clipboard).
+  let copiedColour = '', menuSwatch = null;
+  const colourMenu = document.createElement('div');
+  colourMenu.className = 'menu'; colourMenu.setAttribute('role', 'menu'); colourMenu.setAttribute('aria-label', 'Colour'); colourMenu.hidden = true;
+  colourMenu.innerHTML = '<button type="button" role="menuitem" data-colour-action="copy">Copy colour</button><button type="button" role="menuitem" data-colour-action="paste">Paste colour</button>';
+  root.append(colourMenu);
+  const hideColourMenu = () => { colourMenu.hidden = true; menuSwatch = null; };
+  const contextmenu = event => {
+    const swatch = event.target.closest('[data-colour]');
+    if (!swatch || !state || swatch.disabled) return;
+    event.preventDefault(); closeMenu(); closeColorPopover(); menuSwatch = swatch;
+    colourMenu.hidden = false; positionFloating(colourMenu, { x: event.clientX, y: event.clientY });
+    colourMenu.querySelector('[data-colour-action]').focus();
+  };
+  const colourAction = async event => {
+    const action = event.target.closest('[data-colour-action]')?.dataset.colourAction, swatch = menuSwatch;
+    if (!action || !swatch) return;
+    const field = root.querySelector(`[data-field="${swatch.dataset.colour}"]`); hideColourMenu();
+    if (action === 'copy') { copiedColour = field.value; await navigator.clipboard?.writeText(field.value).catch(() => {}); return; }
+    const clip = (await navigator.clipboard?.readText().catch(() => '')) ?? '';
+    const text = (/^#?[0-9a-f]{6}$/i.test(clip.trim()) ? clip.trim() : copiedColour).toLowerCase();
+    if (!/^#?[0-9a-f]{6}$/.test(text)) return;
+    field.value = text.startsWith('#') ? text : `#${text}`;
+    field.dispatchEvent(new Event('input', { bubbles: true })); field.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const colourOutside = event => { if (!colourMenu.hidden && !colourMenu.contains(event.target)) hideColourMenu(); };
+  const colourKey = event => { if (event.key === 'Escape') { const swatch = menuSwatch; hideColourMenu(); swatch?.focus(); } else menuKeyboard(event, colourMenu, () => hideColourMenu()); };
+  root.addEventListener('contextmenu', contextmenu); colourMenu.addEventListener('click', event => void colourAction(event)); colourMenu.addEventListener('keydown', colourKey);
+  document.addEventListener('pointerdown', colourOutside, { capture: true, signal: menuEvents.signal });
   const beforeunload = event => { if (edits.size || busy) { event.preventDefault(); event.returnValue = ''; } };
   addEventListener('beforeunload', beforeunload);
   form.addEventListener('input', input); form.addEventListener('change', change); form.addEventListener('keydown', keydown); form.addEventListener('submit', submit); root.addEventListener('click', click); tabs.addEventListener('click', click); tabs.addEventListener('keydown', tabKeydown);
@@ -265,5 +298,5 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     updateDelivery(_text, deliveryState, revision, epoch) {
       if (epoch === deliveryEpoch && revision === state?.revision && !edits.size && !busy) { retryDelivery = deliveryState === 'failed'; buttons(); }
     },
-    dispose() { disposed = true; removeEventListener('beforeunload', beforeunload); form.removeEventListener('input', input); form.removeEventListener('change', change); form.removeEventListener('keydown', keydown); form.removeEventListener('submit', submit); root.removeEventListener('click', click); tabs.removeEventListener('click', click); tabs.removeEventListener('keydown', tabKeydown); if (adopted) tabs.querySelectorAll('[data-tab-extra],[data-tab-action]').forEach(node => node.remove()); else tabs.remove(); if (setup) { setup.hidden = false; setup.removeAttribute('role'); setup.removeAttribute('aria-labelledby'); root.hidden = false; } disposers.reverse().forEach(fn => fn()); root.replaceChildren(); } };
+    dispose() { disposed = true; removeEventListener('beforeunload', beforeunload); form.removeEventListener('input', input); form.removeEventListener('change', change); form.removeEventListener('keydown', keydown); form.removeEventListener('submit', submit); root.removeEventListener('click', click); root.removeEventListener('contextmenu', contextmenu); closeColorPopover(); colourMenu.remove(); tabs.removeEventListener('click', click); tabs.removeEventListener('keydown', tabKeydown); if (adopted) tabs.querySelectorAll('[data-tab-extra],[data-tab-action]').forEach(node => node.remove()); else tabs.remove(); if (setup) { setup.hidden = false; setup.removeAttribute('role'); setup.removeAttribute('aria-labelledby'); root.hidden = false; } disposers.reverse().forEach(fn => fn()); root.replaceChildren(); } };
 }

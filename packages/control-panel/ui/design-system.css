@@ -266,6 +266,17 @@ a.xrb-path:hover, a.xrb-path:focus-visible { color: var(--accent); text-decorati
 
 /* Menus */
 .menu { position: fixed; z-index: 10; min-width: 150px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 14px 40px rgba(0, 0, 0, .25); display: flex; flex-direction: column; }
+/* Colour popover (openColorPopover): a menu holding a saturation/brightness area, hue slider and hex field. */
+.menu.xrb-color-popover { width: 224px; padding: 10px; gap: 10px; }
+.xrb-color-area { position: relative; height: 140px; border-radius: 6px; cursor: crosshair; touch-action: none; outline: none; }
+.xrb-color-area:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.xrb-color-thumb { position: absolute; width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, .45); transform: translate(-50%, -50%); pointer-events: none; }
+input.xrb-range.xrb-hue::-webkit-slider-runnable-track { height: 8px; border: 0; border-radius: 4px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+input.xrb-range.xrb-hue::-moz-range-track { height: 8px; border: 0; border-radius: 4px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+input.xrb-range.xrb-hue::-moz-range-progress { background: transparent; border: 0; }
+.xrb-color-row { display: flex; align-items: center; gap: 8px; }
+.xrb-color-preview { flex: none; width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--line); }
+input.xrb-color-hex { flex: 1; min-width: 0; font-family: var(--font-mono); text-transform: lowercase; }
 .menu button:not(.xrb-swatch), .menu a[role="menuitem"] { border: 0; background: transparent; text-align: left; padding: 7px 12px; border-radius: 5px; }
 .menu a[role="menuitem"] { display: block; color: var(--fg); font: inherit; font-weight: 500; text-decoration: none; }
 .menu [role="group"] { display: flex; }

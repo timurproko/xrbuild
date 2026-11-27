@@ -157,6 +157,35 @@ function renderList(state){const selected=selectedValues(state.a);state.list.rep
 function focusOption(state){const buttons=[...state.list.querySelectorAll('[role="option"]:not(:disabled)')];if(!buttons.length)return;state.index=Math.max(0,Math.min(state.index,buttons.length-1));buttons[state.index].focus();}
 /** Floating layers inside a fullscreen element must live in it; the browser shows nothing else while fullscreen. */
 export function floatingHost(owner){const full=owner.ownerDocument.fullscreenElement;return full&&full.contains(owner)?full:owner.ownerDocument.body;}
+/* Colour popover: a saturation/brightness area, a hue slider and a hex field, styled like the other menus. */
+export function hexToHsv(hex){const n=parseInt(String(hex).replace('#',''),16),r=(n>>16&255)/255,g=(n>>8&255)/255,b=(n&255)/255,max=Math.max(r,g,b),d=max-Math.min(r,g,b);let h=0;if(d)h=max===r?((g-b)/d)%6:max===g?(b-r)/d+2:(r-g)/d+4;return[(h*60+360)%360,max?d/max:0,max];}
+export function hsvToHex(h,s,v){const f=n=>{const k=(n+h/60)%6;return Math.round(255*(v-v*s*Math.max(0,Math.min(k,4-k,1))));};return'#'+[f(5),f(3),f(1)].map(x=>x.toString(16).padStart(2,'0')).join('');}
+let activeColor=null;
+export function closeColorPopover(){activeColor?.close();}
+export function openColorPopover(anchor,{value='#000000',onInput=()=>{},onClose=()=>{}}={}){
+ closeColorPopover();
+ const doc=anchor.ownerDocument,pop=doc.createElement('div');
+ pop.className='menu xrb-color-popover';pop.setAttribute('role','dialog');pop.setAttribute('aria-label','Choose colour');
+ pop.innerHTML='<div class="xrb-color-area" tabindex="0" role="slider" aria-label="Saturation and brightness"><span class="xrb-color-thumb"></span></div><input type="range" class="xrb-range xrb-hue" min="0" max="359" step="1" aria-label="Hue"><div class="xrb-color-row"><span class="xrb-color-preview"></span><input type="text" class="xrb-color-hex" maxlength="7" spellcheck="false" aria-label="Hex colour"></div>';
+ floatingHost(anchor).append(pop);
+ const area=pop.querySelector('.xrb-color-area'),thumb=pop.querySelector('.xrb-color-thumb'),hue=pop.querySelector('.xrb-hue'),hex=pop.querySelector('.xrb-color-hex'),preview=pop.querySelector('.xrb-color-preview');
+ let[h,s,v]=hexToHsv(value),current=String(value).toLowerCase();
+ const paint=emit=>{current=hsvToHex(h,s,v);area.style.background=`linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,hsl(${h} 100% 50%))`;thumb.style.left=`${s*100}%`;thumb.style.top=`${(1-v)*100}%`;thumb.style.background=current;hue.value=String(Math.round(h));preview.style.background=current;if(doc.activeElement!==hex)hex.value=current;if(emit)onInput(current);};
+ const clamp=x=>Math.max(0,Math.min(1,x));
+ const pick=e=>{const r=area.getBoundingClientRect();s=clamp((e.clientX-r.left)/r.width);v=1-clamp((e.clientY-r.top)/r.height);paint(true);};
+ area.addEventListener('pointerdown',e=>{area.setPointerCapture(e.pointerId);pick(e);});
+ area.addEventListener('pointermove',e=>{if(area.hasPointerCapture(e.pointerId))pick(e);});
+ area.addEventListener('keydown',e=>{const step=e.shiftKey?.1:.02,keys={ArrowLeft:[-step,0],ArrowRight:[step,0],ArrowUp:[0,step],ArrowDown:[0,-step]};if(!keys[e.key])return;e.preventDefault();s=clamp(s+keys[e.key][0]);v=clamp(v+keys[e.key][1]);paint(true);});
+ hue.addEventListener('input',()=>{h=Number(hue.value);paint(true);});
+ hex.addEventListener('input',()=>{const text=hex.value.trim();if(/^#?[0-9a-f]{6}$/i.test(text)){[h,s,v]=hexToHsv(text.startsWith('#')?text:'#'+text);paint(true);}});
+ hex.addEventListener('blur',()=>{hex.value=current;});
+ const outside=e=>{if(!pop.contains(e.target)&&!anchor.contains(e.target))close();};
+ const key=e=>{if(e.key==='Escape'||e.key==='Enter'&&e.target===hex){e.preventDefault();close();anchor.focus();}};
+ doc.addEventListener('pointerdown',outside,true);pop.addEventListener('keydown',key);
+ function close(){if(activeColor?.pop!==pop)return;activeColor=null;doc.removeEventListener('pointerdown',outside,true);pop.remove();onClose(current);}
+ activeColor={pop,close};paint(false);openFloating(pop,{anchor,align:'end',focus:false});area.focus();
+ return activeColor;
+}
 /** Re-render a dropdown button after its value changed in code. */
 export function refreshDropdown(owner){display(owner,adapter(owner));}
 export function closeDropdown(commit=true){if(!open)return;const state=open;open=null;state.owner.querySelector('.dropdown-btn')?.setAttribute('aria-expanded','false');state.list.remove();if(state.a.multiple&&state.changed){if(commit)state.a.set(state.a.value());else{state.a.restore(state.original);display(state.owner,state.a);}}}
