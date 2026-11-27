@@ -18,6 +18,7 @@
     <span id="panel-chip" class="chip warn" data-maintenance="restart" hidden>restart</span>
     <span id="host-chip" class="chip" data-maintenance="rebuild" hidden>rebuild</span>
     <span id="update-chip" class="chip update" data-maintenance="update" hidden>update</span>
+    <div id="hands-header-status" class="hands-header-status"></div>
     <span class="spacer"></span>
     <div class="row" aria-label="Hands frame rates">
       <span class="chip" data-tooltip="Viewport render rate"><span id="hands-render-fps">—</span><small>render fps</small></span>
@@ -28,6 +29,8 @@
     <section id="hands-viewport" class="xrb-card hands-viewport" aria-label="3D hand view">
       <canvas id="hands-canvas" aria-label="Shared SDK hand view"></canvas>
       <div class="hands-view-tools xrb-controls-small">
+        <div id="hands-session-actions" class="hands-session-actions" hidden></div>
+        <span class="hands-tool-separator" aria-hidden="true"></span>
         <div class="dropdown" data-multi="true" data-summary="View" data-options="grid|axes" data-labels='{"grid":"Grid","axes":"Axes"}'>
           <input id="hands-view-options" type="hidden" value='["grid"]'>
           <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="View options" data-no-tooltip>View</button>
@@ -41,7 +44,6 @@
     </section>
     <section class="xrb-card hands-panel" aria-label="Hand setup and adjustments">
       <div id="hands-setup" class="xrb-sidebar-content xrb-stack hands-source">
-        <div id="hands-session-actions" class="xrb-button-row" hidden></div>
         <form id="hands-form" class="xrb-stack">
           <label class="xrb-field-label" for="hands-provider">Skeleton provider<select id="hands-provider" name="provider" aria-label="Skeleton provider" disabled></select></label>
         </form>

@@ -19,7 +19,15 @@
 .hands-viewport { position: relative; min-height: 360px; padding: 0; margin: 0; overflow: hidden; }
 .hands-viewport canvas { display: block; width: 100%; height: 100%; position: absolute; inset: 0; }
 .hands-view-tools { position: absolute; top: var(--xrb-space-stack); left: var(--xrb-space-stack); right: var(--xrb-space-stack); z-index: 1; display: flex; gap: var(--xrb-space-stack); align-items: center; pointer-events: none; }
-.hands-view-tools > button, .hands-view-tools > .dropdown { pointer-events: auto; }
+.hands-view-tools > button, .hands-view-tools > .dropdown, .hands-view-tools > .hands-session-actions { pointer-events: auto; }
+.hands-session-actions { display: flex; }
+.hands-session-actions > button { justify-content: center; }
+/* Start/Stop is its own group, set apart from the view controls. */
+.hands-tool-separator { align-self: stretch; width: 1px; margin-block: 4px; background: var(--line); }
+.hands-session-actions[hidden] + .hands-tool-separator { display: none; }
+/* The session status sits in the middle of the header. */
+.hands-header-status { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; pointer-events: none; }
+.hands-header-status > * { pointer-events: auto; }
 .hands-view-tools > .dropdown { width: auto; }
 .hands-viewport .xrb-media-empty { pointer-events: none; }
 .hands-view-error { position: absolute; bottom: var(--xrb-space-stack); left: var(--xrb-space-stack); right: var(--xrb-space-stack); }

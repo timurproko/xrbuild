@@ -2,16 +2,25 @@ const key = source => source ? `${source.owner}/${source.id}` : '';
 /** Only acquisition controls: no source writes, status paragraphs, recorder or adjustment editor. */
 export function mountHandsLiveControls({ session, view, load, provider = document.getElementById('hands-provider') }) {
   const root = document.getElementById('hands-session-actions') ?? document.createElement('div');
-  root.id = 'hands-session-actions'; root.className = 'xrb-button-row'; root.hidden = false;
+  root.id = 'hands-session-actions'; root.className = 'hands-session-actions'; root.hidden = false;
   const button = document.createElement('button'), state = document.createElement('span'), diagnostic = document.createElement('small');
   diagnostic.id = 'hands-live-diagnostic'; diagnostic.setAttribute('role', 'status'); diagnostic.hidden = true;
   button.type = 'button'; button.id = 'hands-start-stop'; state.id = 'hands-live-state'; state.className = 'chip'; state.setAttribute('role', 'status');
-  root.replaceChildren(button, state, diagnostic); (provider.closest('label') ?? provider).before(root);
+  // Start/Stop leads the viewer toolbar; the status sits in the header; diagnostics stay beside the provider.
+  const header = document.getElementById('hands-header-status');
+  root.replaceChildren(button); if (!root.isConnected) (provider.closest('label') ?? provider).before(root);
+  if (header) header.replaceChildren(state); else root.append(state);
+  (provider.closest('label') ?? provider).before(diagnostic);
+  // Keep one width for every label so the toolbar never shifts when Start becomes Stop.
+  const lockWidth = () => { if (!button.isConnected || button.style.minWidth) return; const current = button.textContent; let widest = 0;
+    for (const label of ['Start', 'Stop', 'Stopping…', 'Take over']) { button.textContent = label; widest = Math.max(widest, button.getBoundingClientRect().width); }
+    button.textContent = current; if (widest) button.style.minWidth = `${Math.ceil(widest)}px`; };
   provider.title = 'Provider changes are saved for the next Start or app launch; the active session is not switched.';
   let status = { phase: 'not-started' }, data = null, supported = true, starting = false, stopping = false, closed = false, polling = false, generation = 0, lastDiagnostic = '';
   const rates = document.getElementById('hands-tracking-fps'), overlay = document.getElementById('hands-view-empty');
   function render() {
     if (closed) return;
+    lockWidth();
     const active = session.active || starting, phase = status.phase;
     lastDiagnostic = status.diagnostic || lastDiagnostic;
     diagnostic.textContent = lastDiagnostic; diagnostic.hidden = !lastDiagnostic;
@@ -32,9 +41,10 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     if (rates.textContent !== fps) rates.textContent = fps;
     rates.parentElement.dataset.tooltip = fps === '—' ? 'No fresh live provider frames' : `Unique received frames/s · Capture age ${status.frameAgeMs?.toFixed(1)} ms ± ${status.uncertaintyMs?.toFixed(1)} ms · Delivery gaps ${status.dropped ?? 0} · Provider-reported ${status.reportedHz ?? '—'} Hz`;
     if (!view?.replaying) {
-      overlay.hidden = phase === 'running';
-      const message = status.filtered && phase === 'no-hands' ? 'Malformed observation dropped; no admitted hands this frame.' : phase === 'no-hands' ? 'No hands detected.' : phase === 'waiting' ? 'Waiting for fresh provider frames…' : phase === 'stalled' ? 'Tracking stalled. Hands and holds cleared.' : phase === 'starting' ? 'Starting provider…' : phase === 'stopping' ? 'Stopping provider…' : phase === 'failed' || phase === 'occupied' || phase === 'cleanup' ? detail : unavailable || 'Press Start to track the saved provider.';
+      // Idle needs no prompt: the viewer stays empty until there is something to report.
+      const message = status.filtered && phase === 'no-hands' ? 'Malformed observation dropped; no admitted hands this frame.' : phase === 'no-hands' ? 'No hands detected.' : phase === 'waiting' ? 'Waiting for fresh provider frames…' : phase === 'stalled' ? 'Tracking stalled. Hands and holds cleared.' : phase === 'starting' ? 'Starting provider…' : phase === 'stopping' ? 'Stopping provider…' : phase === 'failed' || phase === 'occupied' || phase === 'cleanup' ? detail : unavailable || '';
       if (overlay.firstElementChild.textContent !== message) overlay.firstElementChild.textContent = message;
+      overlay.hidden = phase === 'running' || !message;
     }
   }
   function update(next) { status = next.phase === 'retired' ? { ...next, phase: next.reason ? 'failed' : 'stopping' } : next; render(); }

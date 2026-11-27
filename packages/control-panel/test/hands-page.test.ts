@@ -24,6 +24,10 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(markup, /aria-label="View options" data-no-tooltip/);
   assert.match(markup, /<section id="hands-viewport"[\s\S]*<section class="xrb-card hands-panel" aria-label="Hand setup and adjustments">\s*<div id="hands-setup" class="xrb-sidebar-content xrb-stack hands-source">/, 'setup moved into the single right card after the viewer');
   assert.equal((markup.match(/class="xrb-card hands-panel"/g) ?? []).length, 1);
+  assert.match(markup, /class="hands-view-tools xrb-controls-small">\s*<div id="hands-session-actions" class="hands-session-actions" hidden><\/div>\s*<span class="hands-tool-separator"/, 'Start leads the viewer toolbar, set apart by a separator');
+  assert.match(markup, /<div id="hands-header-status" class="hands-header-status"><\/div>/);
+  assert.match(live, /for \(const label of \['Start', 'Stop', 'Stopping…', 'Take over'\]\)/, 'Start keeps one width for every label');
+  assert.doesNotMatch(live, /Press Start to track the saved provider/);
   assert.match(await fs.readFile(path.join(ui, 'hands.js'), 'utf8'), /setup: \$\('hands-setup'\)/);
   assert.match(await fs.readFile(path.join(ui, 'hands-adjustments.js'), 'utf8'), /aria-label="\$\{label\} settings" data-no-tooltip/);
   const shell = await fs.readFile(path.join(ui, 'hands-shell.js'), 'utf8');
