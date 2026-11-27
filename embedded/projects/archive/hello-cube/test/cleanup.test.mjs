@@ -17,11 +17,13 @@ const THREE = requireCore('three');
 const ts = createRequire(path.join(core, 'package.json'))('typescript');
 const bridge = await import(pathToFileURL(path.join(core, 'packages/react/src/index.ts')).href);
 const sdk = await import(pathToFileURL(path.join(core, 'packages/sdk/src/index.ts')).href);
-const { fixture, settle } = await import(pathToFileURL(path.join(core, 'packages/react/test/fixture.ts')).href);
+const { fixture, settle, installPointerEvents } = await import(pathToFileURL(path.join(core, 'packages/react/test/fixture.ts')).href);
+const { openHand } = await import(pathToFileURL(path.join(core, 'packages/sdk/test/fixtures.ts')).href);
+const { pointerProvenance } = await import(pathToFileURL(path.join(core, 'packages/sdk/src/pointer.ts')).href);
 // Node selects Fiber's CJS main; match its Three catalogue, as Vite's dedupe does for ESM builds.
 requireCore('@react-three/fiber').extend(THREE);
 
-async function sample(entry = 'main.tsx') {
+async function sample(entry = 'main.tsx', input = {}) {
   const state = fixture(); state.app.dispose(); state.calls.length = 0;
   const window = new EventTarget();
   const log = [];
@@ -35,7 +37,7 @@ async function sample(entry = 'main.tsx') {
     react: { ...React, default: React }, 'react/jsx-runtime': jsx, three: THREE,
     'three/examples/jsm/controls/OrbitControls.js': { OrbitControls: Controls },
     '@xr-build/react': { ...bridge, mountXrbApp(container, children, options) {
-      app = sdk.createXrbApp(state.renderer, { ...options, autoStart: false });
+      app = sdk.createXrbApp(state.renderer, { ...options, xrb: { ...options.xrb, ...input }, autoStart: false });
       handle = bridge.mountXrbApp(container, children, { ...options, app });
       let done;
       return { ...handle, dispose() {
@@ -127,6 +129,38 @@ test('SDK compatibility picking matches the original whole-canvas raycaster in e
   }
   await state.exports.dispose();
 });
+
+for (const stereo of [false, true]) for (const projection of ['perspective', 'orthographic']) {
+  test(`Hand-only Hello Cube selects without enabling Mouse: stereo=${stereo}, ${projection}`, async () => {
+    const restoreEvents = installPointerEvents();
+    let state;
+    try {
+      state = await sample('main.tsx', { mouse: false });
+      state.app.setProjection(projection); state.app.xrb.setStereo(stereo);
+      const objects = cubes(state);
+      let pinching = false, domHandClicks = 0;
+      const points = openHand([0, 0, 0]); points[8] = [0, 0, 0];
+      state.app.xrb.hands.sample = () => [{ id: 7, handedness: 'right', keypoints: points, rawKeypoints: points,
+        pinching, grabbing: false, pinchPoint: [0, 0, 0], coasting: false, lastSeen: 0 }];
+      state.canvas.addEventListener('click', (event) => { if (pointerProvenance(event)) domHandClicks++; });
+      state.tick(1000);
+      state.canvas.dispatchEvent(new globalThis.MouseEvent('click', { clientX: 400, clientY: 225 }));
+      await settle();
+      assert.equal(objects[1].material.color.getHexString(), '5bd18b');
+      assert.equal(state.log.filter((line) => line.startsWith('CLICK')).length, 0);
+      pinching = true; state.tick(1016); pinching = false; state.tick(1032);
+      await settle();
+      assert.equal(domHandClicks, 1);
+      assert.equal(objects[1].material.color.getHexString(), 'ffffff');
+      assert.deepEqual(state.log.filter((line) => line.startsWith('CLICK')), ['CLICK cube 1']);
+      state.canvas.dispatchEvent(new globalThis.MouseEvent('click', { clientX: 0, clientY: 0 }));
+      await settle();
+      assert.equal(objects[1].material.color.getHexString(), 'ffffff', 'unmarked Mouse events stay disabled');
+      assert.equal(state.app.xrb.interaction.pointer, null);
+      assert.equal(state.app.xrb.cursorObject.visible, false);
+    } finally { try { await state?.exports.dispose(); } finally { restoreEvents(); } }
+  });
+}
 
 test('page departure disposes, while persisted back-forward caching keeps the app usable', async () => {
   const state = await sample();

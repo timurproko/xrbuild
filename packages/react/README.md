@@ -65,7 +65,11 @@ All hooks require the bridge context. `ComponentPointerHandlers` supports `onPoi
 ancestors until `stopPropagation()`. A click miss calls registered miss handlers. Only SDK pointer
 and click events are consumed, never compatibility mouse duplicates. Physical target capture wins;
 emulated-hand echoes and cancelled/retired gestures cannot activate mesh handlers. Legacy DOM events
-for OrbitControls are unchanged. Existing SDK Mouse/Hand-pointer policies apply independently.
+for OrbitControls are unchanged. Existing SDK Mouse/Hand-pointer policies apply independently:
+Mouse-off excludes unmarked native input but still delivers SDK-provenance hand-pointer events when
+hand emulation is enabled. Hand events use whole-panel coordinates and the centre-viewer ray in stereo;
+native Mouse events retain the selected-eye half-canvas rays. Neither hand delivery nor observation
+re-enables Mouse targets, the Mouse cursor or native pointer capture when Mouse is off.
 
 `ComponentPointerEvent` has `type`, hit `object`, receiving `eventObject`, world `point`, SDK `ray`,
 `nativeEvent`, `handId` (null for a real mouse), and `stopPropagation()`. This is **not** Fiber's full

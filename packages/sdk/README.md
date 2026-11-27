@@ -110,6 +110,9 @@ existing explicit `xrb.bindMouse()` calls are idempotent and listeners are remov
 Set `xrb: { mouse: false }` to disable mouse binding and the cursor. Panel launches carry the selected Mouse input
 through `xrb-mouse=0|1`, including launcher destinations and returns. Input selection applies on the next run;
 it does not hot-swap native input providers. `pointer: false` separately disables hand-to-pointer emulation, not the mouse.
+Component handlers still receive SDK-marked hand-pointer events when Mouse is disabled, without enabling Mouse
+capture, cursor or unmarked native input. Stereo hand-pointer coordinates span the whole panel and use the
+centre-viewer ray; native Mouse picking still selects an eye and its half of the canvas.
 
 Settings → Apps → Cursor selects `system` (default), `ring`, or `ring-dot` for the next launch. The managed
 `xrb-cursor` preference overrides `xrb: { cursor: ... }` and survives launcher navigation. System hides the scene

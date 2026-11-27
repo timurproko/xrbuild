@@ -47,3 +47,29 @@ export function fixture() {
 }
 
 export const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+/** Browser-shaped events for exercising real SDK hand emulation in Node fixtures. */
+export function installPointerEvents(): () => void {
+  class PointerEventFixture extends Event {
+    readonly clientX: number;
+    readonly clientY: number;
+    readonly pointerId: number;
+    readonly pointerType: string;
+    readonly button: number;
+    readonly buttons: number;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.clientX = init.clientX ?? 0; this.clientY = init.clientY ?? 0;
+      this.pointerId = init.pointerId ?? 1; this.pointerType = init.pointerType ?? 'mouse';
+      this.button = init.button ?? 0; this.buttons = init.buttons ?? 0;
+    }
+  }
+  const previous = ['PointerEvent', 'MouseEvent'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
+  for (const [key] of previous) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: PointerEventFixture });
+  return () => {
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  };
+}

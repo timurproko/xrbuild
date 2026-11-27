@@ -26,7 +26,7 @@ import { iconControls, IconStage, type IconFactory } from './icon-object.ts';
 import { appLaunchContextFromLocation, appResumeProjectionFromLocation, type CameraProjection, type LaunchLocationLike } from './launch-context.ts';
 import { loadReturnOverlay } from './return-overlay.ts';
 import type { ReturnControl } from './return-control.ts';
-import { PointerEmulation } from './pointer.ts';
+import { PointerEmulation, pointerProvenance } from './pointer.ts';
 import { type HandCapabilities, type PagePerformance, type PlatformInfo, type StatusMessage, type Vec3 } from './protocol.ts';
 import { toSceneHand, type SceneHand } from './scene-hands.ts';
 import { nominalEyes, panelCropPlanes, StereoRenderer, type AppCamera, type EyePair, type PanelMapping } from './stereo.ts';
@@ -538,24 +538,33 @@ export class Xrb {
    * mouse-over, press / take on button down, drag while held, release on button up. Returns an unbind function.
    */
   bindMouse(): () => void {
-    if (!this.mouseEnabled) return () => {};
+    if (!this.mouseEnabled && !this.pointer) return () => {};
     if (this.unbindMouse) return this.unbindMouse;
     // Perspective/stereo views map the pointer to the physical glass and viewer. Orthographic mono
     // views draw through the app camera directly, so their pick ray must come from that camera too.
     // ManagedCamera changes projection in place, so use its standard camera flag rather than instanceof.
-    const unbind = this.interaction.bindMouse(this.renderer.domElement, (u, v) => {
+    const unbind = this.interaction.bindMouse(this.renderer.domElement, (u, v, event) => {
       if (!this.stereo && isOrthographicCamera(this.appCamera)) return pointerRayFromCamera(this.appCamera, u, v);
+      // Emulated hands map the WHOLE panel across the canvas, not one eye-half.
+      // Only provenance (not pointerType, which is 'mouse' for both) distinguishes them.
+      const hand = !!event && !!pointerProvenance(event);
+      const eyeHalf = this.stereo && !hand;
       const d = this.display;
-      const rightEye = this.stereo && u >= 0.5;
-      const panelU = this.stereo ? Math.min(1, rightEye ? (u - 0.5) * 2 : u * 2) : u;
+      const rightEye = eyeHalf && u >= 0.5;
+      const panelU = eyeHalf ? Math.min(1, rightEye ? (u - 0.5) * 2 : u * 2) : u;
       const glass = this.view.panel.pointToWorld([(panelU - 0.5) * d.widthM, (0.5 - v) * d.heightM, 0], new THREE.Vector3());
       const l = this.currentEyes.left, r = this.currentEyes.right;
-      const e: Vec3 = this.stereo ? (rightEye ? r : l) : [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2, (l[2] + r[2]) / 2];
+      const e: Vec3 = eyeHalf ? (rightEye ? r : l) : [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2, (l[2] + r[2]) / 2];
       const eye = this.view.panel.pointToWorld(e, new THREE.Vector3());
       return new THREE.Ray(eye, glass.sub(eye).normalize());
-    }, { systemCursor: this.cursorStyle === 'system', observe: (type, ray, event, blocked) => {
-      this.componentPointer.dispatch(type, ray, event, blocked, this.renderer.domElement.getBoundingClientRect());
-    } });
+    }, {
+      systemCursor: this.cursorStyle === 'system',
+      accept: (event) => this.mouseEnabled || !!pointerProvenance(event),
+      interact: this.mouseEnabled,
+      observe: (type, ray, event, blocked) => {
+        this.componentPointer.dispatch(type, ray, event, blocked, this.renderer.domElement.getBoundingClientRect());
+      },
+    });
     const release = () => {
       if (this.unbindMouse !== release) return;
       unbind();
