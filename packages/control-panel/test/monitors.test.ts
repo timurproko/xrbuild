@@ -29,13 +29,3 @@ test('Windows display enumeration returns human-readable labels without changing
   const monitors=await listMonitors();
   for(const monitor of monitors){assert.ok(monitor.name);assert.notEqual(monitor.name,monitor.device);assert.ok(Number.isInteger(monitor.index));}
 });
-
-test('EDID physical size passes through only when plausible', () => {
-  const [sized, missing, bogus] = monitorNames([
-    { index: 0, device: '\\\\.\\DISPLAY1', name: 'DELL U2723QE', primary: true, width: 2560, height: 1440, widthMm: 597, heightMm: 336 },
-    { index: 1, device: '\\\\.\\DISPLAY2', name: 'Panel', primary: false, width: 1920, height: 1080, widthMm: null, heightMm: null },
-    { index: 2, device: '\\\\.\\DISPLAY3', name: 'Odd', primary: false, width: 1920, height: 1080, widthMm: 9, heightMm: 99999 },
-  ]);
-  assert.equal(sized.widthMm, 597); assert.equal(sized.heightMm, 336);
-  assert.equal('widthMm' in missing, false); assert.equal('widthMm' in bogus, false);
-});

@@ -70,3 +70,5 @@
 .hands-xyz-field { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .hands-xyz-field > span { flex: none; color: var(--muted); font-weight: 600; }
 .hands-xyz-field > .xrb-number-control, .hands-xyz-field > input { min-width: 0; flex: 1; }
+.hands-xyz.hands-xyz--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#hands-custom-resolution[hidden] { display: none; }

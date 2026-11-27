@@ -112,42 +112,28 @@ $('hands-form').addEventListener('submit', event => event.preventDefault());
 $('hands-source-retry').addEventListener('click', () => { if (sourceEdit) void saveSource(true); else { message(); void load(); } });
 $('hands-source-discard').addEventListener('click', () => { sourceEdit = sourceConflict = null; message(); void load(); });
 const navigation = mountToolNavigation($('hands-menu-button'), $('hands-menu'), { origin: location.origin, current: 'hands' });
-// Monitor frame: pick a monitor in Setup (remembered in this browser); its EDID size draws the frame.
-const MONITOR_KEY = 'xrb.hands.monitor', MONITOR_SIZE_KEY = 'xrb.hands.monitorSize', MONITOR_RESOLUTION_KEY = 'xrb.hands.monitorResolution';
-/** Frame the last monitor before the first frame; the live list (about a second later) then only confirms it. */
-function restoreMonitorFrame() { try { const size = JSON.parse(localStorage.getItem(MONITOR_SIZE_KEY) || 'null'); if (size?.widthMm) view?.setMonitor(size); } catch { /* No remembered size. */ } }
-async function loadMonitors() {
-  const select = $('hands-monitor');
-  let monitors = [];
-  try { monitors = (await (await fetch('/api/monitors', { cache: 'no-store' })).json()).monitors ?? []; } catch { /* No monitor list: the frame stays off. */ }
-  let saved = ''; try { saved = localStorage.getItem(MONITOR_KEY) ?? ''; } catch { /* Storage may be blocked. */ }
-  const sized = monitors.filter(m => m.widthMm && m.heightMm);
-  if (!monitors.some(m => m.device === saved && m.widthMm)) saved = (sized.find(m => m.primary) ?? sized[0])?.device ?? '';
-  select.replaceChildren(new Option('None', ''), ...monitors.map(m => {
-    const option = new Option(m.widthMm ? `${m.name} · ${m.widthMm} × ${m.heightMm} mm` : `${m.name} · size unknown`, m.device);
-    option.disabled = !m.widthMm; return option;
-  }));
-  select.value = saved; select.disabled = !sized.length;
-  // Resolution scales the frame: its pixels times the monitor's millimetres per pixel (the current mode is full size).
-  const resolution = $('hands-monitor-resolution');
-  const COMMON = [[3840, 2160], [2560, 1440], [1920, 1080], [1600, 900], [1280, 720]];
-  const fillResolutions = monitor => {
-    const modes = monitor?.widthMm ? [[monitor.width, monitor.height], ...COMMON.filter(([w, h]) => w < monitor.width && h <= monitor.height)] : [];
-    resolution.replaceChildren(...modes.map(([w, h], i) => new Option(`${w} × ${h}${i ? '' : ' (current)'}`, `${w}x${h}`)));
-    let saved = ''; try { saved = localStorage.getItem(MONITOR_RESOLUTION_KEY) ?? ''; } catch { /* Storage may be blocked. */ }
-    resolution.value = modes.some(([w, h]) => `${w}x${h}` === saved) ? saved : modes[0] ? `${modes[0][0]}x${modes[0][1]}` : '';
-    resolution.disabled = !modes.length;
-  };
+// Screen frame from the resolution the tracking treats the screen as: 4K (default), 2K or a custom size, drawn at one
+// fixed pixel size (a 27-inch 4K panel, 0.1554 mm per pixel) so 4K is 597 x 336 mm. Remembered in this browser only.
+const PIXEL_MM = 597 / 3840, RESOLUTIONS = { '4k': [3840, 2160], '2k': [2560, 1440] };
+function mountResolution() {
+  const select = $('hands-resolution'), custom = $('hands-custom-resolution'), width = $('hands-resolution-width'), height = $('hands-resolution-height');
+  let size = [1920, 1080];
+  try { const saved = JSON.parse(localStorage.getItem('xrb.hands.customResolution') || 'null'); if (Number.isFinite(saved?.[0]) && Number.isFinite(saved?.[1])) size = saved; } catch { /* Defaults stay. */ }
+  let choice = ''; try { choice = localStorage.getItem('xrb.hands.resolution') ?? ''; } catch { /* Storage may be blocked. */ }
+  select.value = RESOLUTIONS[choice] || choice === 'custom' ? choice : '4k';
+  width.value = String(size[0]); height.value = String(size[1]);
   const apply = (options = {}) => {
-    const monitor = monitors.find(m => m.device === select.value) ?? null;
-    const [w, h] = resolution.value.split('x').map(Number);
-    const frame = monitor?.widthMm && w && h ? { widthMm: Math.round(monitor.widthMm * w / monitor.width), heightMm: Math.round(monitor.heightMm * h / monitor.height) } : null;
-    try { localStorage.setItem(MONITOR_SIZE_KEY, frame ? JSON.stringify(frame) : ''); } catch { /* Storage may be blocked. */ }
-    view?.setMonitor(frame, options);
+    custom.hidden = select.value !== 'custom';
+    const [w, h] = select.value === 'custom' ? size : RESOLUTIONS[select.value];
+    view?.setMonitor({ widthMm: w * PIXEL_MM, heightMm: h * PIXEL_MM }, options);
   };
-  resolution.addEventListener('change', () => { try { localStorage.setItem(MONITOR_RESOLUTION_KEY, resolution.value); } catch { /* Storage may be blocked. */ } apply({ keepView: true }); });
-  select.addEventListener('change', () => { try { localStorage.setItem(MONITOR_KEY, select.value); localStorage.removeItem(MONITOR_RESOLUTION_KEY); } catch { /* Storage may be blocked. */ } fillResolutions(monitors.find(m => m.device === select.value)); apply({ keepView: true }); });
-  fillResolutions(monitors.find(m => m.device === select.value)); apply();
+  const save = () => { try { localStorage.setItem('xrb.hands.resolution', select.value); localStorage.setItem('xrb.hands.customResolution', JSON.stringify(size)); } catch { /* Storage may be blocked. */ } };
+  select.addEventListener('change', () => { save(); apply({ keepView: true }); });
+  for (const [field, index, min, max] of [[width, 0, 320, 15360], [height, 1, 240, 8640]]) {
+    const update = commit => { const value = Number.parseFloat(field.value); if (!Number.isFinite(value)) return; size[index] = Math.round(Math.min(max, Math.max(min, value))); if (commit) { field.value = String(size[index]); save(); } apply({ keepView: true }); };
+    field.addEventListener('input', () => update(false)); field.addEventListener('change', () => update(true));
+  }
+  apply();
 }
 // Object shape and grid color are viewer preferences, remembered in this browser only.
 const stored = key => { try { return localStorage.getItem(key) ?? ''; } catch { return ''; } };
@@ -197,7 +183,7 @@ try {
   });
   // Grid, axes and the monitor frame follow the View menu from the first frame (all on by default).
   view.setViewOptions(JSON.parse($('hands-view-options').value));
-  restoreMonitorFrame(); void loadMonitors();
+  mountResolution();
   mountViewPreferences();
 } catch (error) { $('hands-view-error').hidden = false; $('hands-view-error').textContent = `3D view unavailable: ${error.message}`; }
 // Retained integration API only: no recorder nodes or legacy tools enter the simplified page.
