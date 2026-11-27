@@ -26,7 +26,7 @@ A Hands session SHALL start only on an authenticated explicit request for the gl
 
 ### Requirement: Exclusive acquisition ownership
 
-Hands sessions and managed native Hand launches SHALL share one atomic exclusive acquisition lease across workspaces, panels and checkouts within the supported Windows user/logon-session scope. A conflict SHALL identify the owning app or Hands session and require its explicit Stop. A timeout SHALL NOT transfer a lease while its acquisition process can still publish or hold devices.
+Hands sessions and managed native Hand launches SHALL share one atomic exclusive acquisition lease across workspaces, panels and checkouts within the supported Windows user/logon-session scope. A conflict SHALL identify a genuinely live owner. Same-page or dead/failed same-panel ownership SHALL drain automatically on explicit Start. A different live Hands page SHALL offer explicit authenticated takeover, never timeout-based theft or termination of an unrelated app.
 
 #### Scenario: App owns acquisition
 - **WHEN** Hands Start races or follows a managed native app opening Hand
@@ -42,7 +42,21 @@ Hands sessions and managed native Hand launches SHALL share one atomic exclusive
 
 #### Scenario: Owner is slow or inaccessible
 - **WHEN** an owner's heartbeat expires but its death or completed input teardown cannot be established
-- **THEN** ownership stays unavailable and a recovery reason is shown rather than stealing the lease
+- **THEN** ownership stays unavailable with a bounded recovery action and reason rather than stealing the lease
+
+#### Scenario: Explicit Start meets its own leftovers
+- **WHEN** Start finds same-page ownership or a dead/failed Hands session in the same panel
+- **THEN** the service fences old work, completes owned teardown and releases ownership before starting the selected source without a false foreign-page Busy state
+
+#### Scenario: Different live page owns acquisition
+- **WHEN** a different live Hands page owns acquisition
+- **THEN** the requesting page identifies genuine contention and offers an explicit authenticated take-over action
+- **AND** takeover stops and joins that designated Hands worker before reserving again, without controlling unrelated applications or accepting stale ownership targets
+
+#### Scenario: Page reload or panel restart
+- **WHEN** the page reloads or the owning panel restarts
+- **THEN** stale page/session ownership is retired and drained without user-profile edits, automatic capture or permanent Busy
+- **AND** the next explicit Start waits for the previous acquisition process to end before acquiring
 
 ### Requirement: Authenticated bounded live transport
 
@@ -58,11 +72,29 @@ Session controls and frames SHALL be restricted to authenticated loopback peers 
 
 ### Requirement: Frame admission and clock continuity
 
-Every frame SHALL be validated before copying or SDK admission for bounded layout/count, finite values, legal signals and clocks, source identity, epoch and increasing sequence. Capture time SHALL be mapped to page monotonic time with measured clock uncertainty without changing published geometry or gesture capabilities. Invalid, stale, future or retired frames SHALL NOT affect hands or interaction.
+Every frame SHALL be validated before copying or SDK admission for bounded layout/count, finite values, legal signals and clocks, source identity, epoch and increasing sequence. Legitimate ABI values SHALL remain valid. A malformed hand or frame SHALL contribute no hand input and a counted non-fatal diagnostic; only persistent broken output SHALL fail acquisition. Capture time SHALL retain measured monotonic mapping. Invalid, stale, future or retired values SHALL NOT affect hands or interaction.
 
 #### Scenario: Malformed provider frame
 - **WHEN** a provider publishes an invalid size, count, pointer contract, numeric value, confidence, signal or timestamp
-- **THEN** it is rejected before admission, a diagnostic is recorded, and repeated invalid output visibly fails the session without a substitute hand
+- **THEN** malformed data is excluded before admission, unsafe whole frames become empty observations where a safe clock/header exists, and a bounded diagnostic is recorded without fabricated hands
+- **AND** a single rejected observation does not end acquisition, while persistently broken output ends with a clear reason and verified teardown
+
+#### Scenario: Legitimate empty or low-confidence values
+- **WHEN** an ABI-valid frame contains zero confidence, zero-filled optional data or no detected hands
+- **THEN** it remains valid without invented joint positions, confidence rescaling or a session failure
+
+#### Scenario: One malformed hand among valid peers
+- **WHEN** a safely bounded frame contains a malformed hand and a valid hand
+- **THEN** the malformed hand is excluded, the valid peer is retained and the visible rejection counter advances
+
+#### Scenario: Isolated malformed observations
+- **WHEN** valid input resumes between sporadic malformed observations
+- **THEN** earlier lifetime rejects do not accumulate into a persistent-stream failure
+- **AND** old held interactions cannot survive a resulting empty observation
+
+#### Scenario: Reportable rejection diagnostic
+- **WHEN** rejection is shown during acquisition or in a persistent-stream failure
+- **THEN** compact feedback includes a bounded rejected-value kind and joint index when applicable, plus counts, without raw poses, credentials, private paths or images
 
 #### Scenario: Delayed previous session
 - **WHEN** a frame arrives from a stopped epoch, wrong owner or non-increasing sequence
@@ -87,7 +119,7 @@ The session SHALL expose validated provider-published frames to the retained rec
 
 ### Requirement: Supervised teardown and freshness
 
-Explicit Stop, cancelled Start, crash, owning-page loss, panel shutdown and bounded liveness timeout SHALL retire frame admission, clear hands and held interactions, and end acquisition. Graceful cleanup SHALL quiesce callbacks before destruction. Hung children SHALL be contained and ended within a bounded deadline; ownership SHALL not be advertised free before teardown or verified process death.
+Explicit Stop, cancelled Start, failure, crash, owning-page loss, panel shutdown and bounded liveness timeout SHALL retire input, clear held interactions and end acquisition. Graceful cleanup SHALL quiesce callbacks before destruction. Hung owned children SHALL be forcibly contained and joined within a bounded deadline. The lease SHALL release exactly once after cleanup or verified death, and client controls SHALL settle without permanent Stopping or offering Start before teardown completes.
 
 #### Scenario: Stop during startup
 - **WHEN** Stop is requested while provider creation or start is pending
@@ -100,8 +132,17 @@ Explicit Stop, cancelled Start, crash, owning-page loss, panel shutdown and boun
 #### Scenario: Stream stalls while interaction is held
 - **WHEN** a running stream stops delivering fresh frames
 - **THEN** the hand and held pinch/drag/pointer state clear within the freshness deadline without generating a click
-- **AND** a longer liveness failure ends the session rather than leaving an apparently live stale hand
+- **AND** fresh valid input recovers the existing session, or a longer liveness failure drains it to a terminal state with a clear reason and Start available only after teardown
 
 #### Scenario: Worker dies unexpectedly
 - **WHEN** the worker exits without a clean Stop
 - **THEN** the page shows failure, its old epoch is retired and a later explicit Start obtains new ownership without automatic restart
+
+#### Scenario: Failure during stop or stalled cleanup
+- **WHEN** graceful teardown hangs or a stop request fails or never answers
+- **THEN** the owning service forces only its contained child to end, verifies completion and releases its lease
+- **AND** the page resolves its stopping state through bounded reconciliation, retains the failure reason and does not label its own draining session as another page
+
+#### Scenario: Slow provider startup
+- **WHEN** provider startup is slow or never publishes a usable frame
+- **THEN** startup/waiting remains distinct from fresh empty detection, no tracking rate is fabricated, and bounded startup/liveness cleanup precedes a new Start

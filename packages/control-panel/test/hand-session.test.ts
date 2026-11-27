@@ -74,6 +74,22 @@ for (const outcome of ['resolve', 'reject']) test(`timed-out Stop releases exact
   } finally { await f.close(); }
 });
 
+test('supervisor crash reaps the exact owned worker by creation identity and permits Start without stale Busy', { skip: !worker || !helper, timeout: 20000 }, async () => {
+  const f = await fixture({ heartbeatMs: 100000 });
+  try {
+    const owner = (await f.call('/bootstrap', {})).body.capability;
+    const launched = await f.call('', selection, owner); assert.equal(launched.status, 200);
+    const running = (f.sessions as any).current;
+    assert.ok(running.pid); assert.match(running.birth, /^\d+$/);
+    const exited = new Promise<void>(r => running.child.once('close', () => r())); running.child.kill(); await exited;
+    const deadline = Date.now() + 8000; while (f.sessions.busy && Date.now() < deadline) await delay(20);
+    assert.equal(f.sessions.busy, false, 'launcher death cannot strand a dead same-panel lease');
+    assert.equal(f.releases, 1); assert.match(f.sessions.status(owner).reason, /exited unexpectedly/);
+    const next = await f.call('', selection, owner); assert.equal(next.status, 200); assert.notEqual(next.body.sessionId, launched.body.sessionId);
+    await f.call('/stop', { sessionId: next.body.sessionId }, owner); assert.equal(f.sessions.busy, false); assert.equal(f.releases, 2);
+  } finally { await f.close(); }
+});
+
 test('real reserved supervised session is owner-bound, receives native handoff, stops and releases on page loss', { skip: !worker || !helper, timeout: 20000 }, async () => {
   const f = await fixture({ heartbeatMs: 500 });
   try {

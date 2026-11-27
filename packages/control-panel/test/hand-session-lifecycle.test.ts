@@ -27,7 +27,7 @@ async function fixture(t: any, heartbeatMs = 1000000) {
       child.stdin = new Writable({ write(_data, _encoding, callback) {
         if (mode !== 'starting') child.stdout.write('@provider ' + JSON.stringify({ phase: 'running', url: 'ws://127.0.0.1:2222/hands' }) + '\n'); callback();
       } });
-      child.stdin.on('finish', () => { if (mode !== 'hang-stop') child.exit(); }); child.kill = () => { child.killed++; child.exit(); };
+      child.stdin.on('finish', () => { if (!['hang-stop', 'join-pending'].includes(mode)) child.exit(); }); child.kill = () => { child.killed++; child.exit(); };
       children.push(child); return child;
     }) as any,
   });
@@ -37,11 +37,11 @@ async function fixture(t: any, heartbeatMs = 1000000) {
     const response = await fetch(origin + '/api/hands/session' + action, { method: 'POST', headers: { origin, 'sec-fetch-site': 'same-origin', 'x-xrb-hands': '1', authorization: `Bearer ${capability}` }, body: JSON.stringify(body) });
     return { status: response.status, body: await response.json() };
   };
-  const client = (intercept?: (url: string, next: () => Promise<Response>) => Promise<Response>) => {
+  const client = (intercept?: (url: string, next: () => Promise<Response>) => Promise<Response>, options: object = {}) => {
     const view = { active: false, replaying: false, profile: handProfile(), clears: 0, async setProfile(p: any) { this.profile = p; return true; }, beginSession() { this.active = true; return true; }, clearSession() { this.active = false; this.clears++; }, clearHands() {}, pushFrame() { return true; } };
     class Socket { readyState = 1; constructor() { sockets.push(this); } close() {} send() {} }
     const session = createHandsSession({ view, Socket, decode: () => null, frame: () => 1, cancel: () => {}, onStatus: (s: any) => statuses.push(s),
-      fetcher: (url: string, options: any) => { if (url.endsWith('/bootstrap')) bootstraps++; const next = () => fetch(origin + url, { ...options, headers: { ...options.headers, origin, 'sec-fetch-site': 'same-origin' } }); return intercept ? intercept(url, next) : next(); } });
+      fetcher: (url: string, options: any) => { if (url.endsWith('/bootstrap')) bootstraps++; const next = () => fetch(origin + url, { ...options, headers: { ...options.headers, origin, 'sec-fetch-site': 'same-origin' } }); return intercept ? intercept(url, next) : next(); }, ...options });
     return { session, view };
   };
   return { service, call, client, children, sockets, statuses,
@@ -88,12 +88,31 @@ test('startup timeout and hung Stop terminate only the owned child, verify closu
     assert.equal((await starting).status, 409); assert.equal(f.service.busy, false); assert.equal(f.released, 1);
     f.mode = 'hang-stop'; const running = await f.call('', selection, owner); assert.equal(running.status, 200);
     const stopping = f.call('/stop', { sessionId: running.body.sessionId }, owner);
-    await until(() => f.service.status(owner).phase === 'stopping'); f.advance(6001); await stopping;
+    await until(() => f.service.status(owner).phase === 'stopping'); f.advance(13001); await stopping;
     assert.equal(f.children[1].killed, 1); assert.equal(f.service.busy, false); assert.equal(f.released, 2);
     f.mode = 'running'; const again = await f.call('', selection, owner); assert.equal(again.status, 200);
     await f.call('/stop', { sessionId: again.body.sessionId }, owner); assert.equal(f.released, 3);
   } finally { await f.close(); }
 });
+test('failure retires admission but retains ownership until exact supervisor join and launcher close', async t => {
+  const f = await fixture(t);
+  try {
+    const owner = (await f.call('/bootstrap', {})).body.capability;
+    const run = await f.call('', selection, owner); assert.equal(run.status, 200);
+    f.mode = 'join-pending'; const child = f.children[0];
+    child.stdout.write('@provider ' + JSON.stringify({ phase: 'acquiring', pid: 1234567 }) + '\n');
+    child.stdout.write('@provider ' + JSON.stringify({ phase: 'failed', reason: 'Tracking stalled: no usable frames' }) + '\n');
+    await until(() => f.service.status(owner).phase === 'stopping');
+    assert.equal(f.released, 0); assert.equal(f.service.busy, true);
+    const restarting = f.call('', selection, owner); await delay(20);
+    assert.equal(f.acquired, 1, 'same-page recovery cannot acquire before the old worker joins');
+    child.stdout.write('@provider ' + JSON.stringify({ phase: 'joined', pid: 7654321 }) + '\n');
+    assert.equal(f.released, 0, 'wrong designated process receipt cannot release');
+    child.stdout.write('@provider ' + JSON.stringify({ phase: 'joined', pid: 1234567 }) + '\n'); child.exit();
+    f.mode = 'running'; assert.equal((await restarting).status, 200); assert.equal(f.released, 1); assert.equal(f.acquired, 2);
+  } finally { await f.close(); }
+});
+
 test('expired credentials are rejected without mutating even their old acquisition; only lifecycle teardown releases it', async t => {
   const f = await fixture(t);
   try {
@@ -169,6 +188,66 @@ test('renewed page cannot adopt or stop another page which acquired during suspe
     await f.call('/stop', { sessionId: running.body.sessionId }, other); assert.equal(f.released, 1); assert.equal(f.service.busy, false);
   } finally { session.dispose(); await f.close(); }
 });
+test('same-page explicit Start drains its previous session instead of false foreign Busy', async t => {
+  const f = await fixture(t);
+  try {
+    const owner = (await f.call('/bootstrap', {})).body.capability;
+    const first = await f.call('', selection, owner), second = await f.call('', selection, owner);
+    assert.equal(second.status, 200); assert.notEqual(second.body.sessionId, first.body.sessionId);
+    assert.equal(f.children[0].closed, true); assert.equal(f.released, 1); assert.equal(f.acquired, 2);
+  } finally { await f.close(); }
+});
+test('live foreign page requires explicit takeover; stale and simultaneous targets cannot replace the winner', async t => {
+  const f = await fixture(t);
+  try {
+    const owners = await Promise.all([1, 2, 3].map(async () => (await f.call('/bootstrap', {})).body.capability));
+    const first = await f.call('', selection, owners[0]); assert.equal(first.status, 200);
+    const status = (await f.call('/status', {}, owners[1])).body; assert.equal(status.takeoverAvailable, true); assert.equal(status.cleanupPending, false);
+    assert.equal((await f.call('', selection, owners[1])).status, 409); assert.equal(f.released, 0);
+    assert.equal((await f.call('/recover', { sessionId: first.body.sessionId }, owners[1])).status, 403);
+    f.mode = 'join-pending';
+    const replacements = owners.slice(1).map(owner => f.call('', { ...selection, takeoverSessionId: first.body.sessionId }, owner));
+    await until(() => f.service.status().phase === 'stopping'); assert.equal(f.acquired, 1); assert.equal(f.released, 0);
+    f.mode = 'running'; f.children[0].exit();
+    const results = await Promise.all(replacements); assert.deepEqual(results.map(r => r.status).sort(), [200, 409]);
+    assert.equal(f.released, 1); assert.equal(f.acquired, 2);
+    const winner = results.find(r => r.status === 200)!;
+    assert.equal((await f.call('', { ...selection, takeoverSessionId: first.body.sessionId }, owners[0])).status, 409);
+    assert.equal((await f.call('/stop', { sessionId: winner.body.sessionId }, owners[0])).status, 403);
+    assert.equal((await f.call('/heartbeat', { sessionId: first.body.sessionId }, owners[0])).status, 403, 'late old-owner heartbeat cannot renew or retire the replacement');
+    assert.equal(f.service.status().sessionId, winner.body.sessionId);
+  } finally { await f.close(); }
+});
+test('a new page automatically drains failed same-panel leftovers without pretending another live page is Busy', async t => {
+  const f = await fixture(t);
+  try {
+    const old = (await f.call('/bootstrap', {})).body.capability, next = (await f.call('/bootstrap', {})).body.capability;
+    await f.call('', selection, old); f.mode = 'join-pending';
+    f.children[0].stdout.write('@provider ' + JSON.stringify({ phase: 'failed', reason: 'Persistent malformed input' }) + '\n');
+    await until(() => f.service.status().phase === 'stopping');
+    const status = (await f.call('/status', {}, next)).body;
+    assert.equal(status.cleanupPending, true); assert.equal(status.takeoverAvailable, false);
+    const replacing = f.call('', selection, next); await delay(20); assert.equal(f.acquired, 1);
+    f.mode = 'running'; f.children[0].exit(); assert.equal((await replacing).status, 200);
+    assert.equal(f.released, 1); assert.equal(f.acquired, 2);
+  } finally { await f.close(); }
+});
+
+test('reload continuity retires the old owning page and drains before a new explicit Start; copied tab state cannot silently adopt', async t => {
+  const f = await fixture(t);
+  try {
+    const document = '12345678-1234-1234-1234-123456789abc';
+    const first = (await f.call('/bootstrap', { document })).body;
+    const running = await f.call('', selection, first.capability); assert.equal(running.status, 200);
+    const copied = (await f.call('/bootstrap', { document: '22345678-1234-1234-1234-123456789abc', continuity: first.continuity, reload: false })).body;
+    assert.equal(copied.owns, false); assert.equal(copied.takeoverAvailable, true); assert.equal(f.released, 0);
+    const reloaded = (await f.call('/bootstrap', { document: '32345678-1234-1234-1234-123456789abc', continuity: first.continuity, reload: true })).body;
+    assert.equal(reloaded.busy, false); assert.equal(f.released, 1); assert.equal(f.acquired, 1, 'reload never starts capture');
+    assert.equal((await f.call('/status', {}, first.capability)).status, 403, 'retired document cannot control a replacement');
+    assert.equal((await f.call('', selection, reloaded.capability)).status, 200);
+  } finally { await f.close(); }
+});
+
 for (const phase of ['preparing', 'reserving', 'starting', 'running']) test(`panel exit during ${phase} drains the old service and a new panel can acquire`, async t => {
   const f = await fixture(t);
   try {

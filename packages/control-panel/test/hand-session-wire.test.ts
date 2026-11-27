@@ -13,6 +13,9 @@ test('raw packet validation preserves empty/all-255 hands and rejects normalizat
   assert.throws(() => providerPacket(packet(2), decodeMessage)); assert.throws(() => providerPacket(empty.slice(0, 31), decodeMessage));
   const env = new Uint8Array(88 + empty.length), e = new DataView(env.buffer); e.setUint8(0, 21); e.setUint8(1, 2); e.setFloat64(8, 1011, true); env.set(new TextEncoder().encode('a'.repeat(64)), 16); e.setBigUint64(80, 1n, true); env.set(empty, 88);
   assert.deepEqual(sessionPacket(env.buffer, 'a'.repeat(64), decodeMessage).packet, empty);
+  e.setUint8(0, 23); const filtered = sessionPacket(env.buffer, 'a'.repeat(64), decodeMessage);
+  assert.equal(filtered.filtered, true, 'filtered empty observation is distinguishable from genuine no detection');
+  assert.equal(filtered.frame.hands.length, 0); e.setUint8(0, 21);
   assert.throws(() => sessionPacket(env.buffer, 'b'.repeat(64), decodeMessage), /epoch/);
   e.setBigUint64(80, 2n ** 54n, true); assert.throws(() => sessionPacket(env.buffer, 'a'.repeat(64), decodeMessage), /sequence/);
 });

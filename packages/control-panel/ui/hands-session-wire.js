@@ -15,11 +15,11 @@ export function sessionPacket(buffer, epoch, decode) {
   const v = new DataView(buffer);
   if (v.getUint8(1) !== 2 || v.getUint16(2, true) || !Number.isFinite(v.getFloat64(8, true)) || v.getFloat64(8, true) < 0) throw new Error('Invalid session header');
   if (v.getUint8(0) === 22) { if (buffer.byteLength !== 40) throw new Error('Invalid clock reply'); return { type: 'clock', clocks: [16, 24, 32].map(n => v.getFloat64(n, true)) }; }
-  if (v.getUint8(0) !== 21 || buffer.byteLength < 120 || new TextDecoder().decode(new Uint8Array(buffer, 16, 64)) !== epoch) throw new Error('Wrong or retired session epoch');
+  if (![21, 23].includes(v.getUint8(0)) || buffer.byteLength < 120 || new TextDecoder().decode(new Uint8Array(buffer, 16, 64)) !== epoch) throw new Error('Wrong or retired session epoch');
   const sequence = Number(v.getBigUint64(80, true)); if (!Number.isSafeInteger(sequence) || sequence < 1 || sequence >= 0xffffffff) throw new Error('Invalid source sequence');
   const packet = new Uint8Array(buffer.slice(88)), frame = providerPacket(packet, decode);
   if (frame.seq !== sequence) throw new Error('Inconsistent source sequence');
-  return { type: 'frame', sequence, packet, frame, transportSequence: v.getUint32(4, true) };
+  return { type: 'frame', sequence, packet, frame, filtered: v.getUint8(0) === 23, transportSequence: v.getUint32(4, true) };
 }
 export function createSessionClock({ now = () => performance.now() } = {}) {
   let samples = [], mapping = null, lastSequence = -1, capture = -Infinity;
