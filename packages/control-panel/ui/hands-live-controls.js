@@ -22,6 +22,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     if (closed) return;
     lockWidth();
     const active = session.active || starting, phase = status.phase;
+    document.body.dataset.handsSession = active ? 'live' : '';
     lastDiagnostic = status.diagnostic || lastDiagnostic;
     diagnostic.textContent = lastDiagnostic; diagnostic.hidden = !lastDiagnostic;
     const source = data?.providers?.find(p => key(p) === provider.value);

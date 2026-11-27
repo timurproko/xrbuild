@@ -106,7 +106,8 @@ const postprocessing = mountHandsPostprocessing($('hands-postprocessing-root'));
 try {
   const { createHandsView } = await import('./hands-view.js');
   view = createHandsView({ canvas: $('hands-canvas'), viewport: $('hands-viewport'),
-    onMetrics: metrics => { const render = metrics.renderFps.toFixed(1); if ($('hands-render-fps').textContent !== render) $('hands-render-fps').textContent = render; },
+    // The view is ready once it renders; its rate is shown only while a hand session runs.
+    onMetrics: metrics => { document.body.dataset.handsView = 'ready'; const render = document.body.dataset.handsSession === 'live' ? metrics.renderFps.toFixed(1) : '—'; if ($('hands-render-fps').textContent !== render) $('hands-render-fps').textContent = render; },
     onStatus: status => {
       const hidden = status.phase === 'replay' || status.phase === 'running' && status.hands > 0;
       if ($('hands-view-empty').hidden !== hidden) $('hands-view-empty').hidden = hidden;

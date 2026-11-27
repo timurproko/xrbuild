@@ -1,5 +1,5 @@
 import { commitHandsFields } from './hands-commits.js';
-import { renderField, setFieldError, installNumberSteppers, enhanceHelpText, iconSvg, openFloating, positionFloating } from './design-system.js';
+import { renderField, setFieldError, installNumberSteppers, enhanceHelpText, iconSvg, openFloating, positionFloating, refreshDropdown } from './design-system.js';
 import { menuKeyboard } from './navigation.js';
 
 export const linearToHex = rgb => '#' + rgb.map(v => Math.round(255 * (v <= .0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - .055)).toString(16).padStart(2, '0')).join('');
@@ -12,8 +12,9 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   const prefix = `hands-adjustments-${++mounts}`;
   const number = (key, label, min, max, step, hint = '', swatch = '') => renderField(label,
     `<span class="hands-number-row${swatch ? ' hands-number-row--colour' : ''}"><input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required><input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">${swatch}</span>`, { hint });
-  // Switches carry their label on top, like every other field.
-  const toggle = (key, label) => renderField(label, `<span class="xrb-switch"><input type="checkbox" data-field="appearance.${key}"></span>`);
+  // What the skeleton shows is one multi-select; hidden checkboxes stay the saved fields behind it.
+  const DISPLAY = { showJoints: 'Joints', showBones: 'Bones', showPinchGrabIndicator: 'Pinch / grab indicator' };
+  const displayField = () => renderField('Display', `<div class="dropdown" data-multi="true" data-display-toggles data-options="${Object.keys(DISPLAY).join('|')}" data-labels='${JSON.stringify(DISPLAY)}'><input type="hidden" data-display-value value="[]"><button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false">None</button></div>${Object.keys(DISPLAY).map(key => `<input type="checkbox" data-field="appearance.${key}" aria-label="${DISPLAY[key]}" hidden>`).join('')}`);
   const colour = (key, label) => `<span class="xrb-inline-icons"><input type="color" data-field="appearance.${key}" aria-label="${label}" hidden><button type="button" class="xrb-swatch" data-colour="appearance.${key}" aria-label="Choose ${label.toLowerCase()}" aria-haspopup="dialog" aria-pressed="true"></button></span>`;
   const resetMenu = (section, label) => `<button type="button" class="xrb-icon-button" id="${prefix}-${section}-settings" data-reset-menu="${section}" aria-label="${label} settings" data-no-tooltip aria-haspopup="menu" aria-controls="${prefix}-${section}-menu" aria-expanded="false">${iconSvg('settings')}</button><div class="menu" id="${prefix}-${section}-menu" role="menu" aria-labelledby="${prefix}-${section}-settings" hidden><button type="button" role="menuitem" data-reset="${section}">Reset to defaults</button></div>`;
   // Position and Visual are tabs in the card's tab bar; each tab's reset menu sits at the bar's end.
@@ -31,11 +32,10 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
       ${number('sizeFactor', 'Size', .5, 1.5, .01)}
     </section>
     <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-appearance" aria-labelledby="${prefix}-tab-appearance" hidden>
-      <div class="xrb-toggle-grid">${toggle('showJoints', 'Joints')}${toggle('showBones', 'Bones')}</div>
+      ${displayField()}
       ${number('appearance.jointDiameterMm', 'Joint diameter (mm)', 1, 40, 1, '', colour('jointColorLinear', 'Joint colour'))}
       ${number('appearance.boneDiameterMm', 'Bone diameter (mm)', 1, 30, 1, '', colour('boneColorLinear', 'Bone colour'))}
       ${number('appearance.opacity', 'Skeleton opacity', 0, 1, .001)}
-      ${toggle('showPinchGrabIndicator', 'Pinch / grab indicator')}
       ${number('appearance.indicatorDiameterMm', 'Indicator diameter (mm)', 1, 60, 1, '', colour('indicatorColorLinear', 'Indicator colour'))}
       ${number('appearance.indicatorOpacity', 'Indicator opacity', 0, 1, .01)}
     </section>
@@ -95,6 +95,9 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
       if (state) range.value = edits.get(range.dataset.range)?.value ?? read(state, range.dataset.range);
     }
     for (const reset of tabs.querySelectorAll('[data-reset],[data-reset-menu]')) reset.disabled = !state;
+    const display = root.querySelector('[data-display-toggles]');
+    display.querySelector('[data-display-value]').value = JSON.stringify(Object.keys(DISPLAY).filter(key => root.querySelector(`[data-field="appearance.${key}"]`).checked));
+    display.querySelector('.dropdown-btn').disabled = !state; refreshDropdown(display);
     buttons();
   }
   function refresh(next, { discard: discardEdits = false } = {}) {
@@ -167,7 +170,19 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     }
   }
   const input = event => { const field = event.target.closest('[data-field],[data-range]'); if (field && root.contains(field)) edit(field); };
-  const change = event => { const field = event.target.closest('[data-field],[data-range]'); if (field && root.contains(field)) commit(field); };
+  const change = event => {
+    if (event.target.matches?.('[data-display-value]')) {
+      // Each changed choice commits through its own field, exactly like the former switches.
+      const on = new Set(JSON.parse(event.target.value || '[]'));
+      for (const key of Object.keys(DISPLAY)) {
+        const box = root.querySelector(`[data-field="appearance.${key}"]`);
+        if (box.checked === on.has(key)) continue;
+        box.checked = on.has(key); edit(box); commit(box);
+      }
+      return;
+    }
+    const field = event.target.closest('[data-field],[data-range]'); if (field && root.contains(field)) commit(field);
+  };
   const keydown = event => {
     const button = event.target.closest('[data-reset-menu]');
     if (button && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); showMenu(button); return; }

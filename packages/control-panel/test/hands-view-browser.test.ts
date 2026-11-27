@@ -17,7 +17,7 @@ test('core Hands opens the real SDK scene without optional tools, generated data
   const mutations: string[] = []; panel.server.on('request', req => { if (!['GET', 'HEAD'].includes(req.method!)) mutations.push(req.method + ' ' + req.url); });
   await withBrowser(async ({ send, navigate, evaluate }) => {
     await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.captureCalls=0;if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=()=>{captureCalls++;throw Error('Camera forbidden')};` });
-    await navigate(`${panel.url}hands/`, `document.querySelector('#hands-render-fps')?.textContent!=='—' && !!document.querySelector('[data-field="sizeFactor"]')`);
+    await navigate(`${panel.url}hands/`, `document.body?.dataset.handsView==='ready' && !!document.querySelector('[data-field="sizeFactor"]')`);
     assert.equal(await evaluate(`document.title`), 'XR Build · Hands');
     assert.equal(await evaluate(`!!document.querySelector('canvas')`), true);
     assert.equal(await evaluate(`document.querySelector('#hands-view-error').hidden`), true);

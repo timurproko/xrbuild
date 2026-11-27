@@ -24,3 +24,4 @@ export function enhanceSelect(select:HTMLSelectElement):()=>void;
 export function enhanceSelects(root?:Document|Element):()=>void;
 export function installDropdowns(root?:Document|Element):()=>void;
 export function floatingHost(owner:Element):HTMLElement;
+export function refreshDropdown(owner:Element):void;

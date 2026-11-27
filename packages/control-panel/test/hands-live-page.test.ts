@@ -145,7 +145,7 @@ test('top-level Start/Stop and SDK pinch/drag use actual native frames, preserve
       await evaluate(`document.querySelector('#hands-start-stop').click()`); await wait(`document.querySelector('#hands-live-state').textContent==='Running'`);
       const beforeReload = (app.panel.handSessions as any).current;
       await evaluate('window.reloadWitness=true'); await send('Page.reload');
-      await wait(`!window.reloadWitness && document.querySelector('#hands-start-stop') && document.querySelector('#hands-render-fps').textContent!=='—'`);
+      await wait(`!window.reloadWitness && document.querySelector('#hands-start-stop') && document.body?.dataset.handsView==='ready'`);
       await evaluate(`(async()=>{window.livePage=(await import('/hands.js')).handsPage})()`);
       await wait(`document.querySelector('#hands-start-stop').textContent==='Start' && !document.querySelector('#hands-start-stop').disabled`);
       assert.equal(app.panel.handSessions.busy, false, 'reload cleans stale ownership without starting capture');
