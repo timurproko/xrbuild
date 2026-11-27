@@ -88,7 +88,9 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     return new Promise(resolve => { pendingProfile = { resolve, apply() {
       if (closed || request !== profileRequest || !isCurrent() || !allowed()) { resolve(false); return; }
       if (profile && !api.sameHandGeometry(profile, next)) { ingress.reset(performance.now()); clearHands(); }
-      ingress.profile = next; visual.applyAppearance(next.appearance); profile = next; stream.setReady(true); resolve(true);
+      ingress.profile = next; visual.applyAppearance(next.appearance); profile = next; stream.setReady(true);
+      // Hands are shifted by the Position offset, so the real screen sits at that same offset in this view.
+      monitor.position.set(next.offsetMm.x / 1000, next.offsetMm.y / 1000, next.offsetMm.z / 1000); grid.position.copy(monitor.position); resolve(true);
     } }; });
   }
   function theme() {
