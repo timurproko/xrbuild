@@ -30,6 +30,8 @@ export function createHandTestTargets(scene, interaction, onFeedback = () => {})
   const states = targets.map(() => ({ phase: 'Ready', starts: 0, moves: 0, releases: 0 }));
   const feedback = () => onFeedback({ pinch: { ...states[0], held: targets[0].state.held }, drag: { ...states[1], held: targets[1].state.held } });
   const enable = () => targets.forEach(target => { target.enabled = active && shown; });
+  const rest = new THREE.Vector3(), origin = new THREE.Vector3();
+  const place = () => { START.copy(rest).add(origin); if (!targets.some(target => target.state.held)) object.position.copy(START); };
   // Pinch or grab picks the object up: it keeps its offset from the hand and turns with the palm.
   let holder = -1;
   const offset = new THREE.Vector3(), turn = new THREE.Quaternion(), palm = new THREE.Quaternion();
@@ -68,8 +70,10 @@ export function createHandTestTargets(scene, interaction, onFeedback = () => {})
     setActive(value) { active = value; enable(); },
     setVisible(value) { shown = value; object.visible = value; enable(); },
     setShape,
-    /** Rest position in panel metres; the object returns there on reset. */
-    setPosition(x, y, z) { START.set(x, y, z); if (!targets.some(target => target.state.held)) object.position.copy(START); },
+    /** Rest position in panel metres relative to the screen frame; the object returns there on reset. */
+    setPosition(x, y, z) { rest.set(x, y, z); place(); },
+    /** The screen frame's origin (the hand Position offset), so the object stays centred on the frame. */
+    setOrigin(x, y, z) { origin.set(x, y, z); place(); },
     theme(color) { object.material.color.set(color); },
     reset,
     dispose() { targets.forEach(t => interaction.remove(t)); scene.remove(object); object.geometry.dispose(); object.material.dispose(); },
