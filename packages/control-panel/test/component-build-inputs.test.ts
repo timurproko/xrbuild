@@ -23,4 +23,19 @@ test('component source and manifest changes invalidate managed app output withou
   assert.notEqual(manifest.fingerprint, source.fingerprint);
   assert.equal(manifest.sourceFingerprint, before.sourceFingerprint);
   assert.deepEqual(await fs.readdir(path.join(root, 'embedded')), ['package.json']);
+
+  await fs.mkdir(path.join(root, 'packages/ui-kit/src/react'), { recursive: true });
+  await fs.writeFile(path.join(root, 'packages/ui-kit/src/react/controls.tsx'), 'export const Button = () => null;');
+  const controls = await embeddedInputs(root);
+  assert.notEqual(controls.fingerprint, manifest.fingerprint);
+  assert.equal(controls.sourceFingerprint, before.sourceFingerprint);
+  await fs.writeFile(path.join(root, 'packages/ui-kit/package.json'), '{"exports":{"./react":"./src/react/index.ts"}}');
+  const publicEntry = await embeddedInputs(root);
+  assert.notEqual(publicEntry.fingerprint, controls.fingerprint);
+  assert.equal(publicEntry.sourceFingerprint, before.sourceFingerprint);
+  await fs.mkdir(path.join(root, 'embedded/projects/core/ui-kit/src'), { recursive: true });
+  await fs.writeFile(path.join(root, 'embedded/projects/core/ui-kit/src/index.ts'), 'export { Button } from "@fixture/controls";');
+  const appLibrary = await embeddedInputs(root);
+  assert.notEqual(appLibrary.fingerprint, publicEntry.fingerprint);
+  assert.notEqual(appLibrary.sourceFingerprint, before.sourceFingerprint);
 });

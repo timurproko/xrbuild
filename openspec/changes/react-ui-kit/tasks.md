@@ -37,8 +37,8 @@
 
 ## 5. Cross-app reuse and regression fixtures preserve the migration contract
 
-- [ ] 5.1 Add cross-app import-only and mounted-consumer integration fixtures for UI Kit, Launcher and generated scene exports; production bundles show shared runtime deduplication, relative assets, independent instances and no executed foreign bootstrap.
-- [ ] 5.2 Extend only affected managed-input/JSX/type integration checks as needed; targeted fingerprint tests show component/entry changes invalidate managed outputs, and isolated frozen installs/builds do not rely on pooled dependency state.
-- [ ] 5.3 Finish developer/root documentation linking the delivered package/app guides and explaining app-to-app source aliases, visual-builder boundaries and deferred themes/settings; build the cross-app examples as written.
-- [ ] 5.4 Complete the full design verification matrix across all three apps, every control, both input paths, Mouse-off and off-centre stereo hands; retain paired PNG hashes/pixel diffs and event/state/timing traces with zero intentional visual or behavior changes.
-- [ ] 5.5 Run only relevant SDK/React/UI Kit/app/template integration tests, production types, name guard and OpenSpec validation; record exact commands/results and known hardware limits, and stop every disposable app/server before implementation handoff.
+- [x] 5.1 Add cross-app import-only and mounted-consumer integration fixtures for UI Kit, Launcher and generated scene exports; production bundles show shared runtime deduplication, relative assets, independent instances and no executed foreign bootstrap.
+- [x] 5.2 Extend only affected managed-input/JSX/type integration checks as needed; targeted fingerprint tests show component/entry changes invalidate managed outputs, and isolated frozen installs/builds do not rely on pooled dependency state.
+- [x] 5.3 Finish developer/root documentation linking the delivered package/app guides and explaining app-to-app source aliases, visual-builder boundaries and deferred themes/settings; build the cross-app examples as written.
+- [x] 5.4 Complete the full design verification matrix across all three apps, every control, both input paths, Mouse-off and off-centre stereo hands; retain paired PNG hashes/pixel diffs and event/state/timing traces with zero intentional visual or behavior changes.
+- [x] 5.5 Run only relevant SDK/React/UI Kit/app/template integration tests, production types, name guard and OpenSpec validation; record exact commands/results and known hardware limits, and stop every disposable app/server before implementation handoff.

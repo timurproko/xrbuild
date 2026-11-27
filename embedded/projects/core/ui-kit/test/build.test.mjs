@@ -23,6 +23,15 @@ test('production app keeps relative assets/icon entry and import-only consumer b
   assert.equal(typeof icon.default, 'function');
   assert.equal(icon.default().isObject3D, true);
 
+  const vanillaEntry = path.join(root, 'imperative.ts');
+  await fs.writeFile(vanillaEntry, "export { Button, Slider } from '@xr-build/ui-kit';");
+  const modules = [];
+  await build({ configFile: false, root: sampleRoot, logLevel: 'silent', resolve: config.resolve,
+    define: { 'process.env.NODE_ENV': '"production"' },
+    plugins: [{ name: 'imperative-dependency-boundary', moduleParsed(module) { modules.push(module.id.replaceAll('\\', '/')); } }],
+    build: { target: 'es2022', outDir: path.join(root, 'imperative'), lib: { entry: vanillaEntry, formats: ['es'], fileName: () => 'controls.mjs' } } });
+  assert.ok(!modules.some(id => /\/(?:react|react-dom|@react-three\/fiber)\//.test(id) || id.includes('/packages/react/')), 'imperative imports must not enroll React');
+
   const entry = path.join(root, 'consumer.ts');
   await fs.writeFile(entry, "export { UiKitScene, Board, Button, Slider } from '@fixture/hello-components';");
   const consumer = path.join(root, 'consumer');

@@ -87,7 +87,8 @@ export function LauncherCard({entry,index,x,launching,onLaunch}:{entry:Entry;ind
     return()=>{if(navigation.current!==null)clearTimeout(navigation.current);};
   },[]);
   useXrbFrame(({timeMs:now,deltaSeconds})=>{
-    const dt=Math.min(0.1,deltaSeconds),state=animation.current,group=root.current!;
+    const dt=Math.min(0.1,deltaSeconds),state=animation.current,group=root.current;
+    if(!group)return;
     if(state.launching){
       if(spinner.current)(spinner.current.userData.arc as THREE.Group).rotation.z-=dt*5.5;
       const progress=THREE.MathUtils.clamp((now-state.startedAt)/850,0,1),eased=1-Math.pow(1-progress,3);
@@ -169,6 +170,8 @@ export function LauncherScene() {
     return()=>{active=false;controller?.abort();if(timer!==null)clearInterval(timer);};
   },[app]);
   useXrbFrame(({timeMs:now,deltaSeconds})=>{
+    // A retired subscriber can still be in the current Fiber advance snapshot.
+    if(!root.current||!cards.current)return;
     const dt=Math.min(0.1,deltaSeconds);
     if(!sliding.current)cards.current!.position.x+=(0-cards.current!.position.x)*(1-Math.exp(-dt*12));
     const progress=THREE.MathUtils.clamp((now-revealStartedAt.current)/720,0,1),reveal=1-Math.pow(1-progress,3),group=root.current!;

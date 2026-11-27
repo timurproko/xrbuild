@@ -46,6 +46,7 @@ export async function componentApp(root, options = {}) {
   };
   const cache=new Map();
   async function load(name, parent=path.join(root,'src/main.tsx')) {
+    if(options.aliases?.[name])name=options.aliases[name];
     if(name==='@xr-build/ui-kit-app')name=path.join(core,'embedded/projects/core/ui-kit/src/index.ts');
     const key=dependencies[name]?name:path.resolve(path.dirname(parent),name);
     if(cache.has(key))return cache.get(key);
