@@ -1,6 +1,7 @@
 import { renderField, setFieldError, installNumberSteppers, iconSvg, openFloating, positionFloating } from './design-system.js';
 import { menuKeyboard, isPanelUnavailable } from './navigation.js';
 import { openMeshSetup } from './hands-mesh-setup.js';
+import { handsLog } from './hands-log.js';
 const key = p => p ? `${p.owner}/${p.id}` : '';
 const identity = value => value ? { owner: value.slice(0, value.lastIndexOf('/')), id: value.slice(value.lastIndexOf('/') + 1) } : null;
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -21,9 +22,9 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     <div class="menu" id="${prefix}-menu" role="menu" aria-labelledby="${prefix}-settings" hidden><button type="button" role="menuitem" data-mesh-reset>Reset to defaults</button></div></div>
     <select data-mesh-selector aria-label="Hand mesh" hidden></select>
     <div class="dropdown" data-multi="true" data-mesh-layers data-summary="Add layer" data-options="" data-labels="{}"><input type="hidden" data-mesh-layer-value value="[]"><button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Add post-processing layer">Add layer</button></div>
-    <section class="hands-mesh-layer xrb-stack" data-mesh-layer hidden><div class="row hands-mesh-layer-header"><strong data-mesh-layer-title></strong><span class="spacer"></span><button type="button" class="xrb-setup-install" data-mesh-install hidden><span>Install</span></button><span class="state ok" data-mesh-ready hidden>Ready</span><label class="xrb-switch hands-mesh-layer-switch"><input type="checkbox" data-mesh-layer-enabled aria-label="Layer on"><span></span></label><button type="button" class="xrb-icon-button" data-mesh-layer-remove aria-label="Remove layer" data-no-tooltip>${iconSvg('close')}</button></div>
+    <section class="hands-mesh-layer xrb-stack" data-mesh-layer hidden><div class="row hands-mesh-layer-header"><strong data-mesh-layer-title></strong><span class="spacer"></span><button type="button" class="xrb-setup-install" data-mesh-install hidden><span>Install</span></button><span class="state ok" data-mesh-ready hidden>Ready</span><button type="button" class="xrb-setup-install" data-mesh-delivery-retry hidden><span>Retry</span></button><label class="xrb-switch hands-mesh-layer-switch"><input type="checkbox" data-mesh-layer-enabled aria-label="Layer on"></label><button type="button" class="xrb-icon-button" data-mesh-layer-remove aria-label="Remove layer" data-no-tooltip>${iconSvg('close')}</button></div>
     <div class="xrb-stack" data-mesh-fields></div><p class="xrb-help" data-mesh-readiness hidden></p></section>
-    <div class="hands-mesh-delivery"><p class="xrb-help" data-mesh-runtime role="status" aria-live="polite" hidden></p><button type="button" class="small" data-mesh-delivery-retry hidden>Retry</button></div>
+    <p data-mesh-runtime role="status" hidden></p>
     <div data-mesh-recovery hidden><p class="field-error" data-mesh-message role="alert"></p><div class="xrb-button-row"><button type="button" class="small" data-mesh-retry>Retry</button><button type="button" class="small" data-mesh-discard hidden>Use saved</button></div></div></form>`;
   const form = root.querySelector('form'), select = root.querySelector('[data-mesh-selector]'), fields = root.querySelector('[data-mesh-fields]');
   const message = root.querySelector('[data-mesh-message]'), recovery = root.querySelector('[data-mesh-recovery]');
@@ -48,7 +49,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   };
   const editKey = (id, field) => `${id}#${field}`;
   const closeMenu = (focus = false) => { menu.hidden = true; gear.setAttribute('aria-expanded', 'false'); if (focus) gear.focus(); };
-  const showMenu = () => { if (!gear.disabled) { gear.setAttribute('aria-expanded', 'true'); openFloating(menu, { anchor: gear }); } };
+  const showMenu = () => { if (!gear.disabled) { gear.setAttribute('aria-expanded', 'true'); openFloating(menu, { anchor: gear, align: 'end' }); } };
   function buttons() {
     root.dataset.dirty = String(edits.size > 0); root.dataset.saving = String(busy);
     select.disabled = !snapshot || !!snapshot.problem;
@@ -165,8 +166,10 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
       : state === 'applying' ? ['Starting', 'busy'] : state === 'applied' ? ['Running', 'ok'] : state === 'failed' ? ['Failed', 'err']
       : state === 'saving' ? ['Saving', 'neutral'] : ['Ready', 'ok'];
     badge.textContent = label; badge.className = `state ${tone}`; badge.hidden = !label || root.querySelector('[data-mesh-layer]').hidden;
-    if (!['failed', 'unsupported', 'unknown'].includes(state)) text = '';
-    status.textContent = text; status.hidden = !text; root.dataset.meshState = state;
+    // Details go to the Log tab under the plugin's name; the card only shows the badge.
+    const logged = state === 'preparing' ? 'Preparing' : state === 'applied' ? 'Running' : state === 'applying' ? 'Starting' : ['failed', 'unsupported'].includes(state) ? text : '';
+    if (p && logged && !root.querySelector('[data-mesh-layer]').hidden) handsLog(logged, { source: p.label, level: state === 'failed' ? 'err' : state === 'unsupported' ? 'warn' : '' });
+    status.textContent = text; status.hidden = true; root.dataset.meshState = state;
     deliveryRetry.hidden = !d || state !== 'failed';
     deliveryRetry.disabled = busy || retrying || pending || !!snapshot?.problem;
   }
@@ -335,7 +338,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   on(gear, 'keydown', event => { if (['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); showMenu(); } });
   const outside = event => { if (!gear.contains(event.target) && !menu.contains(event.target)) closeMenu(); };
   on(document, 'click', outside); on(document, 'focusin', outside);
-  on(document, 'scroll', () => { if (!menu.hidden) positionFloating(menu, { anchor: gear }); }, { capture: true });
+  on(document, 'scroll', () => { if (!menu.hidden) positionFloating(menu, { anchor: gear, align: 'end' }); }, { capture: true });
   on(document.defaultView, 'resize', () => closeMenu());
   on(form, 'keydown', event => {
     if (!menu.hidden) { menuKeyboard(event, menu, () => closeMenu(true)); return; }

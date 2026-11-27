@@ -87,8 +87,9 @@
 /* Post tab: one card per post-processing layer. */
 /* No fill, so the fields inside keep their normal outline and contrast. */
 .hands-mesh-layer { padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
-.hands-mesh-layer-header { align-items: center; gap: 12px; }
-.hands-mesh-layer-header strong { min-width: 0; overflow-wrap: anywhere; }
+.hands-mesh-layer-header { align-items: center; gap: 12px; flex-wrap: nowrap; }
+.hands-mesh-layer-header strong { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.hands-mesh-layer-header > :not(strong):not(.spacer) { flex: none; }
 /* Viewer / side panel splitter. */
 /* Only the cursor shows the split; no line. */
 .hands-splitter { cursor: col-resize; touch-action: none; outline: none; }
@@ -102,5 +103,7 @@
 /* Install dialog: the description stays one line so nothing moves between states. */
 .hands-mesh-setup [data-setup-message] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Layer on/off sits in the card's top-right corner; an off layer dims its settings. */
-.hands-mesh-layer-switch { margin: 0; }
+.hands-mesh-layer-switch { margin: 0; gap: 0; }
+/* The remove button is trimmed to its icon so badge, switch and x sit at even gaps. */
+.hands-mesh-layer .hands-mesh-layer-header > button.xrb-icon-button[data-mesh-layer-remove] { width: 20px; height: 20px; min-width: 0; padding: 0; margin-left: -2px; }
 .hands-mesh-layer.is-off [data-mesh-fields] { opacity: .5; }

@@ -1,3 +1,4 @@
+import { handsLog, clearHandsLog } from './hands-log.js';
 import { isPanelUnavailable } from './navigation.js';
 const key = source => source ? `${source.owner}/${source.id}` : '';
 /** Only acquisition controls: no source writes, status paragraphs, recorder or adjustment editor. */
@@ -14,20 +15,11 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   if (header) header.replaceChildren(state); else root.append(state);
   if (!diagnostic.isConnected) (provider.closest('label') ?? provider).before(diagnostic);
   // Diagnostics and reasons become timestamped lines in the Log tab (newest last, bounded), never repeated back to back.
-  const logEmpty = document.getElementById('hands-log-empty'); let lastLogged = '';
-  // Rows like the Apps log: a source badge, the message and the time; newest last, bounded, with an X to clear.
-  const append = (text, { source = 'provider', level = '' } = {}) => {
-    const row = document.createElement('div'); row.className = `entry ${level}`.trim();
-    const src = document.createElement('span'), badge = document.createElement('span'), msg = document.createElement('span'), time = document.createElement('span');
-    src.className = 'src'; badge.className = 'badge'; badge.textContent = source; src.append(badge);
-    msg.className = 'msg'; msg.textContent = text; time.className = 'time'; time.textContent = new Date().toLocaleTimeString([], { hour12: false });
-    row.append(src, msg, time); diagnostic.append(row);
-    while (diagnostic.childElementCount > 200) diagnostic.firstElementChild.remove();
-    diagnostic.hidden = false; if (logEmpty) logEmpty.hidden = true; diagnostic.scrollTop = diagnostic.scrollHeight;
-  };
+  // Diagnostics and reasons become rows in the Log tab through the shared Hands log.
+  const append = (text, options = {}) => handsLog(text, { ...options, target: diagnostic });
   const logEvent = text => append(text);
-  const log = (text, level = 'warn') => { if (!text || text === lastLogged) return; lastLogged = text; append(text, { source: 'session', level }); };
-  document.getElementById('hands-log-clear')?.addEventListener('click', () => { diagnostic.replaceChildren(); diagnostic.hidden = true; if (logEmpty) logEmpty.hidden = false; lastLogged = ''; });
+  const log = (text, level = 'warn') => append(text, { source: 'session', level });
+  document.getElementById('hands-log-clear')?.addEventListener('click', () => clearHandsLog(diagnostic));
   // Start and Stop share one width, the size of Reset, so the toolbar never shifts between them.
   const lockWidth = () => { if (!button.isConnected || button.style.minWidth) return; const current = button.textContent; let widest = 0;
     for (const label of ['Start', 'Stop']) { button.textContent = label; widest = Math.max(widest, button.getBoundingClientRect().width); }
