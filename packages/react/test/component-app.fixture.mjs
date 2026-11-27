@@ -54,6 +54,9 @@ export async function componentApp(root, options = {}) {
     }
     if(name.endsWith('.css')){const module=new SyntheticModule([],()=>{},{context});cache.set(key,module);return module;}
     if(!name.startsWith('.')&&!path.isAbsolute(name)) {
+      if(name.endsWith('.json')) {
+        dependencies[name]={default:JSON.parse(await readFile(require.resolve(name),'utf8'))};return load(name,parent);
+      }
       const values=await import(name);dependencies[name]=values;return load(name,parent);
     }
     const source=await readFile(key,'utf8');

@@ -20,8 +20,7 @@ Vite compiles it with your app.
 - A vanilla app depends on `three` (>= 0.160) and `vite` only, never on `@xr-build/sdk` or `@xr-build/ui-kit`.
   Opt-in React apps additionally install the pinned React/Fiber dependencies in the [React guide](../react/README.md).
 - The control panel sets `XRB_CORE` (the core repo it runs from) for every build and dev server it starts.
-- The app's `vite.config.js` maps the two names to the core and keeps one three.js. "New project" in the
-  panel creates this from `templates/app`:
+- The app's `vite.config.js` maps source names to the core and keeps one graphics/runtime instance. This is a minimal vanilla configuration; the React-based `templates/app` adds JSX tooling, bridge/UI Kit aliases and runtime deduplication:
 
 ```js
 // vite.config.js
@@ -54,7 +53,7 @@ Managed apps receive the workspace Hands profile automatically after a normal SD
 
 [`@xr-build/react`](../react/README.md) adds React 19 / Fiber 9 components through this runtime,
 not through a competing Canvas. Its new mount API retains SDK rendering, projection, stereo, WebXR
-and input ownership. Vanilla apps, UI Kit and the template need no changes or React dependency.
+and input ownership. Existing vanilla apps and imperative UI Kit imports still need no React dependency. UI Kit, Launcher and newly generated template apps now use the component layer with separate run/public entries; see [the template guide](../../templates/app/README.md) for build-time component reuse.
 
 The new `app.onComponentFrame(callback)` subscription is for component integrations: after processed
 hands are sampled, before interaction and drawing, with the SDK frame clock and current XRFrame.
@@ -84,8 +83,7 @@ app.setFrame(() => { /* update app objects here */ });
 app.start();                                                   // runtime owns resize and rendering
 ```
 
-The core's `templates/app` is a complete app like this one ("New project" in the panel copies it into the
-workspace). Build and run one without the panel (PowerShell, from the app's folder in the workspace):
+The core's `templates/app` is a complete React app using the same managed SDK runtime ("New project" copies it into the workspace). It exports `AppScene` separately from `main.tsx`; the imperative example above remains supported. Build and run one without the panel (PowerShell, from the app's folder in the workspace):
 
 ```
 $env:XRB_CORE = 'D:\path\to\xr-build'
@@ -138,7 +136,7 @@ managed projection changes until they adopt `createXrbApp()` or wire `xrb.onProj
 
 ## What changes for an existing app
 
-1. **Managed template (recommended)**: use `createXrbApp()` so the runtime owns projection, resize and frame rendering.
+1. **Managed app (recommended)**: use `createXrbApp()` for imperative apps, or `mountXrbApp()` from the React bridge, so the SDK owns projection, resize and frame rendering.
 2. **Legacy render call**: replace `renderer.render(scene, camera)` with `xrb.render(scene, camera)`.
 3. **Canvas size and aspect**: let `xrb.setSize()` size the canvas. Use `xrb.viewSize()`
    (one eye) for the camera aspect and for layout math. Browser canvases preserve the configured display aspect and

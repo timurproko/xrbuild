@@ -29,11 +29,11 @@
 
 ## 4. New app template generates a runnable React component library
 
-- [ ] 4.1 Produce main.tsx, a pure scene component and public index.ts while retaining name/package substitution, text geometry/centering, material/lights, ring animation, renderer/DPR defaults, icon/theme assets and notices; generated-project tests inspect and mount the resulting app.
-- [ ] 4.2 Add pinned React/JSX build tooling, exact source aliases and runtime deduplication to template configuration; isolated generated app and component-consumer production builds pass without modifying existing user projects.
-- [ ] 4.3 Retain standalone icon.js output and clean runtime/HMR/pagehide ownership; targeted template/project/icon contract tests and import-only checks show no public-entry side effects or asset regressions.
-- [ ] 4.4 Compare generated-template before/after pictures in mono perspective, orthographic, stereo and icon mode at identical clock/camera/name/theme and replay its mouse/hand/runtime defaults; record exact matches or justified renderer-noise bounds.
-- [ ] 4.5 Document template run/export shape and example source consumption, updating stale vanilla-template statements; execute the documented build/import steps and keep font/license resources intact.
+- [x] 4.1 Produce main.tsx, a pure scene component and public index.ts while retaining name/package substitution, text geometry/centering, material/lights, ring animation, renderer/DPR defaults, icon/theme assets and notices; generated-project tests inspect and mount the resulting app.
+- [x] 4.2 Add pinned React/JSX build tooling, exact source aliases and runtime deduplication to template configuration; isolated generated app and component-consumer production builds pass without modifying existing user projects.
+- [x] 4.3 Retain standalone icon.js output and clean runtime/HMR/pagehide ownership; targeted template/project/icon contract tests and import-only checks show no public-entry side effects or asset regressions.
+- [x] 4.4 Compare generated-template before/after pictures in mono perspective, orthographic, stereo and icon mode at identical clock/camera/name/theme and replay its mouse/hand/runtime defaults; record exact matches or justified renderer-noise bounds.
+- [x] 4.5 Document template run/export shape and example source consumption, updating stale vanilla-template statements; execute the documented build/import steps and keep font/license resources intact.
 
 ## 5. Cross-app reuse and regression fixtures preserve the migration contract
 
