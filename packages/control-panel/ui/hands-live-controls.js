@@ -15,13 +15,15 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   if (!diagnostic.isConnected) (provider.closest('label') ?? provider).before(diagnostic);
   // Diagnostics and reasons become timestamped lines in the Log tab (newest last, bounded), never repeated back to back.
   const logEmpty = document.getElementById('hands-log-empty'); let lastLogged = '';
-  const log = text => {
-    if (!text || text === lastLogged) return; lastLogged = text;
+  // Events always log; diagnostics skip an exact repeat of the previous diagnostic.
+  const append = text => {
     const time = new Date().toLocaleTimeString([], { hour12: false });
     const lines = diagnostic.textContent ? diagnostic.textContent.split('\n') : [];
     lines.push(`${time}  ${text}`); diagnostic.textContent = lines.slice(-200).join('\n');
     diagnostic.hidden = false; if (logEmpty) logEmpty.hidden = true; diagnostic.scrollTop = diagnostic.scrollHeight;
   };
+  const logEvent = text => append(text);
+  const log = text => { if (!text || text === lastLogged) return; lastLogged = text; append(text); };
   // Start and Stop share one width, the size of Reset, so the toolbar never shifts between them.
   const lockWidth = () => { if (!button.isConnected || button.style.minWidth) return; const current = button.textContent; let widest = 0;
     for (const label of ['Start', 'Stop']) { button.textContent = label; widest = Math.max(widest, button.getBoundingClientRect().width); }
@@ -36,6 +38,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     const active = session.active || starting, phase = status.phase;
     document.body.dataset.handsSession = active ? 'live' : '';
     lastDiagnostic = status.diagnostic || lastDiagnostic;
+    logLifecycle(phase);
     log(['failed', 'occupied', 'cleanup'].includes(status.phase) && status.reason ? status.reason : lastDiagnostic);
     const source = data?.providers?.find(p => key(p) === provider.value);
     const unavailable = !supported ? 'Standalone Hands currently supports Windows x64 only.' : !view?.profile ? 'Wait for the shared SDK view and valid profile.' : !source ? 'Choose an available skeleton provider.' : source.transport !== 'native' ? 'WebXR requires its explicit app XR session.' : !source.available ? source.reason : '';
@@ -51,6 +54,17 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     const fps = Number.isFinite(status.trackingFps) && ['running', 'no-hands'].includes(phase) ? status.trackingFps.toFixed(1) : '—';
     if (rates.textContent !== fps) rates.textContent = fps;
     rates.parentElement.dataset.tooltip = fps === '—' ? 'No fresh live provider frames' : `Unique received frames/s · Capture age ${status.frameAgeMs?.toFixed(1)} ms ± ${status.uncertaintyMs?.toFixed(1)} ms · Delivery gaps ${status.dropped ?? 0} · Provider-reported ${status.reportedHz ?? '—'} Hz`;
+  }
+  // Provider lifecycle in the Log: one line per start, start confirmation and stop, not per running/no-hands flip.
+  const LIVE = ['waiting', 'running', 'no-hands', 'rejected', 'stalled'];
+  let lastPhase = 'not-started';
+  function logLifecycle(phase) {
+    if (phase === lastPhase) return;
+    const name = status.source?.label ?? provider.selectedOptions?.[0]?.textContent ?? 'Provider', was = lastPhase; lastPhase = phase;
+    if (phase === 'starting') logEvent(`Starting ${name}…`);
+    else if (LIVE.includes(phase) && !LIVE.includes(was)) logEvent(`${name} started`);
+    else if (phase === 'stopping') logEvent(`Stopping ${name}…`);
+    else if (['stopped', 'not-started'].includes(phase) && (LIVE.includes(was) || was === 'stopping' || was === 'starting')) logEvent(`${name} stopped`);
   }
   function update(next) { status = next.phase === 'retired' ? { ...next, phase: next.reason ? 'failed' : 'stopping' } : next; render(); }
   const unsubscribe = session.subscribeLifecycle(update);
