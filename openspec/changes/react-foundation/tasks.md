@@ -11,11 +11,11 @@
 
 ## 2. Documented React hooks use SDK hands, picking and target capture without duplicate input
 
-- [ ] 2.1 Add typed SDK/frame/hand context hooks using the shared Fiber advance; verify current processed and scene hands, common frame time/delta, restart behavior, out-of-context errors and cleanup in focused hook tests.
-- [ ] 2.2 Add the optional SDK mesh-pointer registration route to authoritative mouse picking without a second DOM event manager; verify hit/miss, hover/down/move/up/click, parent propagation, both stereo halves and mono orthographic rays in targeted SDK input tests.
-- [ ] 2.3 Add cleanup-safe component pointer and physical-target hooks with current callback refs; verify target nearest arbitration, held capture, disabled/removed/lost reasons and StrictMode replay with real React fixtures.
-- [ ] 2.4 Carry internal emulated-hand provenance and cancellation through the SDK route and suppress captured-hand mesh echoes without changing vanilla DOM behavior or gesture thresholds; verify one activation for pointer/compatibility input, input-off policies, and no click after cancellation/profile reset.
-- [ ] 2.5 Document every new hook and event payload, the supported event subset, frame-readable hand semantics and callback ownership; verify examples and focused pointer/interaction/hand compatibility tests.
+- [x] 2.1 Add typed SDK/frame/hand context hooks using the shared Fiber advance; verify current processed and scene hands, common frame time/delta, restart behavior, out-of-context errors and cleanup in focused hook tests.
+- [x] 2.2 Add the optional SDK mesh-pointer registration route to authoritative mouse picking without a second DOM event manager; verify hit/miss, hover/down/move/up/click, parent propagation, both stereo halves and mono orthographic rays in targeted SDK input tests.
+- [x] 2.3 Add cleanup-safe component pointer and physical-target hooks with current callback refs; verify target nearest arbitration, held capture, disabled/removed/lost reasons and StrictMode replay with real React fixtures.
+- [x] 2.4 Carry internal emulated-hand provenance and cancellation through the SDK route and suppress captured-hand mesh echoes without changing vanilla DOM behavior or gesture thresholds; verify one activation for pointer/compatibility input, input-off policies, and no click after cancellation/profile reset.
+- [x] 2.5 Document every new hook and event payload, the supported event subset, frame-readable hand semantics and callback ownership; verify examples and focused pointer/interaction/hand compatibility tests.
 
 ## 3. Hello Cube runs and exports identical components with compatible source-alias builds
 

@@ -49,6 +49,9 @@ interface Candidate {
   points: THREE.Vector3[];
 }
 
+/** Optional SDK-owned component route; no separate DOM event manager. */
+export type MouseObserver = (type: 'pointermove' | 'pointerdown' | 'pointerup' | 'pointercancel' | 'pointerleave' | 'click', ray: THREE.Ray, event: PointerEvent, blocked: boolean) => void;
+
 export interface InteractorOptions {
   tuning?: Partial<InteractionTuning>;
 }
@@ -226,16 +229,21 @@ export class Interactor {
    * top left) into a world ray; Xrb.bindMouse passes the ray from the viewer's eye through that
    * point of the glass. Returns an unbind function.
    */
-  bindMouse(canvas: HTMLElement, rayAt: (u: number, v: number) => THREE.Ray, { systemCursor = true } = {}): () => void {
+  bindMouse(canvas: HTMLElement, rayAt: (u: number, v: number) => THREE.Ray, { systemCursor = true, observe }: { systemCursor?: boolean; observe?: MouseObserver } = {}): () => void {
     const previousCursor = canvas.style?.cursor ?? '';
     if (canvas.style && !systemCursor) canvas.style.cursor = 'none';
     const ray = (e: PointerEvent) => {
       const r = canvas.getBoundingClientRect();
       return rayAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
     };
-    const down = (e: PointerEvent) => { if (this.pointerDown(ray(e))) canvas.setPointerCapture(e.pointerId); };
+    const down = (e: PointerEvent) => {
+      const r = ray(e), captured = this.pointerDown(r);
+      if (captured) canvas.setPointerCapture(e.pointerId);
+      observe?.('pointerdown', r, e, captured);
+    };
     const move = (e: PointerEvent) => {
-      this.pointerMove(ray(e));
+      const r = ray(e);
+      this.pointerMove(r);
       if (!this.captures.has(MOUSE_ID)) {
         const hit = this.pick(this.mouseRay!);
         this.mouseTarget = hit?.target ?? null;
@@ -243,20 +251,34 @@ export class Interactor {
         for (const t of this.targets) t.state.mouseOver = this.mouseTarget === t;
         if (canvas.style) canvas.style.cursor = systemCursor ? (this.mouseTarget ? 'pointer' : 'auto') : 'none';
       }
+      observe?.('pointermove', r, e, this.captures.has(MOUSE_ID) || !!this.mouseTarget);
     };
-    const up = () => this.pointerUp();
-    const leave = () => { if (!this.captures.has(MOUSE_ID)) this.pointerLeave(); };
+    const up = (e: PointerEvent) => {
+      const captured = this.captures.has(MOUSE_ID);
+      this.pointerUp();
+      observe?.(e.type === 'pointercancel' ? 'pointercancel' : 'pointerup', ray(e), e, captured);
+    };
+    const leave = (e: PointerEvent) => {
+      if (!this.captures.has(MOUSE_ID)) this.pointerLeave();
+      observe?.('pointerleave', ray(e), e, this.captures.has(MOUSE_ID));
+    };
+    const click = (e: PointerEvent) => {
+      const r = ray(e);
+      observe?.('click', r, e, !!this.pick(r) || this.captures.has(MOUSE_ID));
+    };
     canvas.addEventListener('pointerdown', down);
     canvas.addEventListener('pointermove', move);
     canvas.addEventListener('pointerup', up);
     canvas.addEventListener('pointercancel', up);
     canvas.addEventListener('pointerleave', leave);
+    if (observe) canvas.addEventListener('click', click);
     return () => {
       canvas.removeEventListener('pointerdown', down);
       canvas.removeEventListener('pointermove', move);
       canvas.removeEventListener('pointerup', up);
       canvas.removeEventListener('pointercancel', up);
       canvas.removeEventListener('pointerleave', leave);
+      if (observe) canvas.removeEventListener('click', click);
       if (canvas.style) canvas.style.cursor = previousCursor;
     };
   }

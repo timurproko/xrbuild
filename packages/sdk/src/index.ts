@@ -35,6 +35,8 @@ import { HandProfileReceiver } from './hand-profile-control.ts';
 import { previewHandScope, subscribeHandProfile } from './hand-profile-preview.ts';
 import { HandFrameIngress, handSourcePolicy } from './hand-source.ts';
 import { disposeObject } from './dispose-object.ts';
+import { ComponentPointer } from './component-pointer.ts';
+export type { ComponentPointerEvent, ComponentPointerHandlers, ComponentPointerType } from './component-pointer.ts';
 import { detectXrMode, eyesInPanel, headOf, rigMatrix, virtualDisplay, VirtualPanel, wantsAutoEnter, XrHands, type XrFrameLike, type XrMode, type XrOptions, type XrSessionLike, type XrSystemLike } from './webxr.ts';
 
 export * from './protocol.ts';
@@ -121,6 +123,8 @@ export class Xrb {
   readonly hands: HandInput;
   readonly view: StereoRenderer;
   readonly pointer: PointerEmulation | null;
+  /** New: optional SDK-picked mesh handlers. Physical interaction targets take precedence. */
+  readonly componentPointer = new ComponentPointer();
   /** shared interaction core: register poke / pinch / grab / volume targets, updated before each render */
   readonly interaction: Interactor;
   /** add to your scene to see tracked hands */
@@ -252,7 +256,7 @@ export class Xrb {
       for (const fn of this.projectionListeners) fn(projection);
     });
     this.iconOptions = { autoReady: options.icon?.autoReady ?? true, readyMs: options.icon?.readyMs ?? 1000 };
-    this.pointer = options.pointer === false || this.icon ? null : new PointerEmulation({ element: renderer.domElement });
+    this.pointer = options.pointer === false || this.icon ? null : new PointerEmulation({ element: renderer.domElement, captured: (handId) => !!this.interaction.captured(handId) });
     this.configureHandProfile();
     if (this.icon) this.startIcon(this.icon.size);
     if (this.icon && options.icon?.create) this.createIconStage(options.icon.create);
@@ -548,7 +552,9 @@ export class Xrb {
       const e: Vec3 = this.stereo ? (rightEye ? r : l) : [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2, (l[2] + r[2]) / 2];
       const eye = this.view.panel.pointToWorld(e, new THREE.Vector3());
       return new THREE.Ray(eye, glass.sub(eye).normalize());
-    }, { systemCursor: this.cursorStyle === 'system' });
+    }, { systemCursor: this.cursorStyle === 'system', observe: (type, ray, event, blocked) => {
+      this.componentPointer.dispatch(type, ray, event, blocked);
+    } });
     const release = () => {
       if (this.unbindMouse !== release) return;
       unbind();
@@ -806,6 +812,7 @@ export class Xrb {
     this.currentHands = []; this.sceneHands = [];
     this.interaction.update([], this.metre);
     this.unbindMouse?.();
+    this.componentPointer.clear();
     this.restoreCursor();
     this.disposeShell();
     disposeObject(this.cursorObject);

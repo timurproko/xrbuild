@@ -48,6 +48,39 @@ renderer. Do not use Canvas event managers, render-taking effect composers, came
 `setSize`/`setDpr`/`setFrameloop`, Fiber XR helpers or raw drawing in components. SDK managed projection
 and SDK per-eye sizing are authoritative. Use the SDK context for access to the actual renderer.
 
+## New hooks and event types
+
+- `useXrb()` returns the SDK app, including `app.xrb`, the real `renderer`, `scene` and stable `camera`.
+- `useXrbFrame(callback)` receives `XrbAppFrame` once per SDK frame, after fresh hands and before picking/drawing. Animate object refs here; React state commits are scheduled normally.
+- `useXrbHands()` returns stable frame-readable getters `current` (processed SDK hands) and `scene` (scene-space hands). Read inside a frame callback; it does not rerender React per joint. Use existing `xrb.on` for discrete gesture subscriptions and clean up the returned unsubscribe function.
+- `useXrbPointer(objectRef, handlers)` registers a mesh or recursive group after commit. It retains registration across handler updates and unregisters on removal. Do not register the same object twice.
+- `useXrbTarget(targetOrFactory, handler)` owns one existing SDK poke/pinch/grab/volume target registration for its effect lifetime. A factory runs after refs are attached; memoize its identity with `useCallback`. Targets cannot already have another owner. Cleanup releases held capture with `removed` before unsubscribing; handler changes do not cancel capture.
+
+All hooks require the bridge context. `ComponentPointerHandlers` supports `onPointerOver`,
+`onPointerOut`, `onPointerMove`, `onPointerDown`, `onPointerUp`, `onPointerCancel`, `onClick` and
+`onPointerMissed`. Nearest visible registered mesh wins; hit handlers bubble through registered
+ancestors until `stopPropagation()`. A click miss calls registered miss handlers. Only SDK pointer
+and click events are consumed, never compatibility mouse duplicates. Physical target capture wins;
+emulated-hand echoes and cancelled/retired gestures cannot activate mesh handlers. Legacy DOM events
+for OrbitControls are unchanged. Existing SDK Mouse/Hand-pointer policies apply independently.
+
+`ComponentPointerEvent` has `type`, hit `object`, receiving `eventObject`, world `point`, SDK `ray`,
+`nativeEvent`, `handId` (null for a real mouse), and `stopPropagation()`. This is **not** Fiber's full
+DOM event protocol: no independent raycaster, intersection list, wheel/double-click/context-menu
+handlers or Fiber pointer-capture API. Use physical targets for capture-aware spatial controls.
+The corresponding new low-level SDK surface is `xrb.componentPointer.add(object, handlers)`, returning
+an unregister function; `clear()` retires all registrations. Most apps should use the hooks.
+
+```tsx
+function Cube() {
+  const mesh = useRef<THREE.Mesh>(null);
+  const hands = useXrbHands();
+  useXrbFrame(({ timeMs }) => { mesh.current!.rotation.y = timeMs / 1000; });
+  useXrbPointer(mesh, { onClick: () => console.log('selected'), onPointerMissed: () => console.log('miss') });
+  return <mesh ref={mesh}><boxGeometry /><meshStandardMaterial color="#f08a24" /></mesh>;
+}
+```
+
 ## Source aliases and dependencies
 
 Like the SDK, the entry is TypeScript source: alias `@xr-build/react` to
