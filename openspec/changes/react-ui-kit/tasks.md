@@ -2,7 +2,7 @@
 
 ## 1. UI Kit React controls preserve behavior and release owned resources
 
-- [ ] 1.1 Before implementation edits, retain baseline production builds, deterministic camera/clock/viewport/catalog fixtures, pictures and mouse/hand traces for UI Kit, Launcher and a generated template in the crew task folder; check hashes and coverage of mono perspective, orthographic, stereo and icon states against the design matrix.
+- [x] 1.1 Before implementation edits, retain baseline production builds, deterministic camera/clock/viewport/catalog fixtures, pictures and mouse/hand traces for UI Kit, Launcher and a generated template in the crew task folder; check hashes and coverage of mono perspective, orthographic, stereo and icon states against the design matrix.
 - [x] 1.2 Add chain-compatible listener removal, disposer-returning subscriptions and idempotent owned-resource disposal to controls/primitives; focused imperative tests cover selective unsubscribe, repeated detach/dispose, held cancellation, dynamic geometry, nested dialog resources and borrowed-resource survival.
 - [x] 1.3 Separate default visual builders from unchanged control behavior/targets without implementing themes; compare geometry/material parameters and baseline control pictures, and keep existing imperative control/sound tests passing.
 - [x] 1.4 Export typed optional React components for Board, Button variants, Switch, Segmented, Slider variants, Dial, Trackball, Dialog, Label, Icon and GlassEdge; real component tests cover commit-owned construction, SDK-only attachment/frame work, mutable props, stable callback updates and the React-free imperative root import.
