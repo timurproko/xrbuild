@@ -248,6 +248,7 @@ export function findHosts(): Promise<ForeignHost[]> {
 
 export class HostRunner extends EventEmitter {
   private host: ChildProcess | null = null;
+  private hostClosed: Promise<void> | null = null;
   private handReservation: HandAcquisitionReservation | null = null;
   private startEpoch = 0;
   reserveAcquisition = reserveHandAcquisition;
@@ -331,6 +332,8 @@ export class HostRunner extends EventEmitter {
   /** Starts and owns one standalone browser preview, including its optional dev server. */
   async startPreview(req: PreviewRequest, mode: RunMode, launch: (devUrl: string | null) => Promise<ChildProcess>): Promise<void> {
     if (this.busy) throw new Error(`${this.s.projectId} is already running; stop it first`);
+    // Preview replacement also retires any native startup still awaiting handoff.
+    this.startEpoch++;
     this.log = [];
     this.set({ projectId: req.projectId, mode, flat: !!req.flat, switchable: false, switchView: false, cameraAvailable: false, cameraView: false, phase: 'starting', pid: null, startedMs: Date.now(), channelUrl: null, devUrl: null, status: null, warning: null, foreign: [] });
     try {
@@ -379,13 +382,17 @@ export class HostRunner extends EventEmitter {
     const epoch = ++this.startEpoch;
     const current = () => { if (epoch !== this.startEpoch) throw new Error('Native launch was cancelled'); };
     let reservation: HandAcquisitionReservation | null = null;
+    let reservationClosed: Promise<void> | null = null;
+    const closeReservation = () => reservationClosed ??= reservation?.close() ?? Promise.resolve();
+    let host: ChildProcess | null = null;
+    let closed: Promise<void> | null = null;
     this.log = [];
     this.set({ projectId: req.projectId, mode: req.mode, flat: !!req.flat, switchable: false, switchView: !!req.switchView, cameraAvailable: req.cameraAvailable ?? !!req.cameraView, cameraView: !!req.cameraView, phase: 'starting', pid: null, startedMs: Date.now(), channelUrl: null, devUrl: null, status: null, warning: null, foreign: [] });
     try {
       if (req.acquisitionHelper && req.handPolicy === 'native') {
         await this.checkAcquisitionHost(req.hostExe); current();
         reservation = await this.reserveAcquisition(req.acquisitionHelper, `App ${req.projectId}`);
-        this.handReservation = reservation; current();
+        current(); this.handReservation = reservation;
       }
       const args = [...req.hostArgs, '--status=stdout', ...(this.s.cameraAvailable ? ['--camera-view=on', `--camera-stream=${req.cameraView ? 'on' : 'off'}`] : [])];
       if (req.mode === 'dev') {
@@ -409,24 +416,35 @@ export class HostRunner extends EventEmitter {
       current();
       this.addLog(`[panel] ${path.basename(req.hostExe)} ${args.join(' ')}`);
       const { XRB_HAND_LEASE_TICKET: _ambientTicket, ...hostEnvironment } = process.env;
-      const host = spawn(req.hostExe, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...hostEnvironment, ...(reservation ? { XRB_HAND_LEASE_TICKET: reservation.ticket } : {}) } });
+      host = spawn(req.hostExe, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...hostEnvironment, ...(reservation ? { XRB_HAND_LEASE_TICKET: reservation.ticket } : {}) } });
       this.host = host;
       const out = new LineSplitter((l) => this.onHostLine(l));
       host.stdout!.setEncoding('utf8').on('data', (d: string) => out.push(d));
       host.stderr!.setEncoding('utf8').on('data', (d: string) => out.push(d));
       host.on('error', (e) => this.addLog(`[panel] cannot start the host: ${e.message}`));
-      host.on('close', (code) => void this.onHostExit(host, code, out));
+      const child = host;
+      closed = this.hostClosed = new Promise<void>((resolve, reject) => {
+        child.once('close', (code) => { this.onHostExit(child, code, out).then(resolve, reject); });
+      });
       this.set({ pid: host.pid ?? null });
       if (reservation) { if (!host.pid) throw new Error('Native host did not start'); await reservation.handoff(host.pid); current(); }
+      // Reservation teardown is part of startup too: a failure must not orphan this child.
+      await closeReservation();
+      current();
       if (this.host === host && host.exitCode === null) this.set({ phase: 'running' });
     } catch (e) {
-      this.stopDev();
-      this.addLog(`[panel] ${(e as Error).message}`);
-      this.set({ phase: 'idle', last: { projectId: req.projectId, exitCode: null, endedMs: Date.now(), lines: this.log.slice(-30), forced: false }, warning: (e as Error).message });
+      // Join this launch's child, not whatever a later launch may have installed. A kill
+      // request is not proof of exit, including failed spawn and concurrent Stop paths.
+      if (host && closed) await this.stopHost(host, closed, STOP_GRACE_MS);
+      if (epoch === this.startEpoch) {
+        this.stopDev();
+        this.addLog(`[panel] ${(e as Error).message}`);
+        this.set({ phase: 'idle', pid: null, channelUrl: null, devUrl: null, last: { projectId: req.projectId, exitCode: host?.exitCode ?? null, endedMs: Date.now(), lines: this.log.slice(-30), forced: host ? this.s.last?.forced ?? false : false }, warning: (e as Error).message });
+      }
       throw e;
     } finally {
       if (this.handReservation === reservation) this.handReservation = null;
-      await reservation?.close();
+      await closeReservation();
     }
   }
 
@@ -516,18 +534,27 @@ export class HostRunner extends EventEmitter {
       }
       return;
     }
+    await this.stopHost(host, this.hostClosed!, graceMs);
+  }
+
+  /** Keep ownership until the designated child's close handler has finished. */
+  private async stopHost(host: ChildProcess, closed: Promise<void>, graceMs: number): Promise<void> {
+    if (this.host !== host) { await closed; return; }
     this.set({ phase: 'stopping' });
-    const exited = new Promise<void>((r) => host.once('close', () => r()));
-    await this.kill(host.pid, false);
-    const done = await Promise.race([exited.then(() => true), sleep(graceMs).then(() => false)]);
-    if (!done) {
-      this.forced = true;
-      this.addLog(`[panel] the host did not exit within ${graceMs / 1000} s: ending it by force`);
-      await this.kill(host.pid, true);
-      await exited;
+    if (!host.pid || host.exitCode !== null || host.signalCode !== null) { await closed; return; }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await this.kill(host.pid, false);
+      const done = await Promise.race([closed.then(() => true), new Promise<false>(resolve => { timer = setTimeout(() => resolve(false), graceMs); })]);
+      if (!done && this.host === host) {
+        this.forced = true;
+        this.addLog(`[panel] the host did not exit within ${graceMs / 1000} s: ending it by force`);
+        await this.kill(host.pid, true);
+      }
+      await closed;
+    } finally {
+      clearTimeout(timer);
     }
-    // onHostExit runs from 'close' and may still be finishing (foreign check).
-    while (this.s.phase !== 'idle') await sleep(20);
   }
 
   /** Bounded app-shell closure cannot stop a native host or a stale/stopping preview. */
