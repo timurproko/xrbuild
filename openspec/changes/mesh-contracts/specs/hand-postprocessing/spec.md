@@ -114,10 +114,10 @@ A capable plugin SHALL declare a preparation allowance accepted only within a fi
 - **THEN** mesh fails with a bounded reason and owned cleanup completes without waiting on interaction
 
 ### Requirement: Checked writable runtime resolution
-An opted-in declaration SHALL resolve a plugin-owned prepared runtime generation beneath the selected user workspace using a complete checked receipt bound to plugin identity, source/declaration inputs and output integrity. Launch files SHALL be contained regular unlinked files and checked again before spawn. Discovery SHALL remain passive; unsafe, missing, stale or incomplete state SHALL report unavailable without PATH search, implicit setup or source-tree writes.
+An opted-in declaration SHALL resolve a plugin-owned prepared runtime generation beneath the user's ~/.xrbuild using a complete checked receipt bound to plugin identity, source/declaration inputs and output integrity. Launch files SHALL be contained regular unlinked files and checked again before spawn. Discovery SHALL remain passive; unsafe, missing, stale or incomplete state SHALL report unavailable without PATH search, implicit setup or source-tree writes.
 
 #### Scenario: Runtime outside the source folder
-- **WHEN** a plugin has a valid prepared program and model files in its owned user-workspace generation
+- **WHEN** a plugin has a valid prepared program and model files in its owned user-home generation
 - **THEN** the checked program can launch with its contained runtime root without core identifying the runtime language, model names or device implementation
 
 #### Scenario: Unsafe or stale runtime

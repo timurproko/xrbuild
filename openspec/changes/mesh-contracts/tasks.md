@@ -2,9 +2,9 @@
 
 ## 1. Final-pose observations and negotiated compatibility
 
-- [ ] 1.1 Add optional copied SDK Hand/Track joint confidence, support and last-supported capture evidence; verify targeted sampling tests cover partial/zero scores, prediction age, unknown custom inputs, identity retirement and unchanged pose/gesture traces.
-- [ ] 1.2 Add modern declaration and processor/consumer capability negotiation alongside exact legacy packets; verify focused declaration/codec/client tests cover old/new combinations, unknown versions, missing required evidence and malformed payload bounds without provider ABI/wire changes.
-- [ ] 1.3 Carry observation arrays to capable final-pose mesh consumers and document score/support/clock semantics in the mesh protocol and SDK docs; verify codec round trips and fake-service dispatch match the documented 21-joint contract.
+- [x] 1.1 Add optional copied SDK Hand/Track joint confidence, support and last-supported capture evidence; verify targeted sampling tests cover partial/zero scores, prediction age, unknown custom inputs, identity retirement and unchanged pose/gesture traces.
+- [x] 1.2 Add modern declaration and processor/consumer capability negotiation alongside exact legacy packets; verify focused declaration/codec/client tests cover old/new combinations, unknown versions, missing required evidence and malformed payload bounds without provider ABI/wire changes.
+- [x] 1.3 Carry observation arrays to capable final-pose mesh consumers and document score/support/clock semantics in the mesh protocol and SDK docs; verify codec round trips and fake-service dispatch match the documented 21-joint contract.
 
 ## 2. Bounded contained process-tree lifecycle
 

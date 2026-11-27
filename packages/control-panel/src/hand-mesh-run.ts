@@ -1,8 +1,8 @@
 import http from 'node:http';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
-import { meshPacket, readMeshPacket, decodeMeshResult, validMeshFrame, MESH_MAX_BYTES, type MeshFrame, type MeshRuntime } from '../../sdk/src/hand-mesh-protocol.ts';
+import { meshPacket, readMeshPacket, decodeMeshResult, encodeMeshResult, validMeshFrame, validMeshCapabilities, MESH_CAPABILITIES, MESH_MAX_BYTES, type MeshFrame, type MeshRuntime } from '../../sdk/src/hand-mesh-protocol.ts';
 import type { HandMeshPlugin } from './hand-mesh-plugins.ts';
 import { handMeshSettings } from './hand-mesh-contract.ts';
 
@@ -14,6 +14,10 @@ export class HandMeshRun {
   descriptor: MeshRuntime | null = null;
   private child: ChildProcessWithoutNullStreams | null = null;
   private ready = false;
+  private protocol: 1 | 2 = 1;
+  private needsObservations = false;
+  private modernConsumer = false;
+  private runId = randomUUID();
   private closed = false;
   private stopping: Promise<void> | null = null;
   private current: Work | null = null;
@@ -56,6 +60,8 @@ export class HandMeshRun {
   async start(plugin: HandMeshPlugin, settings: unknown): Promise<MeshRuntime> {
     if (!plugin.available || !plugin.program) throw new Error('Mesh plugin unavailable');
     const values = handMeshSettings(plugin.declaration, settings);
+    this.protocol = plugin.declaration.version;
+    this.needsObservations = !!plugin.declaration.capabilities?.includes('final-pose-observations-v1');
     await new Promise<void>((resolve, reject) => { this.server.once('error', reject); this.server.listen(0, '127.0.0.1', () => { this.server.removeListener('error', reject); resolve(); }); });
     const address = this.server.address();
     if (!address || typeof address === 'string') throw new Error('No mesh endpoint');
@@ -68,7 +74,8 @@ export class HandMeshRun {
     child.stdout.on('data', (chunk: Buffer) => this.output(chunk));
     child.once('error', () => this.fail('sidecar could not start'));
     child.once('exit', () => { if (!this.closed) this.fail('sidecar exited'); });
-    child.stdin.write(meshPacket({ type: 'start', version: 1, owner: plugin.owner, id: plugin.id, settingsVersion: plugin.declaration.settingsVersion, settings: values,
+    child.stdin.write(meshPacket({ type: 'start', version: this.protocol,
+      ...(this.protocol === 2 ? { runId: this.runId, settingsGeneration: 1, capabilities: plugin.declaration.capabilities } : {}), owner: plugin.owner, id: plugin.id, settingsVersion: plugin.declaration.settingsVersion, settings: values,
       limits: { hands: 2, vertices: 16384, triangles: 32768, bytes: MESH_MAX_BYTES }, ownerLoss: 'exit-on-stdin-end' }));
     this.later(() => { if (!this.ready) this.fail('sidecar ready timeout'); }, 10000);
     // Covers dev preparation plus host/document loading, even if no app-start notification arrives.
@@ -84,7 +91,11 @@ export class HandMeshRun {
     if (!this.ready || this.current || !this.pending || this.closed) return;
     this.current = this.pending; this.pending = null;
     const work = this.current;
-    this.child?.stdin.write(meshPacket(work.frame));
+    const frame = this.protocol === 2 ? { ...work.frame, version: 2, runId: this.runId, settingsGeneration: 1 } : {
+      type: 'frame', epoch: work.frame.epoch, sequence: work.frame.sequence, revision: work.frame.revision, sentMs: work.frame.sentMs, sampleMs: work.frame.sampleMs,
+      hands: work.frame.hands.map(({ id, handedness, keypoints }) => ({ id, handedness, keypoints })),
+    };
+    this.child?.stdin.write(meshPacket(frame));
     this.later(() => { if (this.current === work) { this.setStatus('Skeleton fallback: mesh is late'); this.reply(work); } }, 33);
     this.later(() => { if (this.current === work) this.fail('sidecar frame timeout'); }, 2000);
   }
@@ -99,15 +110,17 @@ export class HandMeshRun {
         if (this.bytes.length < size) return;
         const packet = this.bytes.subarray(0, size); this.bytes = this.bytes.subarray(size);
         const { meta } = readMeshPacket(packet);
-        if (meta.type === 'ready' && meta.version === 1 && !this.ready) {
+        if (meta.type === 'ready' && meta.version === this.protocol && !this.ready) {
+          if (this.protocol === 2 && (!validMeshCapabilities(meta.capabilities) || meta.runId !== this.runId || meta.settingsGeneration !== 1)) throw new Error('capabilities');
           this.ready = true; this.setStatus('Ready; app mesh not started'); this.pump();
           continue;
         }
         const result = decodeMeshResult(packet), work = this.current;
         if (!work || result.epoch !== work.frame.epoch || result.sequence !== work.frame.sequence || result.revision !== work.frame.revision
           || result.meshes.some(m => !work.frame.hands.some(h => h.id === m.id))) throw new Error('association');
+        if (this.protocol === 2 && (result.version !== 2 || result.runId !== this.runId || result.settingsGeneration !== 1)) throw new Error('settings association');
         this.current = null;
-        if (result.epoch === this.epoch && performance.now() - work.at <= 33) { this.setStatus('Running'); this.reply(work, packet); }
+        if (result.epoch === this.epoch && performance.now() - work.at <= 33) { this.setStatus('Running'); this.reply(work, this.modernConsumer ? encodeMeshResult({ ...result, version: 2, runId: this.runId, settingsGeneration: 1 }) : encodeMeshResult({ ...result, version: undefined })); }
         else { this.setStatus('Skeleton fallback: mesh is late'); this.reply(work); }
         this.pump();
       }
@@ -131,11 +144,19 @@ export class HandMeshRun {
       if (!this.epoch) this.watchConsumer();
       this.epoch = frame.epoch; this.lastSequence = -1; this.lastRequest = performance.now();
       this.reply(this.pending); this.pending = null;
-      res.writeHead(204); res.end(); return;
+      this.modernConsumer = frame.protocolVersion === 2 && MESH_CAPABILITIES.every(c => frame.capabilities?.includes(c));
+      if (this.modernConsumer) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ protocolVersion: 2, capabilities: [...MESH_CAPABILITIES], runId: this.runId, settingsGeneration: 1 }));
+      } else { res.writeHead(204); res.end(); }
+      return;
     }
     if (req.url !== '/frame' || frame.epoch !== this.epoch || frame.sequence <= this.lastSequence) { res.writeHead(409); res.end(); return; }
     this.lastSequence = frame.sequence; this.lastRequest = performance.now();
     if (frame.drawingStatus === 'Running' || frame.drawingStatus?.startsWith('Skeleton fallback:')) this.setStatus(frame.drawingStatus);
+    if (this.needsObservations && (!this.modernConsumer || frame.hands.some(h => !h.observations))) {
+      this.setStatus('Skeleton fallback: rebuild/relaunch for observation support'); res.writeHead(204); res.end(); return;
+    }
     if (!this.ready) { res.setHeader('x-xrb-mesh-status', this.status); res.writeHead(204); res.end(); return; }
     this.reply(this.pending); this.pending = { frame, response: res, at: performance.now() }; this.pump();
   }

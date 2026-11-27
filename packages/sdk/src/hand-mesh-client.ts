@@ -1,5 +1,5 @@
 import type { Hand } from './hands.ts';
-import { decodeMeshResult, MESH_MAX_BYTES, type MeshFrame, type MeshRuntime, type MeshSurface } from './hand-mesh-protocol.ts';
+import { decodeMeshResult, MESH_CAPABILITIES, validMeshCapabilities, unknownMeshObservations, MESH_MAX_BYTES, type MeshFrame, type MeshRuntime, type MeshSurface } from './hand-mesh-protocol.ts';
 
 export function meshRuntime(value: string | undefined): MeshRuntime | null {
   if (!value) return null;
@@ -17,6 +17,9 @@ export class HandMeshClient {
   private now: () => number;
   private closed = false;
   private connected = false;
+  private protocol: 1 | 2 = 1;
+  private runId = '';
+  private settingsGeneration = 1;
   private epoch = crypto.randomUUID();
   private sequence = 0;
   private revision = 0;
@@ -31,15 +34,24 @@ export class HandMeshClient {
     this.runtime = runtime; this.fetcher = fetcher; this.now = now;
     const controller = new AbortController(); this.controller = controller;
     const timer = setTimeout(() => controller.abort(), 2000);
-    void this.send('/connect', this.frame([], 0), controller.signal).then(r => {
+    void this.send('/connect', { ...this.frame([], 0), protocolVersion: 2, capabilities: [...MESH_CAPABILITIES] }, controller.signal).then(async r => {
       if (this.closed) return;
       if (!r.ok) throw new Error('mesh connection refused');
+      if (r.status === 200) {
+        const hello = await r.json();
+        if (hello.protocolVersion !== 2 || !validMeshCapabilities(hello.capabilities) || typeof hello.runId !== 'string'
+          || !/^[a-zA-Z0-9-]{1,80}$/.test(hello.runId) || !Number.isSafeInteger(hello.settingsGeneration) || hello.settingsGeneration < 0) throw new Error('mesh negotiation failed');
+        this.protocol = 2; this.runId = hello.runId; this.settingsGeneration = hello.settingsGeneration;
+      }
+      if (this.closed) return;
       this.connected = true; this.pump();
     }).catch(() => { if (!this.closed) this.status = 'Skeleton fallback: mesh connection unavailable'; }).finally(() => clearTimeout(timer));
   }
   private frame(hands: Hand[], sampleMs: number): MeshFrame {
     return { type: 'frame', epoch: this.epoch, sequence: this.sequence++, revision: this.revision, sentMs: this.now(), sampleMs,
-      hands: hands.slice(0, 2).map(h => ({ id: h.id, handedness: h.handedness, keypoints: h.keypoints.map(p => [...p]) })) };
+      ...(this.protocol === 2 ? { version: 2, runId: this.runId, settingsGeneration: this.settingsGeneration } : {}),
+      hands: hands.slice(0, 2).map(h => ({ id: h.id, handedness: h.handedness, keypoints: h.keypoints.map(p => [...p]),
+        ...(this.protocol === 2 ? { observations: h.observations ? structuredClone(h.observations) : unknownMeshObservations() } : {}) })) };
   }
   /** Empty acquisition invalidates meshes immediately, independent of the skeleton grace period. */
   observed(ids: number[]): void {
@@ -85,6 +97,7 @@ export class HandMeshClient {
       if (this.closed || frame.revision !== this.revision || this.now() - frame.sentMs > 33) return;
       const bytes = new Uint8Array(length); let offset = 0; for (const p of parts) { bytes.set(p, offset); offset += p.length; }
       const result = decodeMeshResult(bytes);
+      if (this.protocol === 2 && (result.version !== 2 || result.runId !== this.runId || result.settingsGeneration !== frame.settingsGeneration)) throw new Error('wrong settings generation');
       if (result.epoch !== frame.epoch || result.sequence !== frame.sequence || result.revision !== frame.revision || result.meshes.some(m => !frame.hands.some(h => h.id === m.id))) throw new Error('wrong mesh association');
       for (const mesh of result.meshes) {
         const cached = this.topologies.get(mesh.id);

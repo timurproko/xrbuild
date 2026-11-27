@@ -9,6 +9,8 @@ nominal viewer position, so you can develop without the rig. Displays and inputs
 plugins (see the [main README](../../README.md#plugins)); the SDK only sees what the host channel
 reports.
 
+`Hand.observations` optionally exposes copied 21-joint `confidence`, `supported` and `ageMs` arrays for geometry-only consumers. Null entries mean unknown; age is measured at the requested sample time from the last supported mapped capture, not dispatch or prediction time. Existing Hand constructors remain compatible. See [mesh protocol](../../docs/hand-mesh-protocol.md) for negotiated wire capabilities.
+
 ## Getting the SDK into an app
 
 There is nothing to install or publish: apps (in your workspace, logically separate from the core) take the SDK and

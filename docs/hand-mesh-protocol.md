@@ -1,4 +1,14 @@
-# Desktop hand mesh sidecar protocol v1
+# Desktop hand mesh sidecar protocol
+
+## Negotiated v2 observation contract
+
+Version-one declarations and packets remain supported unchanged. Version-two declarations opt in with `capabilities`, using the exact names `final-pose-observations-v1`, `live-configure-v1`, and `preparation-progress-v1`. Unsupported or duplicate names are rejected. A modern consumer offers `{protocolVersion:2,capabilities:[...]}` on `/connect`; a legacy 204 response keeps the consumer on v1. A v2 response identifies `protocolVersion`, negotiated `capabilities`, `runId` and `settingsGeneration`. The native bootstrap remains `{version:1,url,token}`.
+
+V2 frames/results include `version:2`, `runId`, and `settingsGeneration`, independent of pose `revision`. Each final-pose hand has `observations:{confidence,supported,ageMs}`: three aligned 21-element arrays. Entries are provider confidence (not calibrated probability), current support (`score > 0` for the existing acquisition contract), and age at `sampleMs` since the last supported mapped capture. Unknown entries are null, never fabricated confidence one or age zero. Prediction does not refresh capture evidence; zero confidence preserves the last supported age. These facts never gate or modify skeleton interaction. Legacy processors receive only the original positional frame shape.
+
+A v2 processor receives the modern `start` and echoes its run/generation and declared capabilities in `ready`. Invalid negotiation fails mesh only. New observation requirements cannot be met by a legacy consumer: it gets rebuild/relaunch guidance, not invented evidence. The sections below describe the retained **v1** contract; modern configuration/preparation extends it as documented below.
+
+## Legacy v1
 
 Only a panel-managed desktop run with Hand starts one selected mesh sidecar. It is optional: acquisition and interaction never wait for ready or results. Settings are pinned at launch; changing them or selecting None takes effect next run. Other execution contexts get no endpoint. No program, environment or model is installed or downloaded by this protocol.
 

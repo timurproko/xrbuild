@@ -11,7 +11,8 @@ process.stdin.on('data', chunk => {
     if (bytes.length < size) break;
     const { meta: m } = readMeshPacket(bytes.subarray(0, size)); bytes = bytes.subarray(size);
     if (m.type === 'stop') process.exit(0);
-    if (m.type === 'start') { settings = m.settings; process.stdout.write(meshPacket({ type: 'ready', version: 1 })); continue; }
+    if (m.type === 'start') { settings = m.settings; process.stdout.write(meshPacket({ type: 'ready', version: m.version,
+      ...(m.version === 2 ? { runId: m.runId, settingsGeneration: m.settingsGeneration, capabilities: m.capabilities } : {}) })); continue; }
     if (m.type !== 'frame') process.exit(2);
     if (settings.mode === 'crash') process.exit(7);
     setTimeout(() => {
@@ -24,7 +25,8 @@ process.stdin.on('data', chunk => {
         const indices = new Uint32Array(triangles * 3); for (let i = 0; i < indices.length; i++) indices[i] = i % count;
         return { id: h.id, topology: `fixture-${count}`, positions, normals, indices };
       });
-      const result = { type: 'result', epoch: m.epoch, sequence: m.sequence, revision: m.revision, meshes };
+      const result = { type: 'result', epoch: m.epoch, sequence: m.sequence, revision: m.revision, meshes,
+        ...(m.version === 2 ? { version: 2, runId: m.runId, settingsGeneration: m.settingsGeneration } : {}) };
       if (settings.mode === 'wrong-epoch') result.epoch = 'retired';
       const packet = encodeMeshResult(result);
       if (settings.mode === 'malformed') packet[0] = 0;

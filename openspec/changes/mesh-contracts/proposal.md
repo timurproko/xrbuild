@@ -10,7 +10,7 @@ The optional hand-mesh service drops acquisition confidence before final-pose di
 - Negotiate versioned mesh capabilities; add bounded live configure/applied acknowledgements and settings-generation fences across service and SDK. Declare live versus reprepare settings and expose saved, applying, applied and drawing generations separately.
 - Replace the fixed modern ready deadline with a plugin-declared, core-bounded preparation allowance and Preparing/Ready/Failed status with bounded progress/reason. Repreparation keeps the owning app/input session alive.
 - Contain the owned mesh process tree from birth, with bounded graceful Stop, forced fallback and verified teardown on cancellation, crash, owner loss and panel exit.
-- Resolve optional plugin-owned runtime generations in the selected writable workspace using checked receipts and contained files, without executing discovery, knowing model/runtime contents, or installing anything.
+- Resolve optional plugin-owned runtime generations in the user's `~/.xrbuild` using checked receipts and contained files, without executing discovery, knowing model/runtime contents, or installing anything.
 - Keep mesh selection independent from Joints/Bones appearance. Provide run-owned control hooks and apply saved post-processing changes to existing compatible managed desktop consumers; later Hands live-session/viewport wiring reuses those hooks.
 - Retain legacy declarations/processors/consumers through explicit capability negotiation and honest unsupported/relaunch status, never by inventing acknowledgements or observation support.
 
@@ -22,7 +22,7 @@ None; extend the existing hand-processing boundaries.
 
 ### Modified Capabilities
 
-- `hand-postprocessing`: negotiated observations/configuration, preparation, safe process ownership, checked writable runtimes and independent mesh visibility.
+- `hand-postprocessing`: negotiated observations/configuration, preparation, safe process ownership, checked writable runtimes and independent mesh visibility. Runtime/model storage is user-home-owned, never workspace-owned.
 - `hand-input`: optional observation metadata survives to final sampling without changing acquisition, geometry or interaction semantics.
 - `hands-module`: backend saved-versus-applied post-processing status and revised current-run semantics, without implementing the later controls redesign or viewport integration.
 
