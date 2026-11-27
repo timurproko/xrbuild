@@ -4,7 +4,7 @@
 SDK hand view and grouped global adjustments. It opens without optional hand tools.
 Choosing Skeleton provider saves silently for the next app launch; a failed save retains the choice with an inline retry.
 The sidebar omits routine source status/guidance. Viewing this page never starts hardware.
-The top slot above the provider is reserved for separately delivered live controls; until connected, the view is idle.
+Start/Stop sits above Skeleton provider. Rejected observations keep a visible diagnostic line with value kind, joint index and count; report that line if real tracking fails. Stalled clears hands/holds after 250 ms and shows dash tracking fps; fresh input resumes, or ten seconds without fresh usable input ends the owned session. Start returns only after worker teardown and ownership release. If cleanup cannot be verified, Retry cleanup replaces permanent Stopping rather than pretending the camera is free. See [session ownership and deadlines](hand-provider-sessions.md).
 
 The former diagnostic and legacy hand-tracking page routes are removed (404, no redirects).
 There is no generated preview, local fixture, fixture interaction target or laboratory navigation.

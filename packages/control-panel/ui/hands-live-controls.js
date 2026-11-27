@@ -18,8 +18,8 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     const source = data?.providers?.find(p => key(p) === provider.value);
     const unavailable = !supported ? 'Standalone Hands currently supports Windows x64 only.' : !view?.profile ? 'Wait for the shared SDK view and valid profile.' : !source ? 'Choose an available skeleton provider.' : source.transport !== 'native' ? 'WebXR requires its explicit app XR session.' : !source.available ? source.reason : '';
     const stoppingNow = stopping || session.stopping || phase === 'stopping';
-    button.textContent = stoppingNow ? 'Stopping…' : active ? 'Stop' : 'Start';
-    button.disabled = stoppingNow || !active && (!!unavailable || phase === 'occupied' || !!view?.replaying);
+    button.textContent = session.blocked ? 'Retry cleanup' : stoppingNow ? 'Stopping…' : active ? 'Stop' : 'Start';
+    button.disabled = !session.blocked && (stoppingNow || !active && (!!unavailable || phase === 'occupied' || !!view?.replaying));
     const labels = { 'not-started': 'Not started', starting: 'Starting…', waiting: 'Waiting', running: 'Running', 'no-hands': 'No hands', rejected: 'Observation dropped', stalled: 'Stalled', stopping: 'Stopping…', stopped: 'Stopped', failed: 'Failed', occupied: 'Busy' };
     let label = labels[phase] ?? 'Not started';
     if (active && status.source && key(status.source) !== provider.value) label += ` · ${status.source.label}`;
@@ -40,7 +40,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   const unsubscribe = session.subscribeLifecycle(update);
   const changed = () => render(); provider.addEventListener('change', changed);
   const click = async () => {
-    if (starting || session.active) {
+    if (starting || session.active || session.blocked) {
       generation++;
       stopping = true; starting = false; update({ phase: 'stopping', source: status.source });
       try { await session.stop(); } catch (error) { update({ phase: 'failed', reason: error.message }); }

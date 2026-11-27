@@ -23,14 +23,14 @@ test('top-level Start/Stop and SDK pinch/drag use actual native frames, preserve
   }
   immutable.set(path.join(workspace, 'xrb-plugins.json'), await fs.readFile(path.join(workspace, 'xrb-plugins.json')));
   const profileFile = path.join(workspace, 'config/hands/profile.json'), profile = JSON.parse(await fs.readFile(profileFile, 'utf8')); profile.unrelated = { keep: [1, 2, 3] }; await fs.writeFile(profileFile, JSON.stringify(profile));
-  const app = createServer({ repo: REPO, workspace, port }); let empty = false;
+  const app = createServer({ repo: REPO, workspace, port }); let empty = false, stream = 'normal';
   const inventory = async () => ({ providers: [{ role: 'input' as const, name: 'session-test', builtin: false, version: '0.0.1', description: 'test-built ABI fixture', path: binary }], rejected: [], error: null });
   app.panel.nativeProviders = inventory;
   const deps = (app.panel.handSessions as any).deps; deps.testScope = randomBytes(32).toString('hex');
   deps.prepare = async (request: any) => {
     const state = await readHandsState(REPO, workspace), registry = await discoverHandProviders(REPO, workspace, inventory);
     assert.equal(request.provider.id, 'fixture'); assert.equal(request.revision, state.revision); assert.equal(request.registryRevision, registry.revision);
-    return { workerExe: worker, helperExe: helper, runtimeName: 'session-test', pluginPath: binary, config: { testHold: true, empty }, source: { owner: 'workspace:fixture', id: 'fixture', label: 'Fixture input', version: '0.0.1' }, profile: state.profile, revision: state.revision };
+    return { workerExe: worker, helperExe: helper, runtimeName: 'session-test', pluginPath: binary, config: { testHold: true, empty, invalidConfidence: stream === 'malformed', sporadic: stream === 'malformed', stallRecover: stream === 'stall-recover', stall: stream === 'stall' }, source: { owner: 'workspace:fixture', id: 'fixture', label: 'Fixture input', version: '0.0.1' }, profile: state.profile, revision: state.revision };
   };
   await new Promise<void>(r => app.server.listen(port, '127.0.0.1', r));
   try {
@@ -106,6 +106,28 @@ test('top-level Start/Stop and SDK pinch/drag use actual native frames, preserve
       assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
       await fs.writeFile(path.join(proof, 'hands-live-responsive.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
       await evaluate(`document.querySelector('#hands-start-stop').click()`); await wait('!livePage.session.active && !livePage.session.stopping');
+      empty = false; stream = 'malformed';
+      await evaluate(`document.querySelector('#hands-start-stop').click()`);
+      await wait(`document.querySelector('#hands-live-diagnostic')?.textContent.includes('confidence-range; joint 8; count')`);
+      assert.equal(await evaluate(`document.querySelector('#hands-live-diagnostic').hidden`), false);
+      await sleep(1200); assert.equal(await evaluate('livePage.session.active'), true, 'healthy frames reset transient rejection rate');
+      await evaluate(`document.querySelector('#hands-start-stop').click()`); await wait(`document.querySelector('#hands-start-stop').textContent==='Start'`);
+      stream = 'stall-recover'; await evaluate(`document.querySelector('#hands-start-stop').click()`);
+      await wait(`document.querySelector('#hands-live-state').textContent==='Running'`);
+      await wait(`document.querySelector('#hands-live-state').textContent==='Stalled'`);
+      assert.equal(await evaluate(`document.querySelector('#hands-tracking-fps').textContent`), '—');
+      assert.equal(await evaluate('livePage.view.testState.drag.held'), false);
+      await wait(`document.querySelector('#hands-live-state').textContent==='Running' && Number(document.querySelector('#hands-tracking-fps').textContent)>0`);
+      await evaluate(`document.querySelector('#hands-start-stop').click()`); await wait(`document.querySelector('#hands-start-stop').textContent==='Start'`);
+      stream = 'stall'; await evaluate(`document.querySelector('#hands-start-stop').click()`);
+      await wait(`document.querySelector('#hands-live-state').textContent==='Stalled'`);
+      for (let i = 0; i < 300 && app.panel.handSessions.busy; i++) await sleep(50);
+      assert.equal(app.panel.handSessions.busy, false, 'stalled acquisition really ends before next Start');
+      await wait(`document.querySelector('#hands-start-stop').textContent==='Start' && !document.querySelector('#hands-start-stop').disabled`);
+      assert.match(await evaluate(`document.querySelector('#hands-start-stop').getAttribute('data-xrb-tooltip-title') || document.querySelector('#hands-start-stop').title`), /10 seconds|usable frames|stalled/i);
+      stream = 'normal'; await evaluate(`document.querySelector('#hands-start-stop').click()`);
+      await wait(`document.querySelector('#hands-live-state').textContent==='Running'`);
+      await evaluate(`document.querySelector('#hands-start-stop').click()`); await wait(`document.querySelector('#hands-start-stop').textContent==='Start'`);
     });
     for (const [file, bytes] of immutable) assert.deepEqual(await fs.readFile(file), bytes, path.relative(workspace, file));
     assert.deepEqual(JSON.parse(await fs.readFile(profileFile, 'utf8')).unrelated, { keep: [1, 2, 3] });

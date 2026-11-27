@@ -23,7 +23,7 @@ type Phase = 'not-started' | 'starting' | 'running' | 'stopping' | 'stopped' | '
 interface Running {
   id: string; epoch: string; owner: string; token: string; phase: Phase; reason: string; heartbeat: number; diagnostic?: string;
   source?: Awaited<ReturnType<typeof prepareHandSession>>['source']; url?: string; child?: ChildProcessWithoutNullStreams;
-  pid?: number; ended: boolean; cancelled: boolean; preparing: boolean; drainTimedOut?: boolean; live?: LiveHands; release?: () => void; stop?: Promise<void>;
+  pid?: number; joined?: boolean; ended: boolean; cancelled: boolean; preparing: boolean; drainTimedOut?: boolean; live?: LiveHands; release?: () => void; stop?: Promise<void>;
 }
 /** One process-owned session; no durable capabilities, camera auto-start or adoption by another tab. */
 export class HandSessions {
@@ -78,7 +78,7 @@ export class HandSessions {
     }
     const s = this.current;
     if (!s || s.owner !== owner || body.sessionId !== s.id) throw new HttpError(403, 'This page does not own that Hands session');
-    if (action === '/stop') { await this.stop(s); return sendJson(res, 200, this.status(owner)); }
+    if (action === '/stop') { await this.stop(s, typeof body.reason === 'string' ? body.reason.slice(0, 512) : ''); return sendJson(res, 200, this.status(owner)); }
     if (action === '/heartbeat') { if (this.busy && !s.cancelled) s.heartbeat = performance.now(); return sendJson(res, 200, this.status(owner)); }
     if (action === '/ack') { if (!s.cancelled && this.busy) s.live?.acknowledge(body.profile); return sendJson(res, 200, this.status(owner)); }
     throw new HttpError(404, 'Unknown Hands operation');
@@ -101,19 +101,13 @@ export class HandSessions {
       s.child = child; const observer = s.token, ticket = reservation.ticket; let buffer = '', handoff: Promise<void> | null = null;
       child.stdin.on('error', () => {}); child.stderr.resume();
       child.on('error', () => { s.reason = 'Provider supervisor is unavailable. Rebuild the host.'; });
-      child.on('close', () => { void (async () => {
-        if (s.pid) {
-          let dead = false; const deadline = performance.now() + 2000;
-          while (performance.now() < deadline) {
-            try { process.kill(s.pid, 0); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ESRCH') { dead = true; break; } }
-            await pause(20);
-          }
-          if (!dead) { s.phase = 'failed'; s.reason = 'Cannot verify worker death; restart the panel before reacquisition'; return; }
-        }
+      child.on('close', () => {
+        // A supervisor receipt is based on its retained exact process handle, never PID probing.
+        if (s.pid && !s.joined) { s.phase = 'failed'; s.reason ||= 'Owned worker teardown could not be verified; acquisition remains blocked'; return; }
         s.ended = true; s.live?.close();
         if (!s.cancelled) { s.phase = 'failed'; s.reason ||= 'Provider worker exited unexpectedly'; }
         this.finishDrained(s);
-      })(); });
+      });
       child.stdout.setEncoding('utf8').on('data', (text: string) => {
         buffer += text;
         let end: number;
@@ -124,6 +118,8 @@ export class HandSessions {
           try {
             const event = JSON.parse(line.slice(10));
             if (typeof event.diagnostic === 'string' && /^Rejected [a-z-]+; joint (?:n\/a|\d{1,2}); count \d{1,16} frames, \d{1,16} hands$/.test(event.diagnostic)) s.diagnostic = event.diagnostic;
+            if (event.phase === 'joined' && Number.isSafeInteger(event.pid) && (!s.pid || s.pid === event.pid)) s.joined = true;
+            if (event.phase === 'teardown-failed') { s.reason ||= 'Owned worker teardown could not be verified; acquisition remains blocked'; s.phase = 'failed'; }
             if (event.phase === 'acquiring' && Number.isSafeInteger(event.pid) && !handoff) {
               s.pid = event.pid; handoff = reservation!.handoff(event.pid); handoff.catch(() => { s.reason = 'Native acquisition handoff failed'; void this.stop(s, s.reason); });
             }
@@ -161,6 +157,7 @@ export class HandSessions {
     s.release?.(); s.release = undefined;
   }
   private stop(s: Running, reason = ''): Promise<void> {
+    s.reason ||= reason;
     if (s.stop) return s.stop;
     s.cancelled = true; s.token = ''; s.live?.close(); s.reason ||= reason; s.phase = 'stopping';
     return s.stop = (async () => {
@@ -169,12 +166,12 @@ export class HandSessions {
       if (s.preparing && !s.child) { s.drainTimedOut = true; s.phase = 'failed'; s.reason = 'Hands preparation has not drained; wait before reacquisition'; return; }
       if (s.child && !s.ended) {
         s.child.stdin.end('{"stop":true}\n');
-        const deadline = performance.now() + 6000;
+        const deadline = performance.now() + 13000;
         while (!s.ended && performance.now() < deadline) await pause(20);
         if (!s.ended) s.child.kill(); // Only our launcher; closing its job contains only our worker.
         const killedBy = performance.now() + 2000;
         while (!s.ended && performance.now() < killedBy) await pause(20);
-        if (!s.ended) { s.phase = 'failed'; s.reason = 'Cannot verify worker death; restart the panel before reacquisition'; return; }
+        if (!s.ended) { s.phase = 'failed'; s.reason ||= 'Owned worker teardown could not be verified; acquisition remains blocked'; return; }
       }
       // During asynchronous preparation, Start's cancellation check must drain before ownership is free.
       if (!s.child) this.finishDrained(s);

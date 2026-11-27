@@ -96,6 +96,27 @@ test('actual panel-process death closes the supervisor job and its worker', { sk
   } finally { if (panel.exitCode === null && panel.signalCode === null) panel.kill(); }
 });
 
+test('supervisor joins hung owned-provider teardown before releasing the isolated acquisition slot', { skip: !worker || !supervisor || !process.env.XRB_TEST_PROVIDER_DLL, timeout: 20000 }, async () => {
+  const testScope = randomBytes(32).toString('hex');
+  const f = await fixture(true, { testScope, runtimeName: 'session-test', pluginPath: path.resolve(process.env.XRB_TEST_PROVIDER_DLL!), config: { testHold: true, hangStop: true }, stopTimeoutMs: 200 });
+  try {
+    await f.close();
+    assert.ok(f.stdout.some(line => line.includes('"phase":"joined"')), 'exact-handle completion receipt follows forced watchdog termination');
+    assert.throws(() => process.kill(f.workerPid, 0), (e: any) => e.code === 'ESRCH');
+    const next = await fixture(true, { testScope }); try { assert.ok(next.workerPid); } finally { await next.close(); }
+  } finally { await f.close(); }
+});
+
+test('supervisor forces and joins a worker that never reads Stop', { skip: !worker || !supervisor, timeout: 15000 }, async () => {
+  const f = await fixture(true, { deferControlReader: true }), peer = await connect(f.url);
+  try {
+    peer.send(Buffer.from(f.token)); await peer.next();
+    await f.close();
+    assert.ok(f.stdout.some(line => line.includes('"phase":"joined"')));
+    assert.throws(() => process.kill(f.workerPid, 0), (e: any) => e.code === 'ESRCH');
+  } finally { peer.socket.destroy(); await f.close(); }
+});
+
 test('headless socket requires exact Origin and first-message capability and never leaks credentials in URL/logs', { skip: !worker, timeout: 15000 }, async () => {
   const f = await fixture();
   try {

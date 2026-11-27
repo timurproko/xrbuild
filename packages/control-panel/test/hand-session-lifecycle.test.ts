@@ -27,7 +27,7 @@ async function fixture(t: any, heartbeatMs = 1000000) {
       child.stdin = new Writable({ write(_data, _encoding, callback) {
         if (mode !== 'starting') child.stdout.write('@provider ' + JSON.stringify({ phase: 'running', url: 'ws://127.0.0.1:2222/hands' }) + '\n'); callback();
       } });
-      child.stdin.on('finish', () => { if (mode !== 'hang-stop') child.exit(); }); child.kill = () => { child.killed++; child.exit(); };
+      child.stdin.on('finish', () => { if (!['hang-stop', 'join-pending'].includes(mode)) child.exit(); }); child.kill = () => { child.killed++; child.exit(); };
       children.push(child); return child;
     }) as any,
   });
@@ -88,12 +88,31 @@ test('startup timeout and hung Stop terminate only the owned child, verify closu
     assert.equal((await starting).status, 409); assert.equal(f.service.busy, false); assert.equal(f.released, 1);
     f.mode = 'hang-stop'; const running = await f.call('', selection, owner); assert.equal(running.status, 200);
     const stopping = f.call('/stop', { sessionId: running.body.sessionId }, owner);
-    await until(() => f.service.status(owner).phase === 'stopping'); f.advance(6001); await stopping;
+    await until(() => f.service.status(owner).phase === 'stopping'); f.advance(13001); await stopping;
     assert.equal(f.children[1].killed, 1); assert.equal(f.service.busy, false); assert.equal(f.released, 2);
     f.mode = 'running'; const again = await f.call('', selection, owner); assert.equal(again.status, 200);
     await f.call('/stop', { sessionId: again.body.sessionId }, owner); assert.equal(f.released, 3);
   } finally { await f.close(); }
 });
+test('failure retires admission but retains ownership until exact supervisor join and launcher close', async t => {
+  const f = await fixture(t);
+  try {
+    const owner = (await f.call('/bootstrap', {})).body.capability;
+    const run = await f.call('', selection, owner); assert.equal(run.status, 200);
+    f.mode = 'join-pending'; const child = f.children[0];
+    child.stdout.write('@provider ' + JSON.stringify({ phase: 'acquiring', pid: 1234567 }) + '\n');
+    child.stdout.write('@provider ' + JSON.stringify({ phase: 'failed', reason: 'Tracking stalled: no usable frames' }) + '\n');
+    await until(() => f.service.status(owner).phase === 'stopping');
+    assert.equal(f.released, 0); assert.equal(f.service.busy, true);
+    assert.equal((await f.call('', selection, owner)).status, 409, 'cannot offer overlapping acquisition');
+    child.stdout.write('@provider ' + JSON.stringify({ phase: 'joined', pid: 7654321 }) + '\n');
+    assert.equal(f.released, 0, 'wrong designated process receipt cannot release');
+    child.stdout.write('@provider ' + JSON.stringify({ phase: 'joined', pid: 1234567 }) + '\n'); child.exit();
+    await until(() => !f.service.busy); assert.equal(f.released, 1); assert.match(f.service.status(owner).reason, /Tracking stalled/);
+    f.mode = 'running'; assert.equal((await f.call('', selection, owner)).status, 200);
+  } finally { await f.close(); }
+});
+
 test('expired credentials are rejected without mutating even their old acquisition; only lifecycle teardown releases it', async t => {
   const f = await fixture(t);
   try {

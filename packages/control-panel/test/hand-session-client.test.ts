@@ -35,7 +35,15 @@ test('owning client gates frames on profile/clock, ACKs only consumption, counts
     assert.equal(pushes, 2); assert.equal(samples.length, 1, 'filtered observation cannot impersonate unchanged raw recording');
     assert.equal(statuses.at(-1).trackingFps, null, 'diagnostic-only clearing has no invented detection fps');
     now = 400; callback!(); assert.equal(held, false); assert.equal(statuses.at(-1).phase, 'stalled'); assert.equal(statuses.at(-1).trackingFps, null);
-    await client.stop(); assert.equal(view.active, false); const before = pushes; socket.onmessage({ data: envelope(2) }); callback!(); assert.equal(pushes, before); assert.ok(clears > 0);
+    for (let seq = 3; seq <= 6; seq++) { socket.onmessage({ data: envelope(seq) }); callback!(); }
+    assert.equal(client.active, true, 'several stale observations do not prematurely fail the session');
+    const fresh = envelope(7); const freshView = new DataView(fresh); freshView.setFloat64(96, 1399, true); freshView.setFloat64(104, 1398, true);
+    socket.onmessage({ data: fresh }); callback!(); assert.equal(statuses.at(-1).phase, 'no-hands', 'fresh input recovers Stalled automatically');
+    now = 10500; callback!(); await new Promise(r => setTimeout(r, 10));
+    assert.equal(client.active, false); assert.equal(client.stopping, false); assert.match(statuses.at(-1).reason, /Tracking stalled/);
+    const terminal: boolean[] = []; client.subscribeLifecycle((s: any) => { if (['failed', 'stopped'].includes(s.phase)) terminal.push(client.stopping); });
+    await client.start({ provider: { owner: 'core', id: 'simulated' }, revision: 'r', registryRevision: 'g' });
+    await client.stop(); assert.deepEqual(terminal, [false], 'terminal notification follows local retired-context cleanup'); assert.equal(view.active, false); const before = pushes; socket.onmessage({ data: envelope(2) }); callback!(); assert.equal(pushes, before); assert.ok(clears > 0);
     assert.ok(calls.some(c => c.url.endsWith('/ack'))); assert.ok(calls.every(c => !c.url.includes('?')));
   } finally { client.dispose(); }
 });

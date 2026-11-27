@@ -9,11 +9,11 @@
 
 ## 2. Failed and stalled sessions finish bounded teardown before Start returns
 
-- [ ] 2.1 Centralize service terminal cleanup and cancellation, release exactly once after preparation/reservation drain and exact owned-worker completion; cover failed start, late preparation, disconnect and normal Stop in hand-session-lifecycle.test.ts.
-- [ ] 2.2 Strengthen supervisor exact-handle completion and bounded forced job fallback; extend isolated disposable worker/supervisor tests for hung start/stop/destroy, launcher death and panel death, asserting process completion before lease reacquisition.
-- [ ] 2.3 Bound client stop requests and reconciliation, clear retired context before terminal notification and fence delayed responses by generation; add mounted Start/Stop controls regressions for stuck fetch, failure/stop ordering and no permanent Stopping or unsafe enabled Start.
-- [ ] 2.4 Make Stalled recover on fresh input or use the same terminal teardown after 10 seconds without fresh usable frames; cover no callbacks, slow startup, malformed-only output, stale clocks, transport gaps, truthful dash fps, hold clearing and recovery/timeout in affected client/worker tests.
-- [ ] 2.5 Document stop/liveness deadlines and distinct failure reasons in docs/hand-provider-sessions.md and docs/hands.md; verify documentation matches tests showing Start only after worker completion and lease release.
+- [x] 2.1 Centralize service terminal cleanup and cancellation, release exactly once after preparation/reservation drain and exact owned-worker completion; cover failed start, late preparation, disconnect and normal Stop in hand-session-lifecycle.test.ts.
+- [x] 2.2 Strengthen supervisor exact-handle completion and bounded forced job fallback; extend isolated disposable worker/supervisor tests for hung start/stop/destroy, launcher death and panel death, asserting process completion before lease reacquisition.
+- [x] 2.3 Bound client stop requests and reconciliation, clear retired context before terminal notification and fence delayed responses by generation; add mounted Start/Stop controls regressions for stuck fetch, failure/stop ordering and no permanent Stopping or unsafe enabled Start.
+- [x] 2.4 Make Stalled recover on fresh input or use the same terminal teardown after 10 seconds without fresh usable frames; cover no callbacks, slow startup, malformed-only output, stale clocks, transport gaps, truthful dash fps, hold clearing and recovery/timeout in affected client/worker tests.
+- [x] 2.5 Document stop/liveness deadlines and distinct failure reasons in docs/hand-provider-sessions.md and docs/hands.md; verify documentation matches tests showing Start only after worker completion and lease release.
 
 ## 3. Stale ownership recovers and real live-page contention offers safe takeover
 

@@ -1,13 +1,20 @@
 import { createSessionClock, sessionPacket, SESSION_BOUNDS } from './hands-session-wire.js';
 /** One owning page. Socket credit is returned only at the actual consumer frame boundary. */
-export function createHandsSession({ view, replaying = () => false, onStatus = () => {}, fetcher = fetch, Socket = WebSocket, now = () => performance.now(), decode, frame = requestAnimationFrame, cancel = cancelAnimationFrame }) {
+export function createHandsSession({ view, replaying = () => false, onStatus = () => {}, fetcher = fetch, Socket = WebSocket, now = () => performance.now(), decode, frame = requestAnimationFrame, cancel = cancelAnimationFrame, requestTimeoutMs = 12000 }) {
   let capability = '', bootstrapPromise = null, current = null, disposed = false, generation = 0, raf = 0;
   const raw = new Set(), lifecycle = new Set();
   const notify = value => { onStatus(value); for (const listener of lifecycle) listener(value); };
   async function request(action = '', body, renew = true) {
     const sentCapability = capability;
-    const response = await fetcher('/api/hands/session' + action, { method: body ? 'POST' : 'GET', cache: 'no-store', mode: 'same-origin', redirect: 'error', headers: { 'x-xrb-hands': '1', ...(body ? { 'content-type': 'application/json' } : {}), ...(sentCapability ? { authorization: `Bearer ${sentCapability}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
-    const value = await response.json();
+    const controller = new AbortController(); let timer;
+    const timeout = new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('Hands control request timed out; checking owned cleanup')); }, action === '' ? Math.max(35000, requestTimeoutMs) : requestTimeoutMs); });
+    let response, value;
+    try {
+      ({ response, value } = await Promise.race([(async () => {
+        const response = await fetcher('/api/hands/session' + action, { signal: controller.signal, method: body ? 'POST' : 'GET', cache: 'no-store', mode: 'same-origin', redirect: 'error', headers: { 'x-xrb-hands': '1', ...(body ? { 'content-type': 'application/json' } : {}), ...(sentCapability ? { authorization: `Bearer ${sentCapability}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+        return { response, value: await response.json() };
+      })(), timeout]));
+    } finally { clearTimeout(timer); }
     if (!response.ok) {
       if (action !== '/bootstrap' && value.details?.code === 'hands-page-capability-expired') {
         // A delayed response for an old credential cannot retire a newer session/credential.
@@ -36,19 +43,30 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
     for (const listener of lifecycle) listener({ phase: 'retired', reason, epoch: s.epoch, sessionId: s.sessionId });
     onStatus({ phase: reason ? 'failed' : 'stopping', reason, epoch: s.epoch, sessionId: s.sessionId });
   }
+  function complete(s, result = {}) {
+    if (current !== s) return;
+    current = null; // Terminal listeners must observe cleared local stopping flags.
+    if (!disposed) notify({ phase: result.reason || s.reason ? 'failed' : 'stopped', reason: result.reason || s.reason || '', diagnostic: result.diagnostic || s.diagnostic || '', epoch: s.epoch, sessionId: s.sessionId, busy: false });
+  }
   async function stop(reason = '') {
     generation++; const s = current; if (!s) return;
+    s.reason ||= reason;
     if (s.stopPromise) return s.stopPromise;
-    retire(s, reason);
+    retire(s, reason); s.unresolved = false;
     return s.stopPromise = (async () => {
       try {
-        if (!s.sessionId) { const status = await request('/status', {}); if (status.owns) s.sessionId = status.sessionId; }
-        const result = s.sessionId ? await request('/stop', { sessionId: s.sessionId }) : null;
-        const failure = result?.reason || reason;
-        if (!disposed && current === s) notify({ phase: failure ? 'failed' : 'stopped', reason: failure, diagnostic: result?.diagnostic || s.diagnostic || '', epoch: s.epoch, sessionId: s.sessionId });
-      } catch (error) { if (!disposed && current === s) onStatus({ phase: 'failed', reason: error.message }); }
-      if (current === s) current = null;
-    })();
+        if (!s.sessionId) { const status = await request('/status', {}); if (status.owns) s.sessionId = status.sessionId; else { complete(s, status); return; } }
+        const result = await request('/stop', { sessionId: s.sessionId, reason: s.reason || '' });
+        if (result.busy === true && result.sessionId === s.sessionId) throw new Error(result.reason || 'Owned provider is still draining');
+        complete(s, result);
+      } catch (error) {
+        try {
+          const status = await request('/status', {});
+          if (!status.busy || status.sessionId !== s.sessionId) { complete(s, { ...status, reason: s.reason || error.message }); return; }
+        } catch { /* Never equate a missing reply with released cameras. */ }
+        if (current === s) { s.unresolved = true; if (!disposed) notify({ phase: 'failed', cleanupPending: true, reason: s.reason || error.message, diagnostic: s.diagnostic || '' }); }
+      }
+    })().finally(() => { if (current === s) s.stopPromise = null; });
   }
   async function applyProfile(s, envelope) {
     if (!envelope || s.retired || current !== s || envelope.runId !== s.sessionId || !Number.isSafeInteger(envelope.sequence)) return false;
@@ -129,13 +147,13 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
               s.dropped += Math.max(0, event.sequence - (s.lastSequence ?? event.sequence) - 1); s.lastSequence = event.sequence; s.accepted++; s.invalidStreak = 0; s.lastFresh = now(); s.capture = mapped; s.hands = event.frame.hands.length; s.reportedHz = event.frame.trackingHz; if (!event.filtered) s.times.push(now()); s.filtered = event.filtered; s.stale = false;
               clearTimeout(s.freshness); s.freshness = setTimeout(() => { if (!s.retired && current === s) { s.stale = true; view.clearHands(); notify({ phase: 'stalled', epoch: s.epoch, sessionId: s.sessionId, trackingFps: null, frameAgeMs: null }); } }, SESSION_BOUNDS.age);
             } else s.rejected++;
-          } else { s.rejected++; view.clearHands(); if (++s.invalidStreak >= 3) throw new Error('Repeated stale or invalid provider captures'); }
+          } else { s.rejected++; view.clearHands(); s.stale = true; }
           const ack = new ArrayBuffer(5), v = new DataView(ack); v.setUint8(0, 110); v.setUint32(1, event.transportSequence, true); s.socket.send(ack);
         } catch (error) { void stop(error.message); }
       }
       if (!s.retired) {
         const at = now();
-        if (s.socket && at - (s.lastFresh ?? s.consumerStarted) > 10000) { void stop('No fresh valid provider frames for 10 seconds'); }
+        if (s.socket && at - (s.lastFresh ?? s.consumerStarted) > 10000) { void stop('Tracking stalled: no fresh usable provider frames for 10 seconds (callback, transport or capture age)'); }
         s.times = s.times.filter(t => at - t <= 1000);
         if (s.lastFresh !== null && at - s.lastFresh > SESSION_BOUNDS.age && !s.stale) { s.stale = true; view.clearHands(); }
         notify({ phase: s.lastFresh === null ? 'waiting' : s.stale ? 'stalled' : s.hands ? 'running' : 'no-hands', source: s.source, epoch: s.epoch, sessionId: s.sessionId,
@@ -148,9 +166,10 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
   return {
     start, stop,
     async refreshProfile() { const s = current; if (!s || s.retired) return; const status = await request('/status', {}); if (!s.retired && current === s && status.owns && status.sessionId === s.sessionId && status.profile) await applyProfile(s, status.profile); },
-    async status() { await bootstrap(); return request('/status', {}); },
+    async status() { await bootstrap(); const status = await request('/status', {}); const s = current; if (s?.retired && (!status.busy || status.sessionId !== s.sessionId)) complete(s, status); return status; },
     get active() { return !!current && !current.retired; },
-    get stopping() { return !!current?.retired; },
+    get stopping() { return !!current?.retired && !current.unresolved; },
+    get blocked() { return !!current?.unresolved; },
     recordingSource() { const s = current; return s && !s.retired && s.accepted && view.profile ? { kind: 'xrbuild-hand-session', version: 1, source: { owner: s.source.owner, id: s.source.id, ...(s.source.version ? { version: s.source.version } : {}) }, sessionId: s.sessionId, epoch: s.epoch, profile: view.profile, frameSpace: 'panel-metres', processing: 'provider-published', globalAdjustmentsApplied: false, clockDomain: 'windows-qpc-ms', axes: 'x-right,y-up,z-viewer' } : null; },
     subscribeRawFrames(listener) { raw.add(listener); return () => raw.delete(listener); },
     subscribeLifecycle(listener) { lifecycle.add(listener); return () => lifecycle.delete(listener); },

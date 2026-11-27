@@ -21,7 +21,7 @@ typedef struct TestPlugin {
   int fail_start;
   int stereo;
   int empty, malformed, hang_start, hang_stop, hang_destroy, test_hold;
-  int invalid_confidence, sporadic, mixed, nan_joint;
+  int invalid_confidence, sporadic, mixed, nan_joint, stall, stall_recover;
   volatile LONG running;
   HANDLE thread;
 } TestPlugin;
@@ -54,6 +54,8 @@ static TestPlugin* make(const XrbHost* host, const char* config) {
   p->nan_joint = config && strstr(config, "\"nanJoint\":true") != NULL;
   p->sporadic = config && strstr(config, "\"sporadic\":true") != NULL;
   p->mixed = config && strstr(config, "\"mixed\":true") != NULL;
+  p->stall = config && strstr(config, "\"stall\":true") != NULL;
+  p->stall_recover = config && strstr(config, "\"stallRecover\":true") != NULL;
   return p;
 }
 
@@ -85,7 +87,8 @@ static DWORD WINAPI input_hold(void* self) {
       if (p->nan_joint) hands[h].keypoints[8 * 4] = NAN;
     }
     frame.count = p->malformed ? 256 : p->empty ? 0 : 2; frame.hands = p->empty ? NULL : hands;
-    p->host->publish_hands(p->host->ctx, &frame); tick++; Sleep(16);
+    if (!(p->stall && tick >= 90) && !(p->stall_recover && tick >= 90 && tick < 150)) p->host->publish_hands(p->host->ctx, &frame);
+    tick++; Sleep(16);
   }
   return 0;
 }
