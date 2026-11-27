@@ -28,4 +28,4 @@ export function refreshDropdown(owner:Element):void;
 export function hexToHsv(hex:string):[number,number,number];
 export function hsvToHex(h:number,s:number,v:number):string;
 export function closeColorPopover():void;
-export function openColorPopover(anchor:HTMLElement,options?:{value?:string;onInput?:(hex:string)=>void;onClose?:(hex:string)=>void}):{pop:HTMLElement;close():void};
+export function openColorPopover(anchor:HTMLElement,options?:{value?:string;onInput?:(hex:string)=>void;onClose?:(hex:string)=>void}):{pop:HTMLElement;anchor:HTMLElement;close():void}|null;

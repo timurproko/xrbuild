@@ -163,6 +163,8 @@ export function hsvToHex(h,s,v){const f=n=>{const k=(n+h/60)%6;return Math.round
 let activeColor=null;
 export function closeColorPopover(){activeColor?.close();}
 export function openColorPopover(anchor,{value='#000000',onInput=()=>{},onClose=()=>{}}={}){
+ // A second click on the same swatch closes its popover instead of reopening it.
+ if(activeColor?.anchor===anchor){activeColor.close();return null;}
  closeColorPopover();
  const doc=anchor.ownerDocument,pop=doc.createElement('div');
  pop.className='menu xrb-color-popover';pop.setAttribute('role','dialog');pop.setAttribute('aria-label','Choose colour');
@@ -183,7 +185,7 @@ export function openColorPopover(anchor,{value='#000000',onInput=()=>{},onClose=
  const key=e=>{if(e.key==='Escape'||e.key==='Enter'&&e.target===hex){e.preventDefault();close();anchor.focus();}};
  doc.addEventListener('pointerdown',outside,true);pop.addEventListener('keydown',key);
  function close(){if(activeColor?.pop!==pop)return;activeColor=null;doc.removeEventListener('pointerdown',outside,true);pop.remove();onClose(current);}
- activeColor={pop,close};paint(false);openFloating(pop,{anchor,align:'end',focus:false});area.focus();
+ activeColor={pop,anchor,close};paint(false);openFloating(pop,{anchor,align:'end',focus:false});area.focus();
  return activeColor;
 }
 /** Re-render a dropdown button after its value changed in code. */

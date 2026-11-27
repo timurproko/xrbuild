@@ -56,6 +56,10 @@ test('section reset gears provide accessible keyboard menus with scoped dismissa
       assert.equal(popover.open, true); assert.equal(popover.right, 0, 'popover is right-aligned with its swatch'); assert.equal(popover.clear, true, 'popover opens beside the swatch without covering it'); assert.equal(popover.hex, popover.field);
       await key('Escape', 'Escape', 27);
       assert.equal(await evaluate(`!!document.querySelector('.xrb-color-popover')`), false, 'Escape closes the popover');
+      await evaluate(`document.querySelector('[data-colour="appearance.jointColorLinear"]').click()`);
+      assert.equal(await evaluate(`!!document.querySelector('.xrb-color-popover')`), true);
+      await evaluate(`document.querySelector('[data-colour="appearance.jointColorLinear"]').click()`);
+      assert.equal(await evaluate(`!!document.querySelector('.xrb-color-popover')`), false, 'clicking the open swatch again closes its popover');
       const menuFor = (key: string) => `(()=>{const s=document.querySelector('[data-colour="appearance.${key}"]'),r=s.getBoundingClientRect();s.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+2,clientY:r.top+2}));return !document.querySelector('[data-colour-action="copy"]').closest('.menu').hidden;})()`;
       assert.equal(await evaluate(menuFor('jointColorLinear')), true, 'right-click opens the colour menu');
       await evaluate(`document.querySelector('[data-colour-action="copy"]').click()`); await sleep(50);
