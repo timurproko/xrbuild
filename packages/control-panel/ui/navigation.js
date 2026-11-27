@@ -44,6 +44,8 @@ export function managedToolDestination(route,origin) {
   return new URL(route,safe).href;
 }
 /** A stale panel already has one actionable state: restart to load its newer code. */
+/** A request refused because the panel is mid-restart; the restart flow reloads the page, so it is not an error. */
+export function isRestartingResponse(error){return error?.status===503&&error?.data?.error==='The panel is restarting';}
 export function shouldReportNavigationError(error,panelFreshness) {
   return !!error&&panelFreshness?.outdated!==true;
 }

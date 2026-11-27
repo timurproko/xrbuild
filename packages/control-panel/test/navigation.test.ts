@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {test} from 'node:test';
 import {readToolLinks,validateToolLinks,TOOLS_FILE} from '../src/navigation.ts';
-import {panelOrigin,panelDestination,toolDestination,managedToolDestination,navigationItems,requestedNavigation,menuKeyboard,shouldReportNavigationError,isReplacementPanel,replaceActiveDocument} from '../ui/navigation.js';
+import {panelOrigin,panelDestination,toolDestination,managedToolDestination,navigationItems,requestedNavigation,menuKeyboard,shouldReportNavigationError,isRestartingResponse,isReplacementPanel,replaceActiveDocument} from '../ui/navigation.js';
 const fixture={id:'tracker',label:'Hand Tracking',url:'http://127.0.0.1:5220/'};
 test('tool links are bounded local navigation metadata, not commands or credentials',()=>{
   assert.deepEqual(validateToolLinks({tools:[{...fixture,command:'ignored'}]}),[fixture]);
@@ -49,6 +49,15 @@ test('stale panel navigation errors defer to the existing restart indication',()
   assert.equal(shouldReportNavigationError('invalid tool URL',{outdated:false}),true);
   assert.equal(shouldReportNavigationError('invalid tool URL',null),true);
   assert.equal(shouldReportNavigationError('',{outdated:true}),false);
+});
+
+test('a request refused while the panel restarts is not reported as an error',async()=>{
+  assert.equal(isRestartingResponse({status:503,data:{error:'The panel is restarting'}}),true);
+  assert.equal(isRestartingResponse({status:503,data:{error:'Service unavailable'}}),false);
+  assert.equal(isRestartingResponse({status:409,data:{error:'The panel is restarting'}}),false);
+  assert.equal(isRestartingResponse(new Error('The panel is restarting')),false);
+  const app=await fs.readFile(path.join(import.meta.dirname,'..','ui','app.js'),'utf8');
+  assert.match(app,/function report\(e\) \{[^}]*if \(isRestartingResponse\(e\)\) return;/);
 });
 test('maintenance and job navigation are consumed once and only describe an action',()=>{
   const request=requestedNavigation('http://127.0.0.1:5182/?page=plugins&maintenance=rebuild&job=17&keep=1');assert.equal(request.page,'plugins');assert.equal(request.maintenance,'rebuild');assert.equal(request.job,17);assert.equal(request.cleanUrl,'http://127.0.0.1:5182/?keep=1');assert.equal(requestedNavigation(request.cleanUrl).maintenance,null);assert.equal(requestedNavigation(request.cleanUrl).job,null);assert.equal(requestedNavigation('http://127.0.0.1:5182/plugins/').page,'plugins');assert.equal(requestedNavigation('http://127.0.0.1:5182/settings/').page,'settings');assert.equal(requestedNavigation('http://127.0.0.1:5182/?maintenance=run-command&job=invalid').maintenance,null);assert.equal(requestedNavigation('http://127.0.0.1:5182/?job=0').job,null);assert.equal(requestedNavigation('http://127.0.0.1:5182/?maintenance=update').maintenance,'update');

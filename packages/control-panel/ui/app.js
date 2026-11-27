@@ -4,7 +4,7 @@ import { SettingsWriter } from './settings-writer.js';
 import {installJobLogCopy, readJobLog} from './job-log.js';
 import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
-import {requestedNavigation,menuKeyboard,renderNavigationMenu,renderRemoteUpdate,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
+import {requestedNavigation,menuKeyboard,renderNavigationMenu,renderRemoteUpdate,restartPanelInPlace,shouldReportNavigationError,isRestartingResponse} from './navigation.js';
 import {rebuildHostInPlace,updateInPlace,updateTooltip,followStartedJobInPlace} from './rebuild-dialog.js';
 import {enhanceHelpText,iconSvg,installDropdowns,installIcons,installNumberSteppers,installTabs,installTooltips,openFloating,renderField,resumeAnimations,setFieldError,setPageIdentity,setRevealed,stabilizePanelHeight,transitionPanelHeight,updateRebuildChip,updateRestartChip} from './design-system.js';
 import {logicalInputNames} from './provider-choice.js';
@@ -149,6 +149,8 @@ async function confirmable(path, body = {}) {
 function report(e) {
   console.error(e);
   const rawMessage = String(e?.message ?? e ?? 'Unknown error');
+  // While the panel restarts it answers every request with 503; the restart dialog reloads the page, so this is not a failure.
+  if (isRestartingResponse(e)) return;
   const blocked = e?.data?.details && typeof e.data.details.reason === 'string' ? e.data.details : null;
   if (e?.data?.details?.needsRebuild) {
     void ask({ title: 'Rebuild needed', message: rawMessage, ok: 'Rebuild', cancel: 'Close' })
