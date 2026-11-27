@@ -18,6 +18,9 @@
 .hands-adjustment-tabs { gap: 18px; }
 .hands-adjustment-tabs > .hands-tab-action { display: flex; align-items: center; margin-left: auto; }
 .hands-adjustment-tabs > .hands-tab-action[hidden] { display: none; }
+.hands-postprocessing .hands-mesh-delivery { display: flex; align-items: center; flex-wrap: wrap; gap: var(--xrb-space-field); }
+.hands-postprocessing .hands-mesh-delivery > p { min-width: 0; overflow-wrap: anywhere; }
+.hands-postprocessing [data-mesh-message] { overflow-wrap: anywhere; }
 .hands-source p { margin: 0; }
 .hands-panel > .xrb-sidebar-content { flex: 1; min-height: 0; align-content: start; overflow-y: auto; overflow-wrap: anywhere; }
 .hands-viewport { position: relative; min-height: 360px; padding: 0; margin: 0; overflow: hidden; }

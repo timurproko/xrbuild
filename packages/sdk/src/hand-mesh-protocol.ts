@@ -1,10 +1,52 @@
 import type { Vec3 } from './protocol.ts';
+import type { HandObservations } from './hands.ts';
+
+/** Source snapshot lifetime for compensated skin. See docs/hand-mesh-motion.md for 33/66/100-ms measurements. */
+export const MESH_MAX_SOURCE_AGE_MS = 100;
+export const MESH_PROTOCOL_VERSION = 2;
+export const MESH_CAPABILITIES = ['final-pose-observations-v1', 'live-configure-v1', 'preparation-progress-v1'] as const;
+export type MeshCapability = typeof MESH_CAPABILITIES[number];
+export function validMeshCapabilities(v: unknown): v is MeshCapability[] {
+  return Array.isArray(v) && v.length <= MESH_CAPABILITIES.length && new Set(v).size === v.length
+    && v.every(c => MESH_CAPABILITIES.includes(c));
+}
+export function unknownMeshObservations(): HandObservations {
+  return { confidence: Array(21).fill(null), supported: Array(21).fill(null), ageMs: Array(21).fill(null) };
+}
+export function validMeshObservations(v: unknown): v is HandObservations {
+  if (!object(v)) return false;
+  const array = (a: unknown, check: (n: unknown) => boolean) => Array.isArray(a) && a.length === 21 && a.every(n => n === null || check(n));
+  return array(v.confidence, n => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1)
+    && array(v.supported, n => typeof n === 'boolean')
+    && array(v.ageMs, n => typeof n === 'number' && Number.isFinite(n) && n >= 0);
+}
 
 export const MESH_MAX_BYTES = 2 * 1024 * 1024, MESH_MAX_VERTICES = 16384, MESH_MAX_INDICES = 32768 * 3;
-export interface MeshPose { id: number; handedness: string; keypoints: Vec3[] }
-export interface MeshFrame { type: 'frame'; epoch: string; sequence: number; revision: number; sentMs: number; sampleMs: number; hands: MeshPose[]; drawingStatus?: string }
+export interface MeshPose { id: number; handedness: string; keypoints: Vec3[]; observations?: HandObservations }
+export interface MeshFrame { type: 'frame'; epoch: string; sequence: number; revision: number; sentMs: number; sampleMs: number; hands: MeshPose[]; drawingStatus?: string;
+  version?: 2; runId?: string; settingsGeneration?: number; drawingGeneration?: number | null; protocolVersion?: 2; capabilities?: MeshCapability[] }
+export const MESH_PREPARATION_STEPS = ['runtime', 'assets', 'models', 'device', 'warming'] as const;
+export interface MeshState {
+  step?: typeof MESH_PREPARATION_STEPS[number] | null;
+  runId: string; phase: 'Preparing' | 'Ready' | 'Failed' | 'Stopped'; reason: string | null; progress: number | null;
+  requestedGeneration: number; appliedGeneration: number | null; drawingGeneration: number | null; savedRevision: string | null;
+  owner: string | null; id: string | null;
+}
 export interface MeshSurface { id: number; topology: string; positions: Float32Array; normals?: Float32Array; indices: Uint32Array }
-export interface MeshResult { type: 'result'; epoch: string; sequence: number; revision: number; meshes: MeshSurface[] }
+/** SDK-local drawing metadata; never encoded by the processor result codec. */
+export interface MeshDrawSurface extends MeshSurface { transform?: number[]; sourceAgeMs?: number; residualM?: number }
+export interface MeshResult { type: 'result'; epoch: string; sequence: number; revision: number; meshes: MeshSurface[]; version?: 2; runId?: string; settingsGeneration?: number }
+export function validMeshState(v: unknown): v is MeshState {
+  return object(v) && typeof v.runId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(v.runId)
+    && ['Preparing', 'Ready', 'Failed', 'Stopped'].includes(v.phase as string) && integer(v.requestedGeneration)
+    && (v.appliedGeneration === null || integer(v.appliedGeneration) && v.appliedGeneration <= v.requestedGeneration)
+    && (v.drawingGeneration === null || integer(v.drawingGeneration) && v.drawingGeneration === v.appliedGeneration)
+    && (v.step === undefined || v.step === null || MESH_PREPARATION_STEPS.includes(v.step as typeof MESH_PREPARATION_STEPS[number]))
+    && (v.progress === null || typeof v.progress === 'number' && Number.isFinite(v.progress) && v.progress >= 0 && v.progress <= 1)
+    && (v.reason === null || typeof v.reason === 'string' && v.reason.length <= 240 && !/[\x00-\x1f\x7f]/.test(v.reason))
+    && (v.savedRevision === null || typeof v.savedRevision === 'string' && v.savedRevision.length <= 128)
+    && (v.owner === null || typeof v.owner === 'string' && v.owner.length <= 160) && (v.id === null || typeof v.id === 'string' && v.id.length <= 128);
+}
 export interface MeshRuntime { version: 1; url: string; token: string }
 const enc = new TextEncoder(), dec = new TextDecoder('utf-8', { fatal: true });
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -15,9 +57,13 @@ export function meshAssociation(v: unknown): v is Record<string, unknown> & { ep
 export function validMeshFrame(v: unknown): v is MeshFrame {
   return meshAssociation(v) && object(v) && v.type === 'frame' && typeof v.sentMs === 'number' && Number.isFinite(v.sentMs)
     && typeof v.sampleMs === 'number' && Number.isFinite(v.sampleMs)
+    && (v.protocolVersion === undefined || v.protocolVersion === 2 && validMeshCapabilities(v.capabilities))
+    && (v.version === undefined || v.version === 2 && typeof v.runId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(v.runId) && integer(v.settingsGeneration))
+    && (v.drawingGeneration === undefined || v.drawingGeneration === null || integer(v.drawingGeneration))
     && (v.drawingStatus === undefined || typeof v.drawingStatus === 'string' && v.drawingStatus.length <= 128 && !/[\x00-\x1f\x7f]/.test(v.drawingStatus)) && Array.isArray(v.hands) && v.hands.length <= 2
     && new Set(v.hands.map(h => object(h) ? h.id : null)).size === v.hands.length
     && v.hands.every(h => object(h) && integer(h.id) && ['left', 'right', 'unknown'].includes(h.handedness as string)
+      && (h.observations === undefined || validMeshObservations(h.observations))
       && Array.isArray(h.keypoints) && h.keypoints.length === 21 && h.keypoints.every(p => Array.isArray(p) && p.length === 3 && p.every(n => typeof n === 'number' && Number.isFinite(n))));
 }
 /** 12-byte little-endian header: magic 0x314d5258, JSON bytes, binary bytes. */
@@ -41,11 +87,12 @@ export function encodeMeshResult(result: MeshResult): Uint8Array {
   });
   const payload = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let offset = 0;
   for (const p of parts) { payload.set(p, offset); offset += p.length; }
-  return meshPacket({ type: 'result', epoch: result.epoch, sequence: result.sequence, revision: result.revision, meshes }, payload);
+  return meshPacket({ type: 'result', epoch: result.epoch, sequence: result.sequence, revision: result.revision, meshes,
+    ...(result.version === 2 ? { version: 2, runId: result.runId, settingsGeneration: result.settingsGeneration } : {}) }, payload);
 }
 export function decodeMeshResult(bytes: Uint8Array): MeshResult {
   const { meta: m, payload } = readMeshPacket(bytes);
-  if (!meshAssociation(m) || m.type !== 'result' || !Array.isArray(m.meshes) || m.meshes.length > 2) throw new Error('Invalid mesh result');
+  if (!meshAssociation(m) || m.version !== undefined && (m.version !== 2 || typeof m.runId !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(m.runId) || !integer(m.settingsGeneration)) || m.type !== 'result' || !Array.isArray(m.meshes) || m.meshes.length > 2) throw new Error('Invalid mesh result');
   let offset = 0;
   const take = (count: number, kind: 'float' | 'index') => {
     if (offset + count * 4 > payload.length) throw new Error('Truncated mesh buffers');
@@ -65,5 +112,6 @@ export function decodeMeshResult(bytes: Uint8Array): MeshResult {
     return { id: s.id, topology: s.topology, positions, normals, indices };
   });
   if (offset !== payload.length) throw new Error('Unexpected mesh bytes');
-  return { type: 'result', epoch: m.epoch, sequence: m.sequence, revision: m.revision, meshes };
+  return { type: 'result', epoch: m.epoch, sequence: m.sequence, revision: m.revision, meshes,
+    ...(m.version === 2 ? { version: 2 as const, runId: m.runId as string, settingsGeneration: m.settingsGeneration as number } : {}) };
 }

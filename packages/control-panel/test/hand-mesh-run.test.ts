@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test as baseTest, type TestContext } from 'node:test';
+const test = (name: string, fn: (t: TestContext) => unknown) => baseTest(name, { skip: !process.env.XRB_TEST_MESH_SUPERVISOR }, fn);
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { HandMeshRun } from '../src/hand-mesh-run.ts';
+import { meshFixtureOutput, stopMeshFixture } from './helpers/mesh-process-fixture.ts';
 import { handMeshDeclaration } from '../src/hand-mesh-contract.ts';
 import { decodeMeshResult, type MeshFrame } from '../../sdk/src/hand-mesh-protocol.ts';
 const fixture = fileURLToPath(new URL('./fixtures/hand-mesh-sidecar.mjs', import.meta.url));
@@ -18,7 +20,7 @@ const plugin = (mode = 'normal', delay = 0, vertices = 2859) => ({ owner: 'works
     { key: 'vertices', label: 'Vertices', type: 'number', min: 3, max: 2859, default: vertices },
   ] }) });
 async function start(t: any, mode = 'normal', delay = 0, timings: { startupMs?: number; connectMs?: number } = {}) {
-  const run = new HandMeshRun(() => ['https://app.local'], () => {}, timings); t.after(() => run.stop());
+  const run = new HandMeshRun(() => ['https://app.local'], () => {}, { ...timings, supervisor: process.env.XRB_TEST_MESH_SUPERVISOR }); t.after(() => run.stop());
   const descriptor = await run.start(plugin(mode, delay), {});
   const request = (route: string, body = frame(), token = descriptor.token, origin = 'https://app.local') => fetch(descriptor.url + route, { method: 'POST', headers: { origin, authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   for (let i = 0; i < 200 && run.status === 'Starting'; i++) await wait(10);
@@ -51,8 +53,13 @@ test('slow sidecar never blocks a request indefinitely and pending work is newes
   assert.equal((await a).status, 204); assert.equal((await c).status, 204);
   assert.match(f.run.status, /late/);
 });
+test('a 50-ms processor result reaches the compensated SDK instead of being dropped at 33 ms', async t => {
+  const f = await start(t, 'normal', 50); await f.request('/connect');
+  const response = await f.request('/frame', frame(1));
+  assert.equal(response.status, 200); assert.equal(decodeMeshResult(new Uint8Array(await response.arrayBuffer())).meshes.length, 2);
+});
 test('missing runtime and an old client degrade without making startup wait', async t => {
-  const missing = new HandMeshRun(() => ['https://app.local']); t.after(() => missing.stop());
+  const missing = new HandMeshRun(() => ['https://app.local'], () => {}, { supervisor: process.env.XRB_TEST_MESH_SUPERVISOR }); t.after(() => missing.stop());
   const descriptor = await missing.start({ ...plugin(), program: fixture + '.not-installed' }, {});
   assert.ok(descriptor.token);
   for (let i = 0; i < 100 && !missing.status.startsWith('Skeleton fallback'); i++) await wait(10);
@@ -72,15 +79,17 @@ test('owner process death closes the private pipe and the real child exits', asy
   const root = await fs.mkdtemp(path.join(parent, 'mesh-owner-')); let childPid = 0;
   const script = path.join(root, 'owner.mjs');
   await fs.writeFile(script, `import {HandMeshRun} from ${JSON.stringify(new URL('../src/hand-mesh-run.ts', import.meta.url).href)};
-    const run = new HandMeshRun(()=>['https://app.local']); await run.start(${JSON.stringify(plugin('normal', 0, 3))}, {});
-    console.log(run.child.pid);`);
+    const run = new HandMeshRun(()=>['https://app.local'],()=>{}, {supervisor:${JSON.stringify(process.env.XRB_TEST_MESH_SUPERVISOR)}}); await run.start(${JSON.stringify(plugin('normal', 0, 3))}, {});
+    const deadline=performance.now()+5000;
+    while (!run.stage?.owned?.pid && performance.now()<deadline && run.state().phase!=='Failed') await new Promise(resolve=>setTimeout(resolve,10));
+    if(!run.stage?.owned?.pid) { await run.stop(); throw new Error('Owned fixture failed before process birth'); }
+    console.log(run.stage.owned.pid);`);
   const owner = spawn(process.execPath, [script], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-  t.after(async () => { owner.kill(); if (childPid) { try { process.kill(childPid); } catch {} } await fs.rm(root, { recursive: true, force: true }); });
-  childPid = await new Promise<number>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('owner startup timeout')), 5000);
-    owner.stdout.once('data', bytes => { clearTimeout(timer); resolve(Number(bytes.toString().trim())); });
-    owner.once('error', reject);
+  t.after(async () => {
+    try { await stopMeshFixture(owner); }
+    finally { await fs.rm(root, { recursive: true, force: true }); }
   });
+  childPid = Number((await meshFixtureOutput(owner)).toString().trim());
   assert.ok(childPid > 0); owner.kill();
   let alive = true;
   for (let i = 0; i < 200; i++) { try { process.kill(childPid, 0); } catch { alive = false; break; } await wait(10); }

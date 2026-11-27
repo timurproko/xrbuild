@@ -38,7 +38,8 @@ import { detectXrMode, eyesInPanel, headOf, rigMatrix, virtualDisplay, VirtualPa
 
 export * from './protocol.ts';
 export { HostChannel } from './channel.ts';
-export { HandInput, KP, isValidHand, fingerCurl, DEFAULT_HAND_INPUT, type Hand, type HandEvent, type HandInputOptions } from './hands.ts';
+export { HandInput, KP, isValidHand, fingerCurl, DEFAULT_HAND_INPUT, type Hand, type HandObservations, type HandEvent, type HandInputOptions } from './hands.ts';
+export type { MeshState, MeshCapability } from './hand-mesh-protocol.ts';
 export { toSceneHand, type SceneHand } from './scene-hands.ts';
 export { HandVisual, DEFAULT_HAND_STYLE, type HandVisualStyle } from './hand-visual.ts';
 export { play as playUiSound, setMuted as setUiSoundMuted, setVolume as setUiSoundVolume, Glide as UiSoundGlide, pitchOf as uiSoundPitch } from './ui-sound.ts';
@@ -178,6 +179,7 @@ export class Xrb {
   private handProfileReceiver: HandProfileReceiver | null = null;
   private meshClient: HandMeshClient | null = null;
   get handMeshStatus(): string { return this.meshClient?.status ?? 'None'; }
+  get handMeshState() { return this.meshClient?.state ?? null; }
   private handProfileTransport: ReturnType<typeof subscribeHandProfile> | null = null;
   private readonly managedHandPolicy: boolean;
   private handProblemNotice: HTMLElement | null = null;
@@ -598,7 +600,7 @@ export class Xrb {
     const l = this.currentEyes.left, r = this.currentEyes.right;
     this.pointer?.update(this.currentHands, [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2, (l[2] + r[2]) / 2], this.display);
     // Optional mesh dispatch/upload is after every interaction and pointer update, never an input gate.
-    if (this.meshClient) this.handsObject.updateMeshes(this.meshClient.update(this.currentHands, handSampleMs, this.handIngress.generation), this.view.panel);
+    if (this.meshClient) this.handsObject.updateMeshes(this.meshClient.update(this.currentHands, handSampleMs, this.handIngress.generation, this.handsObject.parent !== null && this.handsObject.visible), this.view.panel);
     const t0 = performance.now();
     if (xr) this.drawXr(scene, camera);
     else this.view.render(scene, camera, this.currentEyes);

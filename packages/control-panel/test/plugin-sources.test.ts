@@ -11,6 +11,12 @@ import { freePort } from '../src/host-runner.ts';
 import { readPluginPrefs, updatePluginPrefs } from '../src/plugin-manager.ts';
 import { withBrowser, sleep } from './browser-fixture.ts';
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(r => { resolve = r; });
+  return { promise, resolve };
+}
+
 async function fixture(t: TestContext) {
   await fs.mkdir(path.join(REPO, '.artifacts'), { recursive: true });
   const root = await fs.mkdtemp(path.join(REPO, '.artifacts/plugin-sources-')), core = path.join(root, 'core'), workspace = path.join(root, 'user');
@@ -69,10 +75,23 @@ test('source refresh reserves consumers, publishes services together and refuses
   await assert.rejects(f.panel.selectPluginSource('workspace:shared', 'workspace', revision), /Stop running/);
   release(); await selection; delete (globalThis as any).__sourceGate;
   assert.equal(f.panel.publishers.found[0].publisher.label, 'Bundled'); assert.equal(f.panel.packagers.found[0].packager.label, 'Bundled');
-  let finish!: () => void;
-  const job = f.panel.jobs.start('web-build', null, 'active', () => new Promise<void>(resolve => { finish = resolve; }));
-  await assert.rejects(f.panel.selectPluginSource('workspace:shared', 'workspace', (await f.plugins())[0].sourceRevision), /Stop running/);
-  finish(); await f.panel.jobs.wait(job);
+  const admission = deferred(), started = deferred(), completion = deferred();
+  const beforeStart = f.panel.jobs.beforeStart;
+  // Hold admission explicitly: queued jobs must reserve services before their body can run.
+  t.mock.method(f.panel.jobs, 'beforeStart', async () => { await admission.promise; await beforeStart(); });
+  const job = f.panel.jobs.start('web-build', null, 'active', async () => { started.resolve(); await completion.promise; });
+  try {
+    const currentRevision = (await f.plugins())[0].sourceRevision;
+    assert.equal(job.state, 'queued');
+    await assert.rejects(f.panel.selectPluginSource('workspace:shared', 'workspace', currentRevision), /Stop running/);
+    admission.resolve();
+    await Promise.race([started.promise, f.panel.jobs.wait(job).then(() => { throw new Error('Fixture job ended before its body started'); })]);
+    assert.equal(job.state, 'running');
+    await assert.rejects(f.panel.selectPluginSource('workspace:shared', 'workspace', currentRevision), /Stop running/);
+  } finally {
+    admission.resolve(); completion.resolve(); await f.panel.jobs.wait(job);
+  }
+  assert.equal(job.state, 'done');
 });
 
 test('in-flight package preparation blocks source changes even before its job exists', async t => {
@@ -125,12 +144,14 @@ test('automatic discovery refreshes idle preference changes, defers busy work an
   };
   await change('bundled'); await f.plugins();
   assert.equal(f.panel.publishers.found[0].plugin!.key, 'bundled:shared');
-  let finish!: () => void;
-  const job = f.panel.jobs.start('web-build', null, 'active work', () => new Promise<void>(resolve => { finish = resolve; }));
-  await change('workspace'); await f.plugins();
-  assert.equal(f.panel.pluginServiceStatus().pending, true); assert.equal(f.panel.publishers.found[0].plugin!.key, 'bundled:shared');
-  await assert.rejects(f.panel.publish({} as any), /discovery changed/);
-  finish(); await f.panel.jobs.wait(job); await f.plugins();
+  const completion = deferred();
+  const job = f.panel.jobs.start('web-build', null, 'active work', () => completion.promise);
+  try {
+    await change('workspace'); await f.plugins();
+    assert.equal(f.panel.pluginServiceStatus().pending, true); assert.equal(f.panel.publishers.found[0].plugin!.key, 'bundled:shared');
+    await assert.rejects(f.panel.publish({} as any), /discovery changed/);
+  } finally { completion.resolve(); await f.panel.jobs.wait(job); }
+  assert.equal(job.state, 'done'); await f.plugins();
   assert.equal(f.panel.pluginServiceStatus().pending, false); assert.equal(f.panel.publishers.found[0].plugin!.key, 'workspace:shared');
   const module = path.join(f.workspace, 'plugins/shared/services.mjs');
   await fs.writeFile(module, (await fs.readFile(module, 'utf8')).replaceAll("label:'Workspace'", "label:'Updated after restart'"));
