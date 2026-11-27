@@ -55,7 +55,8 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     root.hidden = !snapshot.plugins.length;
     const p = plugin(), signature = JSON.stringify([selected, schema(snapshot, selected)]);
     // Do not reconstruct controls on every status poll or write completion: retain focus and partial input.
-    if (signature !== rendered) {
+    const rebuilt = signature !== rendered;
+    if (rebuilt) {
       closeMenu(); stepperDispose(); rendered = signature;
       fields.innerHTML = (p?.declaration.settings ?? []).map(f => {
         const attrs = `aria-label="${esc(f.label)}" data-mesh-field="${f.key}"`;
@@ -79,7 +80,9 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     for (const field of fields.querySelectorAll('[data-mesh-field]')) {
       const f = p.declaration.settings.find(f => f.key === field.dataset.meshField), edit = edits.get(editKey(selected, f.key));
       const value = edit ? edit.value : valueAt(snapshot, selected, f.key);
-      if (field.type === 'checkbox') field.checked = value; else field.value = edit?.raw ?? value;
+      if (field.type === 'checkbox') field.checked = value;
+      // Chrome keeps partial numbers (for example '-') outside .value. Reassigning even '' destroys that text.
+      else if (field.type !== 'number' || !edit || rebuilt) field.value = edit?.raw ?? value;
       field.disabled = !p.available || !!snapshot.problem;
       const range = fields.querySelector(`[data-mesh-range="${f.key}"]`);
       if (range) { if (Number.isFinite(value)) range.value = value; range.disabled = field.disabled; }
@@ -189,8 +192,11 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   };
   async function flush() {
     if (disposed || busy || conflict || !snapshot || snapshot.problem) return;
-    const target = selected;
-    const sent = new Map([...edits].filter(([name, edit]) => edit.committed && (name === '$selection' || edit.id === target)));
+    // A settings PUT also selects its plugin. Drain completed settings before the final queued selection,
+    // keeping that selection intention separate so None/another plugin cannot strand an earlier commit.
+    const target = [...edits.values()].find(edit => edit.committed && edit.id)?.id ?? selected;
+    const selectionReady = target === selected && ![...edits.values()].some(edit => edit.committed && edit.id && edit.id !== target);
+    const sent = new Map([...edits].filter(([name, edit]) => edit.committed && (name === '$selection' ? selectionReady : edit.id === target)));
     if (!sent.size) return;
     busy = true; epoch++; deliveryFailure = null; buttons(); let success = false;
     try {
@@ -227,6 +233,12 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
           const latest = edits.get(name);
           if (latest?.version === edit.version) edits.delete(name);
           else if (latest) { latest.base = edit.value; if (name !== '$selection') latest.selectionBase = target; }
+        }
+        // Intermediate writes are our own selection transitions, not foreign selection conflicts.
+        for (const [name, edit] of edits) {
+          if (sent.has(name)) continue;
+          if (name === '$selection' && edit.base === savedSelection) edit.base = target;
+          else if (name !== '$selection' && edit.selectionBase === savedSelection) edit.selectionBase = target;
         }
         failure = conflict = null; incorporate(result); success = true; break;
       }
@@ -309,6 +321,9 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
       const idKey = editKey(selected, f.key), previous = edits.get(idKey);
       edits.set(idKey, { id: selected, name: f.key, base: previous?.base ?? valueAt(snapshot, selected, f.key), value: f.default,
         schema: previous?.schema ?? schema(snapshot, selected), selectionBase: previous?.selectionBase ?? key(snapshot.choice?.selected), committed: true, reviewed: true, version: ++version });
+      // Reset is an explicit replacement of the local draft, unlike a passive poll or save completion.
+      const field = fields.querySelector(`[data-mesh-field="${f.key}"]`);
+      if (field.type === 'checkbox') field.checked = f.default; else field.value = f.default;
     }
     render(); if (!conflict) { failure = null; void flush(); }
   });
