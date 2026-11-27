@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { PokeTarget, type AnyTarget, type EventSource, type Interactor } from '@xr-build/sdk';
 import { Label } from './label.ts';
 import { COLORS } from './theme.ts';
+import { VisualResources } from './resources.ts';
 
 /** Disabled look: colours move this far toward the tint; opacity stays (nothing goes see-through). */
 const DISABLED_STRENGTH = 0.35;
@@ -24,6 +25,9 @@ export abstract class Control extends THREE.Group {
   private readonly listeners = new Map<string, Set<Listener>>();
   /** 1 at full strength; DISABLED_STRENGTH of each colour is left when disabled */
   private dim = 1;
+  protected readonly visuals = new VisualResources();
+  private readonly targetSubscriptions: (() => void)[] = [];
+  private disposed = false;
 
   constructor(title: string, labelY: number) {
     super();
@@ -40,6 +44,9 @@ export abstract class Control extends THREE.Group {
   attach(interactor: Interactor): this;
   override attach(target: THREE.Object3D | Interactor): this {
     if ('isObject3D' in target) return super.attach(target);
+    if (this.disposed) throw new Error('Cannot attach a disposed control');
+    if (this.interactor === target) return this;
+    this.detach();
     this.interactor = target;
     for (const t of this.targets) target.add(t);
     return this;
@@ -67,6 +74,35 @@ export abstract class Control extends THREE.Group {
     if (!this.listeners.has(type)) this.listeners.set(type, new Set());
     this.listeners.get(type)!.add(fn);
     return this;
+  }
+
+  off(type: string, fn: Listener): this {
+    const listeners = this.listeners.get(type);
+    listeners?.delete(fn);
+    if (!listeners?.size) this.listeners.delete(type);
+    return this;
+  }
+
+  subscribe(type: string, fn: Listener): () => void {
+    this.on(type, fn);
+    return () => { this.off(type, fn); };
+  }
+
+  protected listen(target: AnyTarget, fn: Parameters<AnyTarget['on']>[0]): void {
+    this.targetSubscriptions.push(target.on(fn));
+  }
+
+  /** Final teardown; detach alone remains reversible. Consumer-added children are borrowed. */
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.listeners.clear();
+    this.detach();
+    this.cancel();
+    for (const off of this.targetSubscriptions) off();
+    this.targetSubscriptions.length = 0;
+    this.visuals.dispose();
+    this.removeFromParent();
   }
 
   protected emit(type: string, detail: Record<string, unknown> = {}): void {

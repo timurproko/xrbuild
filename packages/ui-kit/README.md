@@ -26,6 +26,29 @@ function animate(now) {
 }
 ```
 
+## React components (optional)
+
+Import `@xr-build/ui-kit/react` inside an SDK-hosted `mountXrbApp` tree. The root entry still exports the imperative classes and does not import React.
+
+```tsx
+import { Button, Slider, Board } from '@xr-build/ui-kit/react';
+
+export function Controls() {
+  return <Board width={0.597} height={0.336}>
+    <Button title="Button" shape="pill" text="Press" onClick={event => console.log(event.source)} />
+    <Slider title="Slider" value={0.5} position={[0, -0.1, 0]} onChange={event => console.log(event.value)} />
+  </Board>;
+}
+```
+
+The optional entry exports Board, Button, Switch, Segmented, Slider, Dial, Trackball, Dialog, Label, Icon and GlassEdge. Existing control options become props; Switch uses `initialOn`, Segmented uses `initialIndex`, Label uses `text`, and Trackball requires `radius`. Construction options (including initial slider value) remain stable for a mounted instance: use a React key to deliberately construct a replacement. Transforms, visibility, enabled state, callbacks, text/icon content, Trackball `axis` and Dialog `open` update in place. `ref` exposes the existing object; `configure` is a construction-only callback. `compact` hides a control's title/status. Dialog `interactive={false}` draws a visual-only sheet with no blocker/Close registrations; `closeButtonVisible={false}` hides and disables Close.
+
+Adapters attach existing SDK targets, never duplicate their mesh events. They update once per SDK frame with delta capped at 0.1 seconds, including stereo; Dialog alone updates its internal Close button. Callback changes retain object identity/capture. Unmount removes subscriptions/capture and disposes construction-owned geometry, materials and textures, not consumer-added children or the SDK renderer. Default visual builders remain separate from input behavior; no theme provider or settings registry is included.
+
+For source aliases, match `@xr-build/ui-kit/react` exactly to `packages/ui-kit/src/react/index.ts` before the imperative root alias. Also alias `@xr-build/react` to `packages/react/src/index.ts` and deduplicate `three`, `react`, `react-dom`, `@react-three/fiber`. Use the React bridge's pinned versions and JSX tooling. Run `pnpm --filter @xr-build/ui-kit test:react` for the component fixtures.
+
+Imperative callers retain chainable `on`; `off(type, handler)` selectively removes one listener, and `subscribe(type, handler)` returns an idempotent unsubscribe function. `detach()` is reversible; `dispose()` is final and idempotent. Only construction-owned resources are disposed.
+
 ## Controls and events
 
 | control | hands | events (`detail`) |

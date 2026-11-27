@@ -4,8 +4,8 @@
 import * as THREE from 'three';
 import { PokeTarget } from '@xr-build/sdk';
 import { Control, placeCursor, sourceOf, touchCursor } from './control.ts';
-import { Icon, type IconNode } from './icon.ts';
-import { Label } from './label.ts';
+import type { IconNode } from './icon.ts';
+import { buttonVisual } from './default-visuals.ts';
 import { play } from './sound.ts';
 import { COLORS, approach, material, roundedBox, roundedDisc } from './theme.ts';
 
@@ -26,7 +26,7 @@ const REST = 0.012;  // gap from the base to the cap's back at rest
 
 export class Button extends Control {
   clicks = 0;
-  private readonly cap = new THREE.Group();
+  private readonly cap: THREE.Group;
   private readonly capMaterial: THREE.MeshStandardMaterial;
   private readonly poke: PokeTarget;
   private readonly cursor = touchCursor();
@@ -38,25 +38,21 @@ export class Button extends Control {
     const pill = options.shape === 'pill';
     const w = pill ? 0.07 : 0.05, h = pill ? 0.028 : 0.05;
     super(options.title, -h / 2 - 0.016);
-    // Both shapes share one look: light bevelled cap in a dark well, dark glyph.
-    const base = new THREE.Mesh(pill ? roundedBox(w + 0.008, h + 0.008, 0.004, (h + 0.008) / 2) : roundedDisc(w / 2 + 0.004, 0.004), material(COLORS.well));
-    this.capMaterial = material(COLORS.cap, { roughness: 0.35 });
-    const capMesh = new THREE.Mesh(pill ? roundedBox(w, h, CAP_DEPTH, h / 2) : roundedDisc(w / 2, CAP_DEPTH), this.capMaterial);
-    const glyph = !pill && options.icon ? new Icon(options.icon, { size: 0.022, stroke: options.iconStroke }) : new Label(options.text, { size: pill ? 0.0085 : 0.019, color: '#30363f', weight: pill ? 600 : 900 });
-    glyph.position.z = CAP_DEPTH + 0.0003;
-    this.cap.add(capMesh, glyph);
-    this.cap.position.z = REST;
-    this.add(base, this.cap, this.cursor);
+    const visual = buttonVisual(options, w, h, CAP_DEPTH, REST);
+    this.cap = visual.cap;
+    this.capMaterial = visual.capMaterial;
+    this.add(visual.base, this.cap, this.cursor);
     // The visible outline; the core adds its poke margin (1 cm) around it.
     const inside = pill
       ? (x: number, y: number) => Math.abs(x) < w / 2 && Math.abs(y) < h / 2
       : (x: number, y: number) => Math.hypot(x, y) < w / 2;
     this.poke = this.target(new PokeTarget(this, { inside, top: this.top, travel: TRAVEL }));
-    this.poke.on((e) => {
+    this.listen(this.poke, (e) => {
       if (e.type === 'start') this.click(sourceOf(e.source));
       else if (e.type === 'end') { play('release'); this.emit('release', { source: sourceOf(e.source) }); }
     });
     this.status.set('Clicks: 0');
+    this.visuals.capture(this);
   }
 
   update(dt: number): void {

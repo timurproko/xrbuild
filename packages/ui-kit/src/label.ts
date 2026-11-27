@@ -2,6 +2,7 @@
 // canvas texture on a plane. Redraws only when the text changes.
 import * as THREE from 'three';
 import { COLORS } from './theme.ts';
+import { VisualResources } from './resources.ts';
 
 export interface LabelOptions {
   /** font size in metres */
@@ -20,6 +21,7 @@ export class Label extends THREE.Object3D {
   private readonly o: Required<LabelOptions>;
   private text = '';
   private color: string;
+  private readonly resources = new VisualResources();
 
   constructor(text: string, options: LabelOptions = {}) {
     super();
@@ -31,7 +33,10 @@ export class Label extends THREE.Object3D {
     this.mesh.raycast = () => {};  // text never takes the mouse from the control under it
     this.add(this.mesh);
     this.set(text);
+    this.resources.capture(this);
   }
+
+  dispose(): void { this.resources.dispose(); this.removeFromParent(); }
 
   set(text: string, color = this.color): void {
     if (text === this.text && color === this.color) return;

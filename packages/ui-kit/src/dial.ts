@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { PinchTarget } from '@xr-build/sdk';
 import { Control } from './control.ts';
 import { pitchOf, play } from './sound.ts';
+import { dialVisual } from './default-visuals.ts';
 import { COLORS, approach, disc, material, roundedBox, roundedDisc } from './theme.ts';
 
 const R = 0.022, KNOB_D = 0.014, KNOB_Z = 0.003;
@@ -16,9 +17,9 @@ const MOUSE_RANGE = 0.1;  // metres of straight mouse drag for the whole 0..1 ra
 
 export class Dial extends Control {
   value = 0;
-  private readonly knob = new THREE.Group();
-  private readonly knobMaterial = material(COLORS.cap, { roughness: 0.35 });
-  private readonly ticks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[] = [];
+  private readonly knob: THREE.Group;
+  private readonly knobMaterial: THREE.MeshStandardMaterial;
+  private readonly ticks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[];
   private readonly pinch: PinchTarget;
   private angle: number | null = null;
   /** mouse drag: last pointer position (local metres) */
@@ -29,27 +30,14 @@ export class Dial extends Control {
 
   constructor(title: string) {
     super(title, -R - 0.024);
-    // Same look as the button: a bevelled dark well with a light bevelled cap and a dark marker.
-    this.add(new THREE.Mesh(roundedDisc(R + 0.012, 0.004), material(COLORS.well)));
-    // Value ring: tick dots that light up to the current value.
-    for (let i = 0; i < TICKS; i++) {
-      const a = START - (i / (TICKS - 1)) * SWEEP;
-      const dot = new THREE.Mesh(disc(0.0013, 0.0008, 12), material(COLORS.track));
-      dot.position.set(Math.cos(a) * (R + 0.0065), Math.sin(a) * (R + 0.0065), 0.004);  // on the well's face
-      this.ticks.push(dot);
-      this.add(dot);
-    }
-    const body = new THREE.Mesh(roundedDisc(R, KNOB_D), this.knobMaterial);
-    // Marker: a pill with round ends, one panel pixel (0.16 mm) wider than the round button's icon stroke.
-    const NOTCH_W = 0.00205;
-    const notch = new THREE.Mesh(roundedBox(NOTCH_W, R * 0.5, 0.0008, NOTCH_W / 2), material('#30363f', { roughness: 0.6 }));
-    notch.position.set(0, R * 0.6, KNOB_D - 0.0001);
-    this.knob.add(body, notch);
-    this.knob.position.z = KNOB_Z;
-    this.add(this.knob);
+    const visual = dialVisual(R, KNOB_D, KNOB_Z, TICKS, START, SWEEP);
+    this.knob = visual.knob;
+    this.knobMaterial = visual.knobMaterial;
+    this.ticks = visual.ticks;
+    this.add(...visual.root.children.slice());
     // A pinch within 5 cm of the knob's centre (the shared pinch radius) takes it.
     this.pinch = this.target(new PinchTarget(this, { position: new THREE.Vector3(0, 0, KNOB_Z + KNOB_D) }));
-    this.pinch.on((e) => {
+    this.listen(this.pinch, (e) => {
       if (e.source === 'mouse') {
         // Straight drag: the larger of the horizontal and vertical movement, 10 cm for the full range.
         if (e.type === 'start') { this.mouseAt = new THREE.Vector2(e.local.x, e.local.y); play('grab'); this.emit('grab', { mode: 'mouse' }); }
@@ -75,6 +63,7 @@ export class Dial extends Control {
       }
     });
     this.showStatus();
+    this.visuals.capture(this);
   }
 
   private showStatus(): void {

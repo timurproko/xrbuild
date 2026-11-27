@@ -15,13 +15,13 @@ const AXES: Record<Exclude<TrackballAxis, 'free'>, THREE.Vector3> = {
 export class Trackball extends Control {
   readonly radius: number;
   /** the object being turned (also what the app icon shows) */
-  readonly object = new THREE.Group();
+  readonly object: THREE.Group;
   /** degrees turned so far in each mode */
   readonly turned: Record<TrackballAxis, number> = { free: 0, x: 0, y: 0, z: 0 };
   private readonly ball: SdkTrackball;
   private readonly shell: DotShell;
   private readonly volume: VolumeTarget;
-  private readonly rings: Record<string, THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>> = {};
+  private readonly rings: Record<string, THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>>;
   private readonly last = new THREE.Quaternion();
   /** hand keypoints inside the sphere this frame (world), from the volume target */
   private points: THREE.Vector3[] = [];
@@ -31,29 +31,14 @@ export class Trackball extends Control {
   constructor(title: string, radius: number) {
     super(title, -radius - 0.02);
     this.radius = radius;
-    this.object.add(robotHead(radius * 0.62));
-    // Axis rings live on the object, so a locked axis is visibly the object's own.
-    for (const [k, axis] of Object.entries(AXES)) {
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(radius * 0.8, radius * 0.012, 8, 96),
-        new THREE.MeshBasicMaterial({ color: COLORS.accent, transparent: true, opacity: 0 }),
-      );
-      ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
-      ring.visible = false;
-      ring.userData.keepLook = true;
-      ring.raycast = () => {};
-      this.rings[k] = ring;
-      this.object.add(ring);
-    }
+    const visual = trackballVisual(radius);
+    this.object = visual.object;
+    this.rings = visual.rings;
+    this.shell = visual.shell;
     this.add(this.object);
-    // The core engages / releases; the ball itself takes every point it is given.
     this.ball = new SdkTrackball(this.object, { radius, axis: 'free', engageCount: 1, releaseCount: 0 });
-    this.shell = new DotShell({ radius, color: COLORS.accent, dotRadius: 0.02 });
-    this.shell.userData.keepLook = true;
-    this.shell.raycast = () => {};
-    this.object.add(this.shell);
     this.volume = this.target(new VolumeTarget(this, { radius }));
-    this.volume.on((e) => {
+    this.listen(this.volume, (e) => {
       if (e.source === 'mouse') {
         if (e.type === 'start') { this.ball.stop(); this.mouse = e.ray ? this.sphereHit(e.ray) : null; this.showStatus(); }
         else if (e.type === 'move' && e.ray) this.mouseDrag(e.ray);
@@ -63,6 +48,7 @@ export class Trackball extends Control {
       this.points = e.type === 'end' ? [] : e.points;
     });
     this.showStatus();
+    this.visuals.capture(this);
   }
 
   get axis(): TrackballAxis {
@@ -140,6 +126,21 @@ export class Trackball extends Control {
     this.count(before);
     this.mouse = b;
   }
+}
+
+function trackballVisual(radius: number) {
+  const object = new THREE.Group();
+  object.add(robotHead(radius * 0.62));
+  const rings: Record<string, THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>> = {};
+  for (const [key, axis] of Object.entries(AXES)) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.8, radius * 0.012, 8, 96), new THREE.MeshBasicMaterial({ color: COLORS.accent, transparent: true, opacity: 0 }));
+    ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
+    ring.visible = false; ring.userData.keepLook = true; ring.raycast = () => {};
+    rings[key] = ring; object.add(ring);
+  }
+  const shell = new DotShell({ radius, color: COLORS.accent, dotRadius: 0.02 });
+  shell.userData.keepLook = true; shell.raycast = () => {}; object.add(shell);
+  return { object, rings, shell };
 }
 
 /**
