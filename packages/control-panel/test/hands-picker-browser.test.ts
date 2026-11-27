@@ -38,10 +38,10 @@ test('provider autosaves quietly, preserves failed choices, refreshes missing ch
       assert.deepEqual((await readHandsState(core, workspace)).provider, { owner: 'workspace:beta', id: 'beta' });
       assert.equal(await evaluate(`document.querySelector('#hands-message').hidden`), true);
       await evaluate('failSource=true'); await choose('workspace:alpha/alpha');
-      await until(evaluate, `!document.querySelector('#hands-source-recovery').hidden`);
+      await until(evaluate, `!![...document.querySelectorAll('.xrb-toast button')].find(b => b.textContent === 'Retry')`); // recovery is a toast with Retry
       assert.equal(await evaluate(`document.querySelector('#hands-provider').value`), 'workspace:alpha/alpha');
       assert.equal((await readHandsState(core, workspace)).provider?.id, 'beta');
-      await evaluate(`failSource=false;document.querySelector('#hands-source-retry').click()`);
+      await evaluate(`failSource=false;[...document.querySelectorAll('.xrb-toast button')].find(b => b.textContent === 'Retry').click()`);
       await until(evaluate, `document.querySelector('#hands-message').hidden && !document.querySelector('#hands-provider').disabled`);
       assert.equal((await readHandsState(core, workspace)).provider?.id, 'alpha');
       await evaluate('window.pauseRead=true'); await choose('workspace:beta/beta');
@@ -49,11 +49,11 @@ test('provider autosaves quietly, preserves failed choices, refreshes missing ch
       let state = await readHandsState(core, workspace);
       await saveHandsState(core, workspace, null, state.revision);
       await evaluate('window.releaseRead()');
-      await until(evaluate, `!document.querySelector('#hands-source-discard').hidden`);
+      await until(evaluate, `!![...document.querySelectorAll('.xrb-toast button')].find(b => b.textContent === 'Use saved')`);
       assert.equal((await readHandsState(core, workspace)).provider, null, 'a concurrent source choice is never overwritten');
       assert.equal(await evaluate(`document.querySelector('#hands-provider').value`), 'workspace:beta/beta', 'the failed intention remains visible');
       assert.match(await evaluate(`document.querySelector('#hands-message').textContent`), /Saved: No provider/);
-      await evaluate(`document.querySelector('#hands-source-discard').click()`);
+      await evaluate(`[...document.querySelectorAll('.xrb-toast button')].find(b => b.textContent === 'Use saved').click()`);
       await until(evaluate, `document.querySelector('#hands-provider').value===''`);
       state = await readHandsState(core, workspace);
       await saveHandsState(core, workspace, { owner: 'workspace:missing', id: 'absent' }, state.revision);

@@ -1,5 +1,6 @@
 // XR Build control panel UI: plain ES module, no build step. Talks to the panel server
 // (same origin) over JSON and a Server-Sent Events stream.
+import { listenForToasts } from './toast.js';
 import { SettingsWriter } from './settings-writer.js';
 import {installJobLogCopy, readJobLog} from './job-log.js';
 import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
@@ -3750,6 +3751,7 @@ document.addEventListener('contextmenu', (event) => event.preventDefault());
 
 function connect() {
   const es = new EventSource('/api/events');
+  listenForToasts(es);
   const on = (type, fn) => es.addEventListener(type, (e) => fn(JSON.parse(e.data)));
   on('run', (r) => {
     if (r.phase === 'starting' && r.startedMs !== state.run?.startedMs) state.runLog = [];

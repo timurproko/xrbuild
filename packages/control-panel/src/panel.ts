@@ -28,6 +28,7 @@ import { launchBlocker, restartBlocker, type LaunchState } from './launch-blocke
 import { log } from './env.ts';
 import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHost, clearProviderCache } from './host-build.ts';
 import { DesktopSetup } from './desktop-setup.ts';
+import { setPanelNotifier } from './plugin-service.ts';
 import { installMeshSetup, meshSetupNeeded, meshSetupOwners, meshSetupPlan, MeshSetupUnavailable } from './hand-mesh-setup.ts';
 import { panelFreshness, panelSourceRoots, type PanelFreshness } from './panel-freshness.ts';
 import { HostRunner, type RunMode, type RunState } from './host-runner.ts';
@@ -335,6 +336,8 @@ export class Panel {
     this.projects = projects;
     this.bootstrapPackageLock = bootstrapPackageLock;
     this.hub = hub;
+    // Core and plugin code raise toasts on every open page through this one path.
+    setPanelNotifier(toast => this.hub.send('toast', toast));
     this.handSessions = new HandSessions({ origin: () => new URL(this.panelUrl!).origin, meshRetirement: this.meshRetirement,
       prepare: request => prepareHandSession(this.repo, this.workspace, request, this.nativeProviders),
       mesh: prepared => {

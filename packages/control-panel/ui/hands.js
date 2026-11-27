@@ -1,4 +1,5 @@
 import { handsLog } from './hands-log.js';
+import { toast, closeToast, listenForToasts } from './toast.js';
 import { mountToolNavigation, isPanelUnavailable } from './navigation.js';
 import { openColorPopover, installNumberSteppers, refreshDropdown } from './design-system.js';
 import { mountHandsShell } from './hands-shell.js';
@@ -24,7 +25,14 @@ let sourceEdit = null, sourceConflict = null, sourceBusy = false, sourceReadErro
 const enqueue = handsWriteQueue();
 const beginWrite = () => { writes++; profileGeneration++; readGeneration++; };
 const endWrite = () => { writes--; profileGeneration++; };
-function message(text = '') { $('hands-message').textContent = text; $('hands-message').hidden = !text; }
+// Provider save/read problems are toasts with their recovery actions; the inline line stays hidden.
+function message(text = '') {
+  $('hands-message').textContent = text; $('hands-message').hidden = true;
+  if (!text) { closeToast('hands-source'); return; }
+  toast({ title: 'Skeleton provider', message: text, tone: 'err', id: 'hands-source', actions: [
+    { label: 'Retry', onClick: () => $('hands-source-retry').click() },
+    ...(sourceConflict ? [{ label: 'Use saved', onClick: () => $('hands-source-discard').click() }] : [])] });
+}
 async function request(method, body, endpoint = '/api/hands') {
   const res = await fetch(endpoint, { method, cache: 'no-store', ...(body ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
   const data = await res.json(); if (!res.ok) { const error = new Error(data.error ?? 'Hands request failed'); error.status = res.status; throw error; } return data;
@@ -48,7 +56,7 @@ function renderSource() {
     select.dataset.options = signature;
   }
   select.value = selected; select.disabled = sourceBusy;
-  $('hands-source-recovery').hidden = !sourceEdit || sourceBusy || !$('hands-message').textContent;
+  $('hands-source-recovery').hidden = true; // Recovery actions live in the toast.
   $('hands-source-discard').hidden = !sourceConflict;
 }
 async function applyViewProfile(data, generation = profileGeneration) {
@@ -247,6 +255,7 @@ const { mountHandsLiveControls } = await import('./hands-live-controls.js');
 const liveControls = mountHandsLiveControls({ session, view, load: () => request('GET') });
 export const handsPage = { get view() { return view; }, get snapshot() { return snapshot; }, recorder, session, recordingFormat, request };
 const events = new EventSource('/api/events');
+listenForToasts(events);
 events.addEventListener('hands-changed', () => { profileGeneration++; void session.refreshProfile().catch(() => {}); void load(); });
 events.addEventListener('plugins-changed', () => { void load(); });
 const deliveryTimer = setInterval(() => { if (!writes) void load(); }, 1000);

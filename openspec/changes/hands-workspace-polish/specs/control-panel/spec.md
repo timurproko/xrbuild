@@ -75,3 +75,11 @@ Plugins SHALL accept `post-processing` as a manifest type. A plugin that declare
 #### Scenario: Hand mesh plugin listed
 - **WHEN** the Plugins page lists a plugin whose manifest declares a hand mesh with type `plugin`
 - **THEN** its type reads post-processing
+
+### Requirement: Shared toasts
+
+Panel pages, core and plugins SHALL show short notices as toasts in the bottom-right corner with a tone, a title, an optional line and up to two actions. Server-side toasts SHALL reach every open page and only offer panel links as actions. Recoverable Hands errors SHALL appear as toasts with their Retry or Use saved actions instead of inline messages.
+
+#### Scenario: Saving a layer fails
+- **WHEN** saving a post-processing layer fails
+- **THEN** a toast names the layer and the problem and offers Retry, and no inline error block appears

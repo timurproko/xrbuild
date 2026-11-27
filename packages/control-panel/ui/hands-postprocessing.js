@@ -2,6 +2,7 @@ import { renderField, setFieldError, installNumberSteppers, iconSvg, openFloatin
 import { menuKeyboard, isPanelUnavailable } from './navigation.js';
 import { openMeshSetup } from './hands-mesh-setup.js';
 import { handsLog } from './hands-log.js';
+import { toast, closeToast } from './toast.js';
 const key = p => p ? `${p.owner}/${p.id}` : '';
 const identity = value => value ? { owner: value.slice(0, value.lastIndexOf('/')), id: value.slice(value.lastIndexOf('/') + 1) } : null;
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -34,7 +35,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   const gear = root.querySelector('[data-mesh-gear]'), menu = root.querySelector('[role="menu"]'), reset = root.querySelector('[data-mesh-reset]');
   const layers = root.querySelector('[data-mesh-layers]'), layerValue = root.querySelector('[data-mesh-layer-value]'), layer = root.querySelector('[data-mesh-layer]');
   const ready = root.querySelector('[data-mesh-ready]'), install = root.querySelector('[data-mesh-install]'), layerOn = root.querySelector('[data-mesh-layer-enabled]');
-  let switching = false;
+  let switching = false, shownProblem = '';
   const events = new AbortController(), document = root.ownerDocument, edits = new Map();
   // On the Hands page the gear sits in the tab bar beside the Post-process tab, like Transform and Display.
   const slot = document.querySelector('[data-tab-action="post"]');
@@ -61,7 +62,15 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     gear.hidden = !plugin()?.declaration.settings.length;
     if (gear.hidden) closeMenu();
     message.textContent = failure ?? snapshot?.problem ?? '';
-    recovery.hidden = !message.textContent; retryButton.disabled = busy;
+    // Problems show as a toast with Retry (and Use saved after a conflict); the inline recovery block stays hidden.
+    recovery.hidden = true; retryButton.disabled = busy;
+    const problem = message.textContent, key = `${problem}|${!!conflict}`;
+    if (key !== shownProblem) {
+      shownProblem = key;
+      if (!problem) closeToast('hands-postprocessing');
+      else toast({ title: plugin()?.label ?? 'Post-process', message: problem, tone: 'err', id: 'hands-postprocessing', actions: [
+        { label: 'Retry', onClick: () => retryButton.click() }, ...(conflict ? [{ label: 'Use saved', onClick: () => discard.click() }] : [])] });
+    }
     discard.hidden = !conflict; discard.disabled = busy;
     renderRuntime();
   }

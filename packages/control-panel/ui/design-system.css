@@ -555,3 +555,18 @@ dialog.xrb-rebuild-dialog, dialog.xrb-job-progress-dialog { width: min(660px, ca
 .xrb-progress-status-icon[data-state="failed"] .xrb-progress-error { display: block; color: var(--err); }
 .xrb-progress-dialog .ask-buttons.is-building button { visibility: hidden; pointer-events: none; }
 .xrb-progress-dialog .ask-buttons .toggle { margin: 0; }
+/* Toasts (ui/toast.js): bottom-right notices with a tone dot, a title, a quieter line and optional actions. */
+.xrb-toasts { position: fixed; inset: auto 16px 16px auto; margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; z-index: 1001; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
+.xrb-toast { pointer-events: auto; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 12px; width: min(360px, calc(100vw - 32px)); padding: 12px 10px 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 14px 40px rgba(0, 0, 0, .25); animation: xrb-toast-in .18s ease-out; }
+.xrb-toast[data-leaving] { opacity: 0; transform: translateY(6px); transition: opacity .18s, transform .18s; }
+.xrb-toast-dot { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--accent); }
+.xrb-toast[data-tone="ok"] .xrb-toast-dot { background: var(--ok); }
+.xrb-toast[data-tone="warn"] .xrb-toast-dot { background: var(--warn); }
+.xrb-toast[data-tone="err"] .xrb-toast-dot { background: var(--err); }
+.xrb-toast-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.xrb-toast-body > strong { font-size: .88rem; color: var(--fg); }
+.xrb-toast-body > span { font-size: .82rem; color: var(--muted); }
+.xrb-toast-actions { display: flex; gap: 8px; margin-top: 8px; }
+.xrb-toast-close { align-self: start; margin: -4px -2px 0 0; }
+@keyframes xrb-toast-in { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .xrb-toast { animation: none; } .xrb-toast[data-leaving] { transition: none; } }
