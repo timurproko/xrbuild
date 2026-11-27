@@ -34,10 +34,11 @@ export async function withPostprocessing(run: (browser: Browser) => Promise<void
           {key:'smooth',label:'Smooth surface',type:'boolean',default:true,changeMode:'live'}]}};
         window.snapshot = {revision:'a'.repeat(64),registryRevision:'registry',plugins:[plugin],choice:{version:1,selected:{owner:plugin.owner,id:plugin.id},settings:{}},running:false,delivery:null};
         window.requests=[]; window.retries=[]; window.loadCount=0;
-        window.options={pollMs:0,load:async()=>{loadCount++;return structuredClone(snapshot)},save:async body=>{
+        window.options={pollMs:0,load:async()=>{loadCount++;const data=structuredClone(snapshot);if(window.loadGate)await loadGate();return data},save:async body=>{
           requests.push(structuredClone(body));
           if(window.saveGate) await saveGate();
           if(window.saveError) throw saveError;
+          if(body.revision!==snapshot.revision)throw Object.assign(new Error('Hands profile changed; reload before saving'),{status:409});
           snapshot={...snapshot,revision:String.fromCharCode(97+requests.length).repeat(64),choice:{...snapshot.choice,selected:body.selected,settings:{...snapshot.choice.settings,...(body.selected?{[body.selected.owner+'/'+body.selected.id]:{version:plugin.declaration.settingsVersion,values:body.values}}:{})}}};
           return structuredClone(snapshot);
         },retry:async body=>{retries.push(body);if(window.retryGate)await retryGate();return {delivery:structuredClone(snapshot.delivery)}}};

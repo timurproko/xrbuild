@@ -9,10 +9,10 @@
 
 ## 2. Conflict-safe immediate persistence
 
-- [ ] 2.1 Replace routine Save/Reload with valid finished-edit and selection/reset commits, retaining the programmatic component interface; verify change/Enter/stepper/slider completion deduplication, invalid input rejection and no writes during intermediate input.
-- [ ] 2.2 Add serialized, versioned field intentions and full-values PUT adaptation against fresh revisions; verify unrelated source/adjustment/sibling-setting writes survive, unfinished fields remain local, newer edits during save are retained and per-plugin values survive switching.
-- [ ] 2.3 Add bounded rebase and explicit same-field/selection/schema conflict recovery with Retry and Use saved; verify a second unseen change cannot be overwritten and transport, busy, malformed-profile and validation failures preserve local intent without automatic loops.
-- [ ] 2.4 Update the existing post-processing browser tests from explicit Save expectations and verify passive mount, independent source/adjustment drafts, poll/save ordering and disposal with fake services only.
+- [x] 2.1 Replace routine Save/Reload with valid finished-edit and selection/reset commits, retaining the programmatic component interface; verify change/Enter/stepper/slider completion deduplication, invalid input rejection and no writes during intermediate input.
+- [x] 2.2 Add serialized, versioned field intentions and full-values PUT adaptation against fresh revisions; verify unrelated source/adjustment/sibling-setting writes survive, unfinished fields remain local, newer edits during save are retained and per-plugin values survive switching.
+- [x] 2.3 Add bounded rebase and explicit same-field/selection/schema conflict recovery with Retry and Use saved; verify a second unseen change cannot be overwritten and transport, busy, malformed-profile and validation failures preserve local intent without automatic loops.
+- [x] 2.4 Update the existing post-processing browser tests from explicit Save expectations and verify passive mount, independent source/adjustment drafts, poll/save ordering and disposal with fake services only.
 
 ## 3. Acknowledged delivery status and Retry
 
