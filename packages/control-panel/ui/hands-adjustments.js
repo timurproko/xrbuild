@@ -1,5 +1,6 @@
 import { commitHandsFields } from './hands-commits.js';
-import { renderField, setFieldError, installNumberSteppers, enhanceHelpText } from './design-system.js';
+import { renderField, setFieldError, installNumberSteppers, enhanceHelpText, iconSvg, openFloating, positionFloating } from './design-system.js';
+import { menuKeyboard } from './navigation.js';
 
 export const linearToHex = rgb => '#' + rgb.map(v => Math.round(255 * (v <= .0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - .055)).toString(16).padStart(2, '0')).join('');
 export const hexToLinear = hex => [1, 3, 5].map(i => { const v = parseInt(hex.slice(i, i + 2), 16) / 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
@@ -9,23 +10,26 @@ let mounts = 0;
 /** Root-scoped editor. Only finished values enter the serialized revision-safe save path. */
 export function mountHandAdjustments(root, { load, apply, serialize = operation => operation() }) {
   const prefix = `hands-adjustments-${++mounts}`;
-  const number = (key, label, min, max, step, hint = '', range = false) => renderField(label,
-    `<input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required>${range ? `<input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">` : ''}`, { hint });
+  const number = (key, label, min, max, step, hint = '', swatch = '') => renderField(label,
+    `<span class="hands-number-row${swatch ? ' hands-number-row--colour' : ''}"><input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required><input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">${swatch}</span>`, { hint });
   const toggle = (key, label) => `<label class="xrb-switch"><input type="checkbox" data-field="appearance.${key}"><span>${label}</span></label>`;
-  const colour = (key, label) => renderField(label, `<span class="xrb-inline-icons"><input type="color" data-field="appearance.${key}" aria-label="${label}" hidden><button type="button" class="xrb-swatch" data-colour="appearance.${key}" aria-label="Choose ${label.toLowerCase()}" aria-haspopup="dialog" aria-pressed="true"></button></span>`);
+  const colour = (key, label) => `<span class="xrb-inline-icons"><input type="color" data-field="appearance.${key}" aria-label="${label}" hidden><button type="button" class="xrb-swatch" data-colour="appearance.${key}" aria-label="Choose ${label.toLowerCase()}" aria-haspopup="dialog" aria-pressed="true"></button></span>`;
+  const resetMenu = (section, label) => `<button type="button" class="xrb-icon-button" id="${prefix}-${section}-settings" data-reset-menu="${section}" aria-label="${label} settings" aria-haspopup="menu" aria-controls="${prefix}-${section}-menu" aria-expanded="false">${iconSvg('settings')}</button><div class="menu" id="${prefix}-${section}-menu" role="menu" aria-labelledby="${prefix}-${section}-settings" hidden><button type="button" role="menuitem" data-reset="${section}">Reset to defaults</button></div>`;
   root.innerHTML = `<form class="xrb-stack hands-adjustment-sections" aria-label="Hand adjustments">
     <section class="xrb-sidebar-section" aria-labelledby="${prefix}-position">
-      <div class="row"><h2 id="${prefix}-position">Position and size</h2><span class="spacer"></span><button type="button" class="small" data-reset="geometry">Reset to defaults</button></div>
-      <div class="xrb-field-grid">${number('offsetMm.x', 'X (mm)', -150, 150, 1)}${number('offsetMm.y', 'Y (mm)', -150, 150, 1)}${number('offsetMm.z', 'Z (mm)', -150, 150, 1)}</div>
-      ${number('sizeFactor', 'Size', .5, 1.5, .01, 'Changes where the hand touches.', true)}
+      <div class="row"><h2 id="${prefix}-position">Position and size</h2><span class="spacer"></span>${resetMenu('geometry', 'Position and size')}</div>
+      ${number('offsetMm.x', 'X (mm)', -150, 150, 1)}${number('offsetMm.y', 'Y (mm)', -150, 150, 1)}${number('offsetMm.z', 'Z (mm)', -150, 150, 1)}
+      ${number('sizeFactor', 'Size', .5, 1.5, .01, 'Changes where the hand touches.')}
     </section>
     <section class="xrb-sidebar-section" aria-labelledby="${prefix}-appearance">
-      <div class="row"><h2 id="${prefix}-appearance">Appearance</h2><span class="spacer"></span><button type="button" class="small" data-reset="appearance">Reset to defaults</button></div>
+      <div class="row"><h2 id="${prefix}-appearance">Appearance</h2><span class="spacer"></span>${resetMenu('appearance', 'Appearance')}</div>
       <div class="xrb-toggle-grid">${toggle('showJoints', 'Joints')}${toggle('showBones', 'Bones')}</div>
-      <div class="xrb-field-grid">${number('appearance.jointDiameterMm', 'Joint diameter (mm)', 1, 40, 1)}${colour('jointColorLinear', 'Joint colour')}${number('appearance.boneDiameterMm', 'Bone diameter (mm)', 1, 30, 1)}${colour('boneColorLinear', 'Bone colour')}</div>
+      ${number('appearance.jointDiameterMm', 'Joint diameter (mm)', 1, 40, 1, '', colour('jointColorLinear', 'Joint colour'))}
+      ${number('appearance.boneDiameterMm', 'Bone diameter (mm)', 1, 30, 1, '', colour('boneColorLinear', 'Bone colour'))}
       ${number('appearance.opacity', 'Skeleton opacity', 0, 1, .001)}
       ${toggle('showPinchGrabIndicator', 'Pinch / grab indicator')}
-      <div class="xrb-field-grid">${number('appearance.indicatorDiameterMm', 'Indicator diameter (mm)', 1, 60, 1)}${colour('indicatorColorLinear', 'Indicator colour')}${number('appearance.indicatorOpacity', 'Indicator opacity', 0, 1, .01)}</div>
+      ${number('appearance.indicatorDiameterMm', 'Indicator diameter (mm)', 1, 60, 1, '', colour('indicatorColorLinear', 'Indicator colour'))}
+      ${number('appearance.indicatorOpacity', 'Indicator opacity', 0, 1, .01)}
     </section>
     <div class="xrb-stack" data-recovery hidden><p class="field-error" data-status role="alert"></p><div class="xrb-button-row"><button type="button" class="small" data-action="retry">Retry</button><button type="button" class="small" data-action="discard" hidden>Use saved</button></div></div>
   </form>`;
@@ -34,6 +38,27 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   const fields = [...root.querySelectorAll('[data-field]')], edits = new Map();
   let state = null, busy = false, disposed = false, failure = null, conflict = null, retryDelivery = false, version = 0, deliveryEpoch = 0, inFlight = null;
   const disposers = [installNumberSteppers(root), enhanceHelpText(root)];
+  const menuEvents = new AbortController(), document = root.ownerDocument;
+  let activeMenu = null;
+  function closeMenu(restoreFocus = false) {
+    if (!activeMenu) return;
+    const { button, menu } = activeMenu;
+    activeMenu = null; menu.hidden = true; button.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) button.focus();
+  }
+  function showMenu(button) {
+    if (!state) return;
+    closeMenu();
+    const menu = root.querySelector(`#${button.getAttribute('aria-controls')}`);
+    activeMenu = { button, menu }; button.setAttribute('aria-expanded', 'true');
+    openFloating(menu, { anchor: button });
+  }
+  const outside = event => { if (activeMenu && !activeMenu.button.contains(event.target) && !activeMenu.menu.contains(event.target)) closeMenu(); };
+  document.addEventListener('click', outside, { signal: menuEvents.signal });
+  document.addEventListener('focusin', outside, { signal: menuEvents.signal });
+  document.addEventListener('scroll', () => { if (activeMenu) positionFloating(activeMenu.menu, { anchor: activeMenu.button }); }, { capture: true, signal: menuEvents.signal });
+  document.defaultView.addEventListener('resize', () => closeMenu(), { signal: menuEvents.signal });
+  disposers.push(() => { closeMenu(); menuEvents.abort(); });
   const read = (data, key) => key.startsWith('appearance.') ? data.profile.appearance[key.slice(11)] ?? data.appearanceDefaults[key.slice(11)] : key.startsWith('offsetMm.') ? data.profile.offsetMm[key.slice(9)] : data.profile[key];
   function buttons() {
     root.dataset.dirty = String(edits.size > 0);
@@ -59,7 +84,7 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
       range.disabled = !state;
       if (state) range.value = edits.get(range.dataset.range)?.value ?? read(state, range.dataset.range);
     }
-    for (const reset of root.querySelectorAll('[data-reset]')) reset.disabled = !state;
+    for (const reset of root.querySelectorAll('[data-reset],[data-reset-menu]')) reset.disabled = !state;
     buttons();
   }
   function refresh(next, { discard: discardEdits = false } = {}) {
@@ -78,10 +103,8 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     const base = sent && sent.version === previous?.version ? sent.value : previous?.base ?? sent?.value ?? read(state, key);
     // Opening, cancelling or returning a colour preview to its initial swatch preserves exact linear values.
     if (field.type === 'color' && field.value.toLowerCase() === linearToHex(base).toLowerCase()) value = structuredClone(base);
-    if (key === 'sizeFactor') {
-      if (field.type === 'range') root.querySelector('[data-field="sizeFactor"]').value = field.value;
-      else if (Number.isFinite(value)) root.querySelector('[data-range="sizeFactor"]').value = value;
-    }
+    if (field.type === 'range') root.querySelector(`[data-field="${key}"]`).value = field.value;
+    else if (field.type === 'number' && field.validity.valid) root.querySelector(`[data-range="${key}"]`).value = value;
     if (previous && equal(value, previous.value)) return key;
     if (!sent && equal(value, base) && equal(read(state, key), base)) {
       edits.delete(key); setFieldError(field);
@@ -135,13 +158,27 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   }
   const input = event => { const field = event.target.closest('[data-field],[data-range]'); if (field && root.contains(field)) edit(field); };
   const change = event => { const field = event.target.closest('[data-field],[data-range]'); if (field && root.contains(field)) commit(field); };
-  const keydown = event => { if (event.key === 'Enter' && event.target.matches('[data-field]')) { event.preventDefault(); commit(event.target); } };
+  const keydown = event => {
+    const button = event.target.closest('[data-reset-menu]');
+    if (button && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); showMenu(button); return; }
+    if (activeMenu && (activeMenu.menu.contains(event.target) || event.key === 'Escape')) {
+      menuKeyboard(event, activeMenu.menu, () => closeMenu(true));
+      return;
+    }
+    if (event.key === 'Enter' && event.target.matches('[data-field]')) { event.preventDefault(); commit(event.target); }
+  };
   const submit = event => event.preventDefault();
   const click = event => {
+    const menuButton = event.target.closest('[data-reset-menu]');
+    if (menuButton) {
+      if (activeMenu?.button === menuButton) closeMenu(); else showMenu(menuButton);
+      return;
+    }
     const swatch = event.target.closest('[data-colour]');
     if (swatch && state) { event.preventDefault(); root.querySelector(`[data-field="${swatch.dataset.colour}"]`).click(); }
     const reset = event.target.closest('[data-reset]');
     if (reset && state) {
+      closeMenu(true);
       for (const field of fields) {
         const key = field.dataset.field, appearance = key.startsWith('appearance.');
         if (appearance !== (reset.dataset.reset === 'appearance')) continue;
