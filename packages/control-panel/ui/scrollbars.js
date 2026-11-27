@@ -144,7 +144,7 @@ export function installOverlayScrollbars(doc = document) {
     const minimum = parseFloat(tokens.getPropertyValue('--xrb-scrollbar-min')) || 24;
     for (const [element,bars] of regions) {
       const isPage = element === doc.scrollingElement,style = win.getComputedStyle(element),box = viewport(element,isPage);
-      const hidden = forced.matches || !visible(element) || (isPage && doc.body.closest('[data-xrb-scrollbar="none"]')) || (modal && !modal.contains(element)) || box.right <= box.left || box.bottom <= box.top;
+      const hidden = forced.matches || !visible(element) || (isPage && doc.body.closest('[data-xrb-scrollbar="none"]')) || (modal && !modal.contains(element)) || (doc.fullscreenElement && !doc.fullscreenElement.contains(element)) || box.right <= box.left || box.bottom <= box.top;
       const axes = {y:!hidden && (isPage || /auto|scroll|overlay/.test(style.overflowY)) && !/hidden|clip/.test(style.overflowY) && element.scrollHeight > element.clientHeight + 1,
         x:!hidden && (isPage || /auto|scroll|overlay/.test(style.overflowX)) && !/hidden|clip/.test(style.overflowX) && element.scrollWidth > element.clientWidth + 1};
       for (const axis of ['y','x']) {
@@ -172,6 +172,7 @@ export function installOverlayScrollbars(doc = document) {
   doc.addEventListener('scroll',()=>schedule(),{capture:true,passive:true,signal});
   doc.addEventListener('load',()=>schedule(true),{capture:true,signal});
   win.addEventListener('resize',()=>schedule(true),{passive:true,signal});
+  doc.addEventListener('fullscreenchange',()=>schedule(true),{signal});
   forced.addEventListener('change',()=>schedule(true),{signal});
   win.addEventListener('pagehide',()=>{
     suspended = true;win.cancelAnimationFrame(frame);frame = 0;
