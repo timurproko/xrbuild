@@ -66,3 +66,19 @@ test('mesh visual maps the final pose once, respects appearance and disposes top
   visual.updateMeshes([], panel); assert.equal(disposed, true); assert.equal(group.children.length, 0);
   visual.disposeMeshes(); assert.equal(visual.children.length, original);
 });
+
+test('the default fetch is called the way browsers require, not as a method of the client', async () => {
+  const original = globalThis.fetch; const calls: string[] = [];
+  // Like Chrome: fetch throws "Illegal invocation" when called with any receiver other than the window.
+  globalThis.fetch = function (this: unknown, input: RequestInfo | URL) {
+    if (this !== undefined && this !== globalThis) throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+    calls.push(String(input)); return Promise.resolve(new Response(null, { status: 204 }));
+  } as typeof fetch;
+  try {
+    const client = new HandMeshClient({ version: 1, url: 'http://127.0.0.1:1234', token: 'a'.repeat(64) });
+    for (let i = 0; i < 5 && !calls.length; i++) await tick();
+    assert.deepEqual(calls, ['http://127.0.0.1:1234/connect']);
+    assert.equal(client.connectError, null, 'the connection is not refused by the browser');
+    client.close();
+  } finally { globalThis.fetch = original; }
+});

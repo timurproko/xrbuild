@@ -44,7 +44,8 @@ export class HandMeshClient {
   private accepted: { frame: MeshFrame; meshes: MeshSurface[] } | null = null;
   private controller: AbortController | null = null;
   private topologies = new Map<number, MeshSurface>();
-  constructor(runtime: MeshRuntime, fetcher = fetch, now = () => performance.now()) {
+  // The browser's fetch must be called on the window: stored as a method it throws "Illegal invocation".
+  constructor(runtime: MeshRuntime, fetcher: typeof fetch = (input, init) => fetch(input, init), now = () => performance.now()) {
     this.runtime = runtime; this.fetcher = fetcher; this.now = now;
     const controller = new AbortController(); this.controller = controller;
     const timer = setTimeout(() => controller.abort(), 2000);
