@@ -67,3 +67,11 @@ Restart SHALL be refused while desktop setup, Rebuild or Update runs, because st
 
 - **WHEN** a page request is refused with the restarting response or cannot reach the restarting panel
 - **THEN** no error dialog, Retry or Failed status appears and the page reloads when the panel returns
+
+### Requirement: Post-processing plugin type
+
+Plugins SHALL accept `post-processing` as a manifest type. A plugin that declares a hand mesh and gives no type or the generic `plugin` type SHALL be listed as post-processing.
+
+#### Scenario: Hand mesh plugin listed
+- **WHEN** the Plugins page lists a plugin whose manifest declares a hand mesh with type `plugin`
+- **THEN** its type reads post-processing

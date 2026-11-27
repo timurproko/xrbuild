@@ -975,11 +975,11 @@ export class Panel {
       const publisher = this.publishers.found.find(item => item.plugin?.key === plugin.key)?.publisher;
       const packagerLabel = this.packagers.found.find(item => item.plugin?.key === plugin.key)?.packager.label;
       const name = meta.name ?? presentedProviders[0]?.name ?? (isPackager ? plugin.id.replace(/^platform-/, '') : plugin.id);
-      const derivedType = publisher ? 'publisher' : ownProviders[0]?.role ?? (isPackager ? 'platform' : 'plugin');
+      const derivedType = publisher ? 'publisher' : ownProviders[0]?.role ?? (isPackager ? 'platform' : meta.handMesh ? 'post-processing' : 'plugin');
       return {
         id, key: plugin.key, logicalId: plugin.id.toLowerCase(), origin: plugin.origin, readOnly: plugin.readOnly, selected,
         sourceRevision, selectedOrigin: Object.hasOwn(prefs.origins ?? {}, plugin.id.toLowerCase()) ? prefs.origins![plugin.id.toLowerCase()] : null,
-        availableOrigins: [...new Set(catalog.plugins.filter(item => item.id.toLowerCase() === plugin.id.toLowerCase()).map(item => item.origin))], name, title: meta.title ?? meta.name ?? packagerLabel ?? publisher?.label ?? name, type: meta.type ?? derivedType,
+        availableOrigins: [...new Set(catalog.plugins.filter(item => item.id.toLowerCase() === plugin.id.toLowerCase()).map(item => item.origin))], name, title: meta.title ?? meta.name ?? packagerLabel ?? publisher?.label ?? name, type: meta.type && !(meta.type === 'plugin' && meta.handMesh) ? meta.type : derivedType,
         label: packagerLabel ?? publisher?.label,
         description: meta.description ?? ownProviders[0]?.description ?? (typeof packager?.description === 'string' ? packager.description : ''),
         settingsDescription: meta.settingsDescription ?? '',

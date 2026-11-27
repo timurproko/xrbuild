@@ -9,7 +9,7 @@
 ## 2. Shared controls
 
 - [x] 2.1 Give inputs, steppers, dropdowns, slider thumbs and swatches one field hover line; centre icon buttons in small toolbars; let elements opt out of hover hints.
-- [x] 2.2 Add the themed colour popover with right-click copy and paste, count multi-select choices, and open dropdowns inside a fullscreen element.
+- [x] 2.2 Add the themed colour popover with right-click copy and paste, count multi-select choices, open dropdowns inside a fullscreen element, and list hand-mesh plugins as post-processing.
 
 ## 3. Hands layout and viewer
 
