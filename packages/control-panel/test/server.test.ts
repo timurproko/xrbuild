@@ -13,6 +13,17 @@ import { launchPreviewBrowser, Panel } from '../src/panel.ts';
 
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(r => { resolve = r; });
+  return { promise, resolve };
+}
+
+function jobEntered(id: number, entered: Promise<void>): Promise<void> {
+  const job = panel.panel.jobs.get(id)!;
+  return Promise.race([entered, panel.panel.jobs.wait(job).then(() => { throw new Error(job.error ?? 'Fixture job ended before its body reached the gate'); })]);
+}
+
 let repo: string;
 let port: number;
 let panel: PanelServer;
@@ -278,7 +289,7 @@ test('publication actions and status ignore package targets while preserving man
   }
 });
 
-test('simultaneous publication requests queue and each publishes its finalized project favicon', async () => {
+test('simultaneous publication requests queue and each publishes its finalized project favicon', async t => {
   const firstManifest = { name: 'Queue First', kind: 'app', target: 'webxr', entry: 'dist', scripts: { build: 'build' }, icon: 'icon.png',
     publication: { enabled: true, publisher: 'queue-fixture', id: '22222222-2222-4222-8222-222222222221', slug: 'queue-first' } };
   const secondManifest = { name: 'Queue Second', kind: 'app', target: 'webxr', entry: 'dist', scripts: { build: 'build' }, icon: 'icon.png',
@@ -300,6 +311,9 @@ test('simultaneous publication requests queue and each publishes its finalized p
   let reachedFirst!: () => void;
   const firstGate = new Promise<void>((resolve) => (releaseFirst = resolve));
   const firstReached = new Promise<void>((resolve) => (reachedFirst = resolve));
+  const admission = deferred(), jobIds: number[] = [];
+  const beforeStart = panel.panel.jobs.beforeStart;
+  t.mock.method(panel.panel.jobs, 'beforeStart', async () => { await admission.promise; await beforeStart(); });
   panel.panel.publishers = { found: [{ dir: repo, publisher: {
     name: 'queue-fixture', origin: 'https://example.test', routePrefix: 'apps', validate: () => [],
     status: async (publication) => ({ state: 'unpublished' as const, selectedUrl: `https://example.test/apps/${publication.slug}/` }),
@@ -317,13 +331,16 @@ test('simultaneous publication requests queue and each publishes its finalized p
   } }], problems: [] };
   try {
     const first = await request('POST', '/api/projects/queue-first/publish', { body: '{}' });
+    if (first.status === 202) jobIds.push(first.json.id);
     const second = await request('POST', '/api/projects/queue-second/publish', { body: '{}' });
+    if (second.status === 202) jobIds.push(second.json.id);
     assert.equal(first.status, 202, first.body);
     assert.equal(second.status, 202, second.body);
-    assert.equal(first.json.state, 'running');
+    assert.equal(first.json.state, 'queued', 'admission reserves the first publication before its body starts');
     assert.equal(second.json.state, 'queued');
     assert.deepEqual(second.json.publication, secondManifest.publication);
-    await firstReached;
+    admission.resolve(); await jobEntered(first.json.id, firstReached);
+    assert.equal(panel.panel.jobs.get(first.json.id)?.state, 'running');
     assert.equal(panel.panel.jobs.get(second.json.id)?.state, 'queued');
     releaseFirst();
     await Promise.all([first.json.id, second.json.id].map((id) => panel.panel.jobs.wait(panel.panel.jobs.get(id)!)));
@@ -331,7 +348,8 @@ test('simultaneous publication requests queue and each publishes its finalized p
     assert.deepEqual(publishedIcons.get('queue-first'), await fs.readFile(path.join(repo, 'projects/Apps/queue-first/icon.png')));
     assert.deepEqual(publishedIcons.get('queue-second'), await fs.readFile(path.join(repo, 'projects/Apps/queue-second/icon.png')));
   } finally {
-    releaseFirst();
+    admission.resolve(); releaseFirst();
+    await Promise.all(jobIds.map(id => panel.panel.jobs.wait(panel.panel.jobs.get(id)!)));
     panel.panel.publishers = original;
     await Promise.all(['queue-first', 'queue-second'].map((folder) => fs.rm(path.join(repo, 'projects/Apps', folder), { recursive: true, force: true })));
   }
@@ -364,7 +382,7 @@ test('a failed forced publication build never calls the publisher', async () => 
   }
 });
 
-test('package setup checks tools before building, requires consent, streams logs and retries safely', async () => {
+test('package setup checks tools before building, requires consent, streams logs and retries safely', async t => {
   await write('projects/Apps/setup-demo/xrb-project.json', JSON.stringify({ name: 'Setup demo', kind: 'app', target: 'webxr', platform: 'setup-fixture', entry: 'dist' }));
   await write('projects/Apps/setup-demo/dist/index.html', '<h1>ready</h1>');
   let ready = false;
@@ -372,7 +390,8 @@ test('package setup checks tools before building, requires consent, streams logs
   let builds = 0;
   let fail = false;
   let remainMissing = false;
-  let release: (() => void) | null = null;
+  let phase = { entered: deferred(), completion: deferred() };
+  const admission = deferred(), jobIds: number[] = [];
   const original = panel.panel.packagers;
   panel.panel.packagers = { ...original, found: [...original.found, { dir: repo, packager: {
     name: 'setup-fixture', target: 'webxr', identityFields: [], validate: () => [],
@@ -382,7 +401,7 @@ test('package setup checks tools before building, requires consent, streams logs
       assert.equal(acceptTerms, true);
       log('installing tools');
       if (fail) throw new Error('download failed');
-      await new Promise<void>((resolve) => { release = resolve; });
+      const current = phase; current.entered.resolve(); await current.completion.promise;
       ready = !remainMissing;
       log('tools installed');
     },
@@ -413,25 +432,33 @@ test('package setup checks tools before building, requires consent, streams logs
     assert.equal(builds, 0);
     fail = true;
     const broken = await request('POST', `${root}/package-setup`, { body: '{"acceptTerms":true}' });
+    if (broken.status === 202) jobIds.push(broken.json.id);
     assert.equal(broken.status, 202);
     const failed = await panel.panel.jobs.wait(panel.panel.jobs.get(broken.json.id)!);
     assert.equal(failed.state, 'failed');
     assert.match(failed.lines.join('\n'), /installing tools[\s\S]*download failed/);
     fail = false;
-    remainMissing = true;
+    remainMissing = true; phase = { entered: deferred(), completion: deferred() };
     const incomplete = await request('POST', `${root}/package-setup`, { body: '{"acceptTerms":true}' });
+    if (incomplete.status === 202) jobIds.push(incomplete.json.id);
     assert.equal(incomplete.status, 202);
-    release?.();
+    await jobEntered(incomplete.json.id, phase.entered.promise); phase.completion.resolve();
     assert.equal((await panel.panel.jobs.wait(panel.panel.jobs.get(incomplete.json.id)!)).state, 'failed', 'successful installer return still requires a ready status');
     assert.equal((await request('GET', `${root}/package/setup-status`)).json.state, 'setup-required');
-    remainMissing = false;
+    remainMissing = false; phase = { entered: deferred(), completion: deferred() };
+    const beforeStart = panel.panel.jobs.beforeStart;
+    t.mock.method(panel.panel.jobs, 'beforeStart', async () => { await admission.promise; await beforeStart(); });
     const started = await request('POST', `${root}/package-setup`, { body: '{"acceptTerms":true}' });
+    if (started.status === 202) jobIds.push(started.json.id);
     assert.equal(started.status, 202);
+    assert.equal((await request('GET', '/api/jobs')).json.jobs.find((j: any) => j.id === started.json.id)?.state, 'queued', 'reopened panels can restore a reserved setup job');
+    assert.equal((await request('POST', `${root}/package-setup`, { body: '{"acceptTerms":true}' })).status, 409, 'no parallel queued setup');
+    admission.resolve(); await jobEntered(started.json.id, phase.entered.promise);
     assert.equal((await request('GET', '/api/jobs')).json.jobs.find((j: any) => j.id === started.json.id)?.state, 'running', 'reopened panels can restore the live setup job');
-    assert.equal((await request('POST', `${root}/package-setup`, { body: '{"acceptTerms":true}' })).status, 409, 'no parallel setup');
+    assert.equal((await request('POST', `${root}/package-setup`, { body: '{"acceptTerms":true}' })).status, 409, 'no parallel running setup');
     ready = true; // Even if another caller sees ready, an active setup must exclude package builds.
     assert.equal((await request('POST', `${root}/package`, { body: '{}' })).status, 409);
-    release?.();
+    phase.completion.resolve();
     const completed = await panel.panel.jobs.wait(panel.panel.jobs.get(started.json.id)!);
     assert.equal(completed.state, 'done');
     assert.match(completed.lines.join('\n'), /tools installed[\s\S]*Package tools are ready/);
@@ -439,12 +466,14 @@ test('package setup checks tools before building, requires consent, streams logs
     assert.equal(installs, 3);
     assert.equal(builds, 0, 'setup never packages automatically');
     const built = await request('POST', `${root}/package`, { body: '{}' });
+    if (built.status === 202) jobIds.push(built.json.id);
     assert.equal(built.status, 202, built.body);
     assert.equal((await panel.panel.jobs.wait(panel.panel.jobs.get(built.json.id)!)).state, 'done');
     assert.equal(builds, 1);
     assert.equal((await request('POST', `${root}/package-setup`, { body: '{}' })).status, 409, 'ready toolchain cannot be reinstalled');
   } finally {
-    release?.();
+    admission.resolve(); phase.completion.resolve();
+    await Promise.all(jobIds.map(id => panel.panel.jobs.wait(panel.panel.jobs.get(id)!)));
     panel.panel.packagers = original;
     await fs.rm(path.join(repo, 'projects/Apps/setup-demo'), { recursive: true, force: true });
   }
