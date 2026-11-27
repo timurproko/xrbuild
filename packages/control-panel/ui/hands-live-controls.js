@@ -26,8 +26,8 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     if (active && status.source && key(status.source) !== provider.value) label += ` · ${status.source.label}`;
     if (state.textContent !== label) state.textContent = label;
     state.classList.toggle('warn', ['failed', 'occupied', 'stalled'].includes(phase));
+    // The viewer message shows failure reasons; Start and its status label carry no hover hint.
     const detail = status.reason || (active && status.source ? `Active provider: ${status.source.label}` : unavailable || 'Opening this page starts no capture.');
-    button.title = state.title = detail;
     const fps = Number.isFinite(status.trackingFps) && ['running', 'no-hands'].includes(phase) ? status.trackingFps.toFixed(1) : '—';
     if (rates.textContent !== fps) rates.textContent = fps;
     rates.parentElement.dataset.tooltip = fps === '—' ? 'No fresh live provider frames' : `Unique received frames/s · Capture age ${status.frameAgeMs?.toFixed(1)} ms ± ${status.uncertaintyMs?.toFixed(1)} ms · Delivery gaps ${status.dropped ?? 0} · Provider-reported ${status.reportedHz ?? '—'} Hz`;

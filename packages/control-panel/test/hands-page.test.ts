@@ -18,6 +18,11 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(live, /next Start or app launch/);
   assert.match(live, /active session is not switched/);
   assert.match(live, /Opening this page starts no capture/);
+  assert.doesNotMatch(live, /button\.title = state\.title/, 'Start and its status label have no hover hint');
+  const markup = await fs.readFile(path.join(ui, 'hands.html'), 'utf8');
+  for (const id of ['hands-view-reset', 'hands-fullscreen']) assert.match(markup, new RegExp(`id="${id}"[^>]*data-no-tooltip`));
+  assert.match(markup, /aria-label="View options" data-no-tooltip/);
+  assert.match(await fs.readFile(path.join(ui, 'hands-adjustments.js'), 'utf8'), /aria-label="\$\{label\} settings" data-no-tooltip/);
   const shell = await fs.readFile(path.join(ui, 'hands-shell.js'), 'utf8');
   assert.match(shell, /resetView\(\)/); assert.match(shell, /requestFullscreen\(\)/); assert.match(shell, /ArrowLeft/);
   assert.doesNotMatch(shell, /fetch\(|innerHTML\s*=.*tabpanel|replaceChildren/);

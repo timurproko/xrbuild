@@ -40,7 +40,8 @@ export function installTooltips(root=document){
   element.removeAttribute('title');
  };
  const scan=node=>{normalize(node);node.querySelectorAll?.('[title]').forEach(normalize);};
- const targetOf=target=>target.closest?.('[data-tooltip],[data-xrb-tooltip-title],button[aria-label],a[aria-label]');
+ // data-no-tooltip keeps an element's accessible name without a hover hint.
+ const targetOf=target=>{const element=target.closest?.('[data-tooltip],[data-xrb-tooltip-title],button[aria-label],a[aria-label]');return element&&!element.closest('[data-no-tooltip]')?element:null;};
  const messageOf=element=>element.getAttribute('data-tooltip')??element.getAttribute('data-xrb-tooltip-title')??element.getAttribute('aria-label')??'';
  const describe=element=>{
   const ids=new Set((element.getAttribute('aria-describedby')??'').split(/\s+/).filter(Boolean));
