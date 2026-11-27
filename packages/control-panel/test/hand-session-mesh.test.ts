@@ -79,10 +79,36 @@ for (const loss of ['crash', 'heartbeat', 'reload', 'shutdown']) test(`Hands mes
   await until(() => run.descriptor === null && !f.service.busy); assert.equal(f.release, 1);
 });
 
+test('mesh attachment allowance starts only after provider startup, not early optional readiness', async t => {
+  const f = await fixture(t); let started = 0, releaseReservation: (value: any) => void = () => {};
+  f.deps.reserve = () => new Promise(resolve => { releaseReservation = resolve; });
+  const run = { descriptor: null, status: 'Ready', state: () => ({ phase: 'Ready' }), appStarted() { started++; }, async stop() {} };
+  f.deps.mesh = () => run;
+  const starting = f.start(); await until(() => f.service.meshRun === run);
+  assert.equal(started, 0, 'slow acquisition cannot consume the view attachment allowance');
+  releaseReservation({ ticket: 'b'.repeat(64), async handoff() {}, async close() {} });
+  const result = await starting; assert.equal(result.status, 200); assert.equal(started, 1);
+  await f.call('/stop', { sessionId: result.value.sessionId }, f.owner);
+});
+
+test('slow previous mesh cleanup never delays a replacement skeleton; late optional attachment is session fenced', async t => {
+  const f = await fixture(t); let finish: () => void = () => {}, created = 0, attached = 0;
+  const draining = new Promise<void>(r => { finish = r; });
+  f.deps.mesh = () => { const generation = ++created; return { descriptor: null, status: 'Ready', state: () => ({ phase: 'Ready' }), appStarted() { attached++; }, stop: () => generation === 1 ? draining : Promise.resolve() }; };
+  const first = await f.start(); assert.equal(first.status, 200); assert.equal(created, 1);
+  const stopping = f.call('/stop', { sessionId: first.value.sessionId }, f.owner);
+  await until(() => !f.service.busy); assert.equal(f.release, 1);
+  const second = await f.start(); assert.equal(second.status, 200); assert.equal(f.children.length, 2);
+  assert.equal(f.service.meshRun, null, 'unverified old cleanup cannot be bypassed for optional processing'); assert.equal(created, 1);
+  finish(); await stopping; await until(() => created === 2);
+  assert.equal(f.service.status(f.owner).sessionId, second.value.sessionId); assert.equal(attached, 2);
+  await f.call('/stop', { sessionId: second.value.sessionId }, f.owner);
+});
+
 test('optional launch validation never delays skeleton, cancellation wins and cleanup failure remains retryable', async t => {
   const f = await fixture(t); let stopped = 0, fail = true, finish: () => void = () => {};
   const opening = new Promise<void>(r => { finish = r; });
-  const run = { descriptor: null, status: 'Preparing', stop: async () => { stopped++; if (fail) throw new Error('owned tree not joined'); }, state: () => ({ phase: 'Preparing' }) };
+  const run = { descriptor: null, status: 'Preparing', appStarted() {}, stop: async () => { stopped++; if (fail) throw new Error('owned tree not joined'); }, state: () => ({ phase: 'Preparing' }) };
   f.deps.mesh = () => { void opening.then(() => { if (!stopped) run.status = 'Ready'; }); return run; };
   const result = await f.start(); assert.equal(result.status, 200); assert.equal(f.children.length, 1); assert.equal(run.status, 'Preparing');
   await f.call('/stop', { sessionId: result.value.sessionId }, f.owner); finish(); await wait();

@@ -61,7 +61,7 @@ test('mesh visual maps the final pose once, respects appearance and disposes top
   const group = visual.getObjectByName('xrb-hand-mesh')!, mesh = group.children[0] as THREE.Mesh;
   assert.deepEqual((mesh.geometry.getAttribute('position').array as Float32Array), surface().positions);
   assert.deepEqual(group.matrix.elements, panel.toWorld.elements);
-  const material = mesh.material as THREE.MeshStandardMaterial; assert.equal(material.opacity, .6); assert.equal(material.color.g, .2);
+  const material = mesh.material as THREE.MeshStandardMaterial; assert.equal(material.opacity, 1); assert.equal(material.transparent, false); assert.equal(material.side, THREE.FrontSide); assert.equal(material.color.g, .2);
   let disposed = false; mesh.geometry.addEventListener('dispose', () => { disposed = true; });
   visual.updateMeshes([], panel); assert.equal(disposed, true); assert.equal(group.children.length, 0);
   visual.disposeMeshes(); assert.equal(visual.children.length, original);

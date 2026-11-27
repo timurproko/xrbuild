@@ -342,9 +342,12 @@ export class Panel {
         const run = new HandMeshRun(() => [new URL(this.panelUrl!).origin], () => {}, { supervisor: path.join(path.dirname(prepared.workerExe), 'xrb-mesh-supervisor.exe') });
         // Gateway opens independently of provider startup; the owner retains it even on failed cleanup.
         void run.start(null, {}, prepared.revision).then(async () => {
-          run.appStarted();
           const registry = await discoverHandMeshPlugins(this.repo, this.workspace);
-          if (this.handSessions.meshRun === run && run.state().savedRevision === prepared.revision) this.applyMeshChoice({ raw: { postprocessing: prepared.postprocessing }, revision: prepared.revision }, registry, run);
+          const latest = await readHandsState(this.repo, this.workspace);
+          if (this.handSessions.meshRun === run && run.state().savedRevision === prepared.revision) {
+            // A committed edit while old optional cleanup drained still belongs to this new consumer.
+            this.applyMeshChoice(latest.revision === prepared.revision ? { raw: { postprocessing: prepared.postprocessing }, revision: prepared.revision } : latest, registry, run);
+          }
         }).catch(() => { void run.stop().catch(() => {}); });
         return run;
       },

@@ -55,14 +55,26 @@ viewport. It runs only when explicitly supplied disposable browser/supervisor/pr
 provider, camera or person's panel. Before/after service/client versions can be compared from task-owned source
 copies; private plugins/assets are unnecessary. It records every hand-render and captures actual viewport PNGs.
 
-On the initial local Windows headless/software-rendered run, 60-Hz render submission produced approximately
-300 renders per five-second measured phase after warmup. Baseline unavailable fractions were 100% for all
-phases. Compensated still/normal/fast were **3.32 / 8.00 / 20.17%**; visible source age was roughly 67 ms median
-and 85-100 ms at P95/P99. Candidate 33/66/100-ms fast fractions were **100 / 77.67 / 20.17%**. These results
-**miss the fast-motion target** despite passing the controlled-clock fixture, and cannot be presented as a
-60-Hz model/display guarantee. Real pipe/browser scheduling tails and deformation of independently filtered
-rotating joints remain limitations. The extreme articulation stress remained 93.50% unavailable. Keep safety
-guards; do not increase age or residual limits to hide this miss.
+The final local Windows headless/software-rendered paired run produced 300 renders per five-second phase
+following 1.2 seconds of warmup. Its fake worker injects 3-10 ms compute-scale delay (plus a 1% 45-ms tail),
+**not another 18-33 ms end-to-end delay on top of real IPC**. Actual HTTP-to-headers P50/P95/P99 in the fast
+phase was 26.5/33.3/44.5 ms; body decoding and rendering are additional. Baseline and compensated processors
+ran together for paired input, so this is conservative shared-browser/workstation evidence, not isolated model
+throughput. Source filtering is the actual default SDK filtering.
+
+| Motion | Baseline unavailable | Compensated at 33 / 66 / 100 ms | Visible source age at 100 ms P50/P95/P99 |
+| --- | ---: | ---: | ---: |
+| Still | 70.67% | 89 / 16.67 / 1% | 49.6 / 67.3 / 83.5 ms |
+| Normal | 61.67% | 85 / 12 / 0% | 49.3 / 67.2 / 68.7 ms |
+| Fast | 95.33% | 90.67 / 22.33 / 7% | 49.6 / 67.4 / 87.4 ms |
+| Severe articulation stress | 98% | 99.33 / 88.67 / 87.5% | 49.8 / 67 / 70.8 ms |
+
+Fast visible residual P50/P95/P99 was 3.99/8.07/9.32 mm. **The 7% real-transport fast fraction still misses
+the well-under-5% target** despite passing the controlled-clock fixture. Pipe/browser scheduling tails and
+nonrigid deformation of independently filtered rotating joints remain limitations. No unvalidated finger
+warping or larger residual/age limit is used to hide that miss. Earlier over-delayed transport probes (18-33 ms
+injected in the worker *plus* real transport) yielded 20-34% fast unavailability and are retained in task
+artifacts; they are not the corrected compute-scale measurement or a reason to advertise a latency guarantee.
 
 The task handoff retains raw rows, exact revisions, current final-tree transport measurements and captures.
 CPU timings from the virtual benchmark include client dispatch, allocations, geometry uploads and normal

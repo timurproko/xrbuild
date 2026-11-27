@@ -152,14 +152,17 @@ export class HandSessions {
       const prepared = await this.deps.prepare(request);
       if (s.cancelled || this.closed) throw new Error('Hands Start cancelled');
       s.source = prepared.source; s.live = new LiveHands(prepared.profile, prepared.revision, s.id, 'Hands session');
-      // Optional processing neither reserves acquisition nor delays worker startup/preparation.
-      await this.retireMesh();
-      if (s.cancelled || this.closed) throw new Error('Hands Start cancelled');
-      if (this.meshes.size) this.meshReason = 'Skeleton fallback: mesh cleanup failed; retry cleanup';
-      else if (this.deps.mesh) {
-        try { const run = this.deps.mesh(prepared); this.sessionMesh = { session: s, run }; this.meshReason = ''; }
-        catch { this.meshReason = 'Skeleton fallback: mesh runtime unavailable'; }
-      }
+      // Even a previous optional tree's slow cleanup must not delay the new skeleton worker.
+      void this.retireMesh().then(() => {
+        if (s.cancelled || this.closed || this.current !== s) return;
+        if (this.meshes.size) { this.meshReason = 'Skeleton fallback: mesh cleanup failed; retry cleanup'; return; }
+        if (this.deps.mesh) {
+          try {
+            const run = this.deps.mesh(prepared); this.sessionMesh = { session: s, run }; this.meshReason = '';
+            if (s.phase === 'running') run.appStarted();
+          } catch { this.meshReason = 'Skeleton fallback: mesh runtime unavailable'; }
+        }
+      });
       // Reserve before DLL create, reject legacy hosts, then transfer under the native transition gate.
       reservation = await (this.deps.reserve ?? reserveHandAcquisition)(prepared.helperExe, 'Hands provider session', { checkLegacyHost: true, ...(this.deps.testScope ? { testScope: this.deps.testScope } : {}) });
       if (s.cancelled || this.closed) throw new Error('Hands Start cancelled');
@@ -210,6 +213,7 @@ export class HandSessions {
       if (handoff) await handoff;
       if (s.cancelled || s.ended) throw new Error(s.reason || 'Hands Start cancelled');
       s.phase = 'running';
+      this.meshRun?.appStarted(); // Attachment allowance starts after provider startup, not mesh readiness.
       return { ...this.status(owner), epoch: s.epoch, url: s.url, observer: s.token, profile: s.live.envelope };
     } catch (e) {
       await reservation?.close(); reservation = null; s.preparing = false;

@@ -5,12 +5,12 @@ import type { HandVisualStyle } from './hand-visual.ts';
 
 /** Lazy drawing child: the no-plugin visual retains its exact original children/materials. */
 export class HandMeshVisual extends THREE.Group {
-  private material = new THREE.MeshStandardMaterial({ transparent: true, depthWrite: false, roughness: .5, side: THREE.DoubleSide });
+  private material = new THREE.MeshStandardMaterial({ transparent: false, opacity: 1, depthWrite: true, roughness: .5, side: THREE.FrontSide });
   private records = new Map<number, { surface: MeshSurface; mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> }>();
   constructor() { super(); this.name = 'xrb-hand-mesh'; this.matrixAutoUpdate = false; }
   update(surfaces: MeshDrawSurface[], panel: PanelFrame, style: HandVisualStyle): void {
     this.matrix.copy(panel.toWorld); this.matrixWorldNeedsUpdate = true;
-    this.material.color.set(style.boneColor); this.material.opacity = style.opacity;
+    this.material.color.set(style.boneColor); // Skeleton opacity never makes skin translucent.
     const ids = new Set(surfaces.map(s => s.id));
     for (const [id, r] of this.records) if (!ids.has(id)) { r.mesh.geometry.dispose(); this.remove(r.mesh); this.records.delete(id); }
     for (const surface of surfaces) {

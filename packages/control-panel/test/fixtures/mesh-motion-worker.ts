@@ -13,7 +13,8 @@ process.stdin.on('data', chunk => {
       process.stdout.write(meshPacket({ type: meta.type === 'start' ? 'ready' : 'configured', version: 2, runId: meta.runId, owner: meta.owner, id: meta.id, settingsVersion: meta.settingsVersion, settingsGeneration: meta.settingsGeneration, settings: meta.settings, ...(meta.type === 'start' ? { capabilities: meta.capabilities } : {}) }));
     }
     if (meta.type === 'frame' && configuration) {
-      const delay = meta.sequence % 100 === 0 ? 80 : [18, 20, 23, 26, 29, 33, 22][meta.sequence % 7];
+      // Worker compute-scale latency; IPC/HTTP/decoding are real additional costs, not injected twice.
+      const delay = meta.sequence % 100 === 0 ? 45 : [3, 4, 5, 6, 7, 10, 5][meta.sequence % 7];
       setTimeout(() => process.stdout.write(encodeMeshResult({ type: 'result', version: 2, runId: meta.runId, settingsGeneration: meta.settingsGeneration, epoch: meta.epoch, sequence: meta.sequence, revision: meta.revision, meshes: meta.hands.map(surfaceFor) })), delay);
     }
   }

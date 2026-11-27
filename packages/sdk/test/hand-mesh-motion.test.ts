@@ -10,7 +10,7 @@ import { HandInput } from '../src/hands.ts';
 import { decodeMessage, type HandsMessage, type Vec3 } from '../src/protocol.ts';
 import { handsMessage, openHand } from './fixtures.ts';
 const tick = () => new Promise(r => setTimeout(r, 0));
-const moved = (points: Vec3[], n: number): Vec3[] => points.map(p => new THREE.Vector3(...p).applyAxisAngle(new THREE.Vector3(0, 0, 1), n).add(new THREE.Vector3(n, n / 2, -n / 4)).toArray() as Vec3);
+const moved = (points: Vec3[], n: number): Vec3[] => points.map(p => new THREE.Vector3(...p).applyQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(n * .5, n * .75, n))).add(new THREE.Vector3(n, n / 2, -n / 4)).toArray() as Vec3);
 
 for (const handedness of ['left', 'right'] as const) test(`${handedness} wrist compensation follows translation and orientation without drift, input mutation or buffer uploads`, () => {
   const source: MeshPose = { id: 1, handedness, keypoints: openHand([0, 0, 0]) };
@@ -27,6 +27,9 @@ for (const handedness of ['left', 'right'] as const) test(`${handedness} wrist c
     const actual = new THREE.Vector3(...source.keypoints[8]).applyMatrix4(mesh.matrixWorld);
     const expected = new THREE.Vector3(...current.keypoints[8]).applyMatrix4(panel.toWorld);
     assert.ok(actual.distanceTo(expected) < 1e-12);
+    const actualNormal = new THREE.Vector3(0, 0, 1).applyMatrix3(new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld)).normalize();
+    const expectedNormal = new THREE.Vector3(0, 0, 1).applyQuaternion(new THREE.Quaternion().setFromEuler(new THREE.Euler(.01 * i, .015 * i, .02 * i))).applyMatrix3(new THREE.Matrix3().getNormalMatrix(panel.toWorld)).normalize();
+    assert.ok(actualNormal.distanceTo(expectedNormal) < 1e-12, 'normals rotate with the current wrist in all three axes');
     const attribute = mesh.geometry.getAttribute('position'); if (version !== -1) assert.equal(attribute.version, version, 'rigid renders do not reupload vertices'); version = attribute.version;
     assert.deepEqual(Array.from(attribute.array), Array.from(positions));
   }

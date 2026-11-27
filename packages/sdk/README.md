@@ -180,7 +180,7 @@ pointer presses without waiting through dropout grace. Binary HANDS v1/v2 and re
 
 Panel-managed desktop runs may select one optional [mesh sidecar](../../docs/hand-mesh-plugins.md). The SDK
 sends copies of the final sampled pose asynchronously and standard hand drawing displays fresh validated geometry
-using the same panel mapping and global bone color/opacity. No app changes or provider-specific branches are
+using the same panel mapping and global bone colour, with opaque single-sided lit skin independent of skeleton opacity. No app changes or provider-specific branches are
 needed. Mesh readiness/failure/latency never changes joints, gestures, pointer or interaction. A late result uses
 only a still-fresh prior mesh, otherwise the skeleton; no-hand frames invalidate mesh immediately, independently
 of skeleton grace. `handVisual:false` suppresses both standard drawings without disabling input. Mesh buffers

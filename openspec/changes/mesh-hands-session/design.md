@@ -65,7 +65,7 @@ Alternative rejected: enlarge raw displacement tolerance or extrapolate processo
 
 ### 5. Bound plausible reuse by source age, not the old dispatch guard
 
-Use a common named compensated lifetime, initially 100 ms, and retain the two-second stuck-work watchdog and existing bounded queues. The client tracks the immutable local snapshot creation time separately from `sentMs`, which is refreshed at dispatch, and from `sampleMs`, which may include a prediction horizon. Pending work does not become younger when dispatched. Results beyond the source bound are never drawable, even if HTTP delivery is recent; future/backwards local-clock inconsistencies reject.
+Use a common named compensated lifetime, initially 100 ms, backed by reported fallback fractions at 33, 66 and 100 ms as required by implementation approval, and retain the two-second stuck-work watchdog and existing bounded queues. The client tracks the immutable local snapshot creation time separately from `sentMs`, which is refreshed at dispatch, and from `sampleMs`, which may include a prediction horizon. Pending work does not become younger when dispatched. Results beyond the source bound are never drawable, even if HTTP delivery is recent; future/backwards local-clock inconsistencies reject.
 
 Replace all unconditional 33-ms geometry/drawing gates along service delivery, client acceptance/update and state getters with coherent compensated-lifetime rules. The service bounds dispatched work at 100 ms; the client enforces the stricter original source-snapshot lifetime and residual. A missed/204 reply may retain the previous still-valid surface, but a failure, generation change, loss or stop cannot. Drawing-generation evidence requires actual valid enabled drawing and expires even without another render/response. A retained readiness ACK is never drawing proof. Service evidence remains a bounded observation of client reporting, not a promise of physical scanout.
 
@@ -87,7 +87,7 @@ Capture paired before/after still, normal and fast sequences under identical inp
 
 Target fast-motion unavailability well below 5 percent without detached/swimming skin. Preserve before/after images or short sequences and inspect open/fist/pinch/fast attachment, handedness and back-face lighting in the actual SDK visual. If articulation or latency tails miss the target, report the miss and its cause rather than hide failures or loosen safety. Real anatomical fitting and physical camera/scanout quality remain unverified.
 
-Extend focused SDK/session/API/browser tests for cleanup races, final-pose parity, generation/topology retirement, material/toggle independence and held-interaction invariance. After implementation run the explicitly requested whole control-panel package once before publication, in addition to focused checks; do not run the repository-wide suite. This is a plan-only handoff: no measurement or application is started before approval.
+Extend focused SDK/session/API/browser tests for cleanup races, final-pose parity, generation/topology retirement, material/toggle independence and held-interaction invariance. After implementation run the explicitly requested whole control-panel package once before publication, in addition to focused checks; do not run the repository-wide suite. Implementation was explicitly approved after the draft plan handoff. Measurements and remaining target misses are recorded in the motion-policy documentation and task report.
 
 ## Risks / Trade-offs
 
