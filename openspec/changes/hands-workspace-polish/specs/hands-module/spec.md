@@ -4,7 +4,7 @@
 
 ### Requirement: Core-owned Hands surface
 
-Hands SHALL remain accessible without optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands page, titled Hands, with the 3D viewer beside one side panel of Setup, Post, Position, Visual and Log tabs, present with Start and status from the first paint, and no recording section. Old diagnostic routes and `/hand-tracking/` SHALL return normal not-found responses without redirects, and no separate diagnostic page or link SHALL remain.
+Hands SHALL remain accessible without optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands page, titled Hands, with the 3D viewer beside one side panel of Setup, Position, Visual, Post and Log tabs, present with Start and status from the first paint, and no recording section. Old diagnostic routes and `/hand-tracking/` SHALL return normal not-found responses without redirects, and no separate diagnostic page or link SHALL remain.
 
 #### Scenario: Diagnostic plugin absent
 - **WHEN** the user opens Hands without the optional hand tools plugin or checked tool build
@@ -165,7 +165,7 @@ The Log tab SHALL list provider start and stop events, diagnostics and failure r
 
 ### Requirement: Post-processing layers
 
-The Post tab SHALL follow Setup and offer an Add layer multi-select of installed post-processing plugins. A chosen plugin SHALL show as a layer card with its settings and a remove action; one hand-mesh layer runs at a time, so adding another replaces it. A plugin whose runtime is not installed SHALL stay selectable and show a small Install action in its card header when it exports a prerequisite setup, and Ready once it can run. With none installed, the tab SHALL show a short empty note.
+The Post tab SHALL follow Visual and offer an Add layer multi-select of installed post-processing plugins. A chosen plugin SHALL show as a layer card with its settings and a remove action; one hand-mesh layer runs at a time, so adding another replaces it. A plugin whose runtime is not installed SHALL stay selectable and show a small Install action in its card header when it exports a prerequisite setup, and Ready once it can run. With none installed, the tab SHALL show a short empty note.
 
 #### Scenario: Adding a layer that needs prerequisites
 - **WHEN** the person adds a post-processing plugin whose runtime is not installed
