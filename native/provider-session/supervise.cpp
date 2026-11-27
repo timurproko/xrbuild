@@ -1,10 +1,29 @@
 // This launcher owns both the exact worker handle and its kill-on-close job from process birth.
 #include <windows.h>
 #include <atomic>
+#include <algorithm>
 #include <string>
 #include <thread>
 #include <vector>
+namespace {
+unsigned long long birthOf(HANDLE process) {
+  FILETIME birth{}, exit{}, kernel{}, user{};
+  if (!GetProcessTimes(process, &birth, &exit, &kernel, &user)) return 0;
+  ULARGE_INTEGER value{}; value.LowPart = birth.dwLowDateTime; value.HighPart = birth.dwHighDateTime; return value.QuadPart;
+}
+}
 int wmain(int argc, wchar_t** argv) {
+  // Read-only fallback after launcher death. Never terminate or signal the queried process.
+  if (argc == 4 && std::wstring(argv[1]) == L"--join") {
+    wchar_t *pidEnd = nullptr, *birthEnd = nullptr;
+    const auto pid = wcstoul(argv[2], &pidEnd, 10); const auto expected = wcstoull(argv[3], &birthEnd, 10);
+    if (!pid || !expected || *pidEnd || *birthEnd) return 2;
+    HANDLE process = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return GetLastError() == ERROR_INVALID_PARAMETER ? 0 : 4;
+    const auto birth = birthOf(process);
+    const bool dead = birth && (birth != expected || WaitForSingleObject(process, 5000) == WAIT_OBJECT_0);
+    CloseHandle(process); return dead ? 0 : 4;
+  }
   if (argc == 2 && std::wstring(argv[1]) == L"--version") { DWORD bytes; const char* version = "xrb-provider-supervisor 1\n"; WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), version, 26, &bytes, nullptr); return 0; }
   if (argc != 3) return 2;
   wchar_t* end = nullptr; const auto id = wcstoul(argv[2], &end, 10);
@@ -14,10 +33,12 @@ int wmain(int argc, wchar_t** argv) {
   HANDLE job = CreateJobObjectW(nullptr, nullptr), stopping = CreateEventW(nullptr, TRUE, FALSE, nullptr);
   JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{}; limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
   if (!job || !stopping || !SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) { if (job) CloseHandle(job); if (stopping) CloseHandle(stopping); CloseHandle(parent); return 3; }
-  HANDLE handles[3]{}, writer = nullptr; SECURITY_ATTRIBUTES security{sizeof(security), nullptr, TRUE};
+  HANDLE handles[3]{}, writer = nullptr, output = nullptr; SECURITY_ATTRIBUTES security{sizeof(security), nullptr, TRUE};
   bool ok = CreatePipe(&handles[0], &writer, &security, 32768) != 0;
   if (writer) SetHandleInformation(writer, HANDLE_FLAG_INHERIT, 0);
-  for (int i = 1; i < 3; i++) if (!DuplicateHandle(GetCurrentProcess(), GetStdHandle(i == 1 ? STD_OUTPUT_HANDLE : STD_ERROR_HANDLE), GetCurrentProcess(), &handles[i], 0, TRUE, DUPLICATE_SAME_ACCESS)) ok = false;
+  ok = CreatePipe(&output, &handles[1], &security, 32768) && ok;
+  if (output) SetHandleInformation(output, HANDLE_FLAG_INHERIT, 0);
+  if (!DuplicateHandle(GetCurrentProcess(), GetStdHandle(STD_ERROR_HANDLE), GetCurrentProcess(), &handles[2], 0, TRUE, DUPLICATE_SAME_ACCESS)) ok = false;
   STARTUPINFOEXW startup{}; startup.StartupInfo.cb = sizeof(startup);
   startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
   startup.StartupInfo.hStdInput = handles[0]; startup.StartupInfo.hStdOutput = handles[1]; startup.StartupInfo.hStdError = handles[2];
@@ -32,13 +53,47 @@ int wmain(int argc, wchar_t** argv) {
   if (initialized) DeleteProcThreadAttributeList(startup.lpAttributeList);
   BOOL inJob = FALSE;
   if (ok) ok = IsProcessInJob(child.hProcess, job, &inJob) && inJob && WaitForSingleObject(parent, 0) == WAIT_TIMEOUT;
-  if (ok) ok = ResumeThread(child.hThread) != DWORD(-1);
+  if (ok) {
+    const auto birth = birthOf(child.hProcess);
+    const std::string spawned = "@provider {\"phase\":\"spawned\",\"pid\":" + std::to_string(child.dwProcessId) + ",\"birth\":\"" + std::to_string(birth) + "\"}\n";
+    DWORD written = 0;
+    ok = birth && WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), spawned.data(), DWORD(spawned.size()), &written, nullptr) && written == spawned.size();
+    if (ok) ok = ResumeThread(child.hThread) != DWORD(-1);
+  }
   if (!ok) {
     if (child.hProcess) { TerminateProcess(child.hProcess, 3); WaitForSingleObject(child.hProcess, 5000); CloseHandle(child.hThread); CloseHandle(child.hProcess); }
-    if (writer) CloseHandle(writer); CloseHandle(job); CloseHandle(stopping); CloseHandle(parent); return 3;
+    if (writer) CloseHandle(writer); if (output) CloseHandle(output); CloseHandle(job); CloseHandle(stopping); CloseHandle(parent); return 3;
   }
   CloseHandle(child.hThread);
   std::atomic<bool> done{false};
+  // Only complete bounded worker lines reach the parent. TerminateProcess can cut std::cout
+  // mid-JSON; never concatenate that tail with our authoritative joined receipt.
+  std::thread events([&] {
+    std::string pending; ULONGLONG drainBy = 0;
+    auto overflow = [&] {
+      const std::string text = "@provider {\"phase\":\"failed\",\"reason\":\"Provider output exceeded its bound\"}\n";
+      DWORD written; WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), text.data(), DWORD(text.size()), &written, nullptr); SetEvent(stopping);
+    };
+    for (;;) {
+      if (done && !drainBy) drainBy = GetTickCount64() + 200;
+      if (drainBy && GetTickCount64() > drainBy) break;
+      DWORD available = 0, read = 0;
+      if (!PeekNamedPipe(output, nullptr, 0, nullptr, &available, nullptr)) break;
+      if (!available) { if (done) break; Sleep(5); continue; }
+      char bytes[4096];
+      if (!ReadFile(output, bytes, (std::min)(available, DWORD(sizeof(bytes))), &read, nullptr) || !read) break;
+      pending.append(bytes, read);
+      size_t end;
+      while ((end = pending.find('\n')) != std::string::npos) {
+        if (end > 4096) { overflow(); CloseHandle(output); return; }
+        const auto line = pending.substr(0, end + 1); pending.erase(0, end + 1);
+        DWORD written;
+        if (!WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), line.data(), DWORD(line.size()), &written, nullptr)) { SetEvent(stopping); CloseHandle(output); return; }
+      }
+      if (pending.size() > 4096) { overflow(); break; }
+    }
+    CloseHandle(output); // Incomplete final line is deliberately discarded, not a lifecycle event.
+  });
   // Forward controls ourselves, so even a worker hung before its reader starts has a bounded Stop.
   std::thread controls([&] {
     const HANDLE input = GetStdHandle(STD_INPUT_HANDLE); std::string line; bool bootstrapped = false;
@@ -62,7 +117,7 @@ int wmain(int argc, wchar_t** argv) {
   bool joined = result == WAIT_OBJECT_0;
   if (!joined && result == WAIT_OBJECT_0 + 2) joined = WaitForSingleObject(child.hProcess, 6000) == WAIT_OBJECT_0;
   if (!joined) { TerminateJobObject(job, 4); joined = WaitForSingleObject(child.hProcess, 5000) == WAIT_OBJECT_0; }
-  done = true; controls.join();
+  done = true; controls.join(); events.join();
   DWORD code = 4; if (joined) GetExitCodeProcess(child.hProcess, &code);
   // Receipt proves the exact process, not a recycled numeric PID, has ended. Parent still joins this launcher.
   const std::string receipt = "@provider {\"phase\":\"" + std::string(joined ? "joined" : "teardown-failed") + "\",\"pid\":" + std::to_string(child.dwProcessId) + "}\n";

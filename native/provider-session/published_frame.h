@@ -35,8 +35,9 @@ struct Diagnostic {
 // Owns borrowed bytes before the callback returns. A filtered snapshot is explicitly NOT raw recording input.
 class Frames {
  public:
-  bool publish(const XrbHandFrame& frame, double publicationMs, std::string* reason) {
+  bool publish(const XrbHandFrame& frame, double publicationMs, std::string* reason, bool* healthy = nullptr) {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (healthy) *healthy = false;
     auto bad = [&](const char* kind, int joint = -1) { diagnostic_.kind = kind; diagnostic_.joint = joint; if (reason) *reason = kind; };
     if (frame.size < sizeof(XrbHandFrame) || frame.count > 255 || frame.count && !frame.hands || frame.capabilities & ~7u ||
         !std::isfinite(frame.capture_time_ms) || frame.capture_time_ms < 0 || !std::isfinite(publicationMs) || publicationMs < frame.capture_time_ms ||
@@ -70,7 +71,9 @@ class Frames {
     channel::Header header{channel::kHands, 2, 0, static_cast<uint32_t>(sequence_), publicationMs};
     memcpy(packet_.data(), &header, sizeof(header));
     const auto payload = channel::encodeHands(safe);
-    memcpy(packet_.data() + 16, payload.data(), payload.size()); return !filtered_;
+    memcpy(packet_.data() + 16, payload.data(), payload.size());
+    if (healthy) *healthy = !filtered_ || safe.count > 0;
+    return !filtered_;
   }
   struct Snapshot { uint64_t sequence; double captureMs, publicationMs; uint32_t count; std::vector<uint8_t> packet; bool filtered; Diagnostic diagnostic; };
   Snapshot newest() { std::lock_guard<std::mutex> lock(mutex_); return {sequence_, capture_, published_, count_, packet_, filtered_, diagnostic_}; }

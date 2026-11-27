@@ -17,7 +17,7 @@
 
 ## 3. Stale ownership recovers and real live-page contention offers safe takeover
 
-- [ ] 3.1 Add authenticated same-page/reload continuity without durable profile credentials, retire obsolete page epochs and automatically drain dead/failed same-panel ownership on explicit Start; verify same-page restart, reload, capability renewal and panel restart lifecycle regressions.
-- [ ] 3.2 Add explicit authenticated takeover bound to the observed live Hands owner and generation, with atomic old-worker teardown before new acquisition; cover foreign-page refusal, consent, stale targets, simultaneous requests and old-owner delayed heartbeats without app or arbitrary PID termination.
-- [ ] 3.3 Render owned cleanup separately from genuine foreign-page Busy and expose the take-over action; extend mounted browser regressions for the reported Failed/Busy/Stopping/Stalled cycle, provider choice retention and a clean next Start with no overlapping workers.
-- [ ] 3.4 Document ownership recovery and person-run hardware checks; run only affected acquisition/session/transport/browser tests in isolated namespaces, list exact commands and any skipped native evidence, and ensure all disposable processes stop before handoff.
+- [x] 3.1 Add authenticated same-page/reload continuity without durable profile credentials, retire obsolete page epochs and automatically drain dead/failed same-panel ownership on explicit Start; verify same-page restart, reload, capability renewal and panel restart lifecycle regressions.
+- [x] 3.2 Add explicit authenticated takeover bound to the observed live Hands owner and generation, with atomic old-worker teardown before new acquisition; cover foreign-page refusal, consent, stale targets, simultaneous requests and old-owner delayed heartbeats without app or arbitrary PID termination.
+- [x] 3.3 Render owned cleanup separately from genuine foreign-page Busy and expose the take-over action; extend mounted browser regressions for the reported Failed/Busy/Stopping/Stalled cycle, provider choice retention and a clean next Start with no overlapping workers.
+- [x] 3.4 Document ownership recovery and person-run hardware checks; run only affected acquisition/session/transport/browser tests in isolated namespaces, list exact commands and any skipped native evidence, and ensure all disposable processes stop before handoff.

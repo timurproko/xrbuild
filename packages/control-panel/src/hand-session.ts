@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, execFile, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { HttpError, readBody, sendJson } from './http.ts';
@@ -9,6 +9,10 @@ import { reserveHandAcquisition } from './hand-acquisition.ts';
 import { LiveHands } from './hands-live.ts';
 const secret = () => randomBytes(32).toString('hex');
 const pause = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+/** The helper checks creation identity and waits on an exact handle; it never kills the queried PID. */
+const joinOwnedWorker = (exe: string, pid: number, birth: string) => new Promise<boolean>(resolve => {
+  execFile(exe, ['--join', String(pid), birth], { windowsHide: true, timeout: 6500, maxBuffer: 1024 }, error => resolve(!error));
+});
 export interface SessionDependencies {
   prepare(request: SessionSelectionRequest): ReturnType<typeof prepareHandSession>;
   acquire(): () => void;
@@ -23,11 +27,12 @@ type Phase = 'not-started' | 'starting' | 'running' | 'stopping' | 'stopped' | '
 interface Running {
   id: string; epoch: string; owner: string; token: string; phase: Phase; reason: string; heartbeat: number; diagnostic?: string;
   source?: Awaited<ReturnType<typeof prepareHandSession>>['source']; url?: string; child?: ChildProcessWithoutNullStreams;
-  pid?: number; joined?: boolean; ended: boolean; cancelled: boolean; preparing: boolean; drainTimedOut?: boolean; live?: LiveHands; release?: () => void; stop?: Promise<void>;
+  pid?: number; birth?: string; joined?: boolean; ended: boolean; cancelled: boolean; preparing: boolean; drainTimedOut?: boolean; live?: LiveHands; release?: () => void; stop?: Promise<void>;
 }
 /** One process-owned session; no durable capabilities, camera auto-start or adoption by another tab. */
 export class HandSessions {
   private pages = new Map<string, number>();
+  private continuities = new Map<string, { owner: string; document: string }>();
   private current: Running | null = null;
   private closed = false;
   private timer: ReturnType<typeof setInterval>;
@@ -43,7 +48,9 @@ export class HandSessions {
   status(owner = '') {
     const s = this.current, owns = !!s && s.owner === owner;
     return { supported: (this.deps.platform ?? process.platform) === 'win32', phase: s?.phase ?? 'not-started', reason: s?.reason ?? '', source: s?.source ?? null, busy: this.busy, owns,
-      sessionId: s?.id ?? null, diagnostic: s?.diagnostic ?? '', ...(owns && this.busy ? { profile: s?.live?.envelope } : {}),
+      sessionId: s?.id ?? null, diagnostic: s?.diagnostic ?? '',
+      cleanupPending: this.busy && !!s && (owns || s.cancelled || s.phase === 'failed' || performance.now() - s.heartbeat > (this.deps.heartbeatMs ?? 5000)),
+      takeoverAvailable: this.busy && !!s && !owns && !s.cancelled && s.phase !== 'failed' && performance.now() - s.heartbeat <= (this.deps.heartbeatMs ?? 5000), ...(owns && this.busy ? { profile: s?.live?.envelope } : {}),
       delivery: s?.live?.delivery, deliveryState: s?.live?.deliveryState };
   }
   private authorize(req: IncomingMessage) {
@@ -55,10 +62,22 @@ export class HandSessions {
     const action = new URL(req.url!, this.deps.origin()).pathname.replace('/api/hands/session', '');
     if (this.closed) throw new HttpError(503, 'Hands sessions are shutting down');
     if (action === '/bootstrap' && req.method === 'POST') {
+      let body: Record<string, unknown>;
+      try { body = JSON.parse((await readBody(req, 16384)).toString()); } catch { throw new HttpError(400, 'Invalid Hands page bootstrap'); }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'Invalid Hands page bootstrap');
+      const document = typeof body.document === 'string' && /^[a-f0-9-]{36}$/.test(body.document) ? body.document : '';
+      const previous = typeof body.continuity === 'string' ? this.continuities.get(body.continuity) : undefined;
+      if (previous && document && (previous.document === document || body.reload === true)) {
+        // Rotate proof and capability; a reload can retire only the session bound to this tab proof.
+        this.continuities.delete(body.continuity as string); this.pages.delete(previous.owner);
+        if (this.current?.owner === previous.owner && this.busy) await this.stop(this.current, 'Owning Hands page reloaded or renewed');
+      }
       for (const [key, expiry] of this.pages) if (expiry < performance.now() && key !== this.current?.owner) this.pages.delete(key);
+      for (const [proof, page] of this.continuities) if (!this.pages.has(page.owner)) this.continuities.delete(proof);
       if (this.pages.size >= 32) throw new HttpError(429, 'Too many Hands pages');
-      const capability = secret(); this.pages.set(capability, performance.now() + 60000);
-      return sendJson(res, 200, { capability, ...this.status() });
+      const capability = secret(), continuity = secret(); this.pages.set(capability, performance.now() + 60000);
+      if (document) this.continuities.set(continuity, { owner: capability, document });
+      return sendJson(res, 200, { capability, continuity, ...this.status(capability) });
     }
     const owner = String(req.headers.authorization ?? '').replace(/^Bearer /, '');
     if (!this.pages.has(owner) || this.pages.get(owner)! < performance.now()) {
@@ -73,19 +92,33 @@ export class HandSessions {
     if (action === '/status') return sendJson(res, 200, this.status(owner));
     if (!action) {
       if (!validHandProviderKey(body.provider) || typeof body.revision !== 'string' || typeof body.registryRevision !== 'string') throw new HttpError(400, 'Saved provider and revisions required');
-      const result = await this.start(owner, body as unknown as SessionSelectionRequest);
+      const result = await this.start(owner, body as unknown as SessionSelectionRequest, typeof body.takeoverSessionId === 'string' ? body.takeoverSessionId : undefined);
       return sendJson(res, 200, result);
     }
     const s = this.current;
+    if (action === '/recover') {
+      if (!s || body.sessionId !== s.id) throw new HttpError(409, 'Hands ownership changed; refresh before recovery');
+      if (s.owner !== owner && !s.cancelled && s.phase !== 'failed' && performance.now() - s.heartbeat <= (this.deps.heartbeatMs ?? 5000)) throw new HttpError(403, 'A different live Hands page requires explicit takeover');
+      await this.stop(s); return sendJson(res, 200, this.status(owner));
+    }
     if (!s || s.owner !== owner || body.sessionId !== s.id) throw new HttpError(403, 'This page does not own that Hands session');
     if (action === '/stop') { await this.stop(s, typeof body.reason === 'string' ? body.reason.slice(0, 512) : ''); return sendJson(res, 200, this.status(owner)); }
     if (action === '/heartbeat') { if (this.busy && !s.cancelled) s.heartbeat = performance.now(); return sendJson(res, 200, this.status(owner)); }
     if (action === '/ack') { if (!s.cancelled && this.busy) s.live?.acknowledge(body.profile); return sendJson(res, 200, this.status(owner)); }
     throw new HttpError(404, 'Unknown Hands operation');
   }
-  private async start(owner: string, request: SessionSelectionRequest) {
+  private async start(owner: string, request: SessionSelectionRequest, takeoverSessionId?: string) {
     if ((this.deps.platform ?? process.platform) !== 'win32') throw new HttpError(409, 'Standalone native Hands sessions currently support Windows x64 only. WebXR requires an explicit app XR session.');
-    if (this.busy) throw new HttpError(409, 'A Hands session owns acquisition. Stop it in its owning page first.');
+    const previous = this.current;
+    if (takeoverSessionId && previous?.id !== takeoverSessionId) throw new HttpError(409, 'Hands ownership changed; review the new owner before takeover');
+    if (this.busy && previous) {
+      if (previous.preparing && previous.cancelled) throw new HttpError(409, 'Previous Hands preparation is still draining; retry cleanup before Start', { code: 'hands-cleanup-pending' });
+      if (previous.owner !== owner && !previous.cancelled && previous.phase !== 'failed' && performance.now() - previous.heartbeat <= (this.deps.heartbeatMs ?? 5000) && takeoverSessionId !== previous.id)
+        throw new HttpError(409, 'Another live Hands page owns acquisition; use Take over to stop it first.', { code: 'hands-live-owner', sessionId: previous.id });
+      await this.stop(previous, takeoverSessionId ? 'Hands acquisition explicitly taken over by another page' : 'Previous Hands session recovered before Start');
+      if (this.current !== previous) throw new HttpError(409, 'Hands ownership changed during recovery; review the new owner');
+      if (this.busy) throw new HttpError(409, previous.reason || 'Owned Hands cleanup is still pending', { code: 'hands-cleanup-pending' });
+    }
     const release = this.deps.acquire();
     const s: Running = { id: randomUUID(), epoch: secret(), owner, token: secret(), phase: 'starting', reason: '', heartbeat: performance.now(), ended: false, cancelled: false, preparing: true, release };
     this.current = s;
@@ -97,17 +130,21 @@ export class HandSessions {
       // Reserve before DLL create, reject legacy hosts, then transfer under the native transition gate.
       reservation = await (this.deps.reserve ?? reserveHandAcquisition)(prepared.helperExe, 'Hands provider session', { checkLegacyHost: true, ...(this.deps.testScope ? { testScope: this.deps.testScope } : {}) });
       if (s.cancelled || this.closed) throw new Error('Hands Start cancelled');
-      const child = (this.deps.spawn ?? spawn)(path.join(path.dirname(prepared.workerExe), 'xrb-provider-supervisor.exe'), [prepared.workerExe, String(process.pid)], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }) as ChildProcessWithoutNullStreams;
+      const supervisor = path.join(path.dirname(prepared.workerExe), 'xrb-provider-supervisor.exe');
+      const child = (this.deps.spawn ?? spawn)(supervisor, [prepared.workerExe, String(process.pid)], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }) as ChildProcessWithoutNullStreams;
       s.child = child; const observer = s.token, ticket = reservation.ticket; let buffer = '', handoff: Promise<void> | null = null;
       child.stdin.on('error', () => {}); child.stderr.resume();
       child.on('error', () => { s.reason = 'Provider supervisor is unavailable. Rebuild the host.'; });
-      child.on('close', () => {
-        // A supervisor receipt is based on its retained exact process handle, never PID probing.
-        if (s.pid && !s.joined) { s.phase = 'failed'; s.reason ||= 'Owned worker teardown could not be verified; acquisition remains blocked'; return; }
-        s.ended = true; s.live?.close();
-        if (!s.cancelled) { s.phase = 'failed'; s.reason ||= 'Provider worker exited unexpectedly'; }
-        this.finishDrained(s);
-      });
+      child.on('close', () => { void (async () => {
+        if (!s.cancelled) { s.cancelled = true; s.token = ''; s.phase = 'failed'; s.reason ||= 'Provider worker exited unexpectedly'; }
+        s.live?.close();
+        // Launcher crash/forced fallback can lose the receipt. Reap by creation identity,
+        // not process.kill(pid, 0), which can mistake a reused or inaccessible PID for our worker.
+        if (s.pid && !s.joined && !(s.birth && await joinOwnedWorker(supervisor, s.pid, s.birth))) {
+          s.phase = 'failed'; s.reason ||= 'Owned worker teardown could not be verified; acquisition remains blocked'; return;
+        }
+        s.ended = true; this.finishDrained(s);
+      })(); });
       child.stdout.setEncoding('utf8').on('data', (text: string) => {
         buffer += text;
         let end: number;
@@ -118,9 +155,11 @@ export class HandSessions {
           try {
             const event = JSON.parse(line.slice(10));
             if (typeof event.diagnostic === 'string' && /^Rejected [a-z-]+; joint (?:n\/a|\d{1,2}); count \d{1,16} frames, \d{1,16} hands$/.test(event.diagnostic)) s.diagnostic = event.diagnostic;
+            if (event.phase === 'spawned' && Number.isSafeInteger(event.pid) && event.pid > 0 && typeof event.birth === 'string' && /^[1-9]\d{0,19}$/.test(event.birth)) { s.pid = event.pid; s.birth = event.birth; }
             if (event.phase === 'joined' && Number.isSafeInteger(event.pid) && (!s.pid || s.pid === event.pid)) s.joined = true;
             if (event.phase === 'teardown-failed') { s.reason ||= 'Owned worker teardown could not be verified; acquisition remains blocked'; s.phase = 'failed'; }
             if (event.phase === 'acquiring' && Number.isSafeInteger(event.pid) && !handoff) {
+              if (s.pid && s.pid !== event.pid) throw new Error('Worker identity changed');
               s.pid = event.pid; handoff = reservation!.handoff(event.pid); handoff.catch(() => { s.reason = 'Native acquisition handoff failed'; void this.stop(s, s.reason); });
             }
             if (event.phase === 'failed') { s.reason = String(event.reason || 'Provider failed').replaceAll(observer, '[redacted]').replaceAll(ticket, '[redacted]').slice(0, 1024); if (!s.cancelled) void this.stop(s, s.reason); }
@@ -178,5 +217,5 @@ export class HandSessions {
       s.phase = s.reason ? 'failed' : 'stopped';
     })();
   }
-  async close() { this.closed = true; clearInterval(this.timer); if (this.current) await this.stop(this.current); this.pages.clear(); }
+  async close() { this.closed = true; clearInterval(this.timer); if (this.current) await this.stop(this.current); this.pages.clear(); this.continuities.clear(); }
 }

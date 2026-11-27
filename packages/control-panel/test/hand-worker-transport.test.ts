@@ -12,14 +12,14 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function fixture(supervised = false, input: object = {}) {
   const token = randomBytes(32).toString('hex'), epoch = randomBytes(32).toString('hex');
   const child = spawn(supervised ? supervisor! : worker!, supervised ? [worker!, String(process.pid)] : [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-  let url = '', workerPid = 0, ended = false; const stdout: string[] = [];
+  let url = '', workerPid = 0, workerBirth = '', ended = false; const stdout: string[] = [];
   child.once('close', () => { ended = true; });
   child.stdout.setEncoding('utf8').on('data', data => lines.push(data)); child.stderr.resume(); child.stdin.on('error', () => {});
-  const lines = new LineSplitter(line => { stdout.push(line); if (line.startsWith('@provider ')) { const message = JSON.parse(line.slice(10)); if (message.url) { url = message.url; workerPid = message.pid; } } });
+  const lines = new LineSplitter(line => { stdout.push(line); if (line.startsWith('@provider ')) { const message = JSON.parse(line.slice(10)); if (message.phase === 'spawned') workerBirth = message.birth; if (message.url) { url = message.url; workerPid = message.pid; } } });
   child.stdin.write(JSON.stringify({ version: 1, runtimeName: 'simulated', config: { hands: 2, rateHz: 120 }, parentPid: process.pid, testScope: randomBytes(32).toString('hex'), token, epoch, origin, ...input }) + '\n');
   const until = Date.now() + 5000;
   while (!url) { if (Date.now() > until || child.exitCode !== null) throw new Error(stdout.join('\n')); await delay(10); }
-  return { child, token, epoch, url, workerPid, stdout, async close() { if (ended) return; const exited = once(child, 'close'); child.stdin.end('{"stop":true}\n'); const timer = setTimeout(() => child.kill(), 7000); try { await exited; } finally { clearTimeout(timer); } } };
+  return { child, token, epoch, url, workerPid, workerBirth, stdout, async close() { if (ended) return; const exited = once(child, 'close'); child.stdin.end('{"stop":true}\n'); const timer = setTimeout(() => child.kill(), 7000); try { await exited; } finally { clearTimeout(timer); } } };
 }
 function masked(payload: Uint8Array) {
   assert.ok(payload.length < 126); const mask = randomBytes(4), out = Buffer.alloc(payload.length + 6);
@@ -98,13 +98,27 @@ test('actual panel-process death closes the supervisor job and its worker', { sk
 
 test('supervisor joins hung owned-provider teardown before releasing the isolated acquisition slot', { skip: !worker || !supervisor || !process.env.XRB_TEST_PROVIDER_DLL, timeout: 20000 }, async () => {
   const testScope = randomBytes(32).toString('hex');
-  const f = await fixture(true, { testScope, runtimeName: 'session-test', pluginPath: path.resolve(process.env.XRB_TEST_PROVIDER_DLL!), config: { testHold: true, hangStop: true }, stopTimeoutMs: 200 });
+  const f = await fixture(true, { testScope, runtimeName: 'session-test', pluginPath: path.resolve(process.env.XRB_TEST_PROVIDER_DLL!), config: { testHold: true, hangStop: true }, stopTimeoutMs: 200, partialOnStop: true });
   try {
     await f.close();
     assert.ok(f.stdout.some(line => line.includes('"phase":"joined"')), 'exact-handle completion receipt follows forced watchdog termination');
+    assert.equal(f.stdout.some(line => line.includes('"partial"')), false, 'a truncated worker JSON tail cannot corrupt the supervisor completion receipt');
     assert.throws(() => process.kill(f.workerPid, 0), (e: any) => e.code === 'ESRCH');
     const next = await fixture(true, { testScope }); try { assert.ok(next.workerPid); } finally { await next.close(); }
   } finally { await f.close(); }
+});
+
+test('read-only reaper distinguishes creation identity, never kills a reused PID, and joins the designated worker', { skip: !worker || !supervisor, timeout: 15000 }, async () => {
+  const f = await fixture(true); let probe: ReturnType<typeof spawn> | undefined;
+  try {
+    assert.match(f.workerBirth, /^\d+$/);
+    probe = spawn(supervisor!, ['--join', String(f.workerPid), '1'], { windowsHide: true, stdio: 'ignore' });
+    assert.equal((await once(probe, 'close'))[0], 0, 'mismatched creation identity means the old designated process is gone');
+    assert.doesNotThrow(() => process.kill(f.workerPid, 0), 'the different live identity is read-only, never killed');
+    probe = spawn(supervisor!, ['--join', String(f.workerPid), f.workerBirth], { windowsHide: true, stdio: 'ignore' });
+    const joined = once(probe, 'close'); await delay(50); assert.equal(probe.exitCode, null);
+    await f.close(); assert.equal((await joined)[0], 0, 'exact process wait ends only after designated worker death');
+  } finally { if (probe && probe.exitCode === null) probe.kill(); await f.close(); }
 });
 
 test('supervisor forces and joins a worker that never reads Stop', { skip: !worker || !supervisor, timeout: 15000 }, async () => {
@@ -129,11 +143,12 @@ test('headless socket requires exact Origin and first-message capability and nev
   } finally { await f.close(); }
 });
 test('filtered and intact observations share one consumption credit and newest pending slot', { skip: !worker || !process.env.XRB_TEST_PROVIDER_DLL, timeout: 15000 }, async () => {
-  const f = await fixture(false, { runtimeName: 'session-test', pluginPath: path.resolve(process.env.XRB_TEST_PROVIDER_DLL!), config: { invalidConfidence: true, sporadic: true } });
+  const f = await fixture(false, { runtimeName: 'session-test', pluginPath: path.resolve(process.env.XRB_TEST_PROVIDER_DLL!), config: { invalidConfidence: true, sporadic: true, alternateBlocks: true } });
   const peer = await connect(f.url);
   try {
     peer.send(Buffer.from(f.token)); let packet = await peer.next(); const kinds = new Set<number>();
-    for (let i = 0; i < 12; i++) {
+    // Blocks outlast consumption cadence, avoiding phase-lock aliasing against single bad callbacks.
+    for (let i = 0; i < 24; i++) {
       kinds.add(packet[0]); assert.ok([21, 23].includes(packet[0]));
       await delay(30); assert.equal(peer.packets.length, 0, 'no second observation before consumption, even across kinds');
       const ack = Buffer.alloc(5); ack[0] = 110; ack.writeUInt32LE(packet.readUInt32LE(4), 1); peer.send(ack); packet = await peer.next();

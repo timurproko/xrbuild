@@ -101,9 +101,9 @@ int main(int argc, char** argv) {
     if (quit) return;
     std::string reason;
     const auto now = channel::hostTimeMs();
-    const bool intact = frames.publish(frame, now, &reason);
+    bool healthy = false;
+    frames.publish(frame, now, &reason, &healthy);
     const auto snapshot = frames.newest();
-    const bool healthy = intact || snapshot.sequence && snapshot.publicationMs == now && snapshot.count > 0;
     if (invalid.observe(now, healthy)) fail("Persistently malformed provider stream (recent rejection rate); " + snapshot.diagnostic.text());
     if (reason == "capture-clock-backwards") fail("Provider capture clock moved backwards; " + snapshot.diagnostic.text());
   };
@@ -171,6 +171,9 @@ int main(int argc, char** argv) {
     Sleep(20);
   }
   transport.stop();
+#ifdef XRB_PROVIDER_TEST
+  if (bootstrap.value("partialOnStop", false)) std::cout << "@provider {\"partial\":" << std::flush;
+#endif
   if (input) { input.api->stop(input.self); input.reset(); }
   catalog.unload();
   lease.release(); // stop promised callback quiescence; destroy has completed.

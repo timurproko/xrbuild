@@ -34,6 +34,9 @@ test('owning client gates frames on profile/clock, ACKs only consumption, counts
     const filtered = envelope(2); new DataView(filtered).setUint8(0, 23); socket.onmessage({ data: filtered }); callback!();
     assert.equal(pushes, 2); assert.equal(samples.length, 1, 'filtered observation cannot impersonate unchanged raw recording');
     assert.equal(statuses.at(-1).trackingFps, null, 'diagnostic-only clearing has no invented detection fps');
+    const peer = envelope(3, 1); new DataView(peer).setUint8(0, 23); socket.onmessage({ data: peer }); callback!();
+    assert.equal(statuses.at(-1).trackingFps, 2, 'intact admitted peer results have an actual observed rate');
+    assert.equal(samples.length, 1, 'partial packet still cannot masquerade as original whole-callback recording');
     now = 400; callback!(); assert.equal(held, false); assert.equal(statuses.at(-1).phase, 'stalled'); assert.equal(statuses.at(-1).trackingFps, null);
     for (let seq = 3; seq <= 6; seq++) { socket.onmessage({ data: envelope(seq) }); callback!(); }
     assert.equal(client.active, true, 'several stale observations do not prematurely fail the session');

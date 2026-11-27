@@ -15,7 +15,9 @@ int main() {
     check(frames.newest().packet == original.packet, "borrowed memory is copied before return");
     check(original.packet.size() == 32 + 456 && original.sequence == 1, "unchanged HANDS v2 layout");
     check(original.packet[0] == 2 && original.packet[1] == 2 && original.packet[29] == XRB_CAP_PINCH, "native capabilities retained");
-    frame.count = 256; check(!frames.publish(frame, 110, &why), "oversize count refused without reading hands");
+    bool healthy = true;
+    frame.count = 256; check(!frames.publish(frame, 110, &why, &healthy), "oversize count refused without reading hands");
+    check(!healthy, "same-timestamp malformed callback cannot inherit previous healthy snapshot");
     frame.count = 1; frame.hands = nullptr; check(!frames.publish(frame, 110, &why), "missing borrowed pointer refused"); frame.hands = &hand;
     check(frames.publish(frame, 110, &why), "zero confidence and optional zero buffers are valid");
     for (float value : {-1.f, 2.f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()}) {
@@ -30,7 +32,7 @@ int main() {
     check(frames.newest().diagnostic.kind == "joint-nonfinite", "coordinate kind distinguished"); hand.keypoints[0] = 0;
     XrbHand peers[2]{hand, hand}; peers[1].id = 8; peers[0].keypoints[3] = 2;
     frame.count = 2; frame.hands = peers;
-    check(!frames.publish(frame, 110, &why) && frames.newest().count == 1, "intact peer retained without malformed hand");
+    check(!frames.publish(frame, 110, &why, &healthy) && healthy && frames.newest().count == 1, "intact peer retained without malformed hand");
     check(frames.newest().packet[32] == 8, "intact peer bytes preserved"); frame.count = 1; frame.hands = &hand;
     hand.pinch[0] = 2; check(!frames.publish(frame, 110, &why), "invalid native signals refused"); hand.pinch[0] = 0;
     frame.capture_time_ms = 99; check(!frames.publish(frame, 110, &why), "backwards capture time refused"); frame.capture_time_ms = 100;

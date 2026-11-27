@@ -1,8 +1,11 @@
 import { createSessionClock, sessionPacket, SESSION_BOUNDS } from './hands-session-wire.js';
 /** One owning page. Socket credit is returned only at the actual consumer frame boundary. */
-export function createHandsSession({ view, replaying = () => false, onStatus = () => {}, fetcher = fetch, Socket = WebSocket, now = () => performance.now(), decode, frame = requestAnimationFrame, cancel = cancelAnimationFrame, requestTimeoutMs = 12000 }) {
+export function createHandsSession({ view, replaying = () => false, onStatus = () => {}, fetcher = fetch, Socket = WebSocket, now = () => performance.now(), decode, frame = requestAnimationFrame, cancel = cancelAnimationFrame, requestTimeoutMs = 16000, storage, reloading = globalThis.performance?.getEntriesByType?.('navigation')?.[0]?.type === 'reload' }) {
   let capability = '', bootstrapPromise = null, current = null, disposed = false, generation = 0, raf = 0;
   const raw = new Set(), lifecycle = new Set();
+  const documentId = crypto.randomUUID(), storageKey = 'xrb-hands-page-continuity-v1';
+  let continuity = '', firstBootstrap = true;
+  try { if (!globalThis.window || window.top === window) storage ??= globalThis.sessionStorage; continuity = storage?.getItem(storageKey) || ''; } catch { /* Memory-only renewal still works if tab storage is unavailable. */ }
   const notify = value => { onStatus(value); for (const listener of lifecycle) listener(value); };
   async function request(action = '', body, renew = true) {
     const sentCapability = capability;
@@ -19,7 +22,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
       if (action !== '/bootstrap' && value.details?.code === 'hands-page-capability-expired') {
         // A delayed response for an old credential cannot retire a newer session/credential.
         if (sentCapability && sentCapability === capability) {
-          if (current) { generation++; retire(current, 'Hands page authorization expired. Press Start again.'); current = null; }
+          if (current) { generation++; current.unresolved = true; current.reason = 'Hands page authorization expired. Press Start again after cleanup.'; retire(current, current.reason); }
           capability = '';
         }
         if (renew && !disposed) {
@@ -34,7 +37,15 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
   }
   async function bootstrap() {
     if (capability || disposed) return;
-    const work = bootstrapPromise ??= (async () => { const b = await request('/bootstrap', {}); if (!disposed) capability = b.capability; })();
+    const work = bootstrapPromise ??= (async () => {
+      const b = await request('/bootstrap', { document: documentId, continuity, reload: firstBootstrap && reloading });
+      firstBootstrap = false;
+      if (!disposed) {
+        capability = b.capability; continuity = b.continuity || continuity;
+        try { if (continuity) storage?.setItem(storageKey, continuity); } catch { /* Never persist credentials in a profile as fallback. */ }
+        if (current?.retired && !b.busy) complete(current, b);
+      }
+    })();
     try { await work; } finally { if (bootstrapPromise === work) bootstrapPromise = null; }
   }
   function retire(s, reason = '') {
@@ -55,13 +66,19 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
     retire(s, reason); s.unresolved = false;
     return s.stopPromise = (async () => {
       try {
-        if (!s.sessionId) { const status = await request('/status', {}); if (status.owns) s.sessionId = status.sessionId; else { complete(s, status); return; } }
+        if (!s.sessionId) {
+          const status = await request('/status', {});
+          if (status.owns) s.sessionId = status.sessionId;
+          else if (s.startRequest) s.sessionId = (await s.startRequest).sessionId;
+          else { complete(s, status); return; }
+        }
         const result = await request('/stop', { sessionId: s.sessionId, reason: s.reason || '' });
         if (result.busy === true && result.sessionId === s.sessionId) throw new Error(result.reason || 'Owned provider is still draining');
         complete(s, result);
       } catch (error) {
         try {
           const status = await request('/status', {});
+          if (status.owns && !s.sessionId) s.sessionId = status.sessionId;
           if (!status.busy || status.sessionId !== s.sessionId) { complete(s, { ...status, reason: s.reason || error.message }); return; }
         } catch { /* Never equate a missing reply with released cameras. */ }
         if (current === s) { s.unresolved = true; if (!disposed) notify({ phase: 'failed', cleanupPending: true, reason: s.reason || error.message, diagnostic: s.diagnostic || '' }); }
@@ -95,7 +112,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
     await bootstrap(); if (disposed || ownGeneration !== generation) return;
     // Renew an idle page before allocating a Start context; renewal never starts capture by itself.
     await request('/status', {}); if (disposed || ownGeneration !== generation) return;
-    const s = { sessionId: null, epoch: null, retired: false, profileSequence: -1, clock: createSessionClock({ now }), pending: null, lastFresh: null, invalidStreak: 0, accepted: 0, dropped: 0, rejected: 0, times: [], pings: new Set() };
+    const s = { sessionId: null, epoch: null, retired: false, profileSequence: -1, clock: createSessionClock({ now }), pending: null, lastFresh: null, accepted: 0, dropped: 0, rejected: 0, times: [], pings: new Set() };
     current = s; notify({ phase: 'starting' });
     // Status polling also binds heartbeat during slow native create/start; the id is not known until this read.
     let polling = false;
@@ -112,7 +129,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
       } catch (error) { if (!s.retired && current === s) void stop(error.message); } finally { polling = false; }
     }, 1000);
     try {
-      const result = await request('', selection);
+      const result = await (s.startRequest = request('', selection));
       if (s.retired || disposed || ownGeneration !== generation) { if (result.sessionId) { s.sessionId = result.sessionId; await request('/stop', { sessionId: result.sessionId }); } return; }
       Object.assign(s, { sessionId: result.sessionId, epoch: result.epoch, source: result.source });
       if (!await applyProfile(s, result.profile) && !s.retired) throw new Error('Initial hand profile was not applied');
@@ -144,7 +161,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
             const sample = { epoch: s.epoch, sequence: event.sequence, captureTimeMs: event.frame.captureTimeMs, publishTimeMs: event.frame.hostTimeMs, packet: event.packet, frame: event.frame };
             if (!event.filtered) for (const listener of raw) listener({ ...sample, packet: sample.packet.slice(), frame: structuredClone(sample.frame) });
             if (view.pushFrame({ epoch: s.epoch, sequence: event.sequence, frame: event.frame, capturePageMs: mapped })) {
-              s.dropped += Math.max(0, event.sequence - (s.lastSequence ?? event.sequence) - 1); s.lastSequence = event.sequence; s.accepted++; s.invalidStreak = 0; s.lastFresh = now(); s.capture = mapped; s.hands = event.frame.hands.length; s.reportedHz = event.frame.trackingHz; if (!event.filtered) s.times.push(now()); s.filtered = event.filtered; s.stale = false;
+              s.dropped += Math.max(0, event.sequence - (s.lastSequence ?? event.sequence) - 1); s.lastSequence = event.sequence; if (!event.filtered) s.accepted++; s.lastFresh = now(); s.capture = mapped; s.hands = event.frame.hands.length; s.reportedHz = event.frame.trackingHz; if (!event.filtered || s.hands > 0) s.times.push(now()); s.filtered = event.filtered; s.stale = false;
               clearTimeout(s.freshness); s.freshness = setTimeout(() => { if (!s.retired && current === s) { s.stale = true; view.clearHands(); notify({ phase: 'stalled', epoch: s.epoch, sessionId: s.sessionId, trackingFps: null, frameAgeMs: null }); } }, SESSION_BOUNDS.age);
             } else s.rejected++;
           } else { s.rejected++; view.clearHands(); s.stale = true; }
@@ -157,7 +174,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
         s.times = s.times.filter(t => at - t <= 1000);
         if (s.lastFresh !== null && at - s.lastFresh > SESSION_BOUNDS.age && !s.stale) { s.stale = true; view.clearHands(); }
         notify({ phase: s.lastFresh === null ? 'waiting' : s.stale ? 'stalled' : s.hands ? 'running' : 'no-hands', source: s.source, epoch: s.epoch, sessionId: s.sessionId,
-          diagnostic: s.diagnostic || '', filtered: !!s.filtered, trackingFps: s.lastFresh !== null && !s.stale && !s.filtered ? s.times.length : null, frameAgeMs: s.lastFresh !== null && !s.stale ? Math.max(0, at - s.capture) : null, uncertaintyMs: s.clock.mapping?.uncertainty ?? null, reportedHz: s.reportedHz ?? null, dropped: s.dropped, rejected: s.rejected });
+          diagnostic: s.diagnostic || '', filtered: !!s.filtered, trackingFps: s.lastFresh !== null && !s.stale && (!s.filtered || s.hands > 0) ? s.times.length : null, frameAgeMs: s.lastFresh !== null && !s.stale ? Math.max(0, at - s.capture) : null, uncertaintyMs: s.clock.mapping?.uncertainty ?? null, reportedHz: s.reportedHz ?? null, dropped: s.dropped, rejected: s.rejected });
       }
     }
     if (!disposed) raf = frame(tick);
@@ -165,8 +182,9 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
   raf = frame(tick);
   return {
     start, stop,
+    async recover(sessionId) { await bootstrap(); const s = current, ownGeneration = generation; const result = await request('/recover', { sessionId }); if (s?.retired && current === s && ownGeneration === generation && !result.busy) complete(s, result); return result; },
     async refreshProfile() { const s = current; if (!s || s.retired) return; const status = await request('/status', {}); if (!s.retired && current === s && status.owns && status.sessionId === s.sessionId && status.profile) await applyProfile(s, status.profile); },
-    async status() { await bootstrap(); const status = await request('/status', {}); const s = current; if (s?.retired && (!status.busy || status.sessionId !== s.sessionId)) complete(s, status); return status; },
+    async status() { await bootstrap(); const s = current, ownGeneration = generation; const status = await request('/status', {}); if (s?.retired && current === s && ownGeneration === generation && (!status.busy || status.sessionId !== s.sessionId)) complete(s, status); return status; },
     get active() { return !!current && !current.retired; },
     get stopping() { return !!current?.retired && !current.unresolved; },
     get blocked() { return !!current?.unresolved; },

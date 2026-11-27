@@ -21,7 +21,7 @@ typedef struct TestPlugin {
   int fail_start;
   int stereo;
   int empty, malformed, hang_start, hang_stop, hang_destroy, test_hold;
-  int invalid_confidence, sporadic, mixed, nan_joint, stall, stall_recover;
+  int invalid_confidence, sporadic, mixed, nan_joint, stall, stall_recover, alternate_blocks;
   volatile LONG running;
   HANDLE thread;
 } TestPlugin;
@@ -56,6 +56,7 @@ static TestPlugin* make(const XrbHost* host, const char* config) {
   p->mixed = config && strstr(config, "\"mixed\":true") != NULL;
   p->stall = config && strstr(config, "\"stall\":true") != NULL;
   p->stall_recover = config && strstr(config, "\"stallRecover\":true") != NULL;
+  p->alternate_blocks = config && strstr(config, "\"alternateBlocks\":true") != NULL;
   return p;
 }
 
@@ -82,7 +83,7 @@ static DWORD WINAPI input_hold(void* self) {
       for (k = 0; k < XRB_NUM_KEYPOINTS; k++) { hands[h].keypoints[k * 4] = x; hands[h].keypoints[k * 4 + 1] = .085f; hands[h].keypoints[k * 4 + 2] = .15f; hands[h].keypoints[k * 4 + 3] = .9f; }
     }
     frame.size = sizeof(frame); frame.capabilities = XRB_CAP_GRAB; frame.capture_time_ms = p->host->now_ms(p->host->ctx); frame.tracking_hz = 60;
-    if (!p->sporadic || tick % 3 == 0) for (h = 0; h < (p->mixed ? 1 : 2); h++) {
+    if (!p->sporadic || (p->alternate_blocks ? tick % 20 < 10 : tick % 3 == 0)) for (h = 0; h < (p->mixed ? 1 : 2); h++) {
       if (p->invalid_confidence) hands[h].keypoints[8 * 4 + 3] = 2.f;
       if (p->nan_joint) hands[h].keypoints[8 * 4] = NAN;
     }

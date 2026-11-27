@@ -17,10 +17,11 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     diagnostic.textContent = lastDiagnostic; diagnostic.hidden = !lastDiagnostic;
     const source = data?.providers?.find(p => key(p) === provider.value);
     const unavailable = !supported ? 'Standalone Hands currently supports Windows x64 only.' : !view?.profile ? 'Wait for the shared SDK view and valid profile.' : !source ? 'Choose an available skeleton provider.' : source.transport !== 'native' ? 'WebXR requires its explicit app XR session.' : !source.available ? source.reason : '';
+    const cleanupPending = session.blocked || status.cleanupPending;
     const stoppingNow = stopping || session.stopping || phase === 'stopping';
-    button.textContent = session.blocked ? 'Retry cleanup' : stoppingNow ? 'Stopping…' : active ? 'Stop' : 'Start';
-    button.disabled = !session.blocked && (stoppingNow || !active && (!!unavailable || phase === 'occupied' || !!view?.replaying));
-    const labels = { 'not-started': 'Not started', starting: 'Starting…', waiting: 'Waiting', running: 'Running', 'no-hands': 'No hands', rejected: 'Observation dropped', stalled: 'Stalled', stopping: 'Stopping…', stopped: 'Stopped', failed: 'Failed', occupied: 'Busy' };
+    button.textContent = cleanupPending && !stopping ? 'Retry cleanup' : stoppingNow ? 'Stopping…' : active ? 'Stop' : status.takeoverAvailable ? 'Take over' : 'Start';
+    button.disabled = stopping || !cleanupPending && (stoppingNow || !active && (!!unavailable || phase === 'occupied' && !status.takeoverAvailable || !!view?.replaying));
+    const labels = { 'not-started': 'Not started', starting: 'Starting…', waiting: 'Waiting', running: 'Running', 'no-hands': 'No hands', rejected: 'Observation dropped', stalled: 'Stalled', stopping: 'Stopping…', stopped: 'Stopped', failed: 'Failed', cleanup: 'Cleanup', occupied: 'Busy' };
     let label = labels[phase] ?? 'Not started';
     if (active && status.source && key(status.source) !== provider.value) label += ` · ${status.source.label}`;
     if (state.textContent !== label) state.textContent = label;
@@ -32,7 +33,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     rates.parentElement.dataset.tooltip = fps === '—' ? 'No fresh live provider frames' : `Unique received frames/s · Capture age ${status.frameAgeMs?.toFixed(1)} ms ± ${status.uncertaintyMs?.toFixed(1)} ms · Delivery gaps ${status.dropped ?? 0} · Provider-reported ${status.reportedHz ?? '—'} Hz`;
     if (!view?.replaying) {
       overlay.hidden = phase === 'running';
-      const message = status.filtered && phase === 'no-hands' ? 'Malformed observation dropped; no admitted hands this frame.' : phase === 'no-hands' ? 'No hands detected.' : phase === 'waiting' ? 'Waiting for fresh provider frames…' : phase === 'stalled' ? 'Tracking stalled. Hands and holds cleared.' : phase === 'starting' ? 'Starting provider…' : phase === 'stopping' ? 'Stopping provider…' : phase === 'failed' || phase === 'occupied' ? detail : unavailable || 'Press Start to track the saved provider.';
+      const message = status.filtered && phase === 'no-hands' ? 'Malformed observation dropped; no admitted hands this frame.' : phase === 'no-hands' ? 'No hands detected.' : phase === 'waiting' ? 'Waiting for fresh provider frames…' : phase === 'stalled' ? 'Tracking stalled. Hands and holds cleared.' : phase === 'starting' ? 'Starting provider…' : phase === 'stopping' ? 'Stopping provider…' : phase === 'failed' || phase === 'occupied' || phase === 'cleanup' ? detail : unavailable || 'Press Start to track the saved provider.';
       if (overlay.firstElementChild.textContent !== message) overlay.firstElementChild.textContent = message;
     }
   }
@@ -40,6 +41,12 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   const unsubscribe = session.subscribeLifecycle(update);
   const changed = () => render(); provider.addEventListener('change', changed);
   const click = async () => {
+    if (status.cleanupPending && !session.active && !session.blocked) {
+      generation++; stopping = true; render();
+      try { update(await session.recover(status.sessionId)); } catch (error) { update({ ...status, phase: 'failed', reason: error.message, cleanupPending: true }); }
+      finally { stopping = false; render(); }
+      return;
+    }
     if (starting || session.active || session.blocked) {
       generation++;
       stopping = true; starting = false; update({ phase: 'stopping', source: status.source });
@@ -47,7 +54,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
       finally { stopping = false; if (status.phase === 'stopping' && !session.active && !session.stopping) update({ phase: 'stopped' }); else render(); }
       return;
     }
-    const own = ++generation;
+    const own = ++generation, takeoverSessionId = status.takeoverAvailable ? status.sessionId : undefined;
     starting = true; update({ phase: 'starting' });
     try {
       data = await load();
@@ -55,19 +62,22 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
       // Works with both reviewed source Save and immediate autosave: never starts a stale picker draft.
       if (key(data.selected) !== provider.value) throw new Error('Wait for the provider choice to save before Start.');
       if (!data.selected) throw new Error('Choose a saved provider before Start.');
-      await session.start({ provider: data.selected, revision: data.revision, registryRevision: data.registryRevision });
+      await session.start({ provider: data.selected, revision: data.revision, registryRevision: data.registryRevision, ...(takeoverSessionId ? { takeoverSessionId } : {}) });
     } catch (error) { if (!closed && own === generation) update({ phase: 'failed', reason: error.message }); }
     finally { if (own === generation) { starting = false; render(); } }
   };
   button.addEventListener('click', click);
   const poll = async () => {
-    if (closed || polling || starting || stopping || session.active) return; polling = true;
+    if (closed || polling || starting || stopping || session.active) return; polling = true; const own = generation;
     try {
       const [current, saved] = await Promise.all([session.status(), load()]);
-      if (closed || starting || stopping || session.active) return;
+      if (closed || own !== generation || starting || stopping || session.active) return;
       data = saved; supported = current.supported !== false;
-      update(current.busy ? { phase: 'occupied', reason: current.reason || 'Another Hands page owns acquisition. Stop it there first.' } : current.owns ? current : { phase: 'not-started' });
-    } catch (error) { if (!closed && !starting && !session.active) update({ phase: 'failed', reason: error.message }); }
+      update(current.busy ? current.owns || current.cleanupPending
+        ? { ...current, phase: 'cleanup', cleanupPending: true, reason: current.reason || 'Previous owned Hands acquisition is draining; retry cleanup before Start.' }
+        : { ...current, phase: 'occupied', reason: current.reason || 'Another live Hands page owns acquisition. Take over stops it before starting here.' }
+        : current.owns ? current : { phase: 'not-started', diagnostic: current.diagnostic });
+    } catch (error) { if (!closed && own === generation && !starting && !session.active) update({ phase: 'failed', reason: error.message }); }
     finally { polling = false; }
   };
   const timer = setInterval(() => { if (session.active) render(); else void poll(); }, 1000);
