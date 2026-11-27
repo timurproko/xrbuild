@@ -42,9 +42,9 @@ test('all numeric adjustments pair with sliders, retain commit timing and fit na
         const before = await evaluate('adjustmentWrites');
         await evaluate(`(()=>{const r=document.querySelector('${range}');r.value=${min};r.dispatchEvent(new Event('input',{bubbles:true}));})()`);
         assert.equal(await evaluate(`Number(document.querySelector('${field}').value)`), min);
-        await sleep(30); assert.equal(await evaluate('adjustmentWrites'), before, `${key}: range drafts never save`);
+        await settled(); assert.equal(await evaluate('adjustmentWrites'), before + 1, `${key}: dragging a slider applies at once`);
         await evaluate(`document.querySelector('${range}').dispatchEvent(new Event('change',{bubbles:true}))`); await settled();
-        assert.equal(await evaluate('adjustmentWrites'), before + 1);
+        assert.equal(await evaluate('adjustmentWrites'), before + 1, `${key}: releasing the slider adds no second save`);
         await evaluate(`(()=>{const n=document.querySelector('${field}');n.value=${max};n.dispatchEvent(new Event('input',{bubbles:true}));})()`);
         assert.equal(await evaluate(`Number(document.querySelector('${range}').value)`), max);
         assert.equal(await evaluate('adjustmentWrites'), before + 1);

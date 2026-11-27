@@ -39,10 +39,11 @@ test('finished edits autosave, retain exact colors, reset independently, survive
       assert.equal(await evaluate('adjustmentWrites'), 1, 'Enter followed by change is one effective save');
       await set('offsetMm.y', -10); await set('offsetMm.z', 30);
       await evaluate(`(()=>{const e=document.querySelector('[data-range="sizeFactor"]');for(const v of ['.95','.9','.8']){e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));}})()`);
-      const beforeSlider = await evaluate('adjustmentWrites'); await sleep(100);
-      assert.equal((await readHandsState(core, workspace)).profile.sizeFactor, 1);
+      await settled();
+      assert.equal((await readHandsState(core, workspace)).profile.sizeFactor, .8, 'a drag applies while moving and ends on the latest value');
+      const beforeSlider = await evaluate('adjustmentWrites');
       await evaluate(`document.querySelector('[data-range="sizeFactor"]').dispatchEvent(new Event('change',{bubbles:true}))`); await settled();
-      assert.equal(await evaluate('adjustmentWrites'), beforeSlider + 1);
+      assert.equal(await evaluate('adjustmentWrites'), beforeSlider, 'releasing after the drag saved adds no write');
       await set('appearance.opacity', .456); await set('appearance.showBones', false);
       state = await readHandsState(core, workspace);
       assert.deepEqual(state.profile.offsetMm, { x: 40, y: -10, z: 30 }); assert.equal(state.profile.sizeFactor, .8);

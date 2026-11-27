@@ -173,7 +173,8 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
       if (!disposed) { render(); if (success && [...edits.values()].some(edit => edit.committed)) void flush(); }
     }
   }
-  const input = event => { const field = event.target.closest('[data-field],[data-range]'); if (field && root.contains(field)) edit(field); };
+  // Sliders apply while dragging: each move commits, and the save queue keeps one request in flight, then sends the latest.
+  const input = event => { const field = event.target.closest('[data-field],[data-range]'); if (field && root.contains(field)) field.matches('[data-range]') ? commit(field) : edit(field); };
   const change = event => {
     if (event.target.matches?.('[data-display-value]')) {
       // Each changed choice commits through its own field, exactly like the former switches.
