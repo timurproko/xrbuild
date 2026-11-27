@@ -10,7 +10,8 @@
 .hands-number-row > .xrb-range { grid-column: 2; grid-row: 1; }
 .hands-number-row > .xrb-inline-icons { grid-column: 3; grid-row: 1; }
 .hands-number-row > .field-error { grid-column: 1 / -1; grid-row: 2; }
-#hands-adjustments-root { padding-top: 0; }
+/* Every tab's content starts the same distance below the tab bar. */
+#hands-adjustments-root, #hands-setup { padding-top: 0; }
 .hands-adjustment-tabs { flex: none; margin-bottom: var(--xrb-space-stack); }
 .hands-adjustment-tabs > .hands-tab-action { display: flex; align-items: center; }
 .hands-adjustment-tabs > .hands-tab-action[hidden] { display: none; }

@@ -42,7 +42,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     rates.parentElement.dataset.tooltip = fps === '—' ? 'No fresh live provider frames' : `Unique received frames/s · Capture age ${status.frameAgeMs?.toFixed(1)} ms ± ${status.uncertaintyMs?.toFixed(1)} ms · Delivery gaps ${status.dropped ?? 0} · Provider-reported ${status.reportedHz ?? '—'} Hz`;
     if (!view?.replaying) {
       // Idle needs no prompt: the viewer stays empty until there is something to report.
-      const message = status.filtered && phase === 'no-hands' ? 'Malformed observation dropped; no admitted hands this frame.' : phase === 'no-hands' ? 'No hands detected.' : phase === 'waiting' ? 'Waiting for fresh provider frames…' : phase === 'stalled' ? 'Tracking stalled. Hands and holds cleared.' : phase === 'starting' ? 'Starting provider…' : phase === 'stopping' ? 'Stopping provider…' : phase === 'failed' || phase === 'occupied' || phase === 'cleanup' ? detail : unavailable || '';
+      const message = status.filtered && phase === 'no-hands' ? 'Malformed observation dropped; no admitted hands this frame.' : phase === 'no-hands' ? 'No hands detected.' : phase === 'waiting' ? 'Waiting for fresh provider frames…' : phase === 'stalled' ? 'Tracking stalled. Hands and holds cleared.' : phase === 'starting' ? 'Starting provider…' : phase === 'stopping' ? 'Stopping provider…' : phase === 'failed' || phase === 'occupied' || phase === 'cleanup' ? detail : view?.profile ? unavailable || '' : '';
       if (overlay.firstElementChild.textContent !== message) overlay.firstElementChild.textContent = message;
       overlay.hidden = phase === 'running' || !message;
     }
