@@ -15,7 +15,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(40, 1, .005, 10);
-  const controls = new OrbitControls(camera, canvas); controls.enableDamping = true; controls.minDistance = .3; controls.maxDistance = 2;
+  const controls = new OrbitControls(camera, canvas); controls.enableDamping = false; // Orbit and pan follow the mouse directly, like the right-drag zoom. controls.minDistance = .3; controls.maxDistance = 2;
   // Like 3D tools: left drag orbits, middle drag pans, right drag zooms (right/up in, left/down out).
   controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: null };
   let zoomDrag = null;
