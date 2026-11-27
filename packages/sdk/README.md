@@ -17,7 +17,8 @@ There is nothing to install or publish: apps (in your workspace, logically separ
 `@xr-build/ui-kit` straight from the core's sources. The package is TypeScript source (`src/index.ts`);
 Vite compiles it with your app.
 
-- An app depends on `three` (>= 0.160) and `vite` only, never on `@xr-build/sdk` or `@xr-build/ui-kit`.
+- A vanilla app depends on `three` (>= 0.160) and `vite` only, never on `@xr-build/sdk` or `@xr-build/ui-kit`.
+  Opt-in React apps additionally install the pinned React/Fiber dependencies in the [React guide](../react/README.md).
 - The control panel sets `XRB_CORE` (the core repo it runs from) for every build and dev server it starts.
 - The app's `vite.config.js` maps the two names to the core and keeps one three.js. "New project" in the
   panel creates this from `templates/app`:
@@ -57,7 +58,9 @@ and input ownership. Vanilla apps, UI Kit and the template need no changes or Re
 
 The new `app.onComponentFrame(callback)` subscription is for component integrations: after processed
 hands are sampled, before interaction and drawing, with the SDK frame clock and current XRFrame.
-It returns an unsubscribe function. Ordinary `app.setFrame` callbacks keep their existing pre-render
+It returns an unsubscribe function. The optional new low-level `xrb.componentPointer.add(object, handlers, options?)`
+registers SDK-picked mesh handlers and returns an unregister function; the React guide documents its event types,
+capture policy and optional historical camera-ray compatibility. Ordinary `app.setFrame` callbacks keep their existing pre-render
 ordering. `app.isRunning` and `app.isDisposed` expose lifecycle state for safe attachment.
 
 ## Minimal app

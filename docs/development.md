@@ -21,6 +21,11 @@ Related: [Confidentiality](confidentiality.md) for what must stay out of this re
 - `native/plugin-sdk` - the C ABI header plugins build against.
 - `packages/sdk` - `@xr-build/sdk`, JS SDK for three.js apps (`createXrb()`: stereo rig, hand input, pointer emulation;
   without a host, a WebXR headset session with the headset's hands and a virtual panel, `src/webxr.ts`).
+- `packages/react` - new optional `@xr-build/react` source bridge for React 19 / Fiber 9. The SDK still owns renderer,
+  frame clock, camera, projection, stereo, WebXR and input; no competing Canvas. See its [API/ownership guide](../packages/react/README.md).
+  Only [Hello Cube](../embedded/projects/archive/hello-cube/README.md) adopts it now, with separate run and public component entries;
+  it retains the exact original appearance/behavior. Template, UI Kit and other apps remain vanilla. Component source/manifest
+  changes join existing managed build-input fingerprints. No themes or application settings are introduced.
 - `packages/ui-kit` - `@xr-build/ui-kit`, 3D controls on the SDK's interaction core.
 - `packages/app-icon` - app icons: default icon and colours, `.ico`, `app-icon render` (the app renders its own icon).
 - `packages/control-panel` - local control panel (Node server + browser UI, 127.0.0.1:5180 for user mode,

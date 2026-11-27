@@ -1,7 +1,7 @@
 import { useContext, useLayoutEffect, useRef, type RefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type * as THREE from 'three';
-import type { AnyTarget, TargetEvent, XrbAppFrame, ComponentPointerHandlers } from '../../sdk/src/index.ts';
+import type { AnyTarget, TargetEvent, XrbAppFrame, ComponentPointerHandlers, ComponentPointerOptions } from '../../sdk/src/index.ts';
 import { XrbContext } from './runtime.tsx';
 
 function useContextValue() {
@@ -29,14 +29,14 @@ export function useXrbHands() {
 }
 
 /** New: SDK-picked mesh events. Refs register after commit; callback updates retain capture. */
-export function useXrbPointer(ref: RefObject<THREE.Object3D | null>, handlers: ComponentPointerHandlers): void {
+export function useXrbPointer(ref: RefObject<THREE.Object3D | null>, handlers: ComponentPointerHandlers, options: ComponentPointerOptions = {}): void {
   const { xrb } = useXrb();
   const current = useRef(handlers);
-  const registration = useRef<{ object: THREE.Object3D; off(): void } | null>(null);
+  const registration = useRef<{ object: THREE.Object3D; camera?: THREE.Camera; off(): void } | null>(null);
   useLayoutEffect(() => {
     current.current = handlers;
     const object = ref.current;
-    if (registration.current?.object === object) return;
+    if (registration.current?.object === object && registration.current?.camera === options.camera) return;
     registration.current?.off();
     registration.current = null;
     if (!object) return;
@@ -50,7 +50,7 @@ export function useXrbPointer(ref: RefObject<THREE.Object3D | null>, handlers: C
       onClick: (e) => current.current.onClick?.(e),
       onPointerMissed: (e) => current.current.onPointerMissed?.(e),
     };
-    registration.current = { object, off: xrb.componentPointer.add(object, proxy) };
+    registration.current = { object, camera: options.camera, off: xrb.componentPointer.add(object, proxy, options) };
   });
   useLayoutEffect(() => () => { registration.current?.off(); registration.current = null; }, [xrb, ref]);
 }

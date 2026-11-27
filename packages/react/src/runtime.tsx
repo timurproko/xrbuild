@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import React, { createContext, useLayoutEffect } from 'react';
-import { advance, createRoot, extend, unmountComponentAtNode, useFrame, type RootStore } from '@react-three/fiber';
+import React, { createContext, useEffect } from 'react';
+import { advance, createRoot, extend, unmountComponentAtNode, useFrame, type RootStore, type RootState } from '@react-three/fiber';
 import { createXrbApp, rendererOptions, type XrbAppFrame, type XrbAppOptions, type XrbAppRuntime } from '../../sdk/src/index.ts';
 
 // Fibre only constructs catalogue entries actually used as JSX elements.
@@ -48,7 +48,9 @@ class MountBoundary extends React.Component<{ children: React.ReactNode; fail(er
   render() { return this.state.failed ? null : this.props.children; }
 }
 function Committed({ done, children }: { done(): void; children: React.ReactNode }) {
-  useLayoutEffect(done, [done]);
+  // Also wait for frame subscriptions in non-DOM test/SSR environments, where
+  // Fiber deliberately uses passive effects instead of layout effects.
+  useEffect(done, [done]);
   return children;
 }
 
@@ -56,6 +58,21 @@ function FrameOwner({ context, children }: { context: BridgeContext; children: R
   // Positive priority disables Fiber's implicit gl.render. No drawing happens here.
   useFrame(noop, 1);
   return <XrbContext.Provider value={context}><group name="xrb-components">{children}</group></XrbContext.Provider>;
+}
+
+// Fiber assumes an orthographic frustum is expressed in canvas pixels. SDK
+// cameras instead express it in scene units; mirror metadata, never its resize policy.
+function sdkViewport(app: XrbAppRuntime, fallback: RootState['viewport']['getCurrentViewport']): RootState['viewport']['getCurrentViewport'] {
+  return (camera = app.camera, target = new THREE.Vector3(), size = { ...app.xrb.viewSize(), top: 0, left: 0 }) => {
+    if (camera !== app.camera) return fallback(camera, target, size);
+    const point = (target as THREE.Vector3).isVector3 ? target as THREE.Vector3 : new THREE.Vector3().fromArray(target as [number, number, number]);
+    const distance = camera.getWorldPosition(new THREE.Vector3()).distanceTo(point);
+    const managed = app.camera, matrix = managed.projectionMatrix.elements;
+    const width = app.projection === 'orthographic' ? (managed.right - managed.left) / managed.zoom : 2 * distance / Math.abs(matrix[0]);
+    const height = app.projection === 'orthographic' ? (managed.top - managed.bottom) / managed.zoom : 2 * distance / Math.abs(matrix[5]);
+    return { width, height, factor: size.width / width, distance, aspect: size.width / size.height,
+      top: size.top, left: size.left };
+  };
 }
 
 /** New: options for an opt-in component mount. A supplied app is borrowed and must be stopped. */
@@ -92,6 +109,8 @@ export function mountXrbApp(container: HTMLElement, children: React.ReactNode, o
   let offFrame = noop;
   let elapsed = 0;
   let tree = children;
+  let retire!: () => void;
+  const retirement = new Promise<void>((resolve) => { retire = resolve; });
   let committed!: () => void, failed!: (error: Error) => void;
   const commit = new Promise<void>((resolve, reject) => { committed = resolve; failed = reject; });
   const renderTree = () => { store = root.render(<MountBoundary fail={(error) => { failed(error); void dispose(); }}><Committed done={committed}><FrameOwner context={context}>{tree}</FrameOwner></Committed></MountBoundary>); };
@@ -104,15 +123,29 @@ export function mountXrbApp(container: HTMLElement, children: React.ReactNode, o
       // No Fiber event manager is installed: SDK bindMouse is authoritative.
     });
     if (retired) return;
+    app.xrb.view.syncHeadCamera(camera);
+    // Obtain the public store before rendering app content, so its first render
+    // already sees SDK scene-unit viewport metadata (not Fiber's pixel frustum).
+    store = root.render(null);
+    const getViewport = sdkViewport(app, store.getState().viewport.getCurrentViewport);
+    const syncViewport = () => {
+      const state = store!.getState(), view = size(), viewport = getViewport(camera, undefined, view);
+      if (state.size.width !== view.width || state.size.height !== view.height
+        || Object.entries(viewport).some(([key, value]) => state.viewport[key as keyof typeof viewport] !== value)) {
+        state.set({ size: view, viewport: { ...state.viewport, ...viewport, getCurrentViewport: getViewport } });
+      } else if (state.viewport.getCurrentViewport !== getViewport) {
+        state.set({ viewport: { ...state.viewport, getCurrentViewport: getViewport } });
+      }
+    };
+    syncViewport();
     renderTree();
-    await commit;
+    await Promise.race([commit, retirement]);
     if (retired) return;
     offFrame = app.onComponentFrame((frame) => {
       if (retired || !store) return;
       context.frame = frame;
+      syncViewport();
       const state = store.getState();
-      const view = size();
-      if (state.size.width !== view.width || state.size.height !== view.height) state.setSize(view.width, view.height);
       // In 'never' mode Fiber uses elapsed seconds, not RAF milliseconds. Seed the
       // clock explicitly so first/restart deltas stay SDK-derived (including zero).
       state.clock.elapsedTime = elapsed;
@@ -125,6 +158,7 @@ export function mountXrbApp(container: HTMLElement, children: React.ReactNode, o
   const dispose = (): Promise<void> => {
     if (disposal) return disposal;
     retired = true;
+    retire();
     app.stop();
     offFrame();
     disposal = (async () => {
@@ -135,7 +169,7 @@ export function mountXrbApp(container: HTMLElement, children: React.ReactNode, o
       // Caller-owned background/environment textures are not component resources.
       const hidden: [string, boolean][] = [];
       for (const [key, value] of Object.entries(app.scene)) {
-        if (value && typeof value.dispose === 'function') {
+        if (['background', 'environment', 'overrideMaterial'].includes(key) || (value && typeof value.dispose === 'function')) {
           const descriptor = Object.getOwnPropertyDescriptor(app.scene, key)!;
           if (descriptor.configurable && descriptor.enumerable) {
             hidden.push([key, true]); Object.defineProperty(app.scene, key, { enumerable: false });
@@ -152,9 +186,13 @@ export function mountXrbApp(container: HTMLElement, children: React.ReactNode, o
       delete (app.scene as THREE.Scene & { __r3f?: unknown }).__r3f;
       attached.delete(app);
       if (owned) {
-        app.dispose();
-        renderer.dispose();
-        renderer.domElement.remove();
+        try { await app.xrb.exitXR(); }
+        finally {
+          app.dispose();
+          renderer.dispose();
+          renderer.forceContextLoss();
+          renderer.domElement.remove();
+        }
       }
     })();
     return disposal;

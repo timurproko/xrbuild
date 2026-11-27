@@ -36,7 +36,7 @@ import { previewHandScope, subscribeHandProfile } from './hand-profile-preview.t
 import { HandFrameIngress, handSourcePolicy } from './hand-source.ts';
 import { disposeObject } from './dispose-object.ts';
 import { ComponentPointer } from './component-pointer.ts';
-export type { ComponentPointerEvent, ComponentPointerHandlers, ComponentPointerType } from './component-pointer.ts';
+export type { ComponentPointerEvent, ComponentPointerHandlers, ComponentPointerType, ComponentPointerOptions } from './component-pointer.ts';
 import { detectXrMode, eyesInPanel, headOf, rigMatrix, virtualDisplay, VirtualPanel, wantsAutoEnter, XrHands, type XrFrameLike, type XrMode, type XrOptions, type XrSessionLike, type XrSystemLike } from './webxr.ts';
 
 export * from './protocol.ts';
@@ -332,6 +332,7 @@ export class Xrb {
     this.renderer.xr.setReferenceSpaceType('local');
     this.xrPanel.reset();
     await this.renderer.xr.setSession(session as unknown as XRSession);
+    if (this.disposed) { await session.end(); this.renderer.xr.enabled = false; return; }
     // After the renderer's own end handler, so the page is no longer presenting when the view is reported.
     session.addEventListener('end', () => this.xrEnded());
     // The headset moved its origin (the user recentred the headset): place the panel in front of them again.
@@ -553,7 +554,7 @@ export class Xrb {
       const eye = this.view.panel.pointToWorld(e, new THREE.Vector3());
       return new THREE.Ray(eye, glass.sub(eye).normalize());
     }, { systemCursor: this.cursorStyle === 'system', observe: (type, ray, event, blocked) => {
-      this.componentPointer.dispatch(type, ray, event, blocked);
+      this.componentPointer.dispatch(type, ray, event, blocked, this.renderer.domElement.getBoundingClientRect());
     } });
     const release = () => {
       if (this.unbindMouse !== release) return;
@@ -597,6 +598,7 @@ export class Xrb {
     this.returnControl?.attach(scene, this.view.panel, this.visibleDisplay(), isOrthographicCamera(camera) ? 'orthographic' : 'perspective');
     this.sceneHands = this.currentHands.map((h) => toSceneHand(h, this.view.panel));
     if (componentFrame) {
+      this.view.syncHeadCamera(camera);
       componentFrame();
       // Component controls may move the managed camera or scene objects. Resynchronize
       // mapping before picking, without sampling input or advancing components twice.
@@ -747,9 +749,10 @@ export class Xrb {
     void Promise.resolve().then(create).then((object) => {
       if (this.disposed) { disposeObject(object); return; }
       const stage = new IconStage(object);
+      // Own the stage while its assets load, so disposal can release it immediately.
+      this.iconStage = stage;
       return stage.ready.then(() => {
-        if (this.disposed) { disposeObject(stage.scene); return; }
-        this.iconStage = stage;
+        if (this.disposed) return;
         // Shown at once: the icon studio may already hold the app's frames (paused preview).
         stage.draw(this.renderer);
         if (this.icon?.interactive) this.offIconControls = iconControls(this.renderer.domElement, stage, this.icon.size, () => stage.draw(this.renderer));
@@ -805,6 +808,7 @@ export class Xrb {
     this.disposed = true;
     this.offIconControls?.(); this.offIconServing?.();
     if (this.iconStage) disposeObject(this.iconStage.scene);
+    this.iconStage = null;
     this.handProfileReceiver?.close(); this.handProfileTransport?.close();
     this.meshClient?.close(); this.handsObject.disposeMeshes();
     this.handIngress.close();
@@ -823,7 +827,8 @@ export class Xrb {
     this.channel?.close();
     this.xrButton?.remove();
     this.handProblemNotice?.remove();
-    void this.exitXR();
+    // Final disposal is best-effort even when a retiring browser session rejects end().
+    void this.exitXR().catch(() => {});
   }
 }
 

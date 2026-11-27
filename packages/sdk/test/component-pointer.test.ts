@@ -27,6 +27,22 @@ test('nearest registered visible object wins; parent handlers bubble and unregis
   route.clear(); near.geometry.dispose(); (near.material as THREE.Material).dispose();
 });
 
+test('removing a pressed mesh cancels a late click even without a prior hover', () => {
+  const route = new ComponentPointer();
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+  let clicks = 0;
+  const off = route.add(mesh, { onClick: () => clicks++ });
+  route.dispatch('pointerdown', ray, new Event('pointerdown'), false);
+  off(); route.add(mesh, { onClick: () => clicks++ });
+  route.dispatch('pointerup', ray, new Event('pointerup'), false);
+  route.dispatch('click', ray, new Event('click'), false);
+  assert.equal(clicks, 0);
+  route.dispatch('pointerdown', ray, new Event('pointerdown'), false);
+  route.dispatch('click', ray, new Event('click'), false);
+  assert.equal(clicks, 1);
+  mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose();
+});
+
 test('captured emulated hand cannot echo a mesh activation; free hand activates once with provenance', () => {
   const route = new ComponentPointer();
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());

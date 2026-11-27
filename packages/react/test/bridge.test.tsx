@@ -51,7 +51,13 @@ test('Fiber cannot resize, change colour, replace XR loop or lose a borrowed con
   guarded.forceContextLoss(); guarded.dispose(); guarded.xr.setAnimationLoop(() => {});
   assert.equal(f.calls.includes('context.loss'), false);
   let size: { width: number; height: number } | undefined;
-  function Probe() { size = useThree((s) => s.size); return <mesh><boxGeometry /><meshBasicMaterial /></mesh>; }
+  function Probe() {
+    size = useThree((s) => s.size);
+    useFrame((state) => {
+      if (f.app.projection === 'orthographic') assert.equal(state.viewport.width, (camera.right - camera.left) / camera.zoom);
+    });
+    return <mesh><boxGeometry /><meshBasicMaterial /></mesh>;
+  }
   const before = f.calls.length;
   const m = mountXrbApp(f.container, <Probe />, { app: f.app });
   await m.ready;
@@ -135,16 +141,26 @@ test('headset session transitions cannot install a Fiber XR loop; components adv
   f.app.dispose();
   const { createXrbApp } = await import('../../sdk/src/index.ts');
   const app = createXrbApp(f.renderer, { autoStart: false, xrb: { pointer: false, xr: { button: false } } });
-  function Probe() { useFrame(() => frameCount++); return null; }
+  const xrFrame = { getViewerPose: () => null } as unknown as XRFrame;
+  f.renderer.xr.getFrame = () => xrFrame;
+  function Probe() {
+    useFrame((_state, _delta, frame) => {
+      frameCount++;
+      assert.equal(frame, f.renderer.xr.isPresenting ? xrFrame : undefined);
+    });
+    return null;
+  }
   const m = mountXrbApp(f.container, <Probe />, { app });
   await m.ready; await settle();
   const loopStarts = f.calls.filter((x) => x === 'loop.start').length;
   for (let i = 0; i < 2; i++) {
     app.setProjection('orthographic');
     await app.xrb.enterXR();
+    (f.renderer.xr as unknown as EventTarget).dispatchEvent(new Event('sessionstart'));
     f.tick(1000 + i * 100);
     assert.equal(app.xrb.presenting, true);
     await app.xrb.exitXR();
+    (f.renderer.xr as unknown as EventTarget).dispatchEvent(new Event('sessionend'));
     f.tick(1016 + i * 100);
     assert.equal(app.projection, 'orthographic');
   }

@@ -23,11 +23,12 @@ await mount.dispose();
 runtime and canvas by default. All normal `XrbAppOptions` except setup/frame are accepted;
 `autoStart:false` lets the caller start `mount.app` after readiness. A supplied `app` is **borrowed**:
 it must be stopped, alive and unattached. Detaching stops it but never disposes its renderer/context;
-the owner can explicitly restart it. Do not attach twice or mount into an application component body.
+the owner can explicitly restart it. With a supplied app, its existing scene/camera/SDK options remain authoritative.
+Do not attach twice or mount into an application component body.
 
 `ready` waits for configuration and component commit; failures roll back. `dispose` stops frames
 immediately, retires pending setup, cleans up React effects/root, then releases owned SDK resources,
-renderer and canvas. Repeated disposal returns the same promise. Wait for it before replacing a
+renderer/context and canvas (borrowed contexts are never lost). Repeated disposal returns the same promise. Wait for it before replacing a
 bootstrap or borrowing the same runtime again. A `StrictMode` wrapper may safely replay component
 effects without creating a second SDK runtime. Components must clean up their own external controls,
 subscriptions and resources. Fiber disposes declaratively created geometry/materials; external
@@ -37,6 +38,8 @@ subscriptions and resources. Fiber disposes declaratively created geometry/mater
 
 The root uses `createRoot`/`extend`, never `Canvas`. Only the SDK owns `setAnimationLoop`, the scene,
 managed camera, output sizing/DPR, stereo eye views, WebXR session and final `xrb.render()` submission.
+Fiber size/viewport metadata mirrors the SDK's per-eye dimensions and scene-unit frustum, including
+orthographic projection/zoom; it does not apply Fiber's default pixel-sized orthographic frustum.
 A component phase runs after fresh SDK hand sampling and before interaction and drawing. Fiber
 `useFrame` runs once per SDK frame, not once per eye; its elapsed seconds and delta are SDK-derived
 (first/restarted delta is zero). XR frames use the same path. The icon fast path remains SDK-owned.
@@ -53,7 +56,7 @@ and SDK per-eye sizing are authoritative. Use the SDK context for access to the 
 - `useXrb()` returns the SDK app, including `app.xrb`, the real `renderer`, `scene` and stable `camera`.
 - `useXrbFrame(callback)` receives `XrbAppFrame` once per SDK frame, after fresh hands and before picking/drawing. Animate object refs here; React state commits are scheduled normally.
 - `useXrbHands()` returns stable frame-readable getters `current` (processed SDK hands) and `scene` (scene-space hands). Read inside a frame callback; it does not rerender React per joint. Use existing `xrb.on` for discrete gesture subscriptions and clean up the returned unsubscribe function.
-- `useXrbPointer(objectRef, handlers)` registers a mesh or recursive group after commit. It retains registration across handler updates and unregisters on removal. Do not register the same object twice.
+- `useXrbPointer(objectRef, handlers, options?)` registers a mesh or recursive group after commit. It retains registration across handler updates and unregisters on removal. Do not register the same object twice.
 - `useXrbTarget(targetOrFactory, handler)` owns one existing SDK poke/pinch/grab/volume target registration for its effect lifetime. A factory runs after refs are attached; memoize its identity with `useCallback`. Targets cannot already have another owner. Cleanup releases held capture with `removed` before unsubscribing; handler changes do not cancel capture.
 
 All hooks require the bridge context. `ComponentPointerHandlers` supports `onPointerOver`,
@@ -68,13 +71,21 @@ for OrbitControls are unchanged. Existing SDK Mouse/Hand-pointer policies apply 
 `nativeEvent`, `handId` (null for a real mouse), and `stopPropagation()`. This is **not** Fiber's full
 DOM event protocol: no independent raycaster, intersection list, wheel/double-click/context-menu
 handlers or Fiber pointer-capture API. Use physical targets for capture-aware spatial controls.
-The corresponding new low-level SDK surface is `xrb.componentPointer.add(object, handlers)`, returning
+`ComponentPointerOptions` optionally accepts `{ camera: app.camera }` for a compatibility migration
+that must preserve an older app's whole-canvas camera ray instead of SDK per-eye rays. Hello Cube uses
+this explicitly to remain functionally identical, including its historical stereo selection. New controls
+should omit it. Both policies are computed and picked inside the SDK and respect capture/cancellation.
+
+The corresponding new low-level SDK surface is `xrb.componentPointer.add(object, handlers, options?)`, returning
 an unregister function; `clear()` retires all registrations. Most apps should use the hooks.
 
 ```tsx
+import { useRef } from 'react';
+import * as THREE from 'three';
+import { useXrbFrame, useXrbPointer } from '@xr-build/react';
+
 function Cube() {
   const mesh = useRef<THREE.Mesh>(null);
-  const hands = useXrbHands();
   useXrbFrame(({ timeMs }) => { mesh.current!.rotation.y = timeMs / 1000; });
   useXrbPointer(mesh, { onClick: () => console.log('selected'), onPointerMissed: () => console.log('miss') });
   return <mesh ref={mesh}><boxGeometry /><meshStandardMaterial color="#f08a24" /></mesh>;

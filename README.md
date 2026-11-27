@@ -298,6 +298,7 @@ Layout:
 | `native/host` | `xrb-host.exe`: CEF off-screen browser → frame on the display; providers for display, input and platform; host channel WebSocket to the page |
 | `native/plugin-sdk` | `xrb_plugin.h`: the C ABI between the host and its plugins |
 | [`packages/sdk`](packages/sdk/README.md) | `@xr-build/sdk`: stereo rig, hand input, pointer emulation for three.js |
+| [`packages/react`](packages/react/README.md) | new opt-in React 19 / Fiber 9 components through the SDK-owned runtime; Hello Cube runs and exports reusable components |
 | [`packages/ui-kit`](packages/ui-kit/README.md) | `@xr-build/ui-kit`: 3D controls on the hand interaction core |
 | `packages/app-icon` | `@xr-build/app-icon`: default app icon, `.ico`, rendering an app's own icon |
 | `packages/control-panel` | `@xr-build/control-panel`: the control panel (Node server + browser UI) |

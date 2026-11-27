@@ -93,6 +93,7 @@ test('physical target hook retains capture on callback updates and ends on unmou
 test('hooks reject use outside the bridge without starting an SDK runtime', async () => {
   const f = fixture();
   const { createRoot, unmountComponentAtNode } = await import('@react-three/fiber');
+  const log = console.error; console.error = () => {};
   const root = createRoot(f.renderer.domElement);
   const { componentRenderer } = await import('../src/runtime.tsx');
   let error: Error | undefined;
@@ -102,7 +103,6 @@ test('hooks reject use outside the bridge without starting an SDK runtime', asyn
     render() { return this.state.failed ? null : this.props.children; }
   }
   function Probe() { useXrb(); return null; }
-  const log = console.error; console.error = () => {};
   try {
     await root.configure({ gl: componentRenderer(f.renderer), frameloop: 'never', dpr: 1 });
     root.render(<Catch><Probe /></Catch>); await settle();
