@@ -268,14 +268,14 @@ Hands SHALL show its independent post-processing selector below Skeleton provide
 
 #### Scenario: Plugin installed
 - **WHEN** at least one mesh plugin is installed
-- **THEN** the existing post-processing controls appear below the provider with their current next-desktop-run semantics
+- **THEN** existing controls appear below the provider and status accurately distinguishes saved configuration from supported current-run delivery
 
 ### Requirement: Next-run selection and context notice
-The selector SHALL save only post-processing selection/settings under the common profile revision discipline, independently of source and adjustment drafts. It SHALL label changes as applying on the next desktop run and disclose that browser previews, published web builds and offline packages do not use post-processing. It SHALL offer no multiple-stage ordering or bypass controls.
+The selector SHALL save only post-processing selection/settings under the common profile revision discipline, independently of source and adjustment drafts. Compatible managed desktop runs SHALL follow committed configuration; older consumers SHALL receive next-run guidance without a false live-success claim. Browser previews, published web builds and offline packages SHALL remain excluded. Multiple-stage ordering and bypass controls SHALL remain absent.
 
 #### Scenario: Save independently
 - **WHEN** the person saves the mesh selection while source or adjustment drafts are dirty
-- **THEN** those drafts remain unsaved and the running app retains its current mesh selection
+- **THEN** those drafts remain unsaved, the running skeleton source is unchanged, and only supported post-processing delivery is attempted
 
 #### Scenario: Context limitation
 - **WHEN** the section is displayed
@@ -408,3 +408,18 @@ Hands SHALL distinguish its own draining acquisition from a different live ownin
 #### Scenario: Page reload
 - **WHEN** the person reloads Hands during or after a failed/stalled session
 - **THEN** the old page's session is retired and drained, navigation starts no device, and the next explicit Start can acquire after verified cleanup
+
+### Requirement: Post-processing delivery status contract
+Post-processing status SHALL expose owner identity, desired saved revision, requested/applied generation, preparation state/progress/failure reason and current consumer drawing generation where supported. Missing evidence SHALL remain unknown. Skeleton-session acknowledgement SHALL not count as processor or drawing acknowledgement. Configuration persistence SHALL succeed independently of optional delivery failure.
+
+#### Scenario: Saved but still preparing
+- **WHEN** desired settings are persisted and their processor generation has not completed preparation
+- **THEN** backend status distinguishes saved/applying from applied/drawing, exposes Preparing and leaves skeleton controls and acquisition unaffected
+
+#### Scenario: Applied but not drawn
+- **WHEN** a processor acknowledges a generation but no compatible SDK reports current valid drawing for it
+- **THEN** status identifies applied settings without claiming the mesh is visible
+
+#### Scenario: No Hands mesh session yet
+- **WHEN** only the standalone Hands skeleton session exists and no managed desktop mesh consumer owns processing
+- **THEN** backend configuration/status operations start no mesh or second provider and do not claim Hands viewport mesh delivery
