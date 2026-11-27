@@ -12,7 +12,7 @@
 .hands-number-row > .xrb-inline-icons { grid-column: 3; grid-row: 1; }
 .hands-number-row > .field-error { grid-column: 1 / -1; grid-row: 2; }
 /* Every tab's content starts the same distance below the tab bar. */
-#hands-adjustments-root, #hands-setup { padding-top: 0; }
+#hands-adjustments-root, #hands-setup, #hands-log-panel { padding-top: 0; }
 .hands-adjustment-tabs { flex: none; margin-bottom: var(--xrb-space-stack); }
 /* Four tabs and the reset gear fit the narrow panel: compact tab gap, gear pushed to the end without a spacer gap. */
 .hands-adjustment-tabs { gap: 18px; }
