@@ -80,6 +80,12 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
           const status = await request('/status', {});
           if (status.owns && !s.sessionId) s.sessionId = status.sessionId;
           if (!status.busy || status.sessionId !== s.sessionId) { complete(s, { ...status, reason: s.reason || error.message }); return; }
+          // Capability rotation/reload can retire ownership while its cancelled worker is still draining.
+          // Retry the authorized stale-session recovery route, never Stop a different live page.
+          if (!status.owns && status.cleanupPending) {
+            const recovered = await request('/recover', { sessionId: s.sessionId });
+            if (!recovered.busy || recovered.sessionId !== s.sessionId) { complete(s, recovered); return; }
+          }
         } catch { /* Never equate a missing reply with released cameras. */ }
         if (current === s) { s.unresolved = true; if (!disposed) notify({ phase: 'failed', cleanupPending: true, reason: s.reason || error.message, diagnostic: s.diagnostic || '' }); }
       }

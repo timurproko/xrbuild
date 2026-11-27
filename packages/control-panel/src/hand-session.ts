@@ -22,12 +22,13 @@ export interface SessionDependencies {
   platform?: string;
   testScope?: string;
   heartbeatMs?: number;
+  verifyWorker?: typeof joinOwnedWorker;
 }
 type Phase = 'not-started' | 'starting' | 'running' | 'stopping' | 'stopped' | 'failed';
 interface Running {
   id: string; epoch: string; owner: string; token: string; phase: Phase; reason: string; heartbeat: number; diagnostic?: string;
   source?: Awaited<ReturnType<typeof prepareHandSession>>['source']; url?: string; child?: ChildProcessWithoutNullStreams;
-  pid?: number; birth?: string; joined?: boolean; ended: boolean; cancelled: boolean; preparing: boolean; drainTimedOut?: boolean; live?: LiveHands; release?: () => void; stop?: Promise<void>;
+  pid?: number; birth?: string; joined?: boolean; supervisor?: string; launcherClosed?: boolean; verification?: Promise<boolean>; retryAfter?: number; cleanupReason?: string; ended: boolean; cancelled: boolean; preparing: boolean; drainTimedOut?: boolean; live?: LiveHands; release?: () => void; stop?: Promise<void>;
 }
 /** One process-owned session; no durable capabilities, camera auto-start or adoption by another tab. */
 export class HandSessions {
@@ -35,11 +36,12 @@ export class HandSessions {
   private continuities = new Map<string, { owner: string; document: string }>();
   private current: Running | null = null;
   private closed = false;
+  private closing: Promise<void> | null = null;
   private timer: ReturnType<typeof setInterval>;
   private deps: SessionDependencies;
   constructor(deps: SessionDependencies) {
     this.deps = deps;
-    this.timer = setInterval(() => { const s = this.current; if (s && this.busy && performance.now() - s.heartbeat > (deps.heartbeatMs ?? 5000)) void this.stop(s, 'Owning Hands page heartbeat expired'); }, 100);
+    this.timer = setInterval(() => { const s = this.current; if (s && this.busy && performance.now() - s.heartbeat > (deps.heartbeatMs ?? 5000) && performance.now() >= (s.retryAfter ?? 0)) void this.stop(s, 'Owning Hands page heartbeat expired'); }, 100);
     this.timer.unref();
   }
   get busy() { return !!this.current && (!this.current.ended || this.current.preparing); }
@@ -47,7 +49,7 @@ export class HandSessions {
   get live() { return this.current && this.busy ? this.current.live ?? null : null; }
   status(owner = '') {
     const s = this.current, owns = !!s && s.owner === owner;
-    return { supported: (this.deps.platform ?? process.platform) === 'win32', phase: s?.phase ?? 'not-started', reason: s?.reason ?? '', source: s?.source ?? null, busy: this.busy, owns,
+    return { supported: (this.deps.platform ?? process.platform) === 'win32', phase: s?.phase ?? 'not-started', reason: [s?.reason, this.busy && s?.cleanupReason].filter(Boolean).join('; '), source: s?.source ?? null, busy: this.busy, owns,
       sessionId: s?.id ?? null, diagnostic: s?.diagnostic ?? '',
       cleanupPending: this.busy && !!s && (owns || s.cancelled || s.phase === 'failed' || performance.now() - s.heartbeat > (this.deps.heartbeatMs ?? 5000)),
       takeoverAvailable: this.busy && !!s && !owns && !s.cancelled && s.phase !== 'failed' && performance.now() - s.heartbeat <= (this.deps.heartbeatMs ?? 5000), ...(owns && this.busy ? { profile: s?.live?.envelope } : {}),
@@ -70,7 +72,7 @@ export class HandSessions {
       if (previous && document && (previous.document === document || body.reload === true)) {
         // Rotate proof and capability; a reload can retire only the session bound to this tab proof.
         this.continuities.delete(body.continuity as string); this.pages.delete(previous.owner);
-        if (this.current?.owner === previous.owner && this.busy) await this.stop(this.current, 'Owning Hands page reloaded or renewed');
+        if (this.current && this.busy && (this.current.owner === previous.owner || this.current.cancelled || this.current.phase === 'failed')) await this.stop(this.current, 'Owning Hands page reloaded or renewed');
       }
       for (const [key, expiry] of this.pages) if (expiry < performance.now() && key !== this.current?.owner) this.pages.delete(key);
       for (const [proof, page] of this.continuities) if (!this.pages.has(page.owner)) this.continuities.delete(proof);
@@ -117,7 +119,7 @@ export class HandSessions {
         throw new HttpError(409, 'Another live Hands page owns acquisition; use Take over to stop it first.', { code: 'hands-live-owner', sessionId: previous.id });
       await this.stop(previous, takeoverSessionId ? 'Hands acquisition explicitly taken over by another page' : 'Previous Hands session recovered before Start');
       if (this.current !== previous) throw new HttpError(409, 'Hands ownership changed during recovery; review the new owner');
-      if (this.busy) throw new HttpError(409, previous.reason || 'Owned Hands cleanup is still pending', { code: 'hands-cleanup-pending' });
+      if (this.busy) throw new HttpError(409, previous.cleanupReason || previous.reason || 'Owned Hands cleanup is still pending', { code: 'hands-cleanup-pending' });
     }
     const release = this.deps.acquire();
     const s: Running = { id: randomUUID(), epoch: secret(), owner, token: secret(), phase: 'starting', reason: '', heartbeat: performance.now(), ended: false, cancelled: false, preparing: true, release };
@@ -132,19 +134,15 @@ export class HandSessions {
       if (s.cancelled || this.closed) throw new Error('Hands Start cancelled');
       const supervisor = path.join(path.dirname(prepared.workerExe), 'xrb-provider-supervisor.exe');
       const child = (this.deps.spawn ?? spawn)(supervisor, [prepared.workerExe, String(process.pid)], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }) as ChildProcessWithoutNullStreams;
-      s.child = child; const observer = s.token, ticket = reservation.ticket; let buffer = '', handoff: Promise<void> | null = null;
+      s.child = child; s.supervisor = supervisor; const observer = s.token, ticket = reservation.ticket; let buffer = '', handoff: Promise<void> | null = null;
       child.stdin.on('error', () => {}); child.stderr.resume();
       child.on('error', () => { s.reason = 'Provider supervisor is unavailable. Rebuild the host.'; });
-      child.on('close', () => { void (async () => {
+      child.on('close', () => {
+        s.launcherClosed = true;
         if (!s.cancelled) { s.cancelled = true; s.token = ''; s.phase = 'failed'; s.reason ||= 'Provider worker exited unexpectedly'; }
         s.live?.close();
-        // Launcher crash/forced fallback can lose the receipt. Reap by creation identity,
-        // not process.kill(pid, 0), which can mistake a reused or inaccessible PID for our worker.
-        if (s.pid && !s.joined && !(s.birth && await joinOwnedWorker(supervisor, s.pid, s.birth))) {
-          s.phase = 'failed'; s.reason ||= 'Owned worker teardown could not be verified; acquisition remains blocked'; return;
-        }
-        s.ended = true; this.finishDrained(s);
-      })(); });
+        void this.verifyEnded(s);
+      });
       child.stdout.setEncoding('utf8').on('data', (text: string) => {
         buffer += text;
         let end: number;
@@ -187,7 +185,24 @@ export class HandSessions {
       throw new HttpError(409, s.reason || 'Hands Start cancelled');
     } finally { await reservation?.close(); s.preparing = false; this.finishDrained(s); }
   }
-  /** A timed-out Stop may already be memoized; late preparation/death still completes ownership cleanup. */
+  /** Only positive death evidence is durable. Failed checks are shared in-flight, then retired for retry. */
+  private verifyEnded(s: Running): Promise<boolean> {
+    if (s.ended) return Promise.resolve(true);
+    if (!s.launcherClosed) return Promise.resolve(false);
+    if (s.verification) return s.verification;
+    const attempt = Promise.resolve().then(async () => {
+      const dead = s.joined || !s.pid || !!(s.birth && s.supervisor && await (this.deps.verifyWorker ?? joinOwnedWorker)(s.supervisor, s.pid, s.birth));
+      if (dead) { s.ended = true; s.cleanupReason = undefined; this.finishDrained(s); return true; }
+      this.unverified(s); return false;
+    }).catch(() => { this.unverified(s); return false; }).finally(() => {
+      if (s.verification === attempt) s.verification = undefined;
+    });
+    return s.verification = attempt;
+  }
+  private unverified(s: Running): void {
+    s.phase = 'failed'; s.cleanupReason = 'Owned worker death is not yet verified; Retry cleanup will check again';
+  }
+  /** Late preparation/death still completes ownership cleanup, independent of the attempt that timed out. */
   private finishDrained(s: Running): void {
     if (s.preparing || s.child && !s.ended) return;
     s.ended = true;
@@ -199,23 +214,41 @@ export class HandSessions {
     s.reason ||= reason;
     if (s.stop) return s.stop;
     s.cancelled = true; s.token = ''; s.live?.close(); s.reason ||= reason; s.phase = 'stopping';
-    return s.stop = (async () => {
+    const attempt = (async () => {
       const preparingBy = performance.now() + 31000;
       while (s.preparing && !s.child && performance.now() < preparingBy) await pause(20);
       if (s.preparing && !s.child) { s.drainTimedOut = true; s.phase = 'failed'; s.reason = 'Hands preparation has not drained; wait before reacquisition'; return; }
       if (s.child && !s.ended) {
-        s.child.stdin.end('{"stop":true}\n');
-        const deadline = performance.now() + 13000;
-        while (!s.ended && performance.now() < deadline) await pause(20);
-        if (!s.ended) s.child.kill(); // Only our launcher; closing its job contains only our worker.
-        const killedBy = performance.now() + 2000;
-        while (!s.ended && performance.now() < killedBy) await pause(20);
-        if (!s.ended) { s.phase = 'failed'; s.reason ||= 'Owned worker teardown could not be verified; acquisition remains blocked'; return; }
+        if (!s.launcherClosed) {
+          if (!s.child.stdin.writableEnded && !s.child.stdin.destroyed) s.child.stdin.end('{"stop":true}\n');
+          const deadline = performance.now() + 13000;
+          while (!s.ended && !s.launcherClosed && performance.now() < deadline) await pause(20);
+          if (!s.ended && !s.launcherClosed) s.child.kill(); // Only our launcher/job, never a queried PID.
+          const killedBy = performance.now() + 2000;
+          while (!s.ended && !s.launcherClosed && performance.now() < killedBy) await pause(20);
+        }
+        if (!s.ended && !await this.verifyEnded(s)) { this.unverified(s); return; }
       }
       // During asynchronous preparation, Start's cancellation check must drain before ownership is free.
       if (!s.child) this.finishDrained(s);
       s.phase = s.reason ? 'failed' : 'stopped';
-    })();
+    })().catch(() => { this.unverified(s); }).finally(() => {
+      if (s.stop === attempt) s.stop = undefined;
+      if (!s.ended || s.preparing) s.retryAfter = performance.now() + 1000;
+    });
+    return s.stop = attempt;
   }
-  async close() { this.closed = true; clearInterval(this.timer); if (this.current) await this.stop(this.current); this.pages.clear(); this.continuities.clear(); }
+  async close() {
+    if (this.closing) return this.closing;
+    this.closed = true; clearInterval(this.timer);
+    const attempt = (async () => {
+      // Server/panel restart may memoize close: it must never resolve an unsuccessful drain.
+      while (this.current && this.busy) {
+        await this.stop(this.current);
+        if (this.busy) await pause(1000);
+      }
+      this.pages.clear(); this.continuities.clear();
+    })().finally(() => { if (this.closing === attempt) this.closing = null; });
+    return this.closing = attempt;
+  }
 }
