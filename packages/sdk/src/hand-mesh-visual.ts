@@ -7,10 +7,15 @@ import type { HandVisualStyle } from './hand-visual.ts';
 export class HandMeshVisual extends THREE.Group {
   private material = new THREE.MeshStandardMaterial({ transparent: false, opacity: 1, depthWrite: true, roughness: .5, side: THREE.FrontSide });
   private records = new Map<number, { surface: MeshSurface; mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> }>();
+  /** A viewer's own mesh color and brightness (1 = the color as chosen); without it the mesh uses the bone color. Skin is always opaque. */
+  private viewStyle: { color: THREE.Color } | null = null;
+  setViewStyle(style: { color: string; brightness: number } | null): void {
+    this.viewStyle = style ? { color: new THREE.Color(style.color).multiplyScalar(Math.min(2, Math.max(0, style.brightness))) } : null;
+  }
   constructor() { super(); this.name = 'xrb-hand-mesh'; this.matrixAutoUpdate = false; }
   update(surfaces: MeshDrawSurface[], panel: PanelFrame, style: HandVisualStyle): void {
     this.matrix.copy(panel.toWorld); this.matrixWorldNeedsUpdate = true;
-    this.material.color.set(style.boneColor); // Skeleton opacity never makes skin translucent.
+    this.material.color.set(this.viewStyle?.color ?? style.boneColor); // Skin is never translucent.
     const ids = new Set(surfaces.map(s => s.id));
     for (const [id, r] of this.records) if (!ids.has(id)) { r.mesh.geometry.dispose(); this.remove(r.mesh); this.records.delete(id); }
     for (const surface of surfaces) {

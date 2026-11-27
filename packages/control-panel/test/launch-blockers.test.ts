@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { test } from 'node:test';
-import { launchBlocker, type LaunchState } from '../src/launch-blockers.ts';
+import { launchBlocker, restartBlocker, type LaunchState } from '../src/launch-blockers.ts';
+import { isRestartingResponse } from '../ui/navigation.js';
 
 test('no blocker when the panel is idle', () => {
   assert.equal(launchBlocker({}), null);
@@ -53,7 +54,7 @@ async function reportHarness() {
   const asked: Array<Record<string, unknown>> = [];
   let restarts = 0, answer: unknown = true;
   const ask = async (options: Record<string, unknown>) => { asked.push(options); return options.closeOnly ? null : answer; };
-  const report = new Function('ask', 'restartPanel', 'console', `${source}; return report;`)(ask, async () => { restarts++; }, { error() {} }) as (e: unknown) => void;
+  const report = new Function('ask', 'restartPanel', 'console', 'isRestartingResponse', `${source}; return report;`)(ask, async () => { restarts++; }, { error() {} }, isRestartingResponse) as (e: unknown) => void;
   return { asked, report, restarts: () => restarts, answer: (value: unknown) => { answer = value; } };
 }
 
@@ -70,10 +71,24 @@ test('error dialog offers Restart only for restart-required refusals', async () 
   assert.equal(h.asked[1].details, "This project's settings are being saved", 'reason metadata stays out of the copied details');
 });
 
+test('requests refused mid-restart open no error dialog', async () => {
+  const h = await reportHarness();
+  h.report({ status: 503, message: 'The panel is restarting', data: { error: 'The panel is restarting' } });
+  assert.equal(h.asked.length, 0);
+});
+
 test('declining Restart leaves the panel running', async () => {
   const h = await reportHarness();
   h.answer(null);
   h.report({ message: 'Restart needed', data: { details: { reason: 'restart-required', restart: true } } });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(h.restarts(), 0);
+});
+
+test('restart waits for setup, update and rebuild so no build lock is left behind', () => {
+  assert.equal(restartBlocker([]), null);
+  assert.equal(restartBlocker(['run', 'web-build', 'package']), null);
+  assert.match(restartBlocker(['desktop-setup'])!, /desktop setup/);
+  assert.match(restartBlocker(['host-rebuild'])!, /Wait for Rebuild to finish/);
+  assert.match(restartBlocker(['run', 'update'])!, /Wait for Update to finish/);
 });

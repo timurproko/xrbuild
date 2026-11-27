@@ -10,6 +10,8 @@ export interface HandMeshPlugin {
   label: string;
   available: boolean;
   reason: string;
+  /** Enabled and selected, but its declared runtime is not installed yet. */
+  needsSetup: boolean;
   declaration: HandMeshDeclaration;
   /** Private launch path, not portable output or a browser-facing metadata field. */
   program: string | null;
@@ -38,7 +40,7 @@ export async function handMeshRegistry(catalog: PluginCatalog, options: Pick<Mes
     const reason = !enabled ? 'Plugin is disabled' : !selected ? 'Plugin origin is ambiguous or not selected'
       : problem ?? 'Not started; checked when a desktop app runs';
     plugins.push({ owner: plugin.key, id: declaration.id, label: declaration.label,
-      available: enabled && selected && !problem, reason, declaration, program: enabled && selected && !problem ? program : null,
+      available: enabled && selected && !problem, reason, needsSetup: enabled && selected && !!problem && !!declaration.runtime, declaration, program: enabled && selected && !problem ? program : null,
       ...(enabled && selected && !problem ? { launch: async (signal?: AbortSignal) => {
         const resolved = await resolveMeshRuntime({ owner: plugin.key, sourceRoot: plugin.sourceRoot, declaration }, { ...options, verify: true, signal });
         const stat = await fs.stat(resolved.program);

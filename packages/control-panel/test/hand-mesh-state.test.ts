@@ -20,6 +20,14 @@ test('mesh settings share the profile transaction and retain other editors and u
   await assert.rejects(saveMeshChoice(core, workspace, registry, { selected, revision: state.revision, registryRevision: 'stale' }), /changed/);
   state = await saveMeshChoice(core, workspace, registry, { selected, values: { quality: 3 }, revision: state.revision, registryRevision: registry.revision }, provider);
   assert.deepEqual(state.provider, provider); assert.deepEqual(meshChoice(state.raw.postprocessing).selected, selected);
+  assert.equal(meshChoice(state.raw.postprocessing).enabled, true, 'a newly chosen layer starts on');
+  state = await saveMeshChoice(core, workspace, registry, { selected, enabled: false, values: { quality: 3 }, revision: state.revision, registryRevision: registry.revision });
+  assert.equal(meshChoice(state.raw.postprocessing).enabled, false, 'the layer switch is saved');
+  state = await saveMeshChoice(core, workspace, registry, { selected, values: { quality: 2 }, revision: state.revision, registryRevision: registry.revision });
+  assert.equal(meshChoice(state.raw.postprocessing).enabled, false, 'a settings edit keeps the layer off');
+  await assert.rejects(saveMeshChoice(core, workspace, registry, { selected, enabled: 'yes', values: { quality: 3 }, revision: state.revision, registryRevision: registry.revision }), /true or false/);
+  state = await saveMeshChoice(core, workspace, registry, { selected, enabled: true, values: { quality: 3 }, revision: state.revision, registryRevision: registry.revision });
+  assert.throws(() => meshChoice({ version: 1, selected, enabled: 'no', settings: {} }), /Invalid/);
   const original = state.revision;
   state = await saveHandAdjustments(core, workspace, { offsetMm: { x: 12 }, appearance: { opacity: .7 } }, state.revision);
   assert.equal(meshChoice(state.raw.postprocessing).settings['workspace:example/mesh'].values.quality, 3);

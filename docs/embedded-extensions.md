@@ -139,6 +139,18 @@ and uses `#helper` as its publisher/packager/tool module. The target must be the
 export must be a contained owner module. This declaration is a component API, not source-export approval. Factories
 retain the declaring plugin's configuration/identity. Containment is not a sandbox for arbitrary plugin code.
 
+## Toasts
+
+Panel pages and plugins show short notices the same way, as toasts in the bottom-right corner: a tone dot (`info`,
+`ok`, `warn`, `err`), a title, an optional line and up to two actions. A toast with an `id` replaces the previous one
+with that id. Info and success fade after a few seconds; an error with actions stays until it is acted on or closed.
+
+- In a page or plugin UI: `import { toast } from '/toast.js'`, then `toast({ title, message, tone, id, actions })`,
+  where each action is `{ label, onClick }` or `{ label, href }`.
+- In a plugin service: the factory context has `context.toast({ title?, message, tone, id, actions })`; the title
+  defaults to the plugin's name, and actions can only open panel links (`{ label, href: '/hands/' }`). Every open panel
+  page shows it.
+
 ## Projects: normal embedded workflows
 
 Both origins use the same compact project card, capability-based Develop / Publish / Build tabs, settings and menus.

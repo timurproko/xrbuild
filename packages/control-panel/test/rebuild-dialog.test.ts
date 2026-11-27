@@ -46,7 +46,7 @@ test('update presentation follows its steps and reports Git refusals and the res
 test('the passive update hint and local eligibility remain read-only until the explicit action',async()=>{
   const ui=path.resolve(import.meta.dirname,'../ui');
   const [app,index]=await Promise.all(['app.js','index.html'].map(file=>fs.readFile(path.join(ui,file),'utf8')));
-  assert.match(index,/id="update-chip" class="chip rebuild" data-maintenance="update" hidden/);
+  assert.match(index,/id="update-chip" class="chip update" data-maintenance="update" hidden/);
   assert.match(app,/renderRemoteUpdate\(\$\('#panel-menu'\), state\.remoteUpdates/);
   assert.match(app,/api\('GET', '\/api\/update\/available'\)/);
   assert.match(app,/item\.setAttribute\('aria-disabled', 'true'\)/);

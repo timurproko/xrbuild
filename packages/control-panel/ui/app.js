@@ -1,10 +1,11 @@
 // XR Build control panel UI: plain ES module, no build step. Talks to the panel server
 // (same origin) over JSON and a Server-Sent Events stream.
+import { listenForToasts } from './toast.js';
 import { SettingsWriter } from './settings-writer.js';
 import {installJobLogCopy, readJobLog} from './job-log.js';
 import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
-import {requestedNavigation,menuKeyboard,renderNavigationMenu,renderRemoteUpdate,restartPanelInPlace,shouldReportNavigationError} from './navigation.js';
+import {requestedNavigation,menuKeyboard,renderNavigationMenu,renderRemoteUpdate,restartPanelInPlace,shouldReportNavigationError,isRestartingResponse} from './navigation.js';
 import {rebuildHostInPlace,updateInPlace,updateTooltip,followStartedJobInPlace} from './rebuild-dialog.js';
 import {enhanceHelpText,iconSvg,installDropdowns,installIcons,installNumberSteppers,installTabs,installTooltips,openFloating,renderField,resumeAnimations,setFieldError,setPageIdentity,setRevealed,stabilizePanelHeight,transitionPanelHeight,updateRebuildChip,updateRestartChip} from './design-system.js';
 import {logicalInputNames} from './provider-choice.js';
@@ -149,6 +150,8 @@ async function confirmable(path, body = {}) {
 function report(e) {
   console.error(e);
   const rawMessage = String(e?.message ?? e ?? 'Unknown error');
+  // While the panel restarts it answers every request with 503; the restart dialog reloads the page, so this is not a failure.
+  if (isRestartingResponse(e)) return;
   const blocked = e?.data?.details && typeof e.data.details.reason === 'string' ? e.data.details : null;
   if (e?.data?.details?.needsRebuild) {
     void ask({ title: 'Rebuild needed', message: rawMessage, ok: 'Rebuild', cancel: 'Close' })
@@ -1087,7 +1090,7 @@ function field(label, name, value, opts = {}) {
   const input = opts.options
     ? `<div class="dropdown" data-options="${esc(opts.options.join('|'))}" data-default="${esc(opts.defaultLabel ?? '')}" data-labels="${esc(JSON.stringify(labels))}" ${opts.marks ? `data-marks="${esc(JSON.stringify(opts.marks))}"` : ''} ${opts.optionDetails ? `data-details="${esc(JSON.stringify(opts.optionDetails))}"` : ''} ${opts.raw ? 'data-raw="1"' : ''} ${opts.multiple ? 'data-multi="1"' : ''} ${opts.title ? `title="${esc(opts.title)}"` : ''}>
         <input type="hidden" name="${name}" value="${esc(opts.multiple ? JSON.stringify(value) : value ?? '')}" ${err ? 'aria-invalid="true"' : ''}>
-        <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" ${err ? 'aria-invalid="true"' : ''} ${opts.disabled ? 'disabled' : ''}>${!opts.multiple && opts.marks?.[value] ? `<span class="xrb-status-dot ${esc(opts.marks[value])}" aria-hidden="true"></span>` : ''}<span class="xrb-option-label">${esc(opts.multiple ? value.filter((v) => opts.options.includes(v)).map((v) => optionLabel(v, owner)).join(', ') || 'None' : optionLabel(value ?? '', owner))}</span>${!opts.multiple && opts.optionDetails?.[value] ? `<span class="xrb-option-detail">${esc(opts.optionDetails[value])}</span>` : ''}</button>
+        <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" ${err ? 'aria-invalid="true"' : ''} ${opts.disabled ? 'disabled' : ''}>${!opts.multiple && opts.marks?.[value] ? `<span class="xrb-status-dot ${esc(opts.marks[value])}" aria-hidden="true"></span>` : ''}<span class="xrb-option-label">${esc(opts.multiple ? ((chosen) => { const off = chosen.filter((l) => /\(unavailable\)$/.test(l)); return chosen.length > 1 ? `${chosen.length} selected${off.length ? ` · ${off.join(', ')}` : ''}` : chosen[0] ?? 'None'; })(value.filter((v) => opts.options.includes(v)).map((v) => optionLabel(v, owner))) : optionLabel(value ?? '', owner))}</span>${!opts.multiple && opts.optionDetails?.[value] ? `<span class="xrb-option-detail">${esc(opts.optionDetails[value])}</span>` : ''}</button>
       </div>`
     : `<input name="${name}" value="${esc(value ?? '')}" ${err ? 'aria-invalid="true"' : ''} ${opts.disabled ? 'disabled' : ''} ${opts.readonly ? 'readonly aria-disabled="true"' : ''} ${opts.autocomplete ? `autocomplete="${esc(opts.autocomplete)}"` : ''} title="${esc(opts.title ?? '')}" placeholder="${esc(opts.placeholder ?? '')}">`;
   return renderField(label, input, { hint: opts.hint, error: err });
@@ -2380,8 +2383,10 @@ function renderHost() {
   const chip = $('#host-chip');
   if (!h) return;
   const needsRebuild = updateRebuildChip(chip, h, `rebuilt ${ago(h.exeMs)}`);
+  const rebuildReason = chip.title;
   chip.title = h.componentsNeedRebuild ? 'Rebuild prepares changed application components and any outdated native output.' : h.hostProblem ?? (h.exists && h.staleHostPlugins?.length ? `plugins from an older build sit next to xrb-host.exe (${h.staleHostPlugins.join(', ')}): rebuild to use selected plugin roots`
     : h.exists && h.outdated ? `host sources or plugins changed (${h.newestSource ?? 'source membership'}): ${h.exe}` : `xrb-host.exe (${h.runtimeOrigin === 'cache' ? 'user cache' : 'product/source build'}): ${h.exe}`);
+  if (rebuildReason) chip.title = [rebuildReason, chip.title].filter(Boolean).join(': ');
   // Only a problem is worth a chip; the matching dot identifies its action in the menu.
   const rebuildDot = $('#host-rebuild-dot');
   rebuildDot.hidden = !needsRebuild;
@@ -3746,6 +3751,7 @@ document.addEventListener('contextmenu', (event) => event.preventDefault());
 
 function connect() {
   const es = new EventSource('/api/events');
+  listenForToasts(es);
   const on = (type, fn) => es.addEventListener(type, (e) => fn(JSON.parse(e.data)));
   on('run', (r) => {
     if (r.phase === 'starting' && r.startedMs !== state.run?.startedMs) state.runLog = [];

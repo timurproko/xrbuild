@@ -3,6 +3,9 @@ import type { HandObservations } from './hands.ts';
 
 /** Source snapshot lifetime for compensated skin. See docs/hand-mesh-motion.md for 33/66/100-ms measurements. */
 export const MESH_MAX_SOURCE_AGE_MS = 100;
+/** A viewer may accept older mesh results (slow CPU fits) up to this bound, sent as a frame's `maxAgeMs`. */
+export const MESH_HOLD_LIMIT_MS = 2000;
+export const meshMaxAge = (frame: { maxAgeMs?: number }) => frame.maxAgeMs ?? MESH_MAX_SOURCE_AGE_MS;
 export const MESH_PROTOCOL_VERSION = 2;
 export const MESH_CAPABILITIES = ['final-pose-observations-v1', 'live-configure-v1', 'preparation-progress-v1'] as const;
 export type MeshCapability = typeof MESH_CAPABILITIES[number];
@@ -24,7 +27,7 @@ export function validMeshObservations(v: unknown): v is HandObservations {
 export const MESH_MAX_BYTES = 2 * 1024 * 1024, MESH_MAX_VERTICES = 16384, MESH_MAX_INDICES = 32768 * 3;
 export interface MeshPose { id: number; handedness: string; keypoints: Vec3[]; observations?: HandObservations }
 export interface MeshFrame { type: 'frame'; epoch: string; sequence: number; revision: number; sentMs: number; sampleMs: number; hands: MeshPose[]; drawingStatus?: string;
-  version?: 2; runId?: string; settingsGeneration?: number; drawingGeneration?: number | null; protocolVersion?: 2; capabilities?: MeshCapability[] }
+  version?: 2; runId?: string; settingsGeneration?: number; drawingGeneration?: number | null; protocolVersion?: 2; capabilities?: MeshCapability[]; maxAgeMs?: number }
 export const MESH_PREPARATION_STEPS = ['runtime', 'assets', 'models', 'device', 'warming'] as const;
 export interface MeshState {
   step?: typeof MESH_PREPARATION_STEPS[number] | null;
@@ -60,6 +63,7 @@ export function validMeshFrame(v: unknown): v is MeshFrame {
     && (v.protocolVersion === undefined || v.protocolVersion === 2 && validMeshCapabilities(v.capabilities))
     && (v.version === undefined || v.version === 2 && typeof v.runId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(v.runId) && integer(v.settingsGeneration))
     && (v.drawingGeneration === undefined || v.drawingGeneration === null || integer(v.drawingGeneration))
+    && (v.maxAgeMs === undefined || integer(v.maxAgeMs) && (v.maxAgeMs as number) >= MESH_MAX_SOURCE_AGE_MS && (v.maxAgeMs as number) <= MESH_HOLD_LIMIT_MS)
     && (v.drawingStatus === undefined || typeof v.drawingStatus === 'string' && v.drawingStatus.length <= 128 && !/[\x00-\x1f\x7f]/.test(v.drawingStatus)) && Array.isArray(v.hands) && v.hands.length <= 2
     && new Set(v.hands.map(h => object(h) ? h.id : null)).size === v.hands.length
     && v.hands.every(h => object(h) && integer(h.id) && ['left', 'right', 'unknown'].includes(h.handedness as string)

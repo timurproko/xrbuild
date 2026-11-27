@@ -24,10 +24,12 @@ import { cleanWorkingCache, reviewWorkingCache } from './cache-maintenance.ts';
 import { requireProjectOutput, projectPreviewRoute } from './project-build.ts';
 import { assertEditableProject, assertUserRoot, assertWritablePath } from './project-access.ts';
 import { projectStateKey, readProjectRunSettings, saveProjectRunSettings, validateRunOverrides, withRunSettings } from './project-run-settings.ts';
-import { launchBlocker, type LaunchState } from './launch-blockers.ts';
+import { launchBlocker, restartBlocker, type LaunchState } from './launch-blockers.ts';
 import { log } from './env.ts';
 import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHost, clearProviderCache } from './host-build.ts';
 import { DesktopSetup } from './desktop-setup.ts';
+import { setPanelNotifier } from './plugin-service.ts';
+import { installMeshSetup, meshSetupNeeded, meshSetupOwners, meshSetupPlan, MeshSetupUnavailable } from './hand-mesh-setup.ts';
 import { panelFreshness, panelSourceRoots, type PanelFreshness } from './panel-freshness.ts';
 import { HostRunner, type RunMode, type RunState } from './host-runner.ts';
 import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings, type PluginSetting, type SettingValue } from './plugin-manager.ts';
@@ -228,9 +230,11 @@ export class Panel {
     if (!run) return false;
     try {
       const choice = meshChoice(state.raw.postprocessing);
-      const plugin = choice.selected ? registry.plugins.find(p => meshKey(p) === meshKey(choice.selected!)) : null;
-      const saved = choice.selected ? choice.settings[meshKey(choice.selected)] : null;
-      if (choice.selected && (!plugin?.available || !saved || saved.version !== plugin.declaration.settingsVersion)) {
+      // A layer switched off runs nothing, exactly like no layer.
+      const selected = choice.enabled === false ? null : choice.selected;
+      const plugin = selected ? registry.plugins.find(p => meshKey(p) === meshKey(selected)) : null;
+      const saved = selected ? choice.settings[meshKey(selected)] : null;
+      if (selected && (!plugin?.available || !saved || saved.version !== plugin.declaration.settingsVersion)) {
         run.unavailable(state.revision); return false;
       }
       run.configure(plugin ?? null, saved?.values ?? {}, state.revision); return true;
@@ -243,6 +247,8 @@ export class Panel {
   }
   private handRuntimeStates = new Map<string, string>();
   private savingHands = false;
+  /** Aborts the running post-processing install; its downloads are kept for the next Install. */
+  private meshSetupAbort: AbortController | null = null;
   private preparingNativeRun = false;
   private preparingPreview = false;
   private changingPlugins = false;
@@ -330,6 +336,8 @@ export class Panel {
     this.projects = projects;
     this.bootstrapPackageLock = bootstrapPackageLock;
     this.hub = hub;
+    // Core and plugin code raise toasts on every open page through this one path.
+    setPanelNotifier(toast => this.hub.send('toast', toast));
     this.handSessions = new HandSessions({ origin: () => new URL(this.panelUrl!).origin, meshRetirement: this.meshRetirement,
       prepare: request => prepareHandSession(this.repo, this.workspace, request, this.nativeProviders),
       mesh: prepared => {
@@ -975,11 +983,11 @@ export class Panel {
       const publisher = this.publishers.found.find(item => item.plugin?.key === plugin.key)?.publisher;
       const packagerLabel = this.packagers.found.find(item => item.plugin?.key === plugin.key)?.packager.label;
       const name = meta.name ?? presentedProviders[0]?.name ?? (isPackager ? plugin.id.replace(/^platform-/, '') : plugin.id);
-      const derivedType = publisher ? 'publisher' : ownProviders[0]?.role ?? (isPackager ? 'platform' : 'plugin');
+      const derivedType = publisher ? 'publisher' : ownProviders[0]?.role ?? (isPackager ? 'platform' : meta.handMesh ? 'post-processing' : 'plugin');
       return {
         id, key: plugin.key, logicalId: plugin.id.toLowerCase(), origin: plugin.origin, readOnly: plugin.readOnly, selected,
         sourceRevision, selectedOrigin: Object.hasOwn(prefs.origins ?? {}, plugin.id.toLowerCase()) ? prefs.origins![plugin.id.toLowerCase()] : null,
-        availableOrigins: [...new Set(catalog.plugins.filter(item => item.id.toLowerCase() === plugin.id.toLowerCase()).map(item => item.origin))], name, title: meta.title ?? meta.name ?? packagerLabel ?? publisher?.label ?? name, type: meta.type ?? derivedType,
+        availableOrigins: [...new Set(catalog.plugins.filter(item => item.id.toLowerCase() === plugin.id.toLowerCase()).map(item => item.origin))], name, title: meta.title ?? meta.name ?? packagerLabel ?? publisher?.label ?? name, type: meta.type && !(meta.type === 'plugin' && meta.handMesh) ? meta.type : derivedType,
         label: packagerLabel ?? publisher?.label,
         description: meta.description ?? ownProviders[0]?.description ?? (typeof packager?.description === 'string' ? packager.description : ''),
         settingsDescription: meta.settingsDescription ?? '',
@@ -2086,10 +2094,43 @@ export class Panel {
         const run = this.activeMeshRun, delivery = run?.state() ?? null;
         const active = delivery?.owner && delivery.id ? { owner: delivery.owner, id: delivery.id,
           label: registry.plugins.find(p => p.owner === delivery.owner && p.id === delivery.id)?.label ?? delivery.id } : null;
-        sendJson(res, 200, { plugins: registry.plugins.map(({ program, launch, ...p }) => ({ ...p, declaration: { ...p.declaration, program: undefined, args: undefined } })),
+        const setups = await meshSetupOwners(this.repo, this.workspace);
+        // A selected plugin with a setup reports which declared runtime its saved settings still need (for example GPU).
+        const needed = new Map(await Promise.all(registry.plugins.filter(p => setups.has(p.owner) && p.available).map(async p => [p.owner, await meshSetupNeeded(this.repo, this.workspace, p.owner)] as const)));
+        sendJson(res, 200, { plugins: registry.plugins.map(({ program, launch, ...p }) => ({ ...p, setup: setups.has(p.owner), setupNeeded: needed.get(p.owner) ?? null, declaration: { ...p.declaration, program: undefined, args: undefined } })),
           revision: state.revision, registryRevision: registry.revision, choice, problem, status: run?.status ?? (this.handSessions.meshStatus || this.meshStatus),
           running: this.handSessions.busy || this.runner.busy && this.nativeHandPolicy !== null, active, delivery });
         return true;
+      }
+      case 'POST hands/postprocessing/setup-plan': {
+        const body = await readJson<{ owner?: unknown }>(req);
+        if (typeof body.owner !== 'string') throw new HttpError(400, 'Choose a post-processing plugin');
+        try { sendJson(res, 200, await meshSetupPlan(this.repo, this.workspace, body.owner)); }
+        catch (e) { if (e instanceof MeshSetupUnavailable) throw new HttpError(404, e.message); throw e; }
+        return true;
+      }
+      case 'POST hands/postprocessing/setup': {
+        const body = await readJson<{ owner?: unknown; consent?: unknown }>(req);
+        if (typeof body.owner !== 'string' || typeof body.consent !== 'string') throw new HttpError(400, 'Setup needs a plugin and its consent code');
+        if (this.jobs.active().some(job => job.kind === 'mesh-setup')) throw new HttpError(409, 'A post-processing install is already running');
+        const owner = body.owner, consent = body.consent;
+        const plan = await meshSetupPlan(this.repo, this.workspace, owner).catch(e => { throw e instanceof MeshSetupUnavailable ? new HttpError(404, e.message) : e; });
+        if (plan.consent !== consent) throw new HttpError(409, 'The setup plan changed; review it again');
+        const kind = plan.kind;
+        const abort = new AbortController(); this.meshSetupAbort = abort;
+        const job = this.startJob('mesh-setup', null, 'install post-processing prerequisites', async ctx => {
+          try { await installMeshSetup(this.repo, this.workspace, owner, consent, ctx, abort.signal, kind); }
+          catch (error) {
+            if (abort.signal.aborted) { ctx.line('Install cancelled. Downloaded files are kept, so Install continues where it stopped.'); throw new Error('Install cancelled'); }
+            throw error;
+          } finally { if (this.meshSetupAbort === abort) this.meshSetupAbort = null; }
+          this.hub.send('hands-changed', {});
+        });
+        sendJson(res, 200, job); return true;
+      }
+      case 'POST hands/postprocessing/setup/cancel': {
+        if (!this.meshSetupAbort) throw new HttpError(409, 'No post-processing install is running');
+        this.meshSetupAbort.abort(); sendJson(res, 200, { cancelled: true }); return true;
       }
       case 'POST hands/postprocessing/retry': {
         const body = await readJson<{ runId?: unknown; revision?: unknown }>(req);
@@ -2105,7 +2146,7 @@ export class Panel {
         if (this.handSessions.preparing || this.savingHands || this.preparingNativeRun || this.preparingPreview || this.changingPlugins || this.pluginConsumers || this.jobs.active().length) throw new HttpError(409, 'Wait for Hands preparation before saving');
         this.savingHands = true;
         try {
-          const body = await readJson<{ selected?: unknown; values?: unknown; revision?: unknown; registryRevision?: unknown }>(req);
+          const body = await readJson<{ selected?: unknown; enabled?: unknown; values?: unknown; revision?: unknown; registryRevision?: unknown }>(req);
           const registry = await discoverHandMeshPlugins(this.repo, this.workspace);
           const state = await readHandsState(this.repo, this.workspace);
           const initial = state.exists ? state.provider : selectedHandProvider(state, await discoverHandProviders(this.repo, this.workspace, this.nativeProviders), 'native').key;
@@ -2371,7 +2412,8 @@ export class Panel {
         return true;
       }
       case 'POST restart': {
-        if (this.jobs.active().some(job => job.kind === 'desktop-setup')) throw new HttpError(409, 'Wait for desktop setup to finish; the installer must not be interrupted', { retryWhenIdle: true });
+        const restartWait = restartBlocker(this.jobs.active().map(job => job.kind));
+        if (restartWait) throw new HttpError(409, restartWait, { retryWhenIdle: true });
         const { confirm, ifIdle, expectedInstanceId } = await readJson<{ confirm?: boolean; ifIdle?: boolean; expectedInstanceId?: string }>(req);
         if ((confirm !== undefined && typeof confirm !== 'boolean') || (ifIdle !== undefined && typeof ifIdle !== 'boolean')) throw new HttpError(400, 'Restart flags must be boolean');
         if (ifIdle && (confirm !== false || expectedInstanceId !== this.instanceId)) throw new HttpError(409, 'Automatic restart requires the current panel instance and cannot force active work');

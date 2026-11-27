@@ -37,3 +37,15 @@ export function launchBlocker(state: LaunchState): LaunchBlocker | null {
   if (state.settingsSaving) return blocker('settings-saving', "This project's settings are being saved; try again when the save finishes.");
   return null;
 }
+
+/**
+ * Why Restart must wait for active work. Restarting ends the panel process, so a stopped installer or native build
+ * would leave its lock behind; locks are never removed automatically, so later rebuilds would stay blocked.
+ */
+export function restartBlocker(activeJobKinds: readonly string[]): string | null {
+  if (activeJobKinds.includes('desktop-setup')) return 'Wait for desktop setup to finish; the installer must not be interrupted';
+  if (activeJobKinds.includes('mesh-setup')) return 'Wait for the post-processing install to finish; the installer must not be interrupted';
+  if (activeJobKinds.includes('update')) return 'Wait for Update to finish; restarting now would stop it partway through';
+  if (activeJobKinds.includes('host-rebuild')) return 'Wait for Rebuild to finish; restarting now would stop it partway through';
+  return null;
+}

@@ -49,9 +49,22 @@ export class HandVisual extends THREE.Group {
   private showBones = true;
   private showIndicator = true;
   private meshVisual: HandMeshVisual | null = null;
+  /** View-only display switches (a viewer's Display menu); the saved appearance still decides joints/bones/indicator. */
+  private displaySkeleton = true;
+  private displayMesh = true;
+  private meshViewStyle: { color: string; brightness: number } | null = null;
+  /** View-only mesh color and brightness (null returns to the bone color). */
+  setMeshStyle(style: { color: string; brightness: number } | null): void { this.meshViewStyle = style; this.meshVisual?.setViewStyle(style); }
+  setDisplay({ skeleton, mesh }: { skeleton?: boolean; mesh?: boolean }): void {
+    if (skeleton !== undefined) this.displaySkeleton = skeleton;
+    if (mesh !== undefined) this.displayMesh = mesh;
+    this.joints.visible = this.showJoints && this.displaySkeleton; this.bones.visible = this.showBones && this.displaySkeleton;
+    if (!this.displaySkeleton) for (const pin of this.pinchSpheres) pin.visible = false;
+    if (this.meshVisual) this.meshVisual.visible = this.displayMesh;
+  }
   updateMeshes(surfaces: MeshDrawSurface[], panel: PanelFrame): void {
     if (!this.meshVisual && !surfaces.length) return;
-    if (!this.meshVisual) { this.meshVisual = new HandMeshVisual(); this.add(this.meshVisual); }
+    if (!this.meshVisual) { this.meshVisual = new HandMeshVisual(); this.meshVisual.visible = this.displayMesh; this.meshVisual.setViewStyle(this.meshViewStyle); this.add(this.meshVisual); }
     this.meshVisual.update(surfaces, panel, this.style);
   }
   disposeMeshes(): void { this.meshVisual?.dispose(); this.meshVisual = null; }
@@ -93,7 +106,7 @@ export class HandVisual extends THREE.Group {
       material.color.set(color); material.opacity = this.style.opacity;
     }
     this.showJoints = a.showJoints; this.showBones = a.showBones; this.showIndicator = a.showPinchGrabIndicator;
-    this.joints.visible = this.showJoints; this.bones.visible = this.showBones;
+    this.joints.visible = this.showJoints && this.displaySkeleton; this.bones.visible = this.showBones && this.displaySkeleton;
     for (const pin of this.pinchSpheres) {
       const material = pin.material as THREE.MeshBasicMaterial;
       material.color.setRGB(...a.indicatorColorLinear); material.opacity = a.indicatorOpacity;
@@ -118,7 +131,7 @@ export class HandVisual extends THREE.Group {
         this.bones.setMatrixAt(b++, this.m.compose(mid, this.q, this.s.set(bd, len, bd)));
       }
       const pin = this.pinchSpheres[h];
-      pin.visible = this.showIndicator && this.style.pinchDiameterM > 0 && (hand.pinching || hand.grabbing);
+      pin.visible = this.displaySkeleton && this.showIndicator && this.style.pinchDiameterM > 0 && (hand.pinching || hand.grabbing);
       if (pin.visible) {
         pin.position.copy(world[4]).add(world[8]).multiplyScalar(0.5);
         pin.scale.setScalar(this.style.pinchDiameterM * k);

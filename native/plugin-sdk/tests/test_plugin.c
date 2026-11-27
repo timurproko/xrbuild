@@ -78,9 +78,9 @@ static DWORD WINAPI input_hold(void* self) {
     XrbHand hands[2]; XrbHandFrame frame; int h, k;
     memset(hands, 0, sizeof(hands)); memset(&frame, 0, sizeof(frame));
     for (h = 0; h < 2; h++) {
-      const float x = h ? .11f + .01f * sinf((float)tick * .05f) : -.11f;
+      const float x = h ? .01f * sinf((float)tick * .05f) : 0.f; /* both hands at the viewer's centre object */
       hands[h].id = 7 + h; hands[h].handedness = (int8_t)h; hands[h].flags = XRB_HAND_GRABBING;
-      for (k = 0; k < XRB_NUM_KEYPOINTS; k++) { hands[h].keypoints[k * 4] = x; hands[h].keypoints[k * 4 + 1] = .085f; hands[h].keypoints[k * 4 + 2] = .15f; hands[h].keypoints[k * 4 + 3] = .9f; }
+      for (k = 0; k < XRB_NUM_KEYPOINTS; k++) { hands[h].keypoints[k * 4] = x; hands[h].keypoints[k * 4 + 1] = 0.f; hands[h].keypoints[k * 4 + 2] = 0.f; hands[h].keypoints[k * 4 + 3] = .9f; }
     }
     frame.size = sizeof(frame); frame.capabilities = XRB_CAP_GRAB; frame.capture_time_ms = p->host->now_ms(p->host->ctx); frame.tracking_hz = 60;
     if (!p->sporadic || (p->alternate_blocks ? tick % 20 < 10 : tick % 3 == 0)) for (h = 0; h < (p->mixed ? 1 : 2); h++) {

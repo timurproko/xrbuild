@@ -35,7 +35,7 @@ export interface PluginSetting {
   options?: PluginSettingOption[];
 }
 export interface PluginSample { id: string; path: string; dir: string; name: string; kind: ProjectKind; description?: string }
-export const PLUGIN_TYPES = ['display', 'input', 'platform', 'publisher', 'plugin'] as const;
+export const PLUGIN_TYPES = ['display', 'input', 'platform', 'publisher', 'post-processing', 'plugin'] as const;
 export type PluginType = typeof PLUGIN_TYPES[number];
 export const PLUGIN_PANEL_TARGETS = ['webxr'] as const;
 export type PluginPanelTarget = typeof PLUGIN_PANEL_TARGETS[number];

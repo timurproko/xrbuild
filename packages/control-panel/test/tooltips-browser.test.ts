@@ -83,7 +83,11 @@ test('shared tooltips replace native hints across dynamic controls and modal dia
       assert.equal(await hover(selector), message, selector);
     }
     assert.equal(await hover('#run'), null, 'a visible text action without a hint has no tooltip');
-    await evaluate(`document.querySelector('#detail').focus()`);
+    // Focus alone (for example a dialog's initial focus) shows no hint; keyboard navigation does.
+    await evaluate(`document.querySelector('#detail').blur(); document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); document.querySelector('#detail').focus()`);
+    await sleep(40);
+    assert.equal(await evaluate(`document.querySelector('.xrb-tooltip:not([hidden])')?.textContent ?? null`), null, 'focus after a pointer shows no hint');
+    await evaluate(`document.querySelector('#detail').blur(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })); document.querySelector('#detail').focus()`);
     await sleep(40);
     assert.equal(await evaluate(`document.querySelector('.xrb-tooltip')?.textContent`), 'Detailed action help');
     assert.equal(await evaluate(`document.querySelector('#detail').getAttribute('aria-label')`), 'Short name');

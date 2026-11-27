@@ -29,7 +29,7 @@ test('real supervised Synthetic session feeds SDK scene, observed fps, profile A
   await new Promise<void>(r => app.server.listen(port, '127.0.0.1', r));
   try {
     await withBrowser(async ({ navigate, evaluate }) => {
-      await navigate(app.url + 'hands/', `document.querySelector('#hands-provider')?.options.length > 1 && document.querySelector('#hands-render-fps')?.textContent !== '—'`);
+      await navigate(app.url + 'hands/', `document.querySelector('#hands-provider')?.options.length > 1 && document.body?.dataset.handsView === 'ready'`);
       await evaluate(`(async()=>{window.livePage = (await import('/hands.js')).handsPage;})()`);
       assert.equal(await evaluate('livePage.view.active'), false); assert.equal(app.panel.handSessions.busy, false);
       await evaluate(`livePage.session.start({provider:{owner:'core',id:'simulated'},revision:livePage.snapshot.revision,registryRevision:livePage.snapshot.registryRevision})`);

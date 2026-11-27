@@ -2,9 +2,10 @@
    Shared visual primitives for the control panel and workspace tools. Product modules own only
    their content layout; typography, application chrome, controls and surfaces live here. */
 :root {
+  --field-hover-line: color-mix(in srgb, var(--muted) 45%, var(--line));
   --bg: #f4f6f9; --surface: #ffffff; --surface-2: #edf0f5; --fg: #1a2230; --muted: #5b6677; --line: #d7dce5;
   --accent: #2c58cf; --accent-soft: #e5ebfb; --test: #3b7a20; --test-soft: #e5f1de;
-  --ok: #23724a; --ok-soft: #dff1e6; --warn: #9a6200; --warn-soft: #fbefd6; --rebuild: #7a45c9; --rebuild-soft: #eee7fa; --err: #b0261d; --err-soft: #fbe3e0;
+  --ok: #23724a; --ok-soft: #dff1e6; --warn: #9a6200; --warn-soft: #fbefd6; --rebuild: #7a45c9; --rebuild-soft: #eee7fa; --update: #0b7285; --update-soft: #daf1f4; --err: #b0261d; --err-soft: #fbe3e0;
   --scrim: rgba(20, 28, 40, .35); --on-accent: #ffffff; --log-bg: #f8f9fb;
   --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
@@ -27,7 +28,7 @@
 :root[data-theme="dark"] {
   --bg: #0f131a; --surface: #161c25; --surface-2: #1d2531; --fg: #e3e8ef; --muted: #97a2b3; --line: #2b3441;
   --accent: #86a4ff; --accent-soft: #1c2747; --test: #91c86f; --test-soft: #1b2d15;
-  --ok: #71c995; --ok-soft: #14301f; --warn: #e3aa3f; --warn-soft: #33270d; --rebuild: #b99bff; --rebuild-soft: #2b2140; --err: #ff8f85; --err-soft: #3b1b18;
+  --ok: #71c995; --ok-soft: #14301f; --warn: #e3aa3f; --warn-soft: #33270d; --rebuild: #b99bff; --rebuild-soft: #2b2140; --update: #5ccfe0; --update-soft: #0f2c32; --err: #ff8f85; --err-soft: #3b1b18;
   --scrim: rgba(0, 0, 0, .55); --on-accent: #0f131a; --log-bg: #0b0f15;
   --xrb-glyph-filter: brightness(0) saturate(100%) invert(70%) sepia(39%) saturate(1071%) hue-rotate(194deg) brightness(101%) contrast(103%);
   --xrb-glyph-detail-filter: grayscale(1) brightness(.58) sepia(1) saturate(1.7) hue-rotate(196deg);
@@ -37,7 +38,7 @@
   :root:not([data-theme="light"]) {
     --bg: #0f131a; --surface: #161c25; --surface-2: #1d2531; --fg: #e3e8ef; --muted: #97a2b3; --line: #2b3441;
     --accent: #86a4ff; --accent-soft: #1c2747; --test: #91c86f; --test-soft: #1b2d15;
-    --ok: #71c995; --ok-soft: #14301f; --warn: #e3aa3f; --warn-soft: #33270d; --rebuild: #b99bff; --rebuild-soft: #2b2140; --err: #ff8f85; --err-soft: #3b1b18;
+    --ok: #71c995; --ok-soft: #14301f; --warn: #e3aa3f; --warn-soft: #33270d; --rebuild: #b99bff; --rebuild-soft: #2b2140; --update: #5ccfe0; --update-soft: #0f2c32; --err: #ff8f85; --err-soft: #3b1b18;
     --scrim: rgba(0, 0, 0, .55); --on-accent: #0f131a; --log-bg: #0b0f15;
     --xrb-glyph-filter: brightness(0) saturate(100%) invert(70%) sepia(39%) saturate(1071%) hue-rotate(194deg) brightness(101%) contrast(103%);
     --xrb-glyph-detail-filter: grayscale(1) brightness(.58) sepia(1) saturate(1.7) hue-rotate(196deg);
@@ -108,9 +109,10 @@ small { font-weight: normal; }
 .panel-menu { min-width: 210px; }
 .menu.panel-menu a[role="menuitem"] { position: relative; padding-left: 28px; }
 .menu.panel-menu a[role="menuitem"][aria-current="page"]::before { content: "✓"; position: absolute; left: 12px; top: 50%; transform: translateY(-52%); color: var(--accent); font-size: .72rem; font-weight: 700; }
-.panel-menu #host-rebuild, .panel-menu #panel-restart { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.panel-menu #host-rebuild, .panel-menu #panel-restart, .panel-menu #panel-update { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .menu-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--warn); }
 .menu-dot.rebuild { background: var(--rebuild); }
+.menu-dot.update { background: var(--update); }
 
 /* Compact inline navigation, without card/button chrome on every choice. */
 .xrb-choice-list { display: grid; gap: 2px; }
@@ -129,6 +131,8 @@ button.primary { --fill: var(--accent); --edge: var(--accent); }
 button.danger, button.danger-solid { --fill: var(--err); --edge: var(--err); }
 button.ghost { --fill: transparent; }
 button.small, :is(.xrb-controls-small, .xrb-controls-compact) button:not(.dropdown-btn) { min-height: 30px; padding: 4px 10px; font-size: .8rem; }
+/* Icon buttons keep their icon centred inside small toolbars. */
+:is(.xrb-controls-small, .xrb-controls-compact) button.xrb-icon-button { padding: 0; }
 button.xrb-icon-button, a.xrb-icon-button { align-self: center; flex: none; margin-left: auto; width: 28px; height: 28px; min-width: 28px; padding: 0; display: grid; place-items: center; box-sizing: border-box; border: 0; border-radius: 6px; background: transparent; color: color-mix(in srgb, var(--muted) 78%, transparent); text-decoration: none; }
 .xrb-inline-icons > .xrb-icon-button { margin-left: 0; }
 button.xrb-icon-button:hover:not(:disabled), a.xrb-icon-button:hover { background: var(--surface-2); border-color: transparent; color: var(--fg); }
@@ -137,10 +141,10 @@ button.xrb-icon-button:hover:not(:disabled), a.xrb-icon-button:hover { backgroun
 .xrb-tooltip { position: fixed; inset: auto; margin: 0; z-index: 1000; width: max-content; white-space: pre-line; overflow-wrap: anywhere; max-width: min(260px, calc(100vw - 16px)); padding: 5px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-2); color: var(--fg); box-shadow: 0 6px 18px rgba(0,0,0,.24); font-size: .72rem; font-weight: 400; line-height: 1.25; pointer-events: none; }
 button.action-button { min-width: var(--action-button-w); height: 34px; padding: 6px 12px; }
 input, select { font: inherit; font-size: .9rem; color: var(--fg); background: var(--surface-2); border: 1px solid transparent; border-radius: 6px; padding: 7px 10px; width: 100%; }
-input:hover, select:hover { border-color: var(--line); }
+/* Every field shares the dropdown's hover border; a number field highlights while its stepper is hovered too. */
+input:hover, select:hover, .xrb-number-control:hover input:not(:disabled) { border-color: var(--field-hover-line); }
 input:disabled, select:disabled, input:read-only[aria-disabled="true"] { color: var(--muted); -webkit-text-fill-color: var(--muted); opacity: .5; cursor: default; border-color: transparent; }
 select { appearance: none; cursor: pointer; padding-right: 32px; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 17px) 52%, calc(100% - 12px) 52%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
-select:hover { border-color: color-mix(in srgb, var(--muted) 45%, var(--line)); }
 input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--err); }
 select:focus-visible { outline: none; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 select option { background: var(--surface); color: var(--fg); }
@@ -184,6 +188,7 @@ input[type="checkbox"]:disabled { opacity: .5; }
 .xrb-segmented.xrb-segmented-fill { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; overflow: visible; }
 .xrb-segmented.xrb-segmented-fill > button { min-width: 0; }
 .xrb-switch { display: inline-flex; align-items: center; gap: 10px; font-size: .85rem; color: var(--fg); cursor: pointer; white-space: nowrap; }
+.xrb-field-label > .xrb-switch { justify-self: start; }
 .xrb-switch input[type="checkbox"] { position: relative; width: 40px; height: 24px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); transition: background-color .12s; }
 .xrb-switch input[type="checkbox"]::before { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border: 0; border-radius: 50%; background: var(--muted); opacity: 1; transform: none; transition: transform .12s, background-color .12s; }
 .xrb-switch input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
@@ -198,6 +203,9 @@ input[type="checkbox"]:disabled { opacity: .5; }
 input.xrb-range { min-width: 0; width: 100%; height: 16px; margin: 0; padding: 0; appearance: none; border: 0; background: transparent; }
 input.xrb-range:hover { border-color: transparent; }
 input.xrb-range:focus, input.xrb-range:focus-visible { outline: none; box-shadow: none; }
+/* Slider hover uses the same 1px hover line as every other field. */
+input.xrb-range:hover:not(:disabled)::-webkit-slider-thumb { box-shadow: 0 0 0 1px var(--accent), 0 0 0 3px var(--surface), 0 0 0 4px var(--field-hover-line); }
+input.xrb-range:hover:not(:disabled)::-moz-range-thumb { box-shadow: 0 0 0 1px var(--accent), 0 0 0 3px var(--surface), 0 0 0 4px var(--field-hover-line); }
 input.xrb-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--accent); }
 input.xrb-range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--accent); }
 input.xrb-range::-webkit-slider-runnable-track { width: 100%; height: 4px; border: 1px solid color-mix(in srgb, var(--muted) 58%, var(--line)); border-radius: 2px; background: linear-gradient(to right, var(--accent) 0 var(--range-progress, 0%), var(--surface) var(--range-progress, 0%) 100%); }
@@ -250,6 +258,7 @@ a.xrb-path:hover, a.xrb-path:focus-visible { color: var(--accent); text-decorati
 .state.neutral { background: var(--surface-2); color: var(--muted); }
 .state.busy, .chip.warn { background: var(--warn-soft); color: var(--warn); border: 0; }
 .state.rebuild, .chip.rebuild { background: var(--rebuild-soft); color: var(--rebuild); border: 0; }
+.chip.update { background: var(--update-soft); color: var(--update); border: 0; }
 .state.ok, .chip.good { background: var(--ok-soft); color: var(--ok); border: 0; }
 .state.err, .chip.bad { background: var(--err-soft); color: var(--err); border: 0; }
 .state.live { background: var(--accent-soft); color: var(--accent); }
@@ -260,6 +269,17 @@ a.xrb-path:hover, a.xrb-path:focus-visible { color: var(--accent); text-decorati
 
 /* Menus */
 .menu { position: fixed; z-index: 10; min-width: 150px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 14px 40px rgba(0, 0, 0, .25); display: flex; flex-direction: column; }
+/* Color popover (openColorPopover): a menu holding a saturation/brightness area, hue slider and hex field. */
+.menu.xrb-color-popover { width: 224px; padding: 10px; gap: 10px; }
+.xrb-color-area { position: relative; height: 140px; border-radius: 6px; cursor: crosshair; touch-action: none; outline: none; }
+.xrb-color-area:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.xrb-color-thumb { position: absolute; width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, .45); transform: translate(-50%, -50%); pointer-events: none; }
+input.xrb-range.xrb-hue::-webkit-slider-runnable-track { height: 8px; border: 0; border-radius: 4px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+input.xrb-range.xrb-hue::-moz-range-track { height: 8px; border: 0; border-radius: 4px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+input.xrb-range.xrb-hue::-moz-range-progress { background: transparent; border: 0; }
+.xrb-color-row { display: flex; align-items: center; gap: 8px; }
+.xrb-color-preview { flex: none; width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--line); }
+input.xrb-color-hex { flex: 1; min-width: 0; font-family: var(--font-mono); text-transform: lowercase; }
 .menu button:not(.xrb-swatch), .menu a[role="menuitem"] { border: 0; background: transparent; text-align: left; padding: 7px 12px; border-radius: 5px; }
 .menu a[role="menuitem"] { display: block; color: var(--fg); font: inherit; font-weight: 500; text-decoration: none; }
 .menu [role="group"] { display: flex; }
@@ -269,13 +289,13 @@ a.xrb-path:hover, a.xrb-path:focus-visible { color: var(--accent); text-decorati
 .menu button:not(.xrb-swatch):hover:not(:disabled), .menu button:not(.xrb-swatch):focus-visible, .menu a[role="menuitem"]:hover, .menu a[role="menuitem"]:focus-visible { background: var(--accent-soft); color: var(--accent); outline: none; }
 .menu button.danger-item { color: var(--err); }
 .menu button.danger-item:hover:not(:disabled), .menu button.danger-item:focus-visible { background: var(--err-soft); color: var(--err); }
-.menu.panel-menu :is(#panel-restart, #host-rebuild), .menu.panel-menu :is(#panel-restart, #host-rebuild):hover, .menu.panel-menu :is(#panel-restart, #host-rebuild):focus-visible { color: var(--fg); }
+.menu.panel-menu :is(#panel-restart, #host-rebuild, #panel-update), .menu.panel-menu :is(#panel-restart, #host-rebuild, #panel-update):hover, .menu.panel-menu :is(#panel-restart, #host-rebuild, #panel-update):focus-visible { color: var(--fg); }
 
 /* Dropdown: one shared, styleable listbox replaces OS-rendered option popups. */
 .dropdown { position: relative; display: block; min-width: 0; }
 .dropdown-btn { position: relative; width: 100%; box-sizing: border-box; text-align: left; font-size: .9rem; font-weight: 500; padding: 7px 34px 7px 10px; border-radius: 6px; background-color: var(--surface-2); border: 1px solid transparent; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .dropdown-btn::after { content: ""; position: absolute; right: 14px; top: 50%; width: 5px; height: 5px; border: solid var(--muted); border-width: 0 2px 2px 0; transform: translateY(-70%) rotate(45deg); transform-origin: center; transition: transform .12s, border-color .12s; }
-.dropdown-btn:hover:not(:disabled) { background-color: var(--surface-2); border-color: color-mix(in srgb, var(--muted) 45%, var(--line)); }
+.dropdown-btn:hover:not(:disabled) { background-color: var(--surface-2); border-color: var(--field-hover-line); }
 .dropdown-btn:hover:not(:disabled)::after { border-color: var(--fg); }
 .dropdown-btn[aria-invalid="true"] { border-color: var(--err); }
 .dropdown-btn[aria-expanded="true"], .dropdown-btn:focus-visible { outline: none; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
@@ -515,14 +535,38 @@ button.xrb-dialog-close:hover:not(:disabled), button.xrb-dialog-close:focus-visi
 dialog.xrb-rebuild-dialog, dialog.xrb-job-progress-dialog { width: min(660px, calc(100vw - 32px)); }
 .xrb-rebuild-dialog .xrb-progress-status, .xrb-job-progress-dialog .xrb-progress-status { min-height: 64px; }
 .xrb-rebuild-dialog > .log, .xrb-job-progress-dialog > .log { margin-top: 20px; height: min(33vh, 280px); max-height: none; }
+/* The job log keeps one fixed height while output streams in, so the dialog never grows with it. */
+.xrb-rebuild-dialog > .xrb-copy-block > .log, .xrb-job-progress-dialog > .xrb-copy-block > .log { height: min(33vh, 280px); max-height: none; }
 .xrb-rebuild-dialog > .xrb-copy-block:has(> .log[hidden]) { min-height: 36px; }
-.xrb-progress-status-icon { display: grid; place-items: center; width: 28px; height: 28px; flex: none; }
+/* Centred on the title and description, raised slightly so it reads level with the title block. */
+.xrb-progress-status-icon { display: grid; place-items: center; width: 28px; height: 28px; flex: none; margin-bottom: 8px; }
 .xrb-progress-status-icon > * { grid-area: 1 / 1; }
 .xrb-progress-status-icon > svg { width: 28px; height: 28px; color: var(--accent); }
-.xrb-progress-check, .xrb-progress-error { display: none; width: 28px; height: 28px; }
+.xrb-progress-check, .xrb-progress-error, .xrb-progress-idle { display: none; width: 28px; height: 28px; }
+/* The idle symbol fills the same 28px slot as the spinner, check and error icons. */
+.xrb-progress-idle { place-items: center; }
+.xrb-progress-idle svg { display: block; width: 28px; height: 28px; }
+/* Before work starts a progress dialog shows its own icon (for example a gear for setup) in the status slot. */
+.xrb-progress-status-icon[data-state="idle"] .xrb-progress-running { display: none; }
+.xrb-progress-status-icon[data-state="idle"] .xrb-progress-idle { display: grid; color: var(--accent); }
 .xrb-progress-check svg, .xrb-progress-error svg { display: block; width: 28px; height: 28px; }
 .xrb-progress-status-icon[data-state="done"] .xrb-progress-running, .xrb-progress-status-icon[data-state="failed"] .xrb-progress-running { display: none; }
 .xrb-progress-status-icon[data-state="done"] .xrb-progress-check { display: block; color: var(--ok); }
 .xrb-progress-status-icon[data-state="failed"] .xrb-progress-error { display: block; color: var(--err); }
 .xrb-progress-dialog .ask-buttons.is-building button { visibility: hidden; pointer-events: none; }
 .xrb-progress-dialog .ask-buttons .toggle { margin: 0; }
+/* Toasts (ui/toast.js): bottom-right notices with a tone dot, a title, a quieter line and optional actions. */
+.xrb-toasts { position: fixed; inset: auto 16px 16px auto; margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; z-index: 1001; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
+.xrb-toast { pointer-events: auto; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 12px; width: min(360px, calc(100vw - 32px)); padding: 12px 10px 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 14px 40px rgba(0, 0, 0, .25); animation: xrb-toast-in .18s ease-out; }
+.xrb-toast[data-leaving] { opacity: 0; transform: translateY(6px); transition: opacity .18s, transform .18s; }
+.xrb-toast-dot { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--accent); }
+.xrb-toast[data-tone="ok"] .xrb-toast-dot { background: var(--ok); }
+.xrb-toast[data-tone="warn"] .xrb-toast-dot { background: var(--warn); }
+.xrb-toast[data-tone="err"] .xrb-toast-dot { background: var(--err); }
+.xrb-toast-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.xrb-toast-body > strong { font-size: .88rem; color: var(--fg); }
+.xrb-toast-body > span { font-size: .82rem; color: var(--muted); }
+.xrb-toast-actions { display: flex; gap: 8px; margin-top: 8px; }
+.xrb-toast-close { align-self: start; margin: -4px -2px 0 0; }
+@keyframes xrb-toast-in { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .xrb-toast { animation: none; } .xrb-toast[data-leaving] { transition: none; } }

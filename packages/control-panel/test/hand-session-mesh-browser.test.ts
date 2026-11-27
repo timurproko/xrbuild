@@ -22,7 +22,7 @@ test('opaque SDK skin has single-sided lighting from front and rear without inhe
   const surface = surfaceFor(poseAt(0, 'still', 1));
   try {
     await withBrowser(async ({ navigate, evaluate, send }) => {
-      await navigate(app.url + 'hands/', `document.querySelector('#hands-render-fps')?.textContent && document.querySelector('#hands-render-fps').textContent !== '—'`);
+      await navigate(app.url + 'hands/', `document.body?.dataset.handsView === 'ready'`);
       const properties = await evaluate(`(async()=>{
         const T=await import('three'),{HandVisual}=await import('/sdk/hand-visual.js'),{PanelFrame}=await import('/sdk/stereo.js');
         window.skinRenderer=new T.WebGLRenderer({antialias:true});skinRenderer.setSize(640,480);skinRenderer.domElement.id='skin-proof';document.body.replaceChildren(skinRenderer.domElement);
@@ -57,7 +57,7 @@ test('Hands viewport loads the complete SDK mesh graph, samples final pose and c
   try {
     await withBrowser(async ({ navigate, evaluate, send }) => {
       await send('Network.enable'); await send('Network.setBlockedURLs', { urls: ['https://*'] });
-      await navigate(app.url + 'hands/', `document.querySelector('#hands-view-error') && (!document.querySelector('#hands-view-error').hidden || document.querySelector('#hands-render-fps')?.textContent !== '—')`);
+      await navigate(app.url + 'hands/', `document.querySelector('#hands-view-error') && (!document.querySelector('#hands-view-error').hidden || document.body?.dataset.handsView === 'ready')`);
       assert.equal(await evaluate(`document.querySelector('#hands-view-error').hidden`), true);
       await evaluate(`(async()=>{window.v=(await import('/hands.js')).handsPage.view;window.meshFrames=[];const original=fetch;window.fetch=(url,init)=>{if(String(url).endsWith('/frame'))meshFrames.push(JSON.parse(init.body));return original(url,init)};await v.setProfile(${JSON.stringify(profile)});v.beginSession({epoch:'mesh-fixture'});v.setMeshRuntime(${JSON.stringify(descriptor)});})()`);
       const frame = decodeMessage(handsMessage([{ id: 1 }], 0));

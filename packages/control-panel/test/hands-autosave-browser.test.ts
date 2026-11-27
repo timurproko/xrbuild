@@ -16,9 +16,14 @@ async function until(evaluate: (s: string) => Promise<any>, expression: string) 
 test('autosave retains network failures, queues finished edits with source writes, validates fields and respects the active view owner', { skip: !process.env.XRB_TEST_BROWSER, timeout: 45000 }, async () => {
   const parent = path.resolve(process.env.XRB_TEST_ROOT ?? '.artifacts'); await fs.mkdir(parent, { recursive: true });
   const workspace = await fs.mkdtemp(path.join(parent, 'hands-auto-')), core = path.resolve(import.meta.dirname, '../../..'), port = await freePort();
-  await saveHandsState(core, workspace, { owner: 'core', id: 'simulated' }, (await readHandsState(core, workspace)).revision);
+  // Two metadata-only workspace trackers: the picker lists installed workspace providers, not built-in sources.
+  for (const id of ['alpha', 'beta']) {
+    const plugin = path.join(workspace, 'plugins', id); await fs.mkdir(plugin, { recursive: true });
+    await fs.writeFile(path.join(plugin, 'xrb-plugin.json'), JSON.stringify({ title: `Tracker ${id}`, type: 'input', version: '1.0.0', handProviders: [{ version: 1, id, runtimeName: `tracker-${id}`, transport: 'native', purpose: 'tracked' }] }));
+  }
+  await saveHandsState(core, workspace, { owner: 'workspace:alpha', id: 'alpha' }, (await readHandsState(core, workspace)).revision);
   const app = createServer({ repo: core, workspace, port });
-  app.panel.nativeProviders = async () => ({ providers: [{ name: 'simulated', role: 'input', builtin: true, path: null, version: '1', description: 'metadata only' }], error: null, rejected: [] });
+  app.panel.nativeProviders = async () => ({ providers: [{ name: 'simulated', role: 'input', builtin: true, path: null, version: '1', description: 'metadata only' }, ...['alpha', 'beta'].map(id => ({ name: `tracker-${id}`, role: 'input' as const, builtin: false, path: path.join(workspace, 'plugins', id, 'bin', `${id}.dll`), version: '1', description: 'metadata only' }))], error: null, rejected: [] });
   app.server.listen(port, '127.0.0.1'); await once(app.server, 'listening');
   try {
     await withBrowser(async ({ navigate, evaluate, send }) => {
@@ -36,10 +41,10 @@ test('autosave retains network failures, queues finished edits with source write
       await evaluate('delayNext=true'); await commit('offsetMm.x', 25);
       await until(evaluate, `!!window.releaseApply`);
       await commit('offsetMm.x', 30); await commit('offsetMm.y', 7);
-      await evaluate(`(()=>{const p=document.querySelector('#hands-provider');p.value='core/webxr';p.dispatchEvent(new Event('change',{bubbles:true}));releaseApply();})()`);
+      await evaluate(`(()=>{const p=document.querySelector('#hands-provider');p.value='workspace:beta/beta';p.dispatchEvent(new Event('change',{bubbles:true}));releaseApply();})()`);
       await until(evaluate, `(${settled}) && !document.querySelector('#hands-provider').disabled`);
       const state = await readHandsState(core, workspace);
-      assert.equal(state.profile.offsetMm.x, 30); assert.equal(state.profile.offsetMm.y, 7); assert.equal(state.provider?.id, 'webxr');
+      assert.equal(state.profile.offsetMm.x, 30); assert.equal(state.profile.offsetMm.y, 7); assert.equal(state.provider?.id, 'beta');
       assert.equal(await evaluate(`document.querySelector('[data-recovery]').hidden`), true);
       const before = await evaluate('adjustmentWrites'); await commit('offsetMm.x', 151); await sleep(150);
       assert.equal(await evaluate('adjustmentWrites'), before);

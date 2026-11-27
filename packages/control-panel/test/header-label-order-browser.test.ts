@@ -43,7 +43,7 @@ test('panel and Hands labels retain menu order, visible placement and node ident
         assert.deepEqual(result.dots,[restart,rebuild]);
         if (result.left.length===2) assert.ok(result.left[0]<result.left[1]);
         if (result.gap!==null) assert.ok(Math.abs(result.gap-result.expected)<1,'single/both labels reserve no empty slot');
-        assert.deepEqual(result.captions,[restart?'restart available':null,rebuild?'rebuild available':null].filter(Boolean));
+        assert.deepEqual(result.captions,[restart?'restart':null,rebuild?'rebuild':null].filter(Boolean));
         assert.deepEqual(result.classes,[restart?'chip warn':null,rebuild?'chip rebuild':null].filter(Boolean));
       }
       await evaluate(`refreshLabels(true,true);document.querySelector('#host-chip').before(document.querySelector('#panel-chip'));refreshLabels(true,true);document.querySelector('#panel-chip').click();document.querySelector('#host-chip').click()`);

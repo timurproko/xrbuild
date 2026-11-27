@@ -1,6 +1,6 @@
 import type { Hand } from './hands.ts';
 import { meshMotion, MESH_MAX_RESIDUAL_M } from './hand-mesh-motion.ts';
-import { decodeMeshResult, MESH_MAX_SOURCE_AGE_MS, MESH_CAPABILITIES, validMeshCapabilities, validMeshState, unknownMeshObservations, MESH_MAX_BYTES, type MeshFrame, type MeshRuntime, type MeshState, type MeshSurface, type MeshDrawSurface } from './hand-mesh-protocol.ts';
+import { decodeMeshResult, MESH_MAX_SOURCE_AGE_MS, MESH_HOLD_LIMIT_MS, MESH_CAPABILITIES, validMeshCapabilities, validMeshState, unknownMeshObservations, MESH_MAX_BYTES, type MeshFrame, type MeshRuntime, type MeshState, type MeshSurface, type MeshDrawSurface } from './hand-mesh-protocol.ts';
 
 export function meshRuntime(value: string | undefined): MeshRuntime | null {
   if (!value) return null;
@@ -13,6 +13,20 @@ export function meshRuntime(value: string | undefined): MeshRuntime | null {
 /** Optional drawing transport, deliberately independent of HandInput/filter/gesture state. */
 export class HandMeshClient {
   status = 'Starting';
+  /** How old a mesh result may be and how far the hand may have moved before it is hidden (defaults: 100 ms, 10 mm). */
+  private maxAgeMs = MESH_MAX_SOURCE_AGE_MS;
+  private maxResidualM = MESH_MAX_RESIDUAL_M;
+  /** How long the last drawn mesh of a still-present hand survives a frame that yields none (0 = never). */
+  private carryMs = 0;
+  private carried = new Map<number, { surface: MeshDrawSurface; at: number }>();
+  private handsSeenAt = -Infinity;
+  setDrawLimits({ maxAgeMs, maxResidualM, carryMs }: { maxAgeMs?: number; maxResidualM?: number; carryMs?: number }): void {
+    if (Number.isFinite(carryMs)) this.carryMs = Math.min(1000, Math.max(0, carryMs!));
+    if (Number.isFinite(maxAgeMs)) this.maxAgeMs = Math.round(Math.min(MESH_HOLD_LIMIT_MS, Math.max(MESH_MAX_SOURCE_AGE_MS, maxAgeMs!)));
+    if (Number.isFinite(maxResidualM)) this.maxResidualM = Math.min(.1, Math.max(.001, maxResidualM!));
+  }
+  /** Why the first connection failed, for diagnostics (null while connecting or once connected). */
+  connectError: string | null = null;
   private runtime: MeshRuntime;
   private fetcher: typeof fetch;
   private now: () => number;
@@ -26,7 +40,7 @@ export class HandMeshClient {
   get state(): MeshState | null {
     if (!this.configuration) return null;
     const c = this.configuration, d = this.drawing, age = d ? this.sourceAge(d.frame) : Infinity;
-    const current = !this.closed && d && age >= 0 && age <= MESH_MAX_SOURCE_AGE_MS && d.frame.revision === this.revision && c.phase === 'Ready'
+    const current = !this.closed && d && age >= 0 && age <= this.maxAgeMs && d.frame.revision === this.revision && c.phase === 'Ready'
       && c.drawingGeneration === d.generation && c.appliedGeneration === d.generation && c.requestedGeneration === d.generation;
     return { ...c, drawingGeneration: current ? d.generation : null };
   }
@@ -42,7 +56,8 @@ export class HandMeshClient {
   private accepted: { frame: MeshFrame; meshes: MeshSurface[] } | null = null;
   private controller: AbortController | null = null;
   private topologies = new Map<number, MeshSurface>();
-  constructor(runtime: MeshRuntime, fetcher = fetch, now = () => performance.now()) {
+  // The browser's fetch must be called on the window: stored as a method it throws "Illegal invocation".
+  constructor(runtime: MeshRuntime, fetcher: typeof fetch = (input, init) => fetch(input, init), now = () => performance.now()) {
     this.runtime = runtime; this.fetcher = fetcher; this.now = now;
     const controller = new AbortController(); this.controller = controller;
     const timer = setTimeout(() => controller.abort(), 2000);
@@ -58,7 +73,11 @@ export class HandMeshClient {
       }
       if (this.closed) return;
       this.connected = true; this.pump();
-    }).catch(() => { if (!this.closed) this.status = 'Skeleton fallback: mesh connection unavailable'; }).finally(() => clearTimeout(timer));
+    }).catch(error => {
+      if (this.closed) return;
+      this.status = 'Skeleton fallback: mesh connection unavailable';
+      this.connectError = controller.signal.aborted ? 'no reply within 2 s' : error instanceof Error ? error.message : String(error);
+    }).finally(() => clearTimeout(timer));
   }
   private applyState(value: unknown): void {
     if (!validMeshState(value) || value.runId !== this.runId) throw new Error('Invalid mesh configuration state');
@@ -70,6 +89,7 @@ export class HandMeshClient {
   private frame(hands: Hand[], sampleMs: number): MeshFrame {
     const frame: MeshFrame = { type: 'frame', epoch: this.epoch, sequence: this.sequence++, revision: this.revision, sentMs: this.now(), sampleMs,
       ...(this.protocol === 2 ? { version: 2, runId: this.runId, settingsGeneration: this.settingsGeneration } : {}),
+      ...(this.maxAgeMs !== MESH_MAX_SOURCE_AGE_MS ? { maxAgeMs: this.maxAgeMs } : {}),
       hands: hands.slice(0, 2).map(h => ({ id: h.id, handedness: h.handedness, keypoints: h.keypoints.map(p => [...p]),
         ...(this.protocol === 2 ? { observations: h.observations ? structuredClone(h.observations) : unknownMeshObservations() } : {}) })) };
     this.sampledAt.set(frame, this.now()); return frame;
@@ -80,20 +100,33 @@ export class HandMeshClient {
     if (key !== this.ids) { this.ids = key; this.invalidate(); }
   }
   invalidate(): void { this.revision++; this.pending = null; this.accepted = null; this.drawing = null; this.topologies.clear(); }
+  /** Drops carried meshes too (a new session or settings), unlike a routine hand-set change. */
+  private reset(): void { this.carried.clear(); this.invalidate(); }
   update(hands: Hand[], sampleMs: number, generation = 0, drawingEnabled = true): MeshDrawSurface[] {
     if (this.closed) return [];
-    if (generation !== this.generation) { this.generation = generation; this.invalidate(); }
+    if (generation !== this.generation) { this.generation = generation; this.reset(); }
     const shown = hands.filter(h => !h.coasting).slice(0, 2);
     let meshes: MeshDrawSurface[] = [];
     const accepted = this.accepted, age = accepted ? this.sourceAge(accepted.frame) : Infinity;
-    if (accepted && age >= 0 && age <= MESH_MAX_SOURCE_AGE_MS && accepted.frame.revision === this.revision) {
+    if (accepted && age >= 0 && age <= this.maxAgeMs && accepted.frame.revision === this.revision) {
       for (const surface of accepted.meshes) {
         const hand = shown.find(h => h.id === surface.id), input = accepted.frame.hands.find(h => h.id === surface.id);
         const motion = hand && input ? meshMotion(input, hand) : null;
-        if (motion && motion.residualM <= MESH_MAX_RESIDUAL_M) meshes.push({ ...surface, ...motion, sourceAgeMs: age });
+        if (motion && motion.residualM <= this.maxResidualM) meshes.push({ ...surface, ...motion, sourceAgeMs: age });
       }
     }
-    if (!shown.length) { this.accepted = null; this.topologies.clear(); }
+    // Bridge single bad frames (a coasting hand, pose noise, a late result) with the last drawn mesh of a hand that is still there.
+    const now = this.now(), present = new Set(hands.map(h => h.id));
+    if (this.carryMs > 0) {
+      for (const mesh of meshes) this.carried.set(mesh.id, { surface: mesh, at: now });
+      for (const [id, last] of this.carried) {
+        if (meshes.some(m => m.id === id)) continue;
+        if (!present.has(id) || now - last.at > this.carryMs) { this.carried.delete(id); continue; }
+        meshes.push(last.surface);
+      }
+    }
+    if (shown.length) this.handsSeenAt = now;
+    if (!shown.length && now - this.handsSeenAt > this.carryMs) { this.accepted = null; this.topologies.clear(); this.carried.clear(); }
     this.status = meshes.length ? 'Running' : this.configuration?.phase === 'Preparing' ? 'Preparing'
       : this.configuration?.reason ? `Skeleton fallback: ${this.configuration.reason}` : 'Skeleton fallback: mesh not ready or current';
     this.drawing = this.protocol === 2 && meshes.length && drawingEnabled && accepted
@@ -124,7 +157,7 @@ export class HandMeshClient {
         const r = await reader.read(); if (r.done) break;
         length += r.value.length; if (length > MESH_MAX_BYTES) { await reader.cancel(); throw new Error('oversized mesh'); } parts.push(r.value);
       }
-      if (this.closed || frame.revision !== this.revision || this.sourceAge(frame) < 0 || this.sourceAge(frame) > MESH_MAX_SOURCE_AGE_MS
+      if (this.closed || frame.revision !== this.revision || this.sourceAge(frame) < 0 || this.sourceAge(frame) > this.maxAgeMs
         || this.protocol === 2 && (frame.settingsGeneration !== this.settingsGeneration || this.configuration && (this.configuration.phase !== 'Ready' || this.configuration.appliedGeneration !== this.settingsGeneration))) return;
       const bytes = new Uint8Array(length); let offset = 0; for (const p of parts) { bytes.set(p, offset); offset += p.length; }
       const result = decodeMeshResult(bytes);

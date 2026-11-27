@@ -8,14 +8,14 @@ test('saved settings are not Applied before the matching generation ACK, includi
   await withPostprocessing(async browser => {
     const { evaluate } = browser;
     await evaluate(`snapshot.running=true;snapshot.sessionRunning=true;snapshot.delivery=meshState();component.refresh(snapshot)`);
-    assert.equal(await evaluate(`root.querySelector('[data-mesh-runtime]').textContent`), 'Applied');
+    assert.equal(await evaluate(`root.querySelector('[data-mesh-ready]').textContent`), 'Running', 'the layer badge carries the live state');
     assert.equal(await evaluate('snapshot.delivery.drawingGeneration'), null, 'application does not imply drawing');
     await evaluate(`window.release=null;window.saveGate=()=>new Promise(r=>release=r);const f=root.querySelector('[data-mesh-field="mode"]');f.value='simple';f.dispatchEvent(new Event('change',{bubbles:true}))`); await evaluate(settle);
     assert.equal(await evaluate('root.dataset.meshState'), 'saving');
     await evaluate(`window.saveGate=null;release()`); await evaluate(settle);
     assert.notEqual(await evaluate('root.dataset.meshState'), 'applied', 'HTTP 200 and an older ACK do not prove the new saved revision');
     await evaluate(`snapshot.delivery=meshState({phase:'Preparing',requestedGeneration:2,appliedGeneration:1,progress:.45});component.refresh(snapshot)`);
-    assert.equal(await evaluate(`root.querySelector('[data-mesh-runtime]').textContent`), 'Preparing · 45%');
+    assert.equal(await evaluate(`root.querySelector('[data-mesh-ready]').textContent`), 'Preparing 45%');
     await pictures(browser, 'after-preparing');
     assert.equal(await evaluate('snapshot.sessionRunning'), true);
     await evaluate(`snapshot.delivery=meshState({requestedGeneration:2,appliedGeneration:1});component.refresh(snapshot)`);
@@ -91,6 +91,7 @@ test('legacy Ready, unknown evidence, wrong identity and None cleanup are honest
     await evaluate(`snapshot.delivery=meshState({owner:null,id:null,requestedGeneration:2,appliedGeneration:2});component.refresh(snapshot)`);
     assert.equal(await evaluate('root.dataset.meshState'), 'applied');
     await evaluate(`snapshot.delivery=meshState({owner:null,id:null,requestedGeneration:3,appliedGeneration:2,phase:'Preparing',progress:null});component.refresh(snapshot)`);
-    assert.equal(await evaluate(`root.querySelector('[data-mesh-runtime]').textContent`), 'Preparing');
+    assert.equal(await evaluate('root.dataset.meshState'), 'preparing', 'with no layer the state is tracked but no badge is shown');
+    assert.equal(await evaluate(`root.querySelector('[data-mesh-ready]').hidden`), true);
   });
 });

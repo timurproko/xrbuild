@@ -74,6 +74,35 @@ An explicit external setup contribution can use `meshRuntimeReceipt(owner, gener
 
 Discovery reads a bounded receipt and checks the launch file. Launch revalidates source/declaration identity and every inventoried output, refuses unexpected files, checks regular unlinked files/ancestors again, and uses the generation as cwd. Stale/incomplete/foreign/missing/modified/linked state is unavailable with explicit preparation guidance, never PATH fallback. These checks are consistency boundaries for trusted installed code, not a sandbox against a malicious same-user writer. Resolved paths and launch closures stay server-private and out of portable output. Source-contained legacy programs remain supported. Prepared runtime and source trees must be disjoint; use a distinct runtime ID when source is itself installed beneath the user's plugins directory, avoiding source/receipt self-inclusion.
 
+## Setup export (`mesh-runtime-setup`)
+
+A hand mesh plugin whose runtime is installed separately can export `mesh-runtime-setup`. The Hands Post-process tab then shows
+**Install** on its layer while the runtime is missing, and runs the setup as a panel job that Restart waits for.
+
+The module exports:
+
+- `plan()`: what would be downloaded, without downloading. Returns `consent`, `destination`, `downloadBytes`,
+  `installedBytes`, `licences` and `items` (`name`, `version`, `publisher`, `licence`, `bytes`). The dialog shows sizes and
+  licences, never URLs.
+- `status()` (optional): `{ cpu: { installed } }`, so the dialog can say the runtime is already installed.
+- `install({ consent, core, workspace, owner, onProgress })`: installs the exact plan the person accepted.
+
+### Progress
+
+Every setup reports progress the same way, and core formats it, so no plugin needs its own wording. Call `onProgress`
+with:
+
+| Field | Meaning |
+| --- | --- |
+| `step` | Short lowercase name such as `download`, `unpack`, `self-check` (`[a-z][a-z0-9-]*`, up to 32 characters). |
+| `done`, `total` | Both present for a measurable step. |
+| `unit` | `bytes` (default) or `items`. |
+| `detail` | The current item, for example a module name; single line, up to 80 characters. |
+
+Core logs `download: 1.0 MB of 2.0 MB (50%)`, `self-check: 3 of 7 (42%) · torch` or `unpack…`, and the dialog shows the
+step with its percent, or how long it has run when there is no total. Malformed events are ignored. Report each item of
+a long step, such as each module a self-check imports, so the person can see it is still working.
+
 ## Hands component
 
 `packages/control-panel/ui/hands-postprocessing.js` exports `mountHandsPostprocessing(root, {load, save, retry, pollMs})` returning `refresh`, `reload` and `dispose`. Defaults use `GET/PUT /api/hands/postprocessing` and `POST /api/hands/postprocessing/retry`. The component owns its root queries, local drafts, serialized writes and status polling; `reload` is a programmatic recovery hook, not a routine UI button. `hands.js` mounts it once into `#hands-postprocessing-root` and calls `dispose` at page teardown. The component can be reparented without changing the surrounding page or source/adjustment drafts.

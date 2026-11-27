@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
 import { HandMeshClient, meshRuntime } from '../src/hand-mesh-client.ts';
-import { encodeMeshResult, decodeMeshResult, meshPacket, MESH_MAX_BYTES, type MeshFrame } from '../src/hand-mesh-protocol.ts';
+import { encodeMeshResult, decodeMeshResult, meshPacket, MESH_MAX_BYTES, validMeshFrame, type MeshFrame } from '../src/hand-mesh-protocol.ts';
 import { HandVisual } from '../src/hand-visual.ts';
 import { HandInput } from '../src/hands.ts';
 import { PanelFrame } from '../src/stereo.ts';
@@ -65,4 +65,51 @@ test('mesh visual maps the final pose once, respects appearance and disposes top
   let disposed = false; mesh.geometry.addEventListener('dispose', () => { disposed = true; });
   visual.updateMeshes([], panel); assert.equal(disposed, true); assert.equal(group.children.length, 0);
   visual.disposeMeshes(); assert.equal(visual.children.length, original);
+});
+
+test('the default fetch is called the way browsers require, not as a method of the client', async () => {
+  const original = globalThis.fetch; const calls: string[] = [];
+  // Like Chrome: fetch throws "Illegal invocation" when called with any receiver other than the window.
+  globalThis.fetch = function (this: unknown, input: RequestInfo | URL) {
+    if (this !== undefined && this !== globalThis) throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+    calls.push(String(input)); return Promise.resolve(new Response(null, { status: 204 }));
+  } as typeof fetch;
+  try {
+    const client = new HandMeshClient({ version: 1, url: 'http://127.0.0.1:1234', token: 'a'.repeat(64) });
+    for (let i = 0; i < 5 && !calls.length; i++) await tick();
+    assert.deepEqual(calls, ['http://127.0.0.1:1234/connect']);
+    assert.equal(client.connectError, null, 'the connection is not refused by the browser');
+    client.close();
+  } finally { globalThis.fetch = original; }
+});
+
+test('a viewer can hold mesh results longer, and the frame tells the server within bounds', async () => {
+  const sent: any[] = [];
+  const fetcher = (async (_url: unknown, init?: RequestInit) => { sent.push(JSON.parse(String(init?.body))); return new Response(null, { status: 204 }); }) as typeof fetch;
+  const client = new HandMeshClient({ version: 1, url: 'http://127.0.0.1:1234', token: 'a'.repeat(64) }, fetcher);
+  client.setDrawLimits({ maxAgeMs: 500, maxResidualM: .02 });
+  client.observed([1]); client.update([], 0); await tick(); await tick();
+  const frame = { type: 'frame', epoch: 'e', sequence: 1, revision: 1, sentMs: 0, sampleMs: 0, hands: [] };
+  assert.equal(validMeshFrame({ ...frame, maxAgeMs: 500 }), true);
+  assert.equal(validMeshFrame({ ...frame, maxAgeMs: 50 }), false, 'never stricter than the default');
+  assert.equal(validMeshFrame({ ...frame, maxAgeMs: 5000 }), false, 'bounded');
+  assert.equal(validMeshFrame(frame), true, 'absent keeps the 100 ms default');
+  client.setDrawLimits({ maxAgeMs: 99999 });
+  assert.ok(sent.every(f => f.maxAgeMs === undefined || f.maxAgeMs <= 2000));
+  client.close();
+});
+
+test('a carried mesh bridges a frame without a fresh mesh, only while the hand is still there', () => {
+  let now = 0;
+  const client = new HandMeshClient({ version: 1, url: 'http://127.0.0.1:1234', token: 'a'.repeat(64) }, (async () => new Response(null, { status: 204 })) as typeof fetch, () => now);
+  client.setDrawLimits({ carryMs: 250 });
+  client.update([], 0); // the first update starts the session's generation
+  const surface = { id: 1, topology: 't', positions: new Float32Array(9), indices: new Uint32Array([0, 1, 2]) } as any;
+  (client as any).carried.set(1, { surface, at: 0 });
+  const hand = { id: 1, coasting: true, handedness: 'left', keypoints: [] } as any;
+  now = 100; assert.equal(client.update([hand], now).length, 1, 'a coasting hand keeps its last mesh briefly');
+  now = 400; assert.equal(client.update([hand], now).length, 0, 'not beyond the carry time');
+  (client as any).carried.set(1, { surface, at: 400 });
+  now = 450; assert.equal(client.update([], now).length, 0, 'a hand that left drops its mesh at once');
+  client.close();
 });

@@ -44,6 +44,10 @@ export function managedToolDestination(route,origin) {
   return new URL(route,safe).href;
 }
 /** A stale panel already has one actionable state: restart to load its newer code. */
+/** The panel is briefly unreachable (restarting or updating) rather than refusing the request; background reads just try again. */
+export function isPanelUnavailable(error){return error instanceof TypeError&&/fetch|network/i.test(error.message)||error?.status===503||/panel is restarting/i.test(String(error?.message??''));}
+/** A request refused because the panel is mid-restart; the restart flow reloads the page, so it is not an error. */
+export function isRestartingResponse(error){return error?.status===503&&error?.data?.error==='The panel is restarting';}
 export function shouldReportNavigationError(error,panelFreshness) {
   return !!error&&panelFreshness?.outdated!==true;
 }
@@ -77,7 +81,7 @@ export function renderNavigationMenu(menu,{origin,tools=[],current='projects',in
     else{
       el.setAttribute('role','menuitem');el.dataset.navigation=item.id;el.href=item.href;el.textContent=item.label;
       if(ids[item.id])el.id=ids[item.id];if(item.current)el.setAttribute('aria-current','page');
-      if(indicators&&['rebuild','restart','update'].includes(item.id)){const dot=document.createElement('span');dot.className=item.id==='restart'?'menu-dot':'menu-dot rebuild';dot.id=item.id==='rebuild'?'host-rebuild-dot':item.id==='update'?'panel-update-dot':'panel-restart-dot';dot.hidden=true;dot.setAttribute('aria-hidden','true');el.append(dot);}
+      if(indicators&&['rebuild','restart','update'].includes(item.id)){const dot=document.createElement('span');dot.className=item.id==='restart'?'menu-dot':item.id==='update'?'menu-dot update':'menu-dot rebuild';dot.id=item.id==='rebuild'?'host-rebuild-dot':item.id==='update'?'panel-update-dot':'panel-restart-dot';dot.hidden=true;dot.setAttribute('aria-hidden','true');el.append(dot);}
     }
     menu.append(el);
   }
@@ -88,12 +92,12 @@ export function renderRemoteUpdate(menu, status, activate) {
   if (!header) return;
   let chip = header.querySelector('[data-maintenance="update"]');
   if (!chip) {
-    chip = menu.ownerDocument.createElement('span');chip.className = 'chip rebuild';chip.dataset.maintenance = 'update';
+    chip = menu.ownerDocument.createElement('span');chip.className = 'chip update';chip.dataset.maintenance = 'update';
     header.querySelector('.spacer')?.before(chip);
     if (!chip.isConnected) header.append(chip);
     orderMaintenanceLabels(header);
   }
-  chip.textContent = 'update available';chip.hidden = !status?.available;
+  chip.textContent = 'update';chip.hidden = !status?.available;
   chip.setAttribute('role', 'button');chip.tabIndex = 0;
   chip.title = ['core','workspace'].filter(role => status?.[role]?.available)
     .map(role => `${role}: origin/${status[role].branch}, checked ${new Date(status[role].checkedMs).toLocaleTimeString()}`).join('\n');

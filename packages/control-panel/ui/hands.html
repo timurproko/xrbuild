@@ -15,9 +15,10 @@
 <body class="hands-page">
   <header class="xrb-app-bar xrb-app-bar--wrap">
     <h1 class="xrb-brand">XR Build <button id="hands-menu-button" class="xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Hands</button></h1>
-    <span id="panel-chip" class="chip warn" data-maintenance="restart" hidden>restart available</span>
-    <span id="host-chip" class="chip" data-maintenance="rebuild" hidden>rebuild available</span>
-    <span id="update-chip" class="chip rebuild" data-maintenance="update" hidden>update available</span>
+    <span id="panel-chip" class="chip warn" data-maintenance="restart" hidden>restart</span>
+    <span id="host-chip" class="chip" data-maintenance="rebuild" hidden>rebuild</span>
+    <span id="update-chip" class="chip update" data-maintenance="update" hidden>update</span>
+    <div id="hands-header-status" class="hands-header-status"><span id="hands-live-state" class="chip" role="status">Not started</span></div>
     <span class="spacer"></span>
     <div class="row" aria-label="Hands frame rates">
       <span class="chip" data-tooltip="Viewport render rate"><span id="hands-render-fps">—</span><small>render fps</small></span>
@@ -25,36 +26,60 @@
     </div>
   </header>
   <main id="hands-workspace" class="xrb-workspace-layout" aria-label="Hands workspace">
-    <section class="xrb-card hands-panel" aria-label="Hand source">
-      <div class="xrb-stack hands-source">
-        <div id="hands-session-actions" class="xrb-button-row" hidden></div>
-        <form id="hands-form" class="xrb-stack">
-          <label class="xrb-field-label" for="hands-provider">Skeleton provider<select id="hands-provider" name="provider" aria-label="Skeleton provider" disabled></select></label>
-        </form>
-        <p id="hands-message" class="field-error" role="alert" hidden></p>
-        <div class="xrb-button-row" id="hands-source-recovery" hidden><button id="hands-source-retry" class="small" type="button">Retry</button><button id="hands-source-discard" class="small" type="button" hidden>Use saved</button></div>
-        <div id="hands-postprocessing-root" hidden></div>
-      </div>
-    </section>
     <section id="hands-viewport" class="xrb-card hands-viewport" aria-label="3D hand view">
       <canvas id="hands-canvas" aria-label="Shared SDK hand view"></canvas>
       <div class="hands-view-tools xrb-controls-small">
-        <div class="dropdown" data-multi="true" data-summary="View" data-options="grid|axes" data-labels='{"grid":"Grid","axes":"Axes"}'>
-          <input id="hands-view-options" type="hidden" value='["grid"]'>
-          <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="View options">View</button>
+        <!-- Present and disabled from the first paint; live controls adopt it once loaded. -->
+        <div id="hands-session-actions" class="hands-session-actions"><button type="button" id="hands-start-stop" class="primary" disabled>Start</button></div>
+        <span class="hands-tool-separator" aria-hidden="true"></span>
+        <div class="dropdown" data-multi="true" data-summary="View" data-options="grid|axes|monitor|object" data-labels='{"grid":"Grid","axes":"Axes","monitor":"Monitor","object":"Object"}'>
+          <input id="hands-view-options" type="hidden" value='["grid","axes","monitor","object"]'>
+          <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="View options" data-no-tooltip>View</button>
+        </div>
+        <button id="hands-view-reset" type="button" aria-label="Reset view" data-no-tooltip>Reset</button>
+        <span class="hands-tool-separator" aria-hidden="true"></span>
+        <div class="dropdown" data-multi="true" data-summary="Display" data-options="skeleton" data-labels='{"skeleton":"Skeleton"}' id="hands-display">
+          <input id="hands-display-options" type="hidden" value='["skeleton","mesh"]'>
+          <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Display options" data-no-tooltip>Display</button>
         </div>
         <span class="spacer"></span>
-        <button id="hands-view-reset" type="button" data-tooltip="Reset view · right-drag to orbit, scroll to zoom">Reset</button>
-        <button id="hands-fullscreen" type="button" class="xrb-icon-button" data-xrb-icon="fullscreen" aria-label="Enter fullscreen"></button>
+        <button id="hands-fullscreen" type="button" class="xrb-icon-button" data-xrb-icon="fullscreen" aria-label="Enter fullscreen" data-no-tooltip></button>
       </div>
-      <div id="hands-view-empty" class="xrb-overlay-empty" role="status"><span>No live hand session.</span></div>
-      <p id="hands-test-feedback" class="xrb-help hands-test-feedback" aria-live="polite">Pinch: Ready · Drag: Ready</p>
       <p id="hands-view-error" class="field-error hands-view-error" role="alert" hidden></p>
     </section>
-    <section class="xrb-card hands-panel" aria-label="Hand adjustments">
-      <div id="hands-adjustments-root" class="xrb-sidebar-content xrb-stack">
-        <h2>Adjustments</h2><p class="xrb-help">Adjustment controls are unavailable in this version.</p>
+    <div id="hands-splitter" class="hands-splitter" role="separator" aria-orientation="vertical" aria-label="Resize side panel" aria-controls="hands-workspace" tabindex="0"></div>
+    <section class="xrb-card hands-panel" aria-label="Hand setup and adjustments">
+      <!-- Present from the first paint; the adjustment editor adopts these tabs when it loads. -->
+      <div class="xrb-tabs hands-adjustment-tabs" role="tablist" aria-label="Hand adjustments" data-xrb-tabs-id="hands-adjustments">
+        <button type="button" class="xrb-tab" role="tab" data-tab="setup" aria-selected="true" tabindex="0">Setup</button>
+        <button type="button" class="xrb-tab" role="tab" data-tab="geometry" aria-selected="false" tabindex="-1">Transform</button>
+        <button type="button" class="xrb-tab" role="tab" data-tab="appearance" aria-selected="false" tabindex="-1">Display</button>
+        <button type="button" class="xrb-tab" role="tab" data-tab="post" aria-selected="false" tabindex="-1">Post-process</button>
+        <button type="button" class="xrb-tab" role="tab" data-tab="log" aria-selected="false" tabindex="-1">Log</button>
+        <span class="hands-tab-action" data-tab-action="post" hidden></span>
+        <span class="hands-tab-action" data-tab-action="log" hidden><button type="button" class="xrb-icon-button" id="hands-log-clear" aria-label="Clear log" data-xrb-icon="close" data-no-tooltip></button></span>
       </div>
+      <div id="hands-setup" class="xrb-sidebar-content xrb-stack hands-source">
+        <form id="hands-form" class="xrb-stack">
+          <label class="xrb-field-label" for="hands-provider">Skeleton provider<select id="hands-provider" name="provider" aria-label="Skeleton provider" disabled></select></label>
+          <label class="xrb-field-label" for="hands-resolution">Monitor resolution<select id="hands-resolution" aria-label="Monitor resolution"><option value="4k">4K · 3840 × 2160</option><option value="2k">2K · 2560 × 1440</option><option value="custom">Custom</option></select></label>
+          <div class="xrb-field-label" id="hands-custom-resolution" hidden>Custom resolution (px)<span class="hands-xyz hands-xyz--two"><label class="hands-xyz-field"><span>W</span><input type="number" id="hands-resolution-width" aria-label="Custom width (px)" min="320" max="15360" step="1"></label><label class="hands-xyz-field"><span>H</span><input type="number" id="hands-resolution-height" aria-label="Custom height (px)" min="240" max="8640" step="1"></label></span></div>
+          <label class="xrb-field-label" for="hands-object">Object<select id="hands-object" aria-label="Object"><option value="cube">Cube</option><option value="sphere">Sphere</option><option value="suzanne">Suzanne</option></select></label>
+          <div class="xrb-field-label">Object position (mm)<span class="hands-xyz"><label class="hands-xyz-field"><span>X</span><input type="number" id="hands-object-x" data-object-axis="x" aria-label="Object X (mm)" min="-300" max="300" step="1"></label><label class="hands-xyz-field"><span>Y</span><input type="number" id="hands-object-y" data-object-axis="y" aria-label="Object Y (mm)" min="-300" max="300" step="1"></label><label class="hands-xyz-field"><span>Z</span><input type="number" id="hands-object-z" data-object-axis="z" aria-label="Object Z (mm)" min="-300" max="300" step="1"></label></span></div>
+          <div class="xrb-field-label">Grid<span class="hands-number-row"><input type="number" id="hands-grid-opacity" aria-label="Grid opacity" min="0" max="1" step="0.01"><input class="xrb-range" type="range" id="hands-grid-opacity-range" aria-label="Grid opacity slider" min="0" max="1" step="0.01"><span class="xrb-inline-icons"><button type="button" id="hands-grid-color" class="xrb-swatch" aria-label="Choose grid color" aria-haspopup="dialog"></button></span></span></div>
+        </form>
+        <p id="hands-message" class="field-error" role="alert" hidden></p>
+        <div class="xrb-button-row" id="hands-source-recovery" hidden><button id="hands-source-retry" class="small" type="button">Retry</button><button id="hands-source-discard" class="small" type="button" hidden>Use saved</button></div>
+      </div>
+      <div id="hands-post-panel" class="xrb-sidebar-content xrb-stack" data-tab-panel="post" hidden>
+        <div id="hands-post-empty" class="empty-note">No post-processing plugins installed.</div>
+        <div id="hands-postprocessing-root" hidden></div>
+      </div>
+      <div id="hands-log-panel" class="xrb-sidebar-content xrb-stack" data-tab-panel="log" hidden>
+        <div id="hands-log-empty" class="empty-note">No log entries yet.</div>
+        <div id="hands-log" class="console" role="log" aria-live="off" aria-label="Hands log" hidden></div>
+      </div>
+      <div id="hands-adjustments-root" class="xrb-sidebar-content xrb-stack" hidden></div>
     </section>
   </main>
   <div id="hands-menu" class="menu xrb-menu panel-menu" role="menu" aria-label="XR Build navigation" hidden></div>

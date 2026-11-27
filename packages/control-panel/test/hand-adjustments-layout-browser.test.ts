@@ -42,9 +42,9 @@ test('all numeric adjustments pair with sliders, retain commit timing and fit na
         const before = await evaluate('adjustmentWrites');
         await evaluate(`(()=>{const r=document.querySelector('${range}');r.value=${min};r.dispatchEvent(new Event('input',{bubbles:true}));})()`);
         assert.equal(await evaluate(`Number(document.querySelector('${field}').value)`), min);
-        await sleep(30); assert.equal(await evaluate('adjustmentWrites'), before, `${key}: range drafts never save`);
+        await settled(); assert.equal(await evaluate('adjustmentWrites'), before + 1, `${key}: dragging a slider applies at once`);
         await evaluate(`document.querySelector('${range}').dispatchEvent(new Event('change',{bubbles:true}))`); await settled();
-        assert.equal(await evaluate('adjustmentWrites'), before + 1);
+        assert.equal(await evaluate('adjustmentWrites'), before + 1, `${key}: releasing the slider adds no second save`);
         await evaluate(`(()=>{const n=document.querySelector('${field}');n.value=${max};n.dispatchEvent(new Event('input',{bubbles:true}));})()`);
         assert.equal(await evaluate(`Number(document.querySelector('${range}').value)`), max);
         assert.equal(await evaluate('adjustmentWrites'), before + 1);
@@ -67,7 +67,7 @@ test('all numeric adjustments pair with sliders, retain commit timing and fit na
         await evaluate(`document.documentElement.dataset.theme='${theme}'`);
         // Reparent into an isolated sidebar width without changing the mounted editor's identity.
         await evaluate(`(()=>{let aside=document.querySelector('#layout-sidebar');if(!aside){aside=document.createElement('aside');aside.id='layout-sidebar';aside.className='hands-panel xrb-sidebar';document.body.append(aside);}aside.style.width='${width}px';aside.append(document.querySelector('#hands-adjustments-root'));})()`);
-        const layout = await evaluate(`(()=>{const root=document.querySelector('#hands-adjustments-root');return {overflow:root.scrollWidth>root.clientWidth,rows:[...root.querySelectorAll('.hands-number-row')].map(row=>{const n=row.querySelector('.xrb-number-control').getBoundingClientRect(),r=row.querySelector('[data-range]').getBoundingClientRect(),s=row.querySelector('[data-colour]')?.getBoundingClientRect();return r.width>0 && n.right<=r.left && Math.abs(n.y+n.height/2-r.y-r.height/2)<1 && (!s || r.right<=s.left);})};})()`);
+        const layout = await evaluate(`(()=>{const root=document.querySelector('#hands-adjustments-root');const rows=[];for(const tab of document.querySelectorAll('[data-tab]')){tab.click();rows.push(...[...root.querySelectorAll('[role="tabpanel"]:not([hidden]) .hands-number-row')].map(row=>{const n=row.querySelector('.xrb-number-control').getBoundingClientRect(),r=row.querySelector('[data-range]').getBoundingClientRect(),s=row.querySelector('[data-color]')?.getBoundingClientRect();return r.width>0 && n.right<=r.left && Math.abs(n.y+n.height/2-r.y-r.height/2)<1 && (!s || r.right<=s.left);}));}document.querySelector('[data-tab]').click();return {overflow:root.scrollWidth>root.clientWidth,rows};})()`);
         assert.equal(layout.overflow, false, `${theme}/${width}: no horizontal scrolling`);
         assert.deepEqual(layout.rows, Array(9).fill(true), `${theme}/${width}: paired alignment and swatches`);
       }

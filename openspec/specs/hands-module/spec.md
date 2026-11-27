@@ -8,7 +8,7 @@ Provides a stable Hands configuration surface centred on the selected skeleton s
 
 ### Requirement: Core-owned Hands surface
 
-Hands SHALL remain accessible independently of optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands product page, titled Hands, with a provider-centred three-column hand view and no recording section. Old diagnostic routes and the legacy `/hand-tracking/` alias SHALL return normal not-found responses without redirects. No separate diagnostic identity/page/link SHALL remain.
+Hands SHALL remain accessible without optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands page, titled Hands, with the 3D viewer beside one side panel of Setup, Transform, Display, Post-process and Log tabs, present with Start and status from the first paint, and no recording section. Old diagnostic routes and `/hand-tracking/` SHALL return normal not-found responses without redirects, and no separate diagnostic page or link SHALL remain.
 
 #### Scenario: Diagnostic plugin absent
 - **WHEN** the user opens Hands without the optional hand tools plugin or checked tool build
@@ -22,9 +22,13 @@ Hands SHALL remain accessible independently of optional input/tool plugins or co
 - **WHEN** a client requests `/hands-diagnostics`, `/hands-diagnostics/`, `/hand-tracking`, `/hand-tracking/` or their children
 - **THEN** the panel returns its normal not-found response with no redirect or old page startup
 
+#### Scenario: Reload keeps the selected tab
+- **WHEN** the page reloads or the panel restarts
+- **THEN** the previously selected tab shows from the first paint and Start appears disabled, never hidden, until live controls load
+
 ### Requirement: Minimal provider picker with availability
 
-Hands SHALL put Start/Stop atop the left sidebar above the autosaving Skeleton provider and optional installed post-processing controls. State SHALL stay compact in the controls, fps chips and viewport message. Selection SHALL save silently, retain missing identities and offer inline error/retry. Acquisition SHALL keep its launch source until Stop. Routine sidebar prose, Save/Reload, recording UI and generated substitutes SHALL remain absent.
+Hands SHALL lead the viewer toolbar with Start/Stop and show the session status in the header. The Setup tab SHALL hold the autosaving Skeleton provider, listing only workspace-installed trackers. Selection SHALL save silently, retain missing identities and offer inline retry. Acquisition SHALL keep its launch source until Stop. Diagnostics SHALL go to the Log tab, with no viewer centre text, Save/Reload, recording UI or generated substitutes.
 
 #### Scenario: Saved source unavailable
 - **WHEN** the chosen provider is disabled, missing or failed
@@ -34,14 +38,18 @@ Hands SHALL put Start/Stop atop the left sidebar above the autosaving Skeleton p
 - **WHEN** a source is installed and enabled but no run has checked its device
 - **THEN** the compact Start control does not claim hardware is connected or running, and no separate not-started sentence appears
 
+#### Scenario: Built-in sources hidden
+- **WHEN** only built-in synthetic, replay or browser sources and one installed tracker exist
+- **THEN** the list offers the installed tracker, while a hidden source that is already the saved choice stays listed
+
 #### Scenario: Standalone live session not available
 - **WHEN** the standalone session runtime is missing, outdated or unsupported on this platform
-- **THEN** the hand view stays idle with the concrete unavailable/Rebuild reason, without starting a full host or fabricating provider frames
+- **THEN** the hand view stays idle and Start stays disabled with the concrete reason in the Log tab, without starting a full host or fabricating provider frames
 
 #### Scenario: Explicit live delivery replaces page-only idle
 - **WHEN** the person starts the saved selected provider and valid session frames arrive
 - **THEN** the viewport shows those actual hands through the shared SDK adapter
-- **AND** before Start it shows no hand, with compact Start guidance confined to the control/viewport rather than sidebar prose or cached app history
+- **AND** before Start it shows no hand and no centre text or cached app history
 
 #### Scenario: Non-live data is not provider input
 - **WHEN** calibration data or replay is available
@@ -130,24 +138,27 @@ Hands SHALL provide separate joint/bone visibility, diameters, colours and share
 
 ### Requirement: Grouped adjustment controls and explicit Apply
 
-Hands SHALL provide Position and size and Appearance directly in the right panel, using Apps section labels and secondary actions without nested cards. All controls and per-section Reset to defaults SHALL remain. Only the size/contact hint SHALL remain from the removed geometry/drawing prose. Finished edits and resets SHALL save automatically, without Apply, routine Reload or saved-for-next-launch text.
+Hands SHALL provide the Transform and Display tabs in the side panel. Each SHALL start with a Preset dropdown offering Default, saved presets and Custom when the values match none, with save and delete actions. Per-tab Reset to defaults SHALL remain. Finished edits, slider drags, presets and resets SHALL save automatically, without Apply.
 
 #### Scenario: Reset one group
-- **WHEN** the user resets Position and size
-- **THEN** only geometry returns to defaults and saves immediately; appearance, selected source and provider calibration remain unchanged
+- **WHEN** the user resets Transform
+- **THEN** only geometry returns to defaults (offset zero, size one) and saves immediately; appearance, selected source and provider calibration remain unchanged
 
 #### Scenario: Appearance reset
-- **WHEN** the user resets Appearance
+- **WHEN** the user resets Display
 - **THEN** default standard drawing saves immediately while geometry and source remain unchanged
 
 #### Scenario: Drag without Apply
-- **WHEN** the user drags a slider or previews a colour
-- **THEN** intermediate input does not save or deliver adjustments
-- **AND** releasing the slider or committing the colour saves and delivers the finished value without Apply
+- **WHEN** the user drags a slider or previews a color
+- **THEN** values apply while dragging, with at most one save in flight that always ends on the latest value, without Apply
 
 #### Scenario: Committed field and switch
 - **WHEN** the person commits a number field or toggles a switch
-- **THEN** that finished change saves and delivers once, retaining validation and exact untouched linear colours
+- **THEN** that finished change saves and delivers once, retaining validation and exact untouched linear colors
+
+#### Scenario: Choosing a preset
+- **WHEN** the person chooses a preset
+- **THEN** only that tab's values change and save, and the dropdown shows Custom after any later edit that matches no preset
 
 ### Requirement: Honest Apply delivery status
 
@@ -335,24 +346,23 @@ Session frames SHALL pass through the same validated applied global profile, can
 
 ### Requirement: Real-session interaction checks
 
-Hands SHALL offer a small pinch target and draggable target using the shared SDK interaction path and current session hand. Test feedback SHALL clear on no hands, staleness, geometry reset, Stop, failure or disposal. It SHALL NOT use generated poses or count mouse actions as evidence of tracked-hand success.
+Hands SHALL offer one object, a cube, sphere or Suzanne chosen in Setup at a set position in front of the screen frame, that the current session hand can pinch or grab to pick up through the shared SDK interaction path. A held object SHALL keep its offset from the hand and turn with the palm. Holds SHALL clear on no hands, staleness, geometry reset, Stop, failure or disposal. It SHALL NOT use generated poses or count mouse actions as evidence of tracked-hand success.
 
 #### Scenario: Live pinch and drag
-- **WHEN** the current session hand pinches the test target or grabs and moves the drag target
-- **THEN** visible feedback reflects shared SDK events and the drag follows the processed hand
+- **WHEN** the current session hand pinches or grabs the object and moves or rotates
+- **THEN** the object follows the processed hand and turns with the palm through shared SDK events, and returns to its set position on Reset
 
 #### Scenario: Discontinuity while dragging
-- **WHEN** tracking becomes stale or the session stops while a target is held
-- **THEN** the target is released without a click and late old frames cannot resume the hold
+- **WHEN** tracking becomes stale or the session stops while the object is held
+- **THEN** the object is released without a click and late old frames cannot resume the hold
 
 ### Requirement: Paired numeric adjustment rows
 
-Each numeric adjustment SHALL have its label above one row with a number input on the left and synchronized slider on the right. Both controls SHALL retain existing bounds, steps, validation and finished-edit autosave/delivery. Colour swatches SHALL remain beside their diameter row. The sidebar SHALL fit narrow widths without horizontal scrolling in light and dark themes.
+Each numeric adjustment SHALL have its label above one row with a number input on the left and synchronized slider on the right, all sliders in a tab sharing one width. Both controls SHALL retain existing bounds, steps and validation. Color swatches SHALL sit at the row end, aligned with the panel's content edge. Joints, bones and the pinch/grab indicator SHALL be one Display multi-select. The panel SHALL fit narrow widths without horizontal scrolling in light and dark themes.
 
 #### Scenario: Every numeric setting has paired controls
-- **WHEN** the person opens adjustments
+- **WHEN** the person opens Transform or Display
 - **THEN** X (mm), Y (mm), Z (mm), Size, Joint diameter (mm), Bone diameter (mm), Skeleton opacity, Indicator diameter (mm) and Indicator opacity each show one labelled number-and-slider row
-- **AND** Size no longer puts its slider below its input
 
 #### Scenario: Number and slider stay synchronized
 - **WHEN** the person edits either control of a numeric setting
@@ -361,36 +371,35 @@ Each numeric adjustment SHALL have its label above one row with a number input o
 
 #### Scenario: Existing commit timing and validation remain
 - **WHEN** the person types a number or drags a slider
-- **THEN** intermediate edits do not save or deliver adjustments
-- **AND** a valid number committed by change or Enter, a number-stepper click, or slider release saves and delivers through the existing path without duplicate saves
+- **THEN** typing does not save until committed by change or Enter, while slider drags apply live without duplicate saves
 - **AND** invalid number values retain field errors without changing saved or running state
 
 #### Scenario: Compact sidebar in both themes
-- **WHEN** adjustments are displayed in light or dark at the normal sidebar width or in a 320-pixel-wide sidebar
-- **THEN** each number and slider remain beside one another, colour swatches stay next to their respective diameter rows, and the adjustment content requires no horizontal scrolling
+- **WHEN** adjustments are displayed in light or dark at the normal panel width or in a 320-pixel-wide panel
+- **THEN** each number and slider remain beside one another, color swatches stay at their row end, and the content requires no horizontal scrolling
 
 ### Requirement: Accessible section reset gear menus
 
-Position and size and Appearance SHALL each show a plain borderless gear icon button matching the Apps project-header icon style instead of a reset text button. Each gear SHALL open a small menu containing only Reset to defaults. Buttons and menus SHALL support keyboard and screen-reader use, Escape and outside-click dismissal. The viewport Reset SHALL remain unchanged.
+The Transform and Display tabs SHALL each show a plain gear in the tab bar that opens a small menu containing only Reset to defaults, right-aligned under the gear. Buttons and menus SHALL support keyboard and screen-reader use, Escape and outside-click dismissal. The viewport Reset SHALL remain separate.
 
 #### Scenario: Opening and operating a section menu
-- **WHEN** the person activates a section's gear by pointer, Enter or Space
+- **WHEN** the person activates a tab's gear by pointer, Enter or Space
 - **THEN** its single Reset to defaults menu item is shown and keyboard reachable with focus in the menu
-- **AND** the trigger has an accessible section-specific name and exposes its popup and expanded state
+- **AND** the trigger has an accessible tab-specific name and exposes its popup and expanded state
 
 #### Scenario: Dismissing a reset menu
 - **WHEN** the person presses Escape in an open menu or clicks outside it
 - **THEN** the menu closes without changing adjustments
-- **AND** Escape restores focus to that section's gear button
+- **AND** Escape restores focus to that tab's gear button
 
 #### Scenario: Resetting exactly one section
-- **WHEN** the person activates Reset to defaults from a section menu
-- **THEN** the menu closes and that section resets through the existing immediate commit path
-- **AND** the other section's saved values and unfinished edits, selected source and provider calibration remain unchanged
+- **WHEN** the person activates Reset to defaults from a tab's menu
+- **THEN** the menu closes and that tab resets through the existing immediate commit path
+- **AND** the other tab's saved values and unfinished edits, selected source and provider calibration remain unchanged
 
 #### Scenario: Viewport reset is separate
-- **WHEN** the person uses Reset inside the 3D view
-- **THEN** its existing scene-only reset behavior and control remain unchanged
+- **WHEN** the person uses Reset in the viewer toolbar
+- **THEN** it frames the monitor and resets the object without changing saved adjustments
 
 ### Requirement: Actionable Hands ownership recovery
 
@@ -536,3 +545,56 @@ An explicit live Hands session SHALL feed copies of its final sampled pose to op
 #### Scenario: Appearance changes while holding
 - **WHEN** only appearance changes during a held interaction
 - **THEN** mesh colour and skeleton appearance update without releasing the hold, restarting acquisition or invalidating compatible topology
+
+### Requirement: Viewer reference scene
+
+The viewer SHALL show an endless grid and a monitor frame in the screen plane, a bottom-left orientation widget and the centre object, each on by default and toggled from View. The frame SHALL follow the Monitor resolution (4K by default, 2K or custom). Hands SHALL be drawn where they physically are relative to the frame; the Transform offset changes only what apps receive. Left drag SHALL orbit, middle drag pan and right drag zoom, without smoothing.
+
+#### Scenario: Hands relative to the screen
+- **WHEN** a Transform offset is set and a tracked hand is in front of the screen's top-left corner
+- **THEN** the viewer draws that hand in front of the frame's top-left corner
+
+### Requirement: Hands log tab
+
+The Log tab SHALL list provider start and stop events, diagnostics and failure reasons as rows with a source badge, message and time, newest last and bounded, with a clear action.
+
+#### Scenario: Provider lifecycle
+- **WHEN** a session starts, runs and stops
+- **THEN** the log shows one starting, one started, one stopping and one stopped row
+
+### Requirement: Post-processing layers
+
+The Post-process tab SHALL follow Display and offer an Add layer multi-select of installed post-processing plugins. A chosen plugin SHALL show as a layer card with its settings, a live status badge, an on/off switch and a remove action; one hand-mesh layer runs at a time. A plugin whose runtime is missing SHALL stay selectable and show Install when it exports a setup. With none installed, the tab shows a short empty note.
+
+#### Scenario: Adding a layer that needs prerequisites
+- **WHEN** the person adds a post-processing plugin whose runtime is not installed
+- **THEN** it becomes the saved layer with an Install action instead of an unavailable label
+
+#### Scenario: Switching a layer off
+- **WHEN** the person turns off a layer's switch in its card corner
+- **THEN** the layer and its settings stay saved, no mesh runs, and turning it on again resumes it
+
+#### Scenario: Cancelling an install
+- **WHEN** the person presses Cancel while an install runs
+- **THEN** the install stops, its downloads are kept, and the next Install continues where it stopped
+
+#### Scenario: Installing prerequisites
+- **WHEN** the person presses Install and accepts the shown downloads, sizes and licences
+- **THEN** the plugin's setup runs as a panel job with live output, Restart waits for it, and the layer becomes ready when it finishes
+- **AND** progress follows one core contract for every plugin, showing each step's percent or running time
+
+### Requirement: Resizable side panel
+
+A splitter between the viewer and the side panel SHALL resize the panel by pointer drag or arrow keys, remember the width and redraw the viewer without blank frames. Tabs that do not fit SHALL move into a more menu at the end of the tab bar, keeping the selected tab visible.
+
+#### Scenario: Narrow side panel
+- **WHEN** the person drags the splitter until not every tab fits
+- **THEN** the last tabs move into the more menu, and choosing one there selects it
+
+### Requirement: Viewer display menu
+
+The viewer toolbar SHALL offer a Display multi-select after Reset, separated from it, listing Skeleton and the active post-processing mesh layer by name. Each choice SHALL only show or hide that drawing in the viewer, remembered in the browser, without changing saved adjustments or stopping the layer. The mesh layer card SHALL offer a view-only mesh color and brightness, keeping the mesh opaque.
+
+#### Scenario: Hiding the skeleton
+- **WHEN** the person unchecks Skeleton while the mesh runs
+- **THEN** the viewer draws only the mesh, and the saved joint and bone settings stay unchanged

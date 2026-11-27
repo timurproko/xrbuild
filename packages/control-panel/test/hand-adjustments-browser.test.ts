@@ -14,7 +14,7 @@ async function until(evaluate: (s: string) => Promise<any>, expression: string) 
   for (let i = 0; i < 200; i++) { if (await evaluate(expression)) return; await sleep(25); }
   assert.fail(expression);
 }
-test('finished edits autosave, retain exact colours, reset independently, survive reparenting and review conflicts', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async () => {
+test('finished edits autosave, retain exact colors, reset independently, survive reparenting and review conflicts', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async () => {
   const root = await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'adjustment-ui-'));
   const core = path.resolve(import.meta.dirname, '../../..'), workspace = path.join(root, 'workspace');
   let state = await saveHandsState(core, workspace, { owner: 'core', id: 'simulated' }, (await readHandsState(core, workspace)).revision);
@@ -39,24 +39,25 @@ test('finished edits autosave, retain exact colours, reset independently, surviv
       assert.equal(await evaluate('adjustmentWrites'), 1, 'Enter followed by change is one effective save');
       await set('offsetMm.y', -10); await set('offsetMm.z', 30);
       await evaluate(`(()=>{const e=document.querySelector('[data-range="sizeFactor"]');for(const v of ['.95','.9','.8']){e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));}})()`);
-      const beforeSlider = await evaluate('adjustmentWrites'); await sleep(100);
-      assert.equal((await readHandsState(core, workspace)).profile.sizeFactor, 1);
+      await settled();
+      assert.equal((await readHandsState(core, workspace)).profile.sizeFactor, .8, 'a drag applies while moving and ends on the latest value');
+      const beforeSlider = await evaluate('adjustmentWrites');
       await evaluate(`document.querySelector('[data-range="sizeFactor"]').dispatchEvent(new Event('change',{bubbles:true}))`); await settled();
-      assert.equal(await evaluate('adjustmentWrites'), beforeSlider + 1);
+      assert.equal(await evaluate('adjustmentWrites'), beforeSlider, 'releasing after the drag saved adds no write');
       await set('appearance.opacity', .456); await set('appearance.showBones', false);
       state = await readHandsState(core, workspace);
       assert.deepEqual(state.profile.offsetMm, { x: 40, y: -10, z: 30 }); assert.equal(state.profile.sizeFactor, .8);
       assert.deepEqual(state.profile.appearance.jointColorLinear, [0, .541, 1]); assert.deepEqual(state.profile.appearance.boneColorLinear, [0, .482, 1]);
       assert.equal(state.profile.appearance.opacity, .456); assert.deepEqual(state.provider, { owner: 'core', id: 'simulated' });
       for (const [field, value] of Object.entries({ showJoints: false, jointDiameterMm: 22, boneDiameterMm: 12, showPinchGrabIndicator: false, indicatorDiameterMm: 40, indicatorOpacity: .6 })) await set('appearance.' + field, value);
-      const originalColour = await evaluate(`document.querySelector('[data-field="appearance.jointColorLinear"]').value`);
+      const originalColor = await evaluate(`document.querySelector('[data-field="appearance.jointColorLinear"]').value`);
       const beforeCancel = await evaluate('adjustmentWrites');
-      await input('appearance.jointColorLinear', '#00ff00'); await input('appearance.jointColorLinear', originalColour, true); await settled();
+      await input('appearance.jointColorLinear', '#00ff00'); await input('appearance.jointColorLinear', originalColor, true); await settled();
       assert.equal(await evaluate('adjustmentWrites'), beforeCancel, 'returning a preview to its original swatch does not save or quantize defaults');
       assert.deepEqual((await readHandsState(core, workspace)).profile.appearance.jointColorLinear, [0, .541, 1]);
-      const beforeColour = (await readHandsState(core, workspace)).revision;
+      const beforeColor = (await readHandsState(core, workspace)).revision;
       await input('appearance.jointColorLinear', '#00ff00'); await input('appearance.jointColorLinear', '#ff0000');
-      assert.equal((await readHandsState(core, workspace)).revision, beforeColour);
+      assert.equal((await readHandsState(core, workspace)).revision, beforeColor);
       await set('appearance.jointColorLinear', '#ff0000');
       for (const key of ['boneColorLinear', 'indicatorColorLinear']) await set('appearance.' + key, '#ff0000');
       assert.deepEqual((await readHandsState(core, workspace)).profile.appearance.indicatorColorLinear, [1, 0, 0]);

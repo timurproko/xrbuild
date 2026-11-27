@@ -160,3 +160,19 @@ test('packager-only plugin uses a short name and package metadata, without a nat
     await fs.rm(workspace, { recursive: true, force: true });
   }
 });
+
+test('a hand-mesh plugin is listed as post-processing', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'xrb-post-processing-manager-'));
+  try {
+    const handMesh = { version: 1, id: 'surface', label: 'Surface', program: 'runtime.exe', args: [], settingsVersion: 1, settings: [{ key: 'quality', label: 'Quality', type: 'number', min: 1, max: 3, default: 2 }] };
+    for (const [id, type] of [['generic-mesh', 'plugin'], ['declared-mesh', 'post-processing']]) {
+      const dir = path.join(workspace, 'plugins', id); await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, 'xrb-plugin.json'), JSON.stringify({ title: id, type, version: '0.1.0', handMesh }));
+    }
+    const panel = new Panel(workspace, workspace, { send() {} } as ConstructorParameters<typeof Panel>[2]);
+    const types = Object.fromEntries((await panel.managedPlugins()).map(plugin => [plugin.title, plugin.type]));
+    assert.deepEqual(types, { 'declared-mesh': 'post-processing', 'generic-mesh': 'post-processing' });
+  } finally {
+    await fs.rm(workspace, { recursive: true, force: true });
+  }
+});
