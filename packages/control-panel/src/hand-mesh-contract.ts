@@ -71,6 +71,12 @@ export function handMeshDeclaration(value: unknown): HandMeshDeclaration {
     ...(value.version === 2 ? { capabilities: [...value.capabilities as MeshCapability[]], preparationTimeoutMs: value.preparationTimeoutMs as number ?? 30000 } : {}),
     args: [...(value.args as string[] ?? [])], settingsVersion: value.settingsVersion as number, settings };
 }
+/** Independent hard allowance; progress never renews it. */
+export function meshPreparationAllowance(declaration: HandMeshDeclaration): number {
+  const value = declaration.version === 1 ? 10000 : declaration.preparationTimeoutMs ?? 30000;
+  if (!Number.isSafeInteger(value) || value < 1000 || value > 120000) throw new Error('Invalid mesh preparation allowance');
+  return value;
+}
 function validValue(field: PluginSetting, value: unknown): value is SettingValue {
   if (field.type === 'boolean') return typeof value === 'boolean';
   if (field.type === 'select') return typeof value === 'string' && !!field.options?.some(o => o.value === value);

@@ -17,7 +17,13 @@ process.stdin.on('data', chunk => {
       const reply = ack(m, m.type === 'start' ? 'ready' : 'configured');
       if (settings.mode === 'bad-ack') reply.runId = 'foreign';
       if (m.type === 'configure' && settings.mode === 'stale-ack') process.stdout.write(meshPacket({ ...reply, settingsGeneration: m.settingsGeneration - 1 }));
-      setTimeout(() => process.stdout.write(meshPacket(reply)), m.type === 'configure' ? settings.ackDelay ?? 0 : settings.startDelay ?? 0);
+      const progress = m.version === 2 && settings.progress ? setInterval(() => process.stdout.write(meshPacket({ ...ack(m, 'preparing'), progress: .5, step: 'models' })), 100) : null;
+      if (settings.mode === 'no-ack' || settings.mode === 'endless-progress') continue;
+      if (settings.mode === 'early-ready') reply.settingsGeneration = 0;
+      setTimeout(() => {
+        if (progress) clearInterval(progress);
+        process.stdout.write(meshPacket(settings.mode === 'reject' ? { ...ack(m, 'failed'), reason: 'preparation-failed' } : reply));
+      }, m.type === 'configure' ? settings.ackDelay ?? 0 : settings.startDelay ?? 0);
       continue;
     }
     if (m.type !== 'frame') process.exit(2);

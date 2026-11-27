@@ -28,9 +28,9 @@
 
 ## 5. Declared bounded preparation and in-session repreparation
 
-- [ ] 5.1 Add validated modern preparation allowance and structured bounded progress/status/reason, keeping legacy behavior; verify controlled-clock tests accept a seventeen-second cold prepare within allowance and reject invalid bounds, early Ready, endless progress and deadline expiry.
-- [ ] 5.2 Apply reprepare settings through Preparing/Ready/Failed behind the stable gateway without ending the input session; verify fake device-change tests suspend incompatible mesh, preserve skeleton and interaction traces, and handle failure/retry/newest-pending/Stop during preparation.
-- [ ] 5.3 Separate preparation, frame, attachment and overall-startup watchdogs and document each bound; verify targeted boundary tests show status/heartbeats continue while preparing, no timer renews the hard allowance and owner loss always enters bounded cleanup.
+- [x] 5.1 Add validated modern preparation allowance and structured bounded progress/status/reason, keeping legacy behavior; verify controlled-clock tests accept a seventeen-second cold prepare within allowance and reject invalid bounds, early Ready, endless progress and deadline expiry.
+- [x] 5.2 Apply reprepare settings through Preparing/Ready/Failed behind the stable gateway without ending the input session; verify fake device-change tests suspend incompatible mesh, preserve skeleton and interaction traces, and handle failure/retry/newest-pending/Stop during preparation.
+- [x] 5.3 Separate preparation, frame, attachment and overall-startup watchdogs and document each bound; verify targeted boundary tests show status/heartbeats continue while preparing, no timer renews the hard allowance and owner loss always enters bounded cleanup.
 
 ## 6. Independent mesh appearance and integrated fake-processor regression
 

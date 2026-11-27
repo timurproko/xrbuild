@@ -23,7 +23,9 @@ export const MESH_MAX_BYTES = 2 * 1024 * 1024, MESH_MAX_VERTICES = 16384, MESH_M
 export interface MeshPose { id: number; handedness: string; keypoints: Vec3[]; observations?: HandObservations }
 export interface MeshFrame { type: 'frame'; epoch: string; sequence: number; revision: number; sentMs: number; sampleMs: number; hands: MeshPose[]; drawingStatus?: string;
   version?: 2; runId?: string; settingsGeneration?: number; drawingGeneration?: number | null; protocolVersion?: 2; capabilities?: MeshCapability[] }
+export const MESH_PREPARATION_STEPS = ['runtime', 'assets', 'models', 'device', 'warming'] as const;
 export interface MeshState {
+  step?: typeof MESH_PREPARATION_STEPS[number] | null;
   runId: string; phase: 'Preparing' | 'Ready' | 'Failed' | 'Stopped'; reason: string | null; progress: number | null;
   requestedGeneration: number; appliedGeneration: number | null; drawingGeneration: number | null; savedRevision: string | null;
   owner: string | null; id: string | null;
@@ -35,6 +37,7 @@ export function validMeshState(v: unknown): v is MeshState {
     && ['Preparing', 'Ready', 'Failed', 'Stopped'].includes(v.phase as string) && integer(v.requestedGeneration)
     && (v.appliedGeneration === null || integer(v.appliedGeneration) && v.appliedGeneration <= v.requestedGeneration)
     && (v.drawingGeneration === null || integer(v.drawingGeneration) && v.drawingGeneration === v.appliedGeneration)
+    && (v.step === undefined || v.step === null || MESH_PREPARATION_STEPS.includes(v.step as typeof MESH_PREPARATION_STEPS[number]))
     && (v.progress === null || typeof v.progress === 'number' && Number.isFinite(v.progress) && v.progress >= 0 && v.progress <= 1)
     && (v.reason === null || typeof v.reason === 'string' && v.reason.length <= 240 && !/[\x00-\x1f\x7f]/.test(v.reason))
     && (v.savedRevision === null || typeof v.savedRevision === 'string' && v.savedRevision.length <= 128)

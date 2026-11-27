@@ -2,14 +2,17 @@ import http from 'node:http';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { HandMeshProcess } from './hand-mesh-process.ts';
-import { meshPacket, readMeshPacket, decodeMeshResult, encodeMeshResult, validMeshFrame, validMeshCapabilities, MESH_CAPABILITIES, MESH_MAX_BYTES,
+import { meshPacket, readMeshPacket, decodeMeshResult, encodeMeshResult, validMeshFrame, validMeshCapabilities, MESH_CAPABILITIES, MESH_PREPARATION_STEPS, MESH_MAX_BYTES,
   type MeshFrame, type MeshRuntime, type MeshState } from '../../sdk/src/hand-mesh-protocol.ts';
 import type { HandMeshPlugin } from './hand-mesh-plugins.ts';
-import { handMeshSettings } from './hand-mesh-contract.ts';
+import { handMeshSettings, meshPreparationAllowance } from './hand-mesh-contract.ts';
 
 type Target = { plugin: HandMeshPlugin | null; values: Record<string, unknown>; generation: number; savedRevision: string | null; failure?: string };
 type Stage = { plugin: HandMeshPlugin; owned: HandMeshProcess | null; bytes: Buffer; generation: number; values: Record<string, unknown>; ready: boolean; retired: boolean; draining?: Promise<void> };
 type Work = { frame: MeshFrame; response: http.ServerResponse; at: number; stage: Stage; timers: ReturnType<typeof setTimeout>[]; done: () => void };
+const failureReasons: Record<string, string> = { 'configuration-rejected': 'Mesh configuration rejected', 'preparation-failed': 'Mesh preparation failed',
+  'runtime-unavailable': 'Mesh runtime unavailable; prepare explicitly', 'unsupported-setting': 'Mesh setting unsupported' };
+const coreReasons = new Set([...Object.values(failureReasons), 'Mesh preparation timed out', 'Mesh live configuration timed out', 'Processor does not support live configuration; relaunch']);
 type Ack = { stage: Stage; target: Target; type: 'ready' | 'configured'; resolve: () => void; reject: (e: Error) => void };
 export interface MeshRunOptions { startupMs?: number; connectMs?: number; supervisor?: string }
 /** Stable authenticated run gateway; only its optional, contained processor is replaceable. */
@@ -38,6 +41,13 @@ export class HandMeshRun {
   private lastRequest = 0;
   private deliveredGeneration: number | null = null;
   private appStartedAtLeastOnce = false;
+  private openedAt = 0;
+  private startupTimer: ReturnType<typeof setTimeout> | null = null;
+  private watchStartup(plugin: HandMeshPlugin | null) {
+    if (this.startupTimer) this.cancel(this.startupTimer);
+    const budget = this.options.startupMs ?? Math.max(90000, (plugin ? meshPreparationAllowance(plugin.declaration) : 0) + 60000);
+    this.startupTimer = this.later(() => { if (!this.epoch) this.failRun('app startup timeout before mesh connection'); }, Math.max(0, budget - (performance.now() - this.openedAt)));
+  }
   private changed: (status: string) => void;
   private origins: () => string[];
   private options: MeshRunOptions;
@@ -71,23 +81,25 @@ export class HandMeshRun {
     if (this.closed) { this.server.close(); throw new Error('Mesh start cancelled'); }
     const address = this.server.address(); if (!address || typeof address === 'string') throw new Error('No mesh endpoint');
     const descriptor: MeshRuntime = { version: 1, url: `http://127.0.0.1:${address.port}`, token: randomBytes(32).toString('hex') }; this.descriptor = descriptor;
+    this.openedAt = performance.now();
     this.configure(plugin, settings, savedRevision);
-    this.later(() => { if (!this.epoch) this.failRun('app startup timeout before mesh connection'); }, this.options.startupMs ?? 90000);
     return descriptor;
   }
   /** Persist first; delivery is optional and asynchronous. No provider/session acquisition happens here. */
   configure(plugin: HandMeshPlugin | null, settings: unknown = {}, savedRevision: string | null = null, retry = false): void {
     if (this.closed) throw new Error('Mesh run stopped');
     const values = plugin ? handMeshSettings(plugin.declaration, settings) : {};
+    if (plugin) meshPreparationAllowance(plugin.declaration);
     if (plugin && (!plugin.available || !plugin.program)) throw new Error('Mesh plugin unavailable');
     const old = this.desired;
     if (!retry && old?.plugin?.owner === plugin?.owner && old?.plugin?.id === plugin?.id
       && JSON.stringify(old?.values) === JSON.stringify(values) && JSON.stringify(old?.plugin?.declaration) === JSON.stringify(plugin?.declaration)) {
       this.data.savedRevision = savedRevision; if (old) old.savedRevision = savedRevision; return;
     }
+    if (this.openedAt) this.watchStartup(plugin);
     const generation = this.data.requestedGeneration + 1;
     const target: Target = { plugin, values, generation, savedRevision }; this.desired = target; this.pendingTarget = target;
-    this.data = { ...this.data, requestedGeneration: generation, savedRevision, drawingGeneration: null, progress: null, reason: null, phase: 'Preparing' };
+    this.data = { ...this.data, requestedGeneration: generation, savedRevision, drawingGeneration: null, progress: null, step: null, reason: null, phase: 'Preparing' };
     this.deliveredGeneration = null;
     this.reply(this.current); this.reply(this.pending); this.pending = null;
     this.setStatus(plugin ? 'Preparing' : 'None'); this.kickControl();
@@ -139,7 +151,7 @@ export class HandMeshRun {
           await this.expectAck(stage, target, 'ready', () => child.stdin.write(meshPacket({ type: 'start', version: target.plugin!.declaration.version,
             owner: target.plugin!.owner, id: target.plugin!.id, settingsVersion: target.plugin!.declaration.settingsVersion, settings: target.values,
             ...(target.plugin!.declaration.version === 2 ? { runId: this.runId, settingsGeneration: target.generation, savedRevision: target.savedRevision, capabilities: target.plugin!.declaration.capabilities } : {}),
-            limits: { hands: 2, vertices: 16384, triangles: 32768, bytes: MESH_MAX_BYTES }, ownerLoss: 'exit-on-stdin-end' })), 10000);
+            limits: { hands: 2, vertices: 16384, triangles: 32768, bytes: MESH_MAX_BYTES }, ownerLoss: 'exit-on-stdin-end' })), meshPreparationAllowance(target.plugin.declaration));
         } else {
           const active = stage!;
           if (!active.plugin.declaration.capabilities?.includes('live-configure-v1')) throw new Error('Processor does not support live configuration; relaunch');
@@ -147,23 +159,23 @@ export class HandMeshRun {
           active.ready = false;
           await this.expectAck(active, target, 'configured', () => active.owned!.child.stdin.write(meshPacket({ type: 'configure', version: 2,
             runId: this.runId, owner: active.plugin.owner, id: active.plugin.id, settingsVersion: active.plugin.declaration.settingsVersion,
-            settingsGeneration: target.generation, savedRevision: target.savedRevision, settings: target.values, mode: reprepare ? 'reprepare' : 'live' })), reprepare ? 10000 : 2000);
+            settingsGeneration: target.generation, savedRevision: target.savedRevision, settings: target.values, mode: reprepare ? 'reprepare' : 'live' })), reprepare ? meshPreparationAllowance(active.plugin.declaration) : 2000, reprepare);
         }
         if (this.closed || !stage || stage.retired) continue;
         stage.generation = target.generation; stage.values = target.values; stage.ready = true;
         this.data.appliedGeneration = target.generation;
-        if (target.generation === this.data.requestedGeneration) { this.data.phase = 'Ready'; this.data.reason = null; this.data.progress = null; this.setStatus('Ready; app mesh not started'); this.pump(); }
+        if (target.generation === this.data.requestedGeneration) { this.data.phase = 'Ready'; this.data.reason = null; this.data.progress = null; this.data.step = null; this.setStatus('Ready; app mesh not started'); this.pump(); }
       } catch (error) {
         if (this.closed) return;
-        this.data.phase = 'Failed'; this.data.reason = error instanceof Error && /relaunch/.test(error.message) ? error.message : 'Mesh preparation or configuration failed';
+        this.data.phase = 'Failed'; this.data.reason = error instanceof Error && coreReasons.has(error.message) ? error.message : 'Mesh preparation or configuration failed';
         this.setStatus(`Skeleton fallback: ${this.data.reason}`);
         if (this.stage) { try { await this.drain(this.stage); } catch { this.data.reason = 'Mesh child cleanup failed; retry cleanup'; this.setStatus(`Skeleton fallback: ${this.data.reason}`); this.pendingTarget = null; } }
       }
     }
   }
-  private expectAck(stage: Stage, target: Target, type: Ack['type'], send: () => void, timeout: number): Promise<void> {
+  private expectAck(stage: Stage, target: Target, type: Ack['type'], send: () => void, timeout: number, preparation = type === 'ready'): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      const timer = this.later(() => { if (this.ack === ack) { this.ack = null; reject(new Error('Mesh preparation/configuration timeout')); } }, timeout);
+      const timer = this.later(() => { if (this.ack === ack) { this.ack = null; reject(new Error(preparation ? 'Mesh preparation timed out' : 'Mesh live configuration timed out')); } }, timeout);
       const ack: Ack = { stage, target, type, resolve: () => { this.cancel(timer); this.ack = null; resolve(); }, reject: error => { this.cancel(timer); this.ack = null; reject(error); } };
       this.ack = ack;
       try { send(); } catch { ack.reject(new Error('Sidecar control pipe closed')); }
@@ -197,7 +209,7 @@ export class HandMeshRun {
   }
   private output(stage: Stage, chunk: Buffer) {
     if (this.closed || stage.retired || this.stage !== stage) return;
-    if (stage.bytes.length + chunk.length > MESH_MAX_BYTES) { this.failStage(stage, 'oversized sidecar output'); return; }
+    if (stage.bytes.length + chunk.length > MESH_MAX_BYTES * 2) { this.failStage(stage, 'oversized sidecar output'); return; }
     stage.bytes = Buffer.concat([stage.bytes, chunk]);
     try {
       while (stage.bytes.length >= 12) {
@@ -205,6 +217,25 @@ export class HandMeshRun {
         if (size > MESH_MAX_BYTES) throw new Error('oversized'); if (stage.bytes.length < size) return;
         const packet = stage.bytes.subarray(0, size); stage.bytes = stage.bytes.subarray(size);
         const { meta, payload } = readMeshPacket(packet);
+        if (meta.type === 'preparing' || meta.type === 'failed') {
+          if (stage.plugin.declaration.version !== 2 || meta.version !== 2 || payload.length || meta.runId !== this.runId
+            || meta.owner !== stage.plugin.owner || meta.id !== stage.plugin.id || meta.settingsVersion !== stage.plugin.declaration.settingsVersion
+            || !Number.isSafeInteger(meta.settingsGeneration)) throw new Error('preparation identity');
+          const ack = this.ack;
+          if (!ack || ack.stage !== stage || meta.settingsGeneration !== ack.target.generation) continue;
+          if (meta.type === 'failed') {
+            if (!Object.hasOwn(failureReasons, meta.reason)) throw new Error('failure reason');
+            ack.reject(new Error(failureReasons[meta.reason])); continue;
+          }
+          if (!stage.plugin.declaration.capabilities?.includes('preparation-progress-v1') || meta.progress !== null
+            && (typeof meta.progress !== 'number' || !Number.isFinite(meta.progress) || meta.progress < 0 || meta.progress > 1)
+            || meta.step !== undefined && meta.step !== null && !MESH_PREPARATION_STEPS.includes(meta.step)) throw new Error('preparation progress');
+          if (meta.settingsGeneration === this.data.requestedGeneration) {
+            this.data.phase = 'Preparing'; this.data.progress = meta.progress; this.data.step = meta.step ?? null;
+            this.changed(this.status); // Status readers can inspect progress, without extending the ACK deadline.
+          }
+          continue;
+        }
         if (meta.type === 'ready' || meta.type === 'configured') {
           const ack = this.ack;
           if (stage.plugin.declaration.version === 2) {
