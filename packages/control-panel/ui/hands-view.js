@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { HandInput } from '/sdk/hands.js';
 import { HandFrameIngress } from '/sdk/hand-source.js';
 import { HandVisual } from '/sdk/hand-visual.js';
+import { HandMeshClient, meshRuntime } from '/sdk/hand-mesh-client.js';
 import { PanelFrame } from '/sdk/stereo.js';
 import { toSceneHand } from '/sdk/scene-hands.js';
 import { Interactor } from '/sdk/interaction/core/interactor.js';
@@ -25,7 +26,9 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   const tests = createHandTestTargets(scene, interaction, onTestFeedback);
   let currentHands = [], sceneHands = [], profile = null, profileRequest = 0, recordedSession = false, pendingProfile = null;
   const legacy = new THREE.Group(); scene.add(legacy);
-  function clearHands() { currentHands = []; sceneHands = []; interaction.update([], 1); visual.update([], panel); tests.reset(); }
+  let meshClient = null, meshDescriptor = null;
+  function closeMesh() { meshClient?.close(); meshClient = null; meshDescriptor = null; visual.disposeMeshes(); }
+  function clearHands() { currentHands = []; sceneHands = []; interaction.update([], 1); visual.update([], panel); meshClient?.observed([]); meshClient?.invalidate(); visual.updateMeshes([], panel); tests.reset(); }
   const stream = createHandStream({ ingress, clear: clearHands });
   function clearLegacy() { for (const object of [...legacy.children]) { object.geometry.dispose(); object.material.dispose(); legacy.remove(object); } }
   async function setProfile(value, { isCurrent = () => true, mode = 'live' } = {}) {
@@ -70,6 +73,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     sceneHands = currentHands.map(hand => toSceneHand(hand, panel));
     tests.setActive(stream.active && !recordedSession);
     interaction.update(sceneHands, 1); visual.update(currentHands, panel);
+    if (meshClient) visual.updateMeshes(meshClient.update(currentHands, now, ingress.generation, visual.parent !== null && visual.visible), panel);
     renderer.render(scene, camera); ticks++;
     if (now - start >= 1000) { onMetrics({ renderFps: ticks * 1000 / (now - start), ...stream.metrics(), ...(recordedSession ? { trackingFps: null } : {}) }); ticks = 0; start = now; }
     frameId = requestAnimationFrame(render);
@@ -78,9 +82,19 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   return {
     setProfile,
     beginSession(options) { if (stream.active && recordedSession !== (options.mode === 'replay')) return false; const accepted = stream.beginSession(options); if (accepted) { clearLegacy(); recordedSession = options.mode === 'replay'; onStatus({ phase: recordedSession ? 'replay' : 'running', hands: 0 }); } return accepted; },
-    pushFrame(value) { const accepted = stream.pushFrame(value); if (accepted) onStatus({ phase: recordedSession ? 'replay' : 'running', hands: value.frame.hands.length }); return accepted; },
+    setMeshRuntime(value) {
+      if (closed || !stream.active || recordedSession) return false;
+      const descriptor = meshRuntime(JSON.stringify(value));
+      if (descriptor?.token === meshDescriptor?.token && descriptor?.url === meshDescriptor?.url) return true;
+      closeMesh();
+      if (descriptor) { meshDescriptor = descriptor; meshClient = new HandMeshClient(descriptor); }
+      return !!descriptor;
+    },
+    get meshState() { return meshClient?.state ?? null; },
+    get meshStatus() { return meshClient?.status ?? 'None'; },
+    pushFrame(value) { const accepted = stream.pushFrame(value); if (accepted) meshClient?.observed(value.frame.hands.map(h => h.id)); if (accepted) onStatus({ phase: recordedSession ? 'replay' : 'running', hands: value.frame.hands.length }); return accepted; },
     clearHands() { stream.clearHands(); },
-    clearSession() { pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; stream.clearSession(); recordedSession = false; onStatus({ phase: 'idle', hands: null }); },
+    clearSession() { pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; closeMesh(); stream.clearSession(); recordedSession = false; onStatus({ phase: 'idle', hands: null }); },
     get replaying() { return recordedSession; },
     get active() { return stream.active; },
     get profile() { return profile ? structuredClone(profile) : null; },
@@ -103,7 +117,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     resetView,
     setViewOptions(options) { grid.visible = options.includes('grid'); axes.visible = options.includes('axes'); },
     dispose() {
-      if (closed) return; closed = true; pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; stream.dispose(); tests.dispose(); clearLegacy(); cancelAnimationFrame(frameId); resize.disconnect(); observer.disconnect(); system.removeEventListener('change', theme); controls.dispose();
+      if (closed) return; closed = true; pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; closeMesh(); stream.dispose(); tests.dispose(); clearLegacy(); cancelAnimationFrame(frameId); resize.disconnect(); observer.disconnect(); system.removeEventListener('change', theme); controls.dispose();
       scene.traverse(object => { object.geometry?.dispose(); for (const material of object.material ? Array.isArray(object.material) ? object.material : [object.material] : []) material.dispose(); });
       renderer.renderLists.dispose(); renderer.dispose();
     },

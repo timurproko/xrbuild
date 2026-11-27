@@ -9,10 +9,10 @@
 
 ## 2. Hands viewport draws final-pose mesh through the SDK
 
-- [ ] 2.1 Attach and retire the SDK mesh client through the live session/view boundary and expose its required module graph through the SDK allowlist; a disposable browser fixture must load every import and show actual SDK mesh output without the optional diagnostics module.
-- [ ] 2.2 Dispatch copies of the view's final sampled pose after interaction with acquisition identities, observation provenance and ingress generation; parity tests must cover nonidentity size/offset, filtering, sample timing and unchanged gesture/hold traces.
-- [ ] 2.3 Clear incompatible mesh on profile geometry, identity, settings-generation or topology changes and stale/empty input; regression tests must reject late retired replies, dispose client/GPU resources on Stop/failure/navigation and keep replay/idle mesh-free.
-- [ ] 2.4 Document supported Hands viewport delivery and session status without editing the parallel post-processing controls module; confirm its existing load/save/retry response contract remains usable and report its context-copy integration dependency.
+- [x] 2.1 Attach and retire the SDK mesh client through the live session/view boundary and expose its required module graph through the SDK allowlist; a disposable browser fixture must load every import and show actual SDK mesh output without the optional diagnostics module.
+- [x] 2.2 Dispatch copies of the view's final sampled pose after interaction with acquisition identities, observation provenance and ingress generation; parity tests must cover nonidentity size/offset, filtering, sample timing and unchanged gesture/hold traces.
+- [x] 2.3 Clear incompatible mesh on profile geometry, identity, settings-generation or topology changes and stale/empty input; regression tests must reject late retired replies, dispose client/GPU resources on Stop/failure/navigation and keep replay/idle mesh-free.
+- [x] 2.4 Document supported Hands viewport delivery and session status without editing the parallel post-processing controls module; confirm its existing load/save/retry response contract remains usable and report its context-copy integration dependency.
 
 ## 3. SDK mesh follows current hand motion with bounded plausible reuse
 
