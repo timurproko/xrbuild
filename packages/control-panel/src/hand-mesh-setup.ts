@@ -53,7 +53,7 @@ const mib = (n: number) => `${(n / 2 ** 20).toFixed(1)} MB`;
 export async function installMeshSetup(core: string, workspace: string, owner: string, consent: string, ctx: JobContext): Promise<void> {
   const { module, plugin } = await setupModule(core, workspace, owner);
   let last = '', lastPercent = -1;
-  ctx.line(`Installing prerequisites for ${plugin.meta.title ?? plugin.id}.`);
+  ctx.line(`Installing ${plugin.meta.title ?? plugin.id}.`);
   await module.install({ consent, core, workspace, owner: plugin.key, onProgress: (event: { step: string; done?: number; total?: number; file?: string }) => {
     if (event.total) {
       const percent = Math.floor((event.done ?? 0) * 100 / event.total);
@@ -63,5 +63,5 @@ export async function installMeshSetup(core: string, workspace: string, owner: s
     } else if (event.step !== last) ctx.line(`${event.step}…`);
     last = event.step;
   } });
-  ctx.line('Prerequisites installed.');
+  ctx.line(`${plugin.meta.title ?? plugin.id} installed.`);
 }

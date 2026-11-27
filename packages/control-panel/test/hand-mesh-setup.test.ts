@@ -34,7 +34,7 @@ test('post-processing plugins offer their prerequisite setup and stay selectable
     await installMeshSetup(core, workspace, 'workspace:fixture-mesh', 'c0ffee', { line: text => lines.push(text), run: async () => {} });
     const options = (globalThis as any).fixtureInstall;
     assert.equal(options.consent, 'c0ffee'); assert.equal(options.owner, 'workspace:fixture-mesh'); assert.equal(options.core, core); assert.equal(options.workspace, workspace);
-    assert.deepEqual(lines.slice(1), ['download: 1.0 MB of 2.0 MB (50%)', 'self-check…', 'Prerequisites installed.']);
+    assert.equal(lines[0], 'Installing Fixture mesh.'); assert.deepEqual(lines.slice(1), ['download: 1.0 MB of 2.0 MB (50%)', 'self-check…', 'Fixture mesh installed.']);
     await assert.rejects(meshSetupPlan(core, workspace, 'workspace:missing'), MeshSetupUnavailable);
     assert.match(restartBlocker(['mesh-setup']) ?? '', /post-processing install/);
   } finally {

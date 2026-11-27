@@ -47,13 +47,13 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
         output.textContent = [`Destination: ${plan.destination}`, '', ...plan.items.map(i => `${i.publisher} · ${i.name} ${i.version} · ${size(i.bytes)} · ${i.licence}`),
           '', 'Files come from their publishers under the licences listed above.'].join('\n');
         install.disabled = false;
-        if (plan.installed) { message.textContent = `${label} prerequisites are already installed.`; install.textContent = 'Reinstall'; }
+        if (plan.installed) { message.textContent = `${label} is already installed.`; install.textContent = 'Reinstall'; }
       } catch (error) { state('failed'); message.textContent = 'Could not read the setup plan.'; output.textContent = error.message; }
     })();
     install.addEventListener('click', async () => {
       if (!plan || running) return;
       running = true; install.hidden = true; cancel.disabled = true; state('running');
-      message.textContent = `Installing ${label} prerequisites…`; output.textContent = 'Starting…';
+      message.textContent = `Installing ${label}…`; output.textContent = 'Starting…';
       try {
         let job = await post('/api/hands/postprocessing/setup', { owner, consent: plan.consent });
         while (job.state === 'running' || job.state === 'queued') {
