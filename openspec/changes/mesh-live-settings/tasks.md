@@ -16,10 +16,10 @@
 
 ## 3. Acknowledged delivery status and Retry
 
-- [ ] 3.1 Interpret supplied delivery identity, saved revision and requested/applied generations to show Applying, Preparing, Applied and failed reasons beside the controls; verify save success, old ACK, legacy Ready and missing drawing evidence never imply current application or visible geometry.
-- [ ] 3.2 Wire explicit delivery Retry to the existing run/revision-bound endpoint without rewriting saved values; verify failure-to-retry-to-ACK, run replacement, None cleanup, reprepare progress and delayed poll/save/retry races using controlled fake status.
-- [ ] 3.3 Keep status and exclusion wording generic and capability-accurate without session/viewport/server/SDK edits; verify idle actions start no provider/processor and fake repreparation leaves the input session running.
-- [ ] 3.4 Run targeted post-processing and nearby Hands page/adjustment contract tests with actual opted-in browser checks, retain commands/results and final status/menu proof outside the checkout, and stop all owned disposable processes before handoff.
+- [x] 3.1 Interpret supplied delivery identity, saved revision and requested/applied generations to show Applying, Preparing, Applied and failed reasons beside the controls; verify save success, old ACK, legacy Ready and missing drawing evidence never imply current application or visible geometry.
+- [x] 3.2 Wire explicit delivery Retry to the existing run/revision-bound endpoint without rewriting saved values; verify failure-to-retry-to-ACK, run replacement, None cleanup, reprepare progress and delayed poll/save/retry races using controlled fake status.
+- [x] 3.3 Keep status and exclusion wording generic and capability-accurate without session/viewport/server/SDK edits; verify idle actions start no provider/processor and fake repreparation leaves the input session running.
+- [x] 3.4 Run targeted post-processing and nearby Hands page/adjustment contract tests with actual opted-in browser checks, retain commands/results and final status/menu proof outside the checkout, and stop all owned disposable processes before handoff.
 
 ## Workflow follow-up
 

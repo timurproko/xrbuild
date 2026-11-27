@@ -6,6 +6,7 @@ const skip = !process.env.XRB_TEST_BROWSER;
 test('post-processing declared controls, paired numeric layout and scoped accessible reset', { skip, timeout: 60000 }, async () => {
   await withPostprocessing(async browser => {
     const { evaluate } = browser;
+    await pictures(browser, 'after');
     assert.equal(await evaluate(`root.querySelectorAll('[data-mesh-field]').length`), 3);
     assert.equal(await evaluate(`root.querySelector('[data-mesh-range]').value`), '0.6');
     await evaluate(`const field=root.querySelector('[data-mesh-field="detail"]');field.value='.75';field.dispatchEvent(new Event('input',{bubbles:true}))`);

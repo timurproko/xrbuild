@@ -12,7 +12,7 @@ async function request(method, body, suffix = '') {
   return data;
 }
 /** Independent root and revision-safe editor. Preview, persistence and runtime evidence are separate. */
-export function mountHandsPostprocessing(root, { load = () => request('GET'), save = body => request('PUT', body), pollMs = 1000 } = {}) {
+export function mountHandsPostprocessing(root, { load = () => request('GET'), save = body => request('PUT', body), retry = body => request('POST', body, '/retry'), pollMs = 1000 } = {}) {
   const prefix = `hands-postprocessing-${++mounts}`;
   root.hidden = true;
   root.innerHTML = `<form class="xrb-stack hands-postprocessing" aria-label="Hand post-processing"><div class="row"><h2>Post-processing</h2><span class="spacer"></span>
@@ -20,7 +20,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     <div class="menu" id="${prefix}-menu" role="menu" aria-labelledby="${prefix}-settings" hidden><button type="button" role="menuitem" data-mesh-reset>Reset to defaults</button></div></div>
     <label class="xrb-field-label">Hand mesh<select data-mesh-selector aria-label="Hand mesh"></select></label>
     <div class="xrb-stack" data-mesh-fields></div><p class="xrb-help" data-mesh-readiness hidden></p>
-    <p class="xrb-help" data-mesh-runtime role="status" aria-live="polite" hidden></p>
+    <div class="hands-mesh-delivery"><p class="xrb-help" data-mesh-runtime role="status" aria-live="polite" hidden></p><button type="button" class="small" data-mesh-delivery-retry hidden>Retry</button></div>
     <div data-mesh-recovery hidden><p class="field-error" data-mesh-message role="alert"></p><div class="xrb-button-row"><button type="button" class="small" data-mesh-retry>Retry</button><button type="button" class="small" data-mesh-discard hidden>Use saved</button></div></div>
     <p class="xrb-help">Post-processing is not used in browser previews, published web builds or offline packages.</p></form>`;
   const form = root.querySelector('form'), select = root.querySelector('[data-mesh-selector]'), fields = root.querySelector('[data-mesh-fields]');
@@ -30,11 +30,13 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   const events = new AbortController(), document = root.ownerDocument, edits = new Map();
   let snapshot = null, selected = '', disposed = false, busy = false, reading = false, epoch = 0, version = 0;
   let failure = null, conflict = null, rendered = '', stepperDispose = () => {};
+  let delivery = null, observedRun = null, highestGeneration = -1, retrying = false, deliveryFailure = null;
+  const retiredRuns = new Set(), deliveryRetry = root.querySelector('[data-mesh-delivery-retry]');
   const plugin = (data = snapshot, id = selected) => data?.plugins.find(p => key(p) === id);
   const schema = (data, id) => { const p = plugin(data, id); return p ? JSON.stringify([p.declaration.settingsVersion, p.declaration.settings]) : null; };
   const valueAt = (data, id, field) => {
     const p = plugin(data, id), f = p?.declaration.settings.find(f => f.key === field), stored = data?.choice?.settings?.[id];
-    return stored?.version === p?.declaration.settingsVersion && Object.hasOwn(stored.values, field) ? stored.values[field] : f?.default;
+    return stored && p && stored.version === p.declaration.settingsVersion && Object.hasOwn(stored.values, field) ? stored.values[field] : f?.default;
   };
   const editKey = (id, field) => `${id}#${field}`;
   const closeMenu = (focus = false) => { menu.hidden = true; gear.setAttribute('aria-expanded', 'false'); if (focus) gear.focus(); };
@@ -46,6 +48,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     message.textContent = failure ?? snapshot?.problem ?? '';
     recovery.hidden = !message.textContent; retryButton.disabled = busy;
     discard.hidden = !conflict; discard.disabled = busy;
+    renderRuntime();
   }
   function render() {
     if (!snapshot || disposed) { buttons(); return; }
@@ -83,18 +86,58 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
       setFieldError(field, edit?.invalid ? field.validationMessage : '');
     }
     const readiness = root.querySelector('[data-mesh-readiness]');
-    readiness.textContent = selected && !p?.available ? p?.reason ?? 'Selected plugin is missing.' : '';
+    const stored = snapshot.choice?.settings?.[selected];
+    readiness.textContent = selected && !p?.available ? p?.reason ?? 'Selected plugin is missing.'
+      : stored && stored.version !== p?.declaration.settingsVersion ? 'Saved settings schema changed. Review defaults with Reset to defaults.' : '';
     readiness.hidden = !readiness.textContent;
     buttons();
   }
-  function runtime(data) {
-    const status = root.querySelector('[data-mesh-runtime]');
-    status.textContent = data.running ? data.status ?? '' : ''; status.hidden = !status.textContent;
+  function acceptDelivery(data) {
+    const next = data.delivery;
+    if (!next) {
+      if (observedRun) retiredRuns.add(observedRun);
+      observedRun = null; highestGeneration = -1; delivery = null; deliveryFailure = null; return;
+    }
+    if (typeof next.runId !== 'string' || !next.runId || !Number.isSafeInteger(next.requestedGeneration) || next.requestedGeneration < 0) { delivery = null; return; }
+    if (retiredRuns.has(next.runId)) return;
+    if (next.runId !== observedRun) {
+      if (observedRun) retiredRuns.add(observedRun);
+      observedRun = next.runId; highestGeneration = -1;
+    }
+    if (!Number.isSafeInteger(next.requestedGeneration) || next.requestedGeneration < highestGeneration) return;
+    if (next.requestedGeneration > highestGeneration || next.phase !== 'Failed') deliveryFailure = null;
+    highestGeneration = next.requestedGeneration; delivery = next;
+  }
+  function renderRuntime() {
+    const status = root.querySelector('[data-mesh-runtime]'), d = delivery;
+    let text = '', state = 'saved';
+    const pending = [...edits.values()].some(edit => edit.committed);
+    const chosen = snapshot?.choice?.selected;
+    const matches = d && d.runId === observedRun && d.savedRevision === snapshot?.revision
+      && d.owner === (chosen?.owner ?? null) && d.id === (chosen?.id ?? null);
+    const legacy = !!selected && (plugin()?.declaration.version !== 2 || !plugin()?.declaration.capabilities?.includes('live-configure-v1'));
+    if (snapshot?.problem) { state = 'unknown'; }
+    else if (busy || pending) { text = busy ? 'Saving…' : 'Not yet saved.'; state = 'saving'; }
+    else if (retrying) { text = 'Applying…'; state = 'applying'; }
+    else if (deliveryFailure) { text = deliveryFailure; state = 'failed'; }
+    else if (d?.phase === 'Failed') { text = `Failed: ${d.reason || 'Post-processing could not be applied.'}`; state = 'failed'; }
+    else if (d && (legacy || /rebuild|relaunch|unsupported/i.test(d.reason ?? ''))) { text = d.reason || 'Saved; rebuild/relaunch for live configuration.'; state = 'unsupported'; }
+    else if (d?.phase === 'Preparing') {
+      text = 'Preparing'; state = 'preparing';
+      if (Number.isFinite(d.progress) && d.progress >= 0 && d.progress <= 1) text += ` · ${Math.round(d.progress * 100)}%`;
+    } else if (matches && d.phase === 'Ready' && Number.isSafeInteger(d.appliedGeneration) && d.requestedGeneration > 0 && d.appliedGeneration === d.requestedGeneration) {
+      text = 'Applied'; state = 'applied';
+    } else if ((d && d.phase !== 'Stopped') || snapshot?.running) { text = 'Saved; application not confirmed.'; state = 'applying'; }
+    status.textContent = text; status.hidden = !text; root.dataset.meshState = state;
+    deliveryRetry.hidden = !d || state !== 'failed';
+    deliveryRetry.disabled = busy || retrying || pending || !!snapshot?.problem;
   }
   function incorporate(data) {
-    snapshot = data;
-    if (!edits.has('$selection')) selected = key(data.choice?.selected);
-    runtime(data); render();
+    // Public refresh and request epochs both fence a retired owner; generations are ordered only within a run.
+    if (data.delivery && retiredRuns.has(data.delivery.runId)) return;
+    snapshot = structuredClone(data);
+    if (!edits.has('$selection')) selected = key(snapshot.choice?.selected);
+    acceptDelivery(snapshot); render();
   }
   function refresh(data, { discard: discardEdits = false } = {}) {
     if (disposed || busy) return;
@@ -103,7 +146,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     incorporate(data);
   }
   async function read(discardEdits = false) {
-    if (disposed || busy || reading) return;
+    if (disposed || busy || reading || retrying) return;
     reading = true; const token = ++epoch;
     try {
       const data = await load();
@@ -111,7 +154,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
         if (discardEdits) { edits.clear(); failure = conflict = null; }
         incorporate(data);
       }
-    } catch (error) { if (!disposed && token === epoch) { failure = error.message; buttons(); } }
+    } catch (error) { if (!disposed && token === epoch) { failure = error.message; delivery = null; if (!snapshot) root.hidden = false; buttons(); } }
     finally { reading = false; }
   }
   function editField(field, committed = false) {
@@ -149,7 +192,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     const target = selected;
     const sent = new Map([...edits].filter(([name, edit]) => edit.committed && (name === '$selection' || edit.id === target)));
     if (!sent.size) return;
-    busy = true; epoch++; buttons(); let success = false;
+    busy = true; epoch++; deliveryFailure = null; buttons(); let success = false;
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         const current = await load(); if (disposed) return;
@@ -162,10 +205,15 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
         if (conflicts.length) throw makeConflict(current, sent, conflicts);
         const p = plugin(current, target);
         if (target && !p?.available) throw makeConflict(current, sent, [...sent.keys()], p?.reason ?? 'Selected plugin is unavailable.');
+        const stored = current.choice?.settings?.[target];
+        const needsReview = p && stored && (stored.version !== p.declaration.settingsVersion || Object.keys(stored.values).some(name => !p.declaration.settings.some(f => f.key === name)));
+        if (needsReview && ![...sent.values()].every(edit => edit.reviewed)) throw makeConflict(current, sent, [...sent.keys()], 'Saved settings schema changed.');
         const values = Object.fromEntries((p?.declaration.settings ?? []).map(f => [f.key, valueAt(current, target, f.key)]));
         for (const [name, edit] of sent) if (name !== '$selection') values[edit.name] = edit.value;
         // Equivalent Enter/change or a value changed back while queued needs no duplicate PUT.
-        const same = savedSelection === target && [...sent].every(([name, edit]) => name === '$selection' || equal(valueAt(current, target, edit.name), edit.value));
+        const same = savedSelection === target && (!target || stored?.version === p.declaration.settingsVersion
+          && Object.keys(stored.values).length === Object.keys(values).length && Object.entries(values).every(([name, value]) => equal(stored.values[name], value)))
+          && [...sent].every(([name, edit]) => name === '$selection' || equal(valueAt(current, target, edit.name), edit.value));
         let result;
         try {
           if (disposed) return;
@@ -198,6 +246,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     if (conflict) {
       for (const name of conflict.keys) {
         const edit = edits.get(name); if (!edit) continue;
+        edit.reviewed = true;
         if (name === '$selection') edit.base = key(conflict.current.choice?.selected);
         else {
           if (!plugin(conflict.current, edit.id)?.declaration.settings.some(f => f.key === edit.name)) { failure = 'Setting is no longer declared. Use saved to review.'; buttons(); return; }
@@ -206,7 +255,29 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
       }
       snapshot = conflict.current; conflict = null;
     }
-    failure = null; if (snapshot) void flush(); else void read();
+    failure = null; buttons();
+    if (snapshot && [...edits.values()].some(edit => edit.committed)) void flush(); else void read();
+  }
+  async function retryDelivery() {
+    if (busy || retrying || disposed || !snapshot || !delivery || deliveryRetry.disabled) return;
+    const expected = { runId: delivery.runId, revision: snapshot.revision, generation: delivery.requestedGeneration };
+    const token = ++epoch; retrying = true; deliveryFailure = null; buttons();
+    try {
+      const current = await load();
+      if (disposed || token !== epoch) return;
+      if (current.revision !== expected.revision || current.delivery?.runId !== expected.runId || current.delivery?.requestedGeneration !== expected.generation) {
+        incorporate(current); deliveryFailure = 'Run or saved configuration changed. Review current status before Retry.'; return;
+      }
+      incorporate(current);
+      if (current.delivery.phase !== 'Failed') return;
+      const result = await retry({ runId: expected.runId, revision: expected.revision });
+      if (disposed || token !== epoch) return;
+      if (result.delivery?.runId !== expected.runId || result.delivery?.savedRevision !== expected.revision) {
+        deliveryFailure = 'Run or saved configuration changed. Review current status before Retry.'; return;
+      }
+      acceptDelivery(result);
+    } catch (error) { if (!disposed && token === epoch) deliveryFailure = `Couldn't apply post-processing. ${error.message}`; }
+    finally { retrying = false; if (!disposed) buttons(); }
   }
   const on = (element, name, listener, options = {}) => element.addEventListener(name, listener, { ...options, signal: events.signal });
   on(gear, 'click', () => menu.hidden ? showMenu() : closeMenu());
@@ -237,11 +308,12 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     for (const f of plugin().declaration.settings) {
       const idKey = editKey(selected, f.key), previous = edits.get(idKey);
       edits.set(idKey, { id: selected, name: f.key, base: previous?.base ?? valueAt(snapshot, selected, f.key), value: f.default,
-        schema: previous?.schema ?? schema(snapshot, selected), selectionBase: previous?.selectionBase ?? key(snapshot.choice?.selected), committed: true, version: ++version });
+        schema: previous?.schema ?? schema(snapshot, selected), selectionBase: previous?.selectionBase ?? key(snapshot.choice?.selected), committed: true, reviewed: true, version: ++version });
     }
     render(); if (!conflict) { failure = null; void flush(); }
   });
   on(retryButton, 'click', retrySave);
+  on(deliveryRetry, 'click', () => { void retryDelivery(); });
   on(discard, 'click', () => {
     if (!conflict || busy) return;
     const current = conflict.current;

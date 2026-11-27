@@ -1,4 +1,5 @@
 import http from 'node:http';
+import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { withBrowser } from '../browser-fixture.ts';
@@ -28,12 +29,13 @@ export async function withPostprocessing(run: (browser: Browser) => Promise<void
         const {mountHandsPostprocessing} = await import('/hands-postprocessing.js');
         window.mountMesh = mountHandsPostprocessing;
         window.root = document.querySelector('main');
-        window.plugin = {owner:'workspace:example',id:'surface',label:'Example surface',available:true,reason:'Available',declaration:{version:2,settingsVersion:1,settings:[
+        window.plugin = {owner:'workspace:example',id:'surface',label:'Example surface',available:true,reason:'Available',declaration:{version:2,settingsVersion:1,capabilities:['live-configure-v1','preparation-progress-v1'],settings:[
           {key:'detail',label:'Surface detail',type:'number',min:0,max:1,step:.01,default:.6,changeMode:'live'},
           {key:'mode',label:'Output mode',type:'select',default:'full',changeMode:'reprepare',options:[{value:'full',label:'Full'},{value:'simple',label:'Simple'}]},
           {key:'smooth',label:'Smooth surface',type:'boolean',default:true,changeMode:'live'}]}};
         window.snapshot = {revision:'a'.repeat(64),registryRevision:'registry',plugins:[plugin],choice:{version:1,selected:{owner:plugin.owner,id:plugin.id},settings:{}},running:false,delivery:null};
         window.requests=[]; window.retries=[]; window.loadCount=0;
+        window.meshState=(overrides={})=>({runId:'run-a',phase:'Ready',reason:null,progress:null,requestedGeneration:1,appliedGeneration:1,drawingGeneration:null,savedRevision:snapshot.revision,owner:plugin.owner,id:plugin.id,...overrides});
         window.options={pollMs:0,load:async()=>{loadCount++;const data=structuredClone(snapshot);if(window.loadGate)await loadGate();return data},save:async body=>{
           requests.push(structuredClone(body));
           if(window.saveGate) await saveGate();
@@ -56,8 +58,11 @@ export async function pictures(browser: Browser, prefix: string) {
   for (const theme of ['light', 'dark']) for (const width of [368, 320]) {
     await browser.evaluate(`document.documentElement.dataset.theme='${theme}';root.style.width='${width}px'`);
     await browser.send('Emulation.setDeviceMetricsOverride', { width: width + 48, height: 1000, deviceScaleFactor: 1, mobile: false });
-    const clip = await browser.evaluate(`(()=>{const r=root.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height,scale:1}})()`);
-    const picture = await browser.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip });
+    await browser.evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+    if (prefix.includes('menu')) await browser.evaluate(`if(root.querySelector('[role="menu"]').hidden)root.querySelector('[data-mesh-gear]').click()`);
+    const clip = await browser.evaluate(`(()=>{const r=root.getBoundingClientRect();return{x:r.x,y:r.y,width:${prefix.includes('menu') ? 'innerWidth-r.x' : 'r.width'},height:r.height,scale:1}})()`);
+    if (prefix.includes('menu')) assert.equal(await browser.evaluate(`root.querySelector('[role="menu"]').hidden`), false);
+    const picture = await browser.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: !prefix.includes('menu'), clip });
     await fs.writeFile(path.join(process.env.XRB_PROOF_DIR, `${prefix}-${theme}-${width}.png`), Buffer.from(picture.data, 'base64'));
   }
 }

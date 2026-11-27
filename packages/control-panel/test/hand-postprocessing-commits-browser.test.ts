@@ -126,3 +126,27 @@ test('continuous number stepper, stale reads, invalid saved state and disposal r
     assert.equal(await evaluate('root.children.length'), 0);
   });
 });
+
+test('bounded revision races retry, transport failures do not loop, and incomplete defaults are persisted', { skip, timeout: 30000 }, async () => {
+  await withPostprocessing(async ({ evaluate }) => {
+    // A retained selection without a settings record must not turn Reset into a no-op.
+    await evaluate(`root.querySelector('[data-mesh-gear]').click();root.querySelector('[data-mesh-reset]').click()`); await evaluate(settle);
+    assert.equal(await evaluate('requests.length'), 1);
+    assert.deepEqual(await evaluate(`snapshot.choice.settings['workspace:example/surface'].values`), { detail: .6, mode: 'full', smooth: true });
+    await evaluate(`window.saveError=Object.assign(new Error('Hands profile changed; reload before saving'),{status:409})`);
+    await evaluate(change('detail', '.8')); await evaluate(settle);
+    assert.equal(await evaluate('requests.length'), 4, 'revision retry is bounded to three attempts');
+    await evaluate(`window.saveError=new Error('Network disconnected');root.querySelector('[data-mesh-retry]').click()`); await evaluate(settle);
+    assert.equal(await evaluate('requests.length'), 5, 'transport failures wait for explicit retry');
+    assert.equal(await evaluate(`root.querySelector('[data-mesh-field="detail"]').valueAsNumber`), .8);
+    await evaluate(`window.saveError=null;root.querySelector('[data-mesh-retry]').click()`); await evaluate(settle);
+    assert.equal(await evaluate('requests.length'), 6);
+    assert.equal(await evaluate('root.dataset.dirty'), 'false');
+    await evaluate(`snapshot.revision='h'.repeat(64);snapshot.choice.settings['workspace:example/surface'].version=2;component.refresh(snapshot)`);
+    await evaluate(change('smooth', false)); await evaluate(settle);
+    assert.equal(await evaluate('requests.length'), 6, 'a saved schema mismatch cannot be silently migrated by a sibling edit');
+    assert.match(await evaluate(`root.querySelector('[data-mesh-message]').textContent`), /schema changed/);
+    await evaluate(`root.querySelector('[data-mesh-retry]').click()`); await evaluate(settle);
+    assert.equal(await evaluate('requests.length'), 7, 'explicit review permits the current validated schema');
+  });
+});
