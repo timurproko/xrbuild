@@ -30,6 +30,10 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.doesNotMatch(markup, /unavailable in this version/);
   assert.match(markup, /class="xrb-tabs hands-adjustment-tabs" role="tablist"[^>]*>\s*<button[^>]*data-tab="setup"[^>]*>Setup<\/button>\s*<button[^>]*data-tab="geometry"[^>]*>Position<\/button>\s*<button[^>]*data-tab="appearance"[^>]*>Visual<\/button>/, 'tabs exist before the editor loads');
   assert.doesNotMatch(markup, /hands-view-empty/, 'the viewer carries no centre text');
+  const viewSource = await fs.readFile(path.join(ui, 'hands-view.js'), 'utf8'), gizmo = await fs.readFile(path.join(ui, 'hands-axis-gizmo.js'), 'utf8');
+  assert.match(viewSource, /renderer\.render\(scene, camera\); axes\.render\(renderer, camera\);/, 'axes render as a corner widget after the scene');
+  assert.doesNotMatch(viewSource, /AxesHelper/);
+  assert.match(gizmo, /camera\.quaternion\.copy\(viewCamera\.quaternion\)/, 'the widget turns with the view camera');
   assert.match(live, /for \(const label of \['Start', 'Stop'\]\)/, 'Start keeps one width for every label');
   assert.match(live, /button\.id = 'hands-start-stop'; button\.className = 'primary';/);
   assert.doesNotMatch(live, /Press Start to track the saved provider/);

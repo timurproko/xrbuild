@@ -8,6 +8,7 @@ import { toSceneHand } from '/sdk/scene-hands.js';
 import { Interactor } from '/sdk/interaction/core/interactor.js';
 import { createHandStream } from './hands-stream.js';
 import { createHandTestTargets } from './hands-targets.js';
+import { createAxisGizmo } from './hands-axis-gizmo.js';
 
 /** Core-owned scene. No provider, device, app host or optional diagnostic module is started here. */
 export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStatus = () => {}, onTestFeedback = () => {} }) {
@@ -19,7 +20,8 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   scene.add(new THREE.HemisphereLight('#e8f4ff', '#162338', 2.8));
   const light = new THREE.DirectionalLight('#ffffff', 3); light.position.set(.2, .4, .6); scene.add(light);
   const grid = new THREE.GridHelper(.6, 12); grid.rotation.x = Math.PI / 2; grid.position.z = -.02; scene.add(grid);
-  const axes = new THREE.AxesHelper(.09); axes.visible = false; scene.add(axes);
+  // Axes appear as an orientation widget in the bottom-left corner (View › Axes), not at the origin.
+  const axes = createAxisGizmo(); axes.visible = false;
   const panel = new PanelFrame(), input = new HandInput(), ingress = new HandFrameIngress(input, 'native'), visual = new HandVisual(), interaction = new Interactor();
   scene.add(visual);
   const tests = createHandTestTargets(scene, interaction, onTestFeedback);
@@ -70,7 +72,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     sceneHands = currentHands.map(hand => toSceneHand(hand, panel));
     tests.setActive(stream.active && !recordedSession);
     interaction.update(sceneHands, 1); visual.update(currentHands, panel);
-    renderer.render(scene, camera); ticks++;
+    renderer.render(scene, camera); axes.render(renderer, camera); ticks++;
     if (now - start >= 1000) { onMetrics({ renderFps: ticks * 1000 / (now - start), ...stream.metrics(), ...(recordedSession ? { trackingFps: null } : {}) }); ticks = 0; start = now; }
     frameId = requestAnimationFrame(render);
   }
@@ -105,7 +107,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     dispose() {
       if (closed) return; closed = true; pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; stream.dispose(); tests.dispose(); clearLegacy(); cancelAnimationFrame(frameId); resize.disconnect(); observer.disconnect(); system.removeEventListener('change', theme); controls.dispose();
       scene.traverse(object => { object.geometry?.dispose(); for (const material of object.material ? Array.isArray(object.material) ? object.material : [object.material] : []) material.dispose(); });
-      renderer.renderLists.dispose(); renderer.dispose();
+      axes.dispose(); renderer.renderLists.dispose(); renderer.dispose();
     },
   };
 }
