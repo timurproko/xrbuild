@@ -15,15 +15,19 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   if (!diagnostic.isConnected) (provider.closest('label') ?? provider).before(diagnostic);
   // Diagnostics and reasons become timestamped lines in the Log tab (newest last, bounded), never repeated back to back.
   const logEmpty = document.getElementById('hands-log-empty'); let lastLogged = '';
-  // Events always log; diagnostics skip an exact repeat of the previous diagnostic.
-  const append = text => {
-    const time = new Date().toLocaleTimeString([], { hour12: false });
-    const lines = diagnostic.textContent ? diagnostic.textContent.split('\n') : [];
-    lines.push(`${time}  ${text}`); diagnostic.textContent = lines.slice(-200).join('\n');
+  // Rows like the Apps log: a source badge, the message and the time; newest last, bounded, with an X to clear.
+  const append = (text, { source = 'provider', level = '' } = {}) => {
+    const row = document.createElement('div'); row.className = `entry ${level}`.trim();
+    const src = document.createElement('span'), badge = document.createElement('span'), msg = document.createElement('span'), time = document.createElement('span');
+    src.className = 'src'; badge.className = 'badge'; badge.textContent = source; src.append(badge);
+    msg.className = 'msg'; msg.textContent = text; time.className = 'time'; time.textContent = new Date().toLocaleTimeString([], { hour12: false });
+    row.append(src, msg, time); diagnostic.append(row);
+    while (diagnostic.childElementCount > 200) diagnostic.firstElementChild.remove();
     diagnostic.hidden = false; if (logEmpty) logEmpty.hidden = true; diagnostic.scrollTop = diagnostic.scrollHeight;
   };
   const logEvent = text => append(text);
-  const log = text => { if (!text || text === lastLogged) return; lastLogged = text; append(text); };
+  const log = (text, level = 'warn') => { if (!text || text === lastLogged) return; lastLogged = text; append(text, { source: 'session', level }); };
+  document.getElementById('hands-log-clear')?.addEventListener('click', () => { diagnostic.replaceChildren(); diagnostic.hidden = true; if (logEmpty) logEmpty.hidden = false; lastLogged = ''; });
   // Start and Stop share one width, the size of Reset, so the toolbar never shifts between them.
   const lockWidth = () => { if (!button.isConnected || button.style.minWidth) return; const current = button.textContent; let widest = 0;
     for (const label of ['Start', 'Stop']) { button.textContent = label; widest = Math.max(widest, button.getBoundingClientRect().width); }
@@ -39,7 +43,8 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     document.body.dataset.handsSession = active ? 'live' : '';
     lastDiagnostic = status.diagnostic || lastDiagnostic;
     logLifecycle(phase);
-    log(['failed', 'occupied', 'cleanup'].includes(status.phase) && status.reason ? status.reason : lastDiagnostic);
+    const failing = ['failed', 'occupied', 'cleanup'].includes(status.phase) && status.reason;
+    log(failing ? status.reason : lastDiagnostic, status.phase === 'failed' ? 'err' : 'warn');
     const source = data?.providers?.find(p => key(p) === provider.value);
     const unavailable = !supported ? 'Standalone Hands currently supports Windows x64 only.' : !view?.profile ? 'Wait for the shared SDK view and valid profile.' : !source ? 'Choose an available skeleton provider.' : source.transport !== 'native' ? 'WebXR requires its explicit app XR session.' : !source.available ? source.reason : '';
     const cleanupPending = session.blocked || status.cleanupPending;

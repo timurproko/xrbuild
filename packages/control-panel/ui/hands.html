@@ -49,15 +49,14 @@
         <button type="button" class="xrb-tab" role="tab" data-tab="geometry" aria-selected="false" tabindex="-1">Position</button>
         <button type="button" class="xrb-tab" role="tab" data-tab="appearance" aria-selected="false" tabindex="-1">Visual</button>
         <button type="button" class="xrb-tab" role="tab" data-tab="log" aria-selected="false" tabindex="-1">Log</button>
+        <span class="hands-tab-action" data-tab-action="log" hidden><button type="button" class="xrb-icon-button" id="hands-log-clear" aria-label="Clear log" data-xrb-icon="close" data-no-tooltip></button></span>
       </div>
       <div id="hands-setup" class="xrb-sidebar-content xrb-stack hands-source">
         <form id="hands-form" class="xrb-stack">
           <label class="xrb-field-label" for="hands-provider">Skeleton provider<select id="hands-provider" name="provider" aria-label="Skeleton provider" disabled></select></label>
           <label class="xrb-field-label" for="hands-monitor">Monitor<select id="hands-monitor" aria-label="Monitor" disabled><option value="">None</option></select></label>
           <label class="xrb-field-label" for="hands-object">Object<select id="hands-object" aria-label="Object"><option value="cube">Cube</option><option value="sphere">Sphere</option><option value="suzanne">Suzanne</option></select></label>
-          <div class="xrb-field-label">Object X (mm)<span class="hands-number-row"><input type="number" id="hands-object-x" data-object-axis="x" aria-label="Object X (mm)" min="-300" max="300" step="1"><input class="xrb-range" type="range" id="hands-object-x-range" data-object-axis="x" aria-label="Object X slider" min="-300" max="300" step="1"></span></div>
-          <div class="xrb-field-label">Object Y (mm)<span class="hands-number-row"><input type="number" id="hands-object-y" data-object-axis="y" aria-label="Object Y (mm)" min="-300" max="300" step="1"><input class="xrb-range" type="range" id="hands-object-y-range" data-object-axis="y" aria-label="Object Y slider" min="-300" max="300" step="1"></span></div>
-          <div class="xrb-field-label">Object Z (mm)<span class="hands-number-row"><input type="number" id="hands-object-z" data-object-axis="z" aria-label="Object Z (mm)" min="-300" max="300" step="1"><input class="xrb-range" type="range" id="hands-object-z-range" data-object-axis="z" aria-label="Object Z slider" min="-300" max="300" step="1"></span></div>
+          <div class="xrb-field-label">Object position (mm)<span class="hands-xyz"><label class="hands-xyz-field"><span>X</span><input type="number" id="hands-object-x" data-object-axis="x" aria-label="Object X (mm)" min="-300" max="300" step="1"></label><label class="hands-xyz-field"><span>Y</span><input type="number" id="hands-object-y" data-object-axis="y" aria-label="Object Y (mm)" min="-300" max="300" step="1"></label><label class="hands-xyz-field"><span>Z</span><input type="number" id="hands-object-z" data-object-axis="z" aria-label="Object Z (mm)" min="-300" max="300" step="1"></label></span></div>
           <div class="xrb-field-label">Grid<span class="hands-number-row"><input type="number" id="hands-grid-opacity" aria-label="Grid opacity" min="0" max="1" step="0.01"><input class="xrb-range" type="range" id="hands-grid-opacity-range" aria-label="Grid opacity slider" min="0" max="1" step="0.01"><span class="xrb-inline-icons"><button type="button" id="hands-grid-color" class="xrb-swatch" aria-label="Choose grid color" aria-haspopup="dialog"></button></span></span></div>
         </form>
         <p id="hands-message" class="field-error" role="alert" hidden></p>
@@ -66,7 +65,7 @@
       </div>
       <div id="hands-log-panel" class="xrb-sidebar-content xrb-stack" data-tab-panel="log" hidden>
         <div id="hands-log-empty" class="empty-note">No log entries yet.</div>
-        <pre id="hands-log" class="log" aria-label="Hands log" hidden></pre>
+        <div id="hands-log" class="console" role="log" aria-live="off" aria-label="Hands log" hidden></div>
       </div>
       <div id="hands-adjustments-root" class="xrb-sidebar-content xrb-stack" hidden></div>
     </section>

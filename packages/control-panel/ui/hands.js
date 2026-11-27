@@ -12,6 +12,7 @@ try {
     for (const tab of document.querySelectorAll('.hands-adjustment-tabs [data-tab]')) { const on = tab.dataset.tab === saved; tab.setAttribute('aria-selected', String(on)); tab.tabIndex = on ? 0 : -1; }
     $('hands-setup').hidden = true;
     const panel = document.querySelector(`[data-tab-panel="${saved}"]`); if (panel) panel.hidden = false;
+    const action = document.querySelector(`[data-tab-action="${saved}"]`); if (action) action.hidden = false;
   }
 } catch { /* Storage may be blocked; Setup stays first. */ }
 let snapshot = null, view = null, adjustments = null, disposed = false, profileKey = '', profileGeneration = 0, writes = 0, readGeneration = 0;
@@ -157,12 +158,12 @@ function mountViewPreferences() {
   let position = { x: 0, y: 0, z: 0 };
   try { const saved = JSON.parse(stored('xrb.hands.objectPosition') || 'null'); if (saved) for (const axis of ['x', 'y', 'z']) if (Number.isFinite(saved[axis])) position[axis] = Math.min(300, Math.max(-300, saved[axis])); } catch { /* Defaults stay. */ }
   const applyPosition = () => {
-    for (const axis of ['x', 'y', 'z']) { $(`hands-object-${axis}`).value = String(position[axis]); $(`hands-object-${axis}-range`).value = String(position[axis]); }
+    for (const axis of ['x', 'y', 'z']) $(`hands-object-${axis}`).value = String(position[axis]);
     view?.setObjectPosition(position.x / 1000, position.y / 1000, position.z / 1000);
   };
   for (const field of document.querySelectorAll('[data-object-axis]')) {
     const update = save => { const value = Number.parseFloat(field.value); if (!Number.isFinite(value)) return; position[field.dataset.objectAxis] = Math.min(300, Math.max(-300, value)); applyPosition(); if (save) store('xrb.hands.objectPosition', JSON.stringify(position)); };
-    field.addEventListener('input', () => update(field.type === 'range'));
+    field.addEventListener('input', () => update(false));
     field.addEventListener('change', () => update(true));
   }
   applyPosition();
