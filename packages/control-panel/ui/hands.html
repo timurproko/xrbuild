@@ -18,7 +18,7 @@
     <span id="panel-chip" class="chip warn" data-maintenance="restart" hidden>restart</span>
     <span id="host-chip" class="chip" data-maintenance="rebuild" hidden>rebuild</span>
     <span id="update-chip" class="chip update" data-maintenance="update" hidden>update</span>
-    <div id="hands-header-status" class="hands-header-status"></div>
+    <div id="hands-header-status" class="hands-header-status"><span id="hands-live-state" class="chip" role="status">Not started</span></div>
     <span class="spacer"></span>
     <div class="row" aria-label="Hands frame rates">
       <span class="chip" data-tooltip="Viewport render rate"><span id="hands-render-fps">—</span><small>render fps</small></span>
@@ -29,7 +29,8 @@
     <section id="hands-viewport" class="xrb-card hands-viewport" aria-label="3D hand view">
       <canvas id="hands-canvas" aria-label="Shared SDK hand view"></canvas>
       <div class="hands-view-tools xrb-controls-small">
-        <div id="hands-session-actions" class="hands-session-actions" hidden></div>
+        <!-- Present and disabled from the first paint; live controls adopt it once loaded. -->
+        <div id="hands-session-actions" class="hands-session-actions"><button type="button" id="hands-start-stop" class="primary" disabled>Start</button></div>
         <span class="hands-tool-separator" aria-hidden="true"></span>
         <div class="dropdown" data-multi="true" data-summary="View" data-options="grid|axes" data-labels='{"grid":"Grid","axes":"Axes"}'>
           <input id="hands-view-options" type="hidden" value='["grid"]'>

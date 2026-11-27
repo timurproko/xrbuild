@@ -23,8 +23,9 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(markup, /aria-label="View options" data-no-tooltip/);
   assert.match(markup, /<section id="hands-viewport"[\s\S]*<section class="xrb-card hands-panel" aria-label="Hand setup and adjustments">[\s\S]*?role="tablist"[\s\S]*?<\/div>\s*<div id="hands-setup" class="xrb-sidebar-content xrb-stack hands-source">/, 'setup moved into the single right card after the viewer');
   assert.equal((markup.match(/class="xrb-card hands-panel"/g) ?? []).length, 1);
-  assert.match(markup, /class="hands-view-tools xrb-controls-small">\s*<div id="hands-session-actions" class="hands-session-actions" hidden><\/div>\s*<span class="hands-tool-separator"/, 'Start leads the viewer toolbar, set apart by a separator');
-  assert.match(markup, /<div id="hands-header-status" class="hands-header-status"><\/div>/);
+  assert.match(markup, /<div id="hands-session-actions" class="hands-session-actions"><button type="button" id="hands-start-stop" class="primary" disabled>Start<\/button><\/div>\s*<span class="hands-tool-separator"/, 'Start leads the toolbar from the first paint, disabled until live controls load');
+  assert.match(markup, /<div id="hands-header-status" class="hands-header-status"><span id="hands-live-state" class="chip" role="status">Not started<\/span><\/div>/);
+  assert.match(live, /document\.getElementById\('hands-start-stop'\) \?\? document\.createElement\('button'\)/);
   assert.match(markup, /<div id="hands-adjustments-root" class="xrb-sidebar-content xrb-stack" hidden><\/div>/, 'adjustments stay hidden until their editor mounts');
   assert.doesNotMatch(markup, /unavailable in this version/);
   assert.match(markup, /class="xrb-tabs hands-adjustment-tabs" role="tablist"[^>]*>\s*<button[^>]*data-tab="setup"[^>]*>Setup<\/button>\s*<button[^>]*data-tab="geometry"[^>]*>Position<\/button>\s*<button[^>]*data-tab="appearance"[^>]*>Visual<\/button>/, 'tabs exist before the editor loads');

@@ -4,7 +4,8 @@ const key = source => source ? `${source.owner}/${source.id}` : '';
 export function mountHandsLiveControls({ session, view, load, provider = document.getElementById('hands-provider') }) {
   const root = document.getElementById('hands-session-actions') ?? document.createElement('div');
   root.id = 'hands-session-actions'; root.className = 'hands-session-actions'; root.hidden = false;
-  const button = document.createElement('button'), state = document.createElement('span'), diagnostic = document.createElement('small');
+  // Adopt the page's Start and status (shown disabled before this loads) so nothing appears or disappears.
+  const button = document.getElementById('hands-start-stop') ?? document.createElement('button'), state = document.getElementById('hands-live-state') ?? document.createElement('span'), diagnostic = document.createElement('small');
   diagnostic.id = 'hands-live-diagnostic'; diagnostic.setAttribute('role', 'status'); diagnostic.hidden = true;
   button.type = 'button'; button.id = 'hands-start-stop'; button.className = 'primary'; state.id = 'hands-live-state'; state.className = 'chip'; state.setAttribute('role', 'status');
   // Start/Stop leads the viewer toolbar; the status sits in the header; diagnostics stay beside the provider.
