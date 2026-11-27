@@ -38,7 +38,7 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   const viewSource = await fs.readFile(path.join(ui, 'hands-view.js'), 'utf8'), gizmo = await fs.readFile(path.join(ui, 'hands-axis-gizmo.js'), 'utf8');
   assert.match(viewSource, /renderer\.render\(scene, camera\); axes\.render\(renderer, camera\);/, 'axes render as a corner widget after the scene');
   assert.doesNotMatch(viewSource, /AxesHelper/);
-  assert.match(viewSource, /fit\(\); const resize = new ResizeObserver\(fit\)/, 'the canvas is sized before the first frame');
+  assert.match(viewSource, /fit\(\); const resize = new ResizeObserver\(\(\) => \{ fit\(\); if \(sized[^}]*renderer\.render\(scene, camera\)/, 'the canvas is sized before the first frame and redrawn in the same frame on resize');
   assert.match(viewSource, /if \(sized\) \{ renderer\.render\(scene, camera\)/, 'no frame draws at the default canvas size');
   assert.match(gizmo, /camera\.quaternion\.copy\(viewCamera\.quaternion\)/, 'the widget turns with the view camera');
   assert.match(gizmo, /renderer\.getViewport\(full\)[\s\S]*renderer\.setViewport\(full\);/, 'the main viewport is restored in the same CSS units');
