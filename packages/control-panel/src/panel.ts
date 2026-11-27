@@ -224,17 +224,18 @@ export class Panel {
   private meshCleanup: Promise<void> = Promise.resolve();
   private meshCleanupFailed = false;
   private retiredMeshRun: HandMeshRun | null = null;
-  private applyMeshChoice(state: HandsState, registry: HandMeshRegistry): void {
-    const run = this.meshRun; if (!run) return;
+  private get activeMeshRun(): HandMeshRun | null { return this.handSessions?.meshRun ?? this.meshRun; }
+  private applyMeshChoice(state: Pick<HandsState, 'raw' | 'revision'>, registry: HandMeshRegistry, run = this.activeMeshRun): boolean {
+    if (!run) return false;
     try {
       const choice = meshChoice(state.raw.postprocessing);
       const plugin = choice.selected ? registry.plugins.find(p => meshKey(p) === meshKey(choice.selected!)) : null;
       const saved = choice.selected ? choice.settings[meshKey(choice.selected)] : null;
       if (choice.selected && (!plugin?.available || !saved || saved.version !== plugin.declaration.settingsVersion)) {
-        run.unavailable(state.revision); return;
+        run.unavailable(state.revision); return false;
       }
-      run.configure(plugin ?? null, saved?.values ?? {}, state.revision);
-    } catch { run.unavailable(state.revision); }
+      run.configure(plugin ?? null, saved?.values ?? {}, state.revision); return true;
+    } catch { run.unavailable(state.revision); return false; }
   }
   private async stopMesh(): Promise<void> {
     const run = this.meshRun ?? this.retiredMeshRun; this.meshRun = null;
@@ -337,6 +338,16 @@ export class Panel {
     this.hub = hub;
     this.handSessions = new HandSessions({ origin: () => new URL(this.panelUrl!).origin,
       prepare: request => prepareHandSession(this.repo, this.workspace, request, this.nativeProviders),
+      mesh: prepared => {
+        const run = new HandMeshRun(() => [new URL(this.panelUrl!).origin], () => {}, { supervisor: path.join(path.dirname(prepared.workerExe), 'xrb-mesh-supervisor.exe') });
+        // Gateway opens independently of provider startup; the owner retains it even on failed cleanup.
+        void run.start(null, {}, prepared.revision).then(async () => {
+          run.appStarted();
+          const registry = await discoverHandMeshPlugins(this.repo, this.workspace);
+          if (this.handSessions.meshRun === run && run.state().savedRevision === prepared.revision) this.applyMeshChoice({ raw: { postprocessing: prepared.postprocessing }, revision: prepared.revision }, registry, run);
+        }).catch(() => { void run.stop().catch(() => {}); });
+        return run;
+      },
       acquire: () => {
         this.refuseCaptureConflict();
         if (this.savingHands || this.preparingNativeRun || this.preparingPreview || this.changingPlugins || this.maintainingCache || this.restartPending || this.pluginConsumers || this.settingsWrites.size || this.jobs.active().length)
@@ -2077,22 +2088,22 @@ export class Panel {
         const [registry, state] = await Promise.all([discoverHandMeshPlugins(this.repo, this.workspace), readHandsState(this.repo, this.workspace)]);
         let choice; let problem: string | null = null;
         try { choice = meshChoice(state.raw.postprocessing); } catch (e) { problem = (e as Error).message; }
-        const delivery = this.meshRun?.state() ?? null;
+        const run = this.activeMeshRun, delivery = run?.state() ?? null;
         const active = delivery?.owner && delivery.id ? { owner: delivery.owner, id: delivery.id,
           label: registry.plugins.find(p => p.owner === delivery.owner && p.id === delivery.id)?.label ?? delivery.id } : null;
         sendJson(res, 200, { plugins: registry.plugins.map(({ program, launch, ...p }) => ({ ...p, declaration: { ...p.declaration, program: undefined, args: undefined } })),
-          revision: state.revision, registryRevision: registry.revision, choice, problem, status: this.meshRun?.status ?? this.meshStatus,
-          running: this.runner.busy && this.nativeHandPolicy !== null, active, delivery });
+          revision: state.revision, registryRevision: registry.revision, choice, problem, status: run?.status ?? (this.handSessions.meshStatus || this.meshStatus),
+          running: this.handSessions.busy || this.runner.busy && this.nativeHandPolicy !== null, active, delivery });
         return true;
       }
       case 'POST hands/postprocessing/retry': {
         const body = await readJson<{ runId?: unknown; revision?: unknown }>(req);
-        const state = await readHandsState(this.repo, this.workspace), run = this.meshRun;
+        const state = await readHandsState(this.repo, this.workspace), run = this.activeMeshRun;
         if (!run || body.runId !== run.state().runId || body.revision !== state.revision) throw new HttpError(409, 'Mesh run or saved configuration changed');
         const registry = await discoverHandMeshPlugins(this.repo, this.workspace);
-        if (run !== this.meshRun || (await readHandsState(this.repo, this.workspace)).revision !== body.revision) throw new HttpError(409, 'Mesh run or saved configuration changed');
-        this.applyMeshChoice(state, registry);
-        if (run === this.meshRun && run.state().phase === 'Failed' && run.state().owner) run.retry();
+        if (run !== this.activeMeshRun || (await readHandsState(this.repo, this.workspace)).revision !== body.revision) throw new HttpError(409, 'Mesh run or saved configuration changed');
+        const available = this.applyMeshChoice(state, registry);
+        if (available && run === this.activeMeshRun && run.state().phase === 'Failed' && run.state().owner) run.retry();
         sendJson(res, 200, { delivery: run.state() }); return true;
       }
       case 'PUT hands/postprocessing': {
@@ -2106,7 +2117,7 @@ export class Panel {
           const saved = await saveMeshChoice(this.repo, this.workspace, registry, body, initial);
           this.hub.send('hands-changed', { revision: saved.revision });
           this.applyMeshChoice(saved, registry);
-          sendJson(res, 200, { revision: saved.revision, choice: meshChoice(saved.raw.postprocessing), delivery: this.meshRun?.state() ?? null });
+          sendJson(res, 200, { revision: saved.revision, choice: meshChoice(saved.raw.postprocessing), delivery: this.activeMeshRun?.state() ?? null });
         } finally { this.savingHands = false; }
         return true;
       }

@@ -7,6 +7,7 @@ import { prepareHandSession, type SessionSelectionRequest } from './hand-session
 import { validHandProviderKey } from './hands-state.ts';
 import { reserveHandAcquisition } from './hand-acquisition.ts';
 import { LiveHands } from './hands-live.ts';
+import type { HandMeshRun } from './hand-mesh-run.ts';
 const secret = () => randomBytes(32).toString('hex');
 const pause = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 /** The helper checks creation identity and waits on an exact handle; it never kills the queried PID. */
@@ -16,6 +17,8 @@ const joinOwnedWorker = (exe: string, pid: number, birth: string) => new Promise
 export interface SessionDependencies {
   prepare(request: SessionSelectionRequest): ReturnType<typeof prepareHandSession>;
   acquire(): () => void;
+  /** Optional, synchronous owner allocation; processor preparation must remain asynchronous. */
+  mesh?(prepared: Awaited<ReturnType<typeof prepareHandSession>>): HandMeshRun;
   origin(): string;
   reserve?: typeof reserveHandAcquisition;
   spawn?: typeof spawn;
@@ -35,6 +38,24 @@ export class HandSessions {
   private pages = new Map<string, number>();
   private continuities = new Map<string, { owner: string; document: string }>();
   private current: Running | null = null;
+  private meshes = new Map<HandMeshRun, Promise<void> | null>();
+  private sessionMesh: { session: Running; run: HandMeshRun } | null = null;
+  private meshReason = '';
+  get meshRun(): HandMeshRun | null { const m = this.sessionMesh; return m && !m.session.cancelled && !m.session.ended ? m.run : null; }
+  get meshStatus(): string { return this.meshRun?.status ?? this.meshReason; }
+  private retireMesh(): Promise<void> {
+    const m = this.sessionMesh; this.sessionMesh = null;
+    if (m) this.meshes.set(m.run, null);
+    return Promise.all([...this.meshes].map(async ([run, work]) => {
+      if (!work) {
+        work = run.stop().then(() => { this.meshes.delete(run); }).catch(() => {
+          this.meshes.set(run, null); this.meshReason = 'Skeleton fallback: mesh cleanup failed; retry cleanup';
+        });
+        this.meshes.set(run, work);
+      }
+      await work;
+    })).then(() => {});
+  }
   private closed = false;
   private closing: Promise<void> | null = null;
   private timer: ReturnType<typeof setInterval>;
@@ -51,6 +72,8 @@ export class HandSessions {
     const s = this.current, owns = !!s && s.owner === owner;
     return { supported: (this.deps.platform ?? process.platform) === 'win32', phase: s?.phase ?? 'not-started', reason: [s?.reason, this.busy && s?.cleanupReason].filter(Boolean).join('; '), source: s?.source ?? null, busy: this.busy, owns,
       sessionId: s?.id ?? null, diagnostic: s?.diagnostic ?? '',
+      meshCleanupPending: !this.meshRun && this.meshes.size > 0, meshStatus: this.meshStatus,
+      ...(owns && this.busy && !s?.cancelled ? { handMeshRuntime: this.meshRun?.descriptor ?? null } : {}),
       cleanupPending: this.busy && !!s && (owns || s.cancelled || s.phase === 'failed' || performance.now() - s.heartbeat > (this.deps.heartbeatMs ?? 5000)),
       takeoverAvailable: this.busy && !!s && !owns && !s.cancelled && s.phase !== 'failed' && performance.now() - s.heartbeat <= (this.deps.heartbeatMs ?? 5000), ...(owns && this.busy ? { profile: s?.live?.envelope } : {}),
       delivery: s?.live?.delivery, deliveryState: s?.live?.deliveryState };
@@ -129,6 +152,14 @@ export class HandSessions {
       const prepared = await this.deps.prepare(request);
       if (s.cancelled || this.closed) throw new Error('Hands Start cancelled');
       s.source = prepared.source; s.live = new LiveHands(prepared.profile, prepared.revision, s.id, 'Hands session');
+      // Optional processing neither reserves acquisition nor delays worker startup/preparation.
+      await this.retireMesh();
+      if (s.cancelled || this.closed) throw new Error('Hands Start cancelled');
+      if (this.meshes.size) this.meshReason = 'Skeleton fallback: mesh cleanup failed; retry cleanup';
+      else if (this.deps.mesh) {
+        try { const run = this.deps.mesh(prepared); this.sessionMesh = { session: s, run }; this.meshReason = ''; }
+        catch { this.meshReason = 'Skeleton fallback: mesh runtime unavailable'; }
+      }
       // Reserve before DLL create, reject legacy hosts, then transfer under the native transition gate.
       reservation = await (this.deps.reserve ?? reserveHandAcquisition)(prepared.helperExe, 'Hands provider session', { checkLegacyHost: true, ...(this.deps.testScope ? { testScope: this.deps.testScope } : {}) });
       if (s.cancelled || this.closed) throw new Error('Hands Start cancelled');
@@ -141,6 +172,7 @@ export class HandSessions {
         s.launcherClosed = true;
         if (!s.cancelled) { s.cancelled = true; s.token = ''; s.phase = 'failed'; s.reason ||= 'Provider worker exited unexpectedly'; }
         s.live?.close();
+        if (this.sessionMesh?.session === s) void this.retireMesh();
         void this.verifyEnded(s);
       });
       child.stdout.setEncoding('utf8').on('data', (text: string) => {
@@ -214,6 +246,7 @@ export class HandSessions {
     s.reason ||= reason;
     if (s.stop) return s.stop;
     s.cancelled = true; s.token = ''; s.live?.close(); s.reason ||= reason; s.phase = 'stopping';
+    const meshCleanup = this.retireMesh();
     const attempt = (async () => {
       const preparingBy = performance.now() + 31000;
       while (s.preparing && !s.child && performance.now() < preparingBy) await pause(20);
@@ -232,6 +265,7 @@ export class HandSessions {
       // During asynchronous preparation, Start's cancellation check must drain before ownership is free.
       if (!s.child) this.finishDrained(s);
       s.phase = s.reason ? 'failed' : 'stopped';
+      await meshCleanup;
     })().catch(() => { this.unverified(s); }).finally(() => {
       if (s.stop === attempt) s.stop = undefined;
       if (!s.ended || s.preparing) s.retryAfter = performance.now() + 1000;
@@ -247,6 +281,7 @@ export class HandSessions {
         await this.stop(this.current);
         if (this.busy) await pause(1000);
       }
+      do { await this.retireMesh(); if (this.meshes.size) await pause(1000); } while (this.meshes.size);
       this.pages.clear(); this.continuities.clear();
     })().finally(() => { if (this.closing === attempt) this.closing = null; });
     return this.closing = attempt;

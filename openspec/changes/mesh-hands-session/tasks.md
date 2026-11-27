@@ -2,10 +2,10 @@
 
 ## 1. Hands sessions own optional mesh processing and live configuration
 
-- [ ] 1.1 Pin initial mesh choice/settings/revision alongside session preparation and supply an injectable optional gateway owner; fake tests must show None starts no processor and slow/failed mesh preparation does not delay skeleton startup or acquire another camera lease.
-- [ ] 1.2 Bind gateway retirement and verified contained cleanup to Stop, page/reload/heartbeat loss, provider crash, cancelled Start and panel shutdown; exercise late factory completion, preparation/replace races and retryable cleanup failures with disposable fakes.
-- [ ] 1.3 Route post-processing save/retry/status through the exact active Hands or managed-native owner while retaining response shapes; API tests must cover live None/replacement/settings, stale run/revision refusal, persistence despite delivery failure and passive idle saves.
-- [ ] 1.4 Deliver the run descriptor only to the authenticated owning page and preserve exact-origin protection; test credential isolation from foreign pages, profiles, recordings and portable output, and document Hands ownership in the neutral lifecycle/protocol docs.
+- [x] 1.1 Pin initial mesh choice/settings/revision alongside session preparation and supply an injectable optional gateway owner; fake tests must show None starts no processor and slow/failed mesh preparation does not delay skeleton startup or acquire another camera lease.
+- [x] 1.2 Bind gateway retirement and verified contained cleanup to Stop, page/reload/heartbeat loss, provider crash, cancelled Start and panel shutdown; exercise late factory completion, preparation/replace races and retryable cleanup failures with disposable fakes.
+- [x] 1.3 Route post-processing save/retry/status through the exact active Hands or managed-native owner while retaining response shapes; API tests must cover live None/replacement/settings, stale run/revision refusal, persistence despite delivery failure and passive idle saves.
+- [x] 1.4 Deliver the run descriptor only to the authenticated owning page and preserve exact-origin protection; test credential isolation from foreign pages, profiles, recordings and portable output, and document Hands ownership in the neutral lifecycle/protocol docs.
 
 ## 2. Hands viewport draws final-pose mesh through the SDK
 

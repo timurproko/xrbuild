@@ -60,6 +60,20 @@ Set `XRB_TEST_PROVIDER_SUPERVISOR` to the supervisor executable to include actua
 
 Page control capabilities expire after 60 seconds without renewal. A separate random tab-continuity proof, never a control capability, is kept in tab-scoped session storage for top-level reload (iframes remain memory-only). Bootstrap rotates it and the capability, revokes the old document and drains its bound session before returning. A copied tab proof on an ordinary new navigation does not silently adopt or stop another live page. If storage is unavailable, memory-only renewal and explicit safe takeover remain available; expired page heartbeat cleanup still drains lost documents. No proof is saved in a profile, URL or log. An expired owner is retired before reauthorization: its socket, SDK hands/holds and timers are cleared, and the service cancels its old acquisition. The page obtains one fresh memory-only capability and retries only status reads, not Start/Stop/ACK/heartbeat as a different owner. Recovery never auto-starts capture or adopts another page's session; a new explicit Start works without reloading. Start automatically drains same-page or failed/dead same-panel leftovers before reservation, never labels its own cleanup as another-page Busy, and refuses a still-draining preparation without claiming devices are free. Delayed replies/errors from retired credentials or sockets cannot affect a replacement session.
 
+## Optional session-owned mesh
+
+Explicit Hands Start also allocates a run-owned authenticated mesh gateway, including with None (no processor).
+The initial mesh choice/settings are pinned with the source/profile snapshot. Optional runtime validation and
+preparation run asynchronously and cannot delay provider startup, skeleton sampling or interaction. Mesh never
+reserves the camera lease. The existing post-processing GET/PUT and revision/run-bound retry routes target this
+Hands owner when it is active, just as they target a managed native app. Idle saves start nothing.
+
+Only the authenticated owning page receives `handMeshRuntime`; foreign page status, public post-processing
+metadata, profiles and recordings contain no descriptor/credential. Stop, reload, heartbeat/page loss, provider
+crash and panel exit retire the gateway and drain its separately contained processor. Failed mesh cleanup remains
+visible and retryable and blocks mesh reuse, but does not retain the provider's camera lease after verified
+provider death. No mesh failure substitutes another source or resets skeleton interaction.
+
 ## Raw recording hooks, without recorder UI
 
 `handsPage.session` exposes `recordingSource()`, `subscribeRawFrames(listener)` and `subscribeLifecycle(listener)`. Each raw listener receives its own unchanged HANDS v2 packet and decoded convenience frame before profile ingress; geometry/filter/render output is never recorded. `hands-provider-format.js` supplies bounded version-1 validation and replay; `createProviderRecording` supplies the raw capture helper. The simplified page does not mount a recorder UI.
