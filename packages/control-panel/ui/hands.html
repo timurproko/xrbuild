@@ -25,17 +25,6 @@
     </div>
   </header>
   <main id="hands-workspace" class="xrb-workspace-layout" aria-label="Hands workspace">
-    <section class="xrb-card hands-panel" aria-label="Hand source">
-      <div class="xrb-stack hands-source">
-        <div id="hands-session-actions" class="xrb-button-row" hidden></div>
-        <form id="hands-form" class="xrb-stack">
-          <label class="xrb-field-label" for="hands-provider">Skeleton provider<select id="hands-provider" name="provider" aria-label="Skeleton provider" disabled></select></label>
-        </form>
-        <p id="hands-message" class="field-error" role="alert" hidden></p>
-        <div class="xrb-button-row" id="hands-source-recovery" hidden><button id="hands-source-retry" class="small" type="button">Retry</button><button id="hands-source-discard" class="small" type="button" hidden>Use saved</button></div>
-        <div id="hands-postprocessing-root" hidden></div>
-      </div>
-    </section>
     <section id="hands-viewport" class="xrb-card hands-viewport" aria-label="3D hand view">
       <canvas id="hands-canvas" aria-label="Shared SDK hand view"></canvas>
       <div class="hands-view-tools xrb-controls-small">
@@ -50,7 +39,16 @@
       <div id="hands-view-empty" class="xrb-overlay-empty" role="status"><span>No live hand session.</span></div>
       <p id="hands-view-error" class="field-error hands-view-error" role="alert" hidden></p>
     </section>
-    <section class="xrb-card hands-panel" aria-label="Hand adjustments">
+    <section class="xrb-card hands-panel" aria-label="Hand setup and adjustments">
+      <div id="hands-setup" class="xrb-sidebar-content xrb-stack hands-source">
+        <div id="hands-session-actions" class="xrb-button-row" hidden></div>
+        <form id="hands-form" class="xrb-stack">
+          <label class="xrb-field-label" for="hands-provider">Skeleton provider<select id="hands-provider" name="provider" aria-label="Skeleton provider" disabled></select></label>
+        </form>
+        <p id="hands-message" class="field-error" role="alert" hidden></p>
+        <div class="xrb-button-row" id="hands-source-recovery" hidden><button id="hands-source-retry" class="small" type="button">Retry</button><button id="hands-source-discard" class="small" type="button" hidden>Use saved</button></div>
+        <div id="hands-postprocessing-root" hidden></div>
+      </div>
       <div id="hands-adjustments-root" class="xrb-sidebar-content xrb-stack">
         <h2>Adjustments</h2><p class="xrb-help">Adjustment controls are unavailable in this version.</p>
       </div>

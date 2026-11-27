@@ -1,6 +1,6 @@
 /* Hands owns only the viewer topology. Surfaces, fields, tabs and colors are shared. */
 .hands-page { min-height: 100dvh; display: flex; flex-direction: column; }
-#hands-workspace { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr) minmax(var(--sidebar-w), 340px); flex: 1; min-height: 0; }
+#hands-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(var(--sidebar-w), 340px); flex: 1; min-height: 0; }
 .hands-panel { min-width: 0; min-height: 0; margin: 0; display: flex; flex-direction: column; }
 .hands-source { overflow: auto; }
 .hands-adjustment-sections { gap: var(--xrb-space-section); }
@@ -26,10 +26,10 @@
 .hands-viewport:fullscreen { width: 100vw; height: 100dvh; max-width: none; border: 0; border-radius: 0; }
 @media (min-width: 1001px) {
   .hands-page { height: 100dvh; overflow: hidden; }
-  #hands-workspace { grid-template-columns: var(--sidebar-compact-w) minmax(0, 1fr) minmax(var(--sidebar-compact-w), 340px); }
+  #hands-workspace { grid-template-columns: minmax(0, 1fr) minmax(var(--sidebar-compact-w), 340px); }
 }
 @media (max-width: 1000px) {
-  #hands-workspace { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  #hands-workspace { grid-template-columns: minmax(0, 1fr); }
   .hands-viewport { grid-column: 1 / -1; grid-row: 1; height: 50dvh; }
   .hands-panel { max-height: 70dvh; }
 }

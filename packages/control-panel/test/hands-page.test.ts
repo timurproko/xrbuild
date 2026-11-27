@@ -22,6 +22,9 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   const markup = await fs.readFile(path.join(ui, 'hands.html'), 'utf8');
   for (const id of ['hands-view-reset', 'hands-fullscreen']) assert.match(markup, new RegExp(`id="${id}"[^>]*data-no-tooltip`));
   assert.match(markup, /aria-label="View options" data-no-tooltip/);
+  assert.match(markup, /<section id="hands-viewport"[\s\S]*<section class="xrb-card hands-panel" aria-label="Hand setup and adjustments">\s*<div id="hands-setup" class="xrb-sidebar-content xrb-stack hands-source">/, 'setup moved into the single right card after the viewer');
+  assert.equal((markup.match(/class="xrb-card hands-panel"/g) ?? []).length, 1);
+  assert.match(await fs.readFile(path.join(ui, 'hands.js'), 'utf8'), /setup: \$\('hands-setup'\)/);
   assert.match(await fs.readFile(path.join(ui, 'hands-adjustments.js'), 'utf8'), /aria-label="\$\{label\} settings" data-no-tooltip/);
   const shell = await fs.readFile(path.join(ui, 'hands-shell.js'), 'utf8');
   assert.match(shell, /resetView\(\)/); assert.match(shell, /requestFullscreen\(\)/); assert.match(shell, /ArrowLeft/);
@@ -41,9 +44,9 @@ test('adjustment groups are direct standard sections, retain controls without hi
   assert.doesNotMatch(component, /class="card|Drawing only|X right/);
   assert.doesNotMatch(component, /Changes where the hand touches/);
   assert.match(component, /role="menuitem" data-reset="\$\{section\}">Reset to defaults/);
-  assert.match(component, /tab\('geometry', 'Position', true\)\}\$\{tab\('appearance', 'Visual', false\)\}/);
+  assert.match(component, /\$\{setup \? tab\('setup', 'Setup', true\) : ''\}\$\{tab\('geometry', 'Position', !setup\)\}\$\{tab\('appearance', 'Visual', false\)\}/);
   assert.match(component, /tabs\.className = 'xrb-tabs hands-adjustment-tabs'; tabs\.setAttribute\('role', 'tablist'\)/);
-  assert.match(component, /tabAction\('geometry', 'Position', true\)\}\$\{tabAction\('appearance', 'Visual', false\)\}/);
+  assert.match(component, /tabAction\('geometry', 'Position', !setup\)\}\$\{tabAction\('appearance', 'Visual', false\)\}/);
   assert.match(component, /role="tabpanel" id="\$\{prefix\}-panel-appearance" aria-labelledby="\$\{prefix\}-tab-appearance" hidden/);
   assert.match(component, /tabs\.remove\(\)/);
   assert.match(component, /class="xrb-icon-button"[^>]+aria-haspopup="menu"/);

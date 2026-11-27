@@ -22,7 +22,7 @@ test('core Hands opens the real SDK scene without optional tools, generated data
     assert.equal(await evaluate(`!!document.querySelector('canvas')`), true);
     assert.equal(await evaluate(`document.querySelector('#hands-view-error').hidden`), true);
     assert.equal(await evaluate(`document.querySelector('#hands-tracking-fps').textContent`), '—');
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="tab"]')].map(tab=>tab.textContent)`), ['Position', 'Visual'], 'only the adjustment tabs exist');
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('[role="tab"]')].map(tab=>tab.textContent)`), ['Setup', 'Position', 'Visual'], 'only the side panel tabs exist');
     assert.equal(await evaluate(`!!document.querySelector('#hands-recording-actions')`), false);
     await evaluate(`document.querySelector('#hands-view-reset').click()`); await sleep(100);
     const fullscreen = await evaluate(`(()=>{const r=document.querySelector('#hands-fullscreen').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);

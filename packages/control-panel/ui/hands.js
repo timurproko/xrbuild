@@ -44,6 +44,7 @@ async function mountAdjustments(data) {
   const { mountHandAdjustments } = await import('./hands-adjustments.js');
   if (disposed) return;
   adjustments = mountHandAdjustments($('hands-adjustments-root'), {
+    setup: $('hands-setup'),
     load: () => request('GET'),
     serialize: operation => enqueue(async () => {
       beginWrite();

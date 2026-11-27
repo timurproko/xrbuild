@@ -8,7 +8,7 @@ const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const set = (profile, key, value) => { const parts = key.split('.'); if (parts.length === 2) profile[parts[0]][parts[1]] = structuredClone(value); else profile[key] = structuredClone(value); };
 let mounts = 0;
 /** Root-scoped editor. Only finished values enter the serialized revision-safe save path. */
-export function mountHandAdjustments(root, { load, apply, serialize = operation => operation() }) {
+export function mountHandAdjustments(root, { load, apply, serialize = operation => operation(), setup = null }) {
   const prefix = `hands-adjustments-${++mounts}`;
   const number = (key, label, min, max, step, hint = '', swatch = '') => renderField(label,
     `<span class="hands-number-row${swatch ? ' hands-number-row--colour' : ''}"><input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required><input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">${swatch}</span>`, { hint });
@@ -21,10 +21,12 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   const tabAction = (section, label, selected) => `<span class="hands-tab-action" data-tab-action="${section}"${selected ? '' : ' hidden'}>${resetMenu(section, label)}</span>`;
   const tabs = root.ownerDocument.createElement('div');
   tabs.className = 'xrb-tabs hands-adjustment-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Hand adjustments'); tabs.dataset.xrbTabsId = 'hands-adjustments';
-  tabs.innerHTML = `${tab('geometry', 'Position', true)}${tab('appearance', 'Visual', false)}<span class="spacer"></span>${tabAction('geometry', 'Position', true)}${tabAction('appearance', 'Visual', false)}`;
-  root.before(tabs);
+  // An optional Setup panel (provider and session) comes first; it has no reset menu.
+  tabs.innerHTML = `${setup ? tab('setup', 'Setup', true) : ''}${tab('geometry', 'Position', !setup)}${tab('appearance', 'Visual', false)}<span class="spacer"></span>${tabAction('geometry', 'Position', !setup)}${tabAction('appearance', 'Visual', false)}`;
+  if (setup) { setup.id ||= `${prefix}-panel-setup`; setup.setAttribute('role', 'tabpanel'); setup.setAttribute('aria-labelledby', `${prefix}-tab-setup`); tabs.querySelector('[data-tab="setup"]').setAttribute('aria-controls', setup.id); root.hidden = true; }
+  (setup ?? root).before(tabs);
   root.innerHTML = `<form class="xrb-stack hands-adjustment-sections" aria-label="Hand adjustments">
-    <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-geometry" aria-labelledby="${prefix}-tab-geometry">
+    <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-geometry" aria-labelledby="${prefix}-tab-geometry"${setup ? ' hidden' : ''}>
       ${number('offsetMm.x', 'X (mm)', -150, 150, 1)}${number('offsetMm.y', 'Y (mm)', -150, 150, 1)}${number('offsetMm.z', 'Z (mm)', -150, 150, 1)}
       ${number('sizeFactor', 'Size', .5, 1.5, .01)}
     </section>
@@ -185,6 +187,7 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     }
     for (const action of tabs.querySelectorAll('[data-tab-action]')) action.hidden = action.dataset.tabAction !== section;
     for (const panel of root.querySelectorAll('[role="tabpanel"]')) panel.hidden = panel.id !== `${prefix}-panel-${section}`;
+    if (setup) { setup.hidden = section !== 'setup'; root.hidden = section === 'setup'; }
   }
   const tabKeydown = event => {
     const current = event.target.closest('[data-tab]');
@@ -243,5 +246,5 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     updateDelivery(_text, deliveryState, revision, epoch) {
       if (epoch === deliveryEpoch && revision === state?.revision && !edits.size && !busy) { retryDelivery = deliveryState === 'failed'; buttons(); }
     },
-    dispose() { disposed = true; removeEventListener('beforeunload', beforeunload); form.removeEventListener('input', input); form.removeEventListener('change', change); form.removeEventListener('keydown', keydown); form.removeEventListener('submit', submit); root.removeEventListener('click', click); tabs.removeEventListener('click', click); tabs.removeEventListener('keydown', tabKeydown); tabs.remove(); disposers.reverse().forEach(fn => fn()); root.replaceChildren(); } };
+    dispose() { disposed = true; removeEventListener('beforeunload', beforeunload); form.removeEventListener('input', input); form.removeEventListener('change', change); form.removeEventListener('keydown', keydown); form.removeEventListener('submit', submit); root.removeEventListener('click', click); tabs.removeEventListener('click', click); tabs.removeEventListener('keydown', tabKeydown); tabs.remove(); if (setup) { setup.hidden = false; setup.removeAttribute('role'); setup.removeAttribute('aria-labelledby'); root.hidden = false; } disposers.reverse().forEach(fn => fn()); root.replaceChildren(); } };
 }
