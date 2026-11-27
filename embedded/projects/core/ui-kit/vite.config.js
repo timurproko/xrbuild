@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig, searchForWorkspaceRoot } from 'vite';
+import react from '@vitejs/plugin-react';
 
 // The SDK comes straight from the XR Build core's sources: the panel sets XRB_CORE when it runs this
 // app's scripts (in a plain terminal, set it to the core repo yourself).
@@ -14,9 +15,10 @@ const appIcon = { name: 'app-icon', generateBundle() { if (fs.existsSync('icon.p
 
 // base './': the build is served from https://app.local/ by xrb-host (and later from a package).
 export default defineConfig({
-  plugins: [appIcon],
-  server: { fs: { allow: [searchForWorkspaceRoot(process.cwd()), core] } }, base: './', resolve: { alias: { '@xr-build/sdk': sdk('sdk'), '@xr-build/ui-kit': sdk('ui-kit') }, dedupe: ['three'] },
+  plugins: [react(), appIcon],
+  server: { fs: { allow: [searchForWorkspaceRoot(process.cwd()), core] } }, base: './', resolve: { alias: { '@xr-build/ui-kit/react': path.join(core, 'packages/ui-kit/src/react/index.ts'), '@xr-build/react': sdk('react'), '@xr-build/sdk': sdk('sdk'), '@xr-build/ui-kit': sdk('ui-kit') }, dedupe: ['three', 'react', 'react-dom', '@react-three/fiber'] },
   build: {
+    target: 'es2022',
     rollupOptions: {
       // The 3D icon is a second entry, emitted as dist/icon.js with its export kept, so a launcher can import it.
       input: { main: 'index.html', icon: 'src/icon.ts' },

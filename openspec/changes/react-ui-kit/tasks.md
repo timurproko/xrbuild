@@ -12,11 +12,11 @@
 
 ## 2. UI Kit showcase runs and exports reusable React components
 
-- [ ] 2.1 Replace the showcase imperative composition with exported scene/control components and separate main.tsx/index.ts entries; runtime tree/layout tests retain all positions, row order, lighting, axes, Interactable behavior, dialog and absence of extra board geometry or UI.
-- [ ] 2.2 Preserve SDK camera/frustum, renderer settings, icon fast path, readiness and clean HMR/pagehide disposal; focused tests cover targets, nested ownership, runtime teardown and standalone icon export without mounting the normal scene.
-- [ ] 2.3 Configure exact React subpath/source aliases, dependency deduplication, app export metadata and pinned embedded dependencies/lock; frozen app build and import-only consumer tests prove one runtime and no bootstrap side effects.
-- [ ] 2.4 Preserve showcase publication/headset contracts and update obsolete source-shape assertions to behavioral component tests; app-local checks and paired before/after mono, orthographic, stereo, dialog/disabled and icon pictures plus mouse/hand traces match the baseline.
-- [ ] 2.5 Update the showcase README with run/export usage and its public control entry; build the documented consumer import and retain existing manifest/assets/output behavior.
+- [x] 2.1 Replace the showcase imperative composition with exported scene/control components and separate main.tsx/index.ts entries; runtime tree/layout tests retain all positions, row order, lighting, axes, Interactable behavior, dialog and absence of extra board geometry or UI.
+- [x] 2.2 Preserve SDK camera/frustum, renderer settings, icon fast path, readiness and clean HMR/pagehide disposal; focused tests cover targets, nested ownership, runtime teardown and standalone icon export without mounting the normal scene.
+- [x] 2.3 Configure exact React subpath/source aliases, dependency deduplication, app export metadata and pinned embedded dependencies/lock; frozen app build and import-only consumer tests prove one runtime and no bootstrap side effects.
+- [x] 2.4 Preserve showcase publication/headset contracts and update obsolete source-shape assertions to behavioral component tests; app-local checks and paired before/after mono, orthographic, stereo, dialog/disabled and icon pictures plus mouse/hand traces match the baseline.
+- [x] 2.5 Update the showcase README with run/export usage and its public control entry; build the documented consumer import and retain existing manifest/assets/output behavior.
 
 ## 3. Launcher composes the UI Kit app's public React exports
 

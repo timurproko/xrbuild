@@ -3,16 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": { ".": "./src/index.ts" },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "vite build && node --test test/*.test.mjs"
+    "test": "vite build && tsx --experimental-vm-modules --test test/*.test.mjs"
   },
   "dependencies": {
     "lucide": "1.54.0",
-    "three": "0.170.0"
+    "three": "0.170.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "@react-three/fiber": "9.8.2"
   },
   "devDependencies": {
-    "vite": "6.4.3"
+    "vite": "6.4.3",
+    "@vitejs/plugin-react": "4.7.0",
+    "tsx": "4.20.6"
   }
 }
