@@ -2,10 +2,10 @@
 
 ## 1. Transient provider rejection stays non-fatal with reportable diagnostics
 
-- [ ] 1.1 Introduce structured native admission results, safe per-hand rejection and explicit empty/clearing observations; extend provider-frame-tests for confidence zero, optional zero buffers, NaN/infinity, confidence range, mixed hands and borrowed-memory lifetime.
-- [ ] 1.2 Replace the lifetime three-reject counter with the 10-second no-healthy-output policy; extend the test-built ABI DLL and hand-provider-worker.test.ts for isolated rejects separated by healthy frames, sustained malformed output and bounded kind/joint-index failure text.
-- [ ] 1.3 Deliver counted rejection summaries to compact live feedback without raw poses or private data, distinguish diagnostic-only clearing from genuine empty detections and preserve recording provenance; verify the affected wire/client/recording tests and a mounted browser rejection/recovery case.
-- [ ] 1.4 Update docs/hand-provider-sessions.md with admitted ABI shapes, rejection categories, persistence policy and hardware uncertainty; check examples against the focused native and client tests without claiming a measured real-device cause.
+- [x] 1.1 Introduce structured native admission results, safe per-hand rejection and explicit empty/clearing observations; extend provider-frame-tests for confidence zero, optional zero buffers, NaN/infinity, confidence range, mixed hands and borrowed-memory lifetime.
+- [x] 1.2 Replace the lifetime three-reject counter with the 10-second no-healthy-output policy; extend the test-built ABI DLL and hand-provider-worker.test.ts for isolated rejects separated by healthy frames, sustained malformed output and bounded kind/joint-index failure text.
+- [x] 1.3 Deliver counted rejection summaries to compact live feedback without raw poses or private data, distinguish diagnostic-only clearing from genuine empty detections and preserve recording provenance; verify the affected wire/client/recording tests and a mounted browser rejection/recovery case.
+- [x] 1.4 Update docs/hand-provider-sessions.md with admitted ABI shapes, rejection categories, persistence policy and hardware uncertainty; check examples against the focused native and client tests without claiming a measured real-device cause.
 
 ## 2. Failed and stalled sessions finish bounded teardown before Start returns
 

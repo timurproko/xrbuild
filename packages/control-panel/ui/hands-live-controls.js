@@ -3,21 +3,24 @@ const key = source => source ? `${source.owner}/${source.id}` : '';
 export function mountHandsLiveControls({ session, view, load, provider = document.getElementById('hands-provider') }) {
   const root = document.getElementById('hands-session-actions') ?? document.createElement('div');
   root.id = 'hands-session-actions'; root.className = 'xrb-button-row'; root.hidden = false;
-  const button = document.createElement('button'), state = document.createElement('span');
+  const button = document.createElement('button'), state = document.createElement('span'), diagnostic = document.createElement('small');
+  diagnostic.id = 'hands-live-diagnostic'; diagnostic.setAttribute('role', 'status'); diagnostic.hidden = true;
   button.type = 'button'; button.id = 'hands-start-stop'; state.id = 'hands-live-state'; state.className = 'chip'; state.setAttribute('role', 'status');
-  root.replaceChildren(button, state); (provider.closest('label') ?? provider).before(root);
+  root.replaceChildren(button, state, diagnostic); (provider.closest('label') ?? provider).before(root);
   provider.title = 'Provider changes are saved for the next Start or app launch; the active session is not switched.';
-  let status = { phase: 'not-started' }, data = null, supported = true, starting = false, stopping = false, closed = false, polling = false, generation = 0;
+  let status = { phase: 'not-started' }, data = null, supported = true, starting = false, stopping = false, closed = false, polling = false, generation = 0, lastDiagnostic = '';
   const rates = document.getElementById('hands-tracking-fps'), overlay = document.getElementById('hands-view-empty');
   function render() {
     if (closed) return;
     const active = session.active || starting, phase = status.phase;
+    lastDiagnostic = status.diagnostic || lastDiagnostic;
+    diagnostic.textContent = lastDiagnostic; diagnostic.hidden = !lastDiagnostic;
     const source = data?.providers?.find(p => key(p) === provider.value);
     const unavailable = !supported ? 'Standalone Hands currently supports Windows x64 only.' : !view?.profile ? 'Wait for the shared SDK view and valid profile.' : !source ? 'Choose an available skeleton provider.' : source.transport !== 'native' ? 'WebXR requires its explicit app XR session.' : !source.available ? source.reason : '';
     const stoppingNow = stopping || session.stopping || phase === 'stopping';
     button.textContent = stoppingNow ? 'Stopping…' : active ? 'Stop' : 'Start';
     button.disabled = stoppingNow || !active && (!!unavailable || phase === 'occupied' || !!view?.replaying);
-    const labels = { 'not-started': 'Not started', starting: 'Starting…', waiting: 'Waiting', running: 'Running', 'no-hands': 'No hands', stalled: 'Stalled', stopping: 'Stopping…', stopped: 'Stopped', failed: 'Failed', occupied: 'Busy' };
+    const labels = { 'not-started': 'Not started', starting: 'Starting…', waiting: 'Waiting', running: 'Running', 'no-hands': 'No hands', rejected: 'Observation dropped', stalled: 'Stalled', stopping: 'Stopping…', stopped: 'Stopped', failed: 'Failed', occupied: 'Busy' };
     let label = labels[phase] ?? 'Not started';
     if (active && status.source && key(status.source) !== provider.value) label += ` · ${status.source.label}`;
     if (state.textContent !== label) state.textContent = label;
@@ -29,7 +32,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     rates.parentElement.dataset.tooltip = fps === '—' ? 'No fresh live provider frames' : `Unique received frames/s · Capture age ${status.frameAgeMs?.toFixed(1)} ms ± ${status.uncertaintyMs?.toFixed(1)} ms · Delivery gaps ${status.dropped ?? 0} · Provider-reported ${status.reportedHz ?? '—'} Hz`;
     if (!view?.replaying) {
       overlay.hidden = phase === 'running';
-      const message = phase === 'no-hands' ? 'No hands detected.' : phase === 'waiting' ? 'Waiting for fresh provider frames…' : phase === 'stalled' ? 'Tracking stalled. Hands and holds cleared.' : phase === 'starting' ? 'Starting provider…' : phase === 'stopping' ? 'Stopping provider…' : phase === 'failed' || phase === 'occupied' ? detail : unavailable || 'Press Start to track the saved provider.';
+      const message = status.filtered && phase === 'no-hands' ? 'Malformed observation dropped; no admitted hands this frame.' : phase === 'no-hands' ? 'No hands detected.' : phase === 'waiting' ? 'Waiting for fresh provider frames…' : phase === 'stalled' ? 'Tracking stalled. Hands and holds cleared.' : phase === 'starting' ? 'Starting provider…' : phase === 'stopping' ? 'Stopping provider…' : phase === 'failed' || phase === 'occupied' ? detail : unavailable || 'Press Start to track the saved provider.';
       if (overlay.firstElementChild.textContent !== message) overlay.firstElementChild.textContent = message;
     }
   }

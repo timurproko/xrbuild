@@ -3,19 +3,20 @@ import test from 'node:test';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import net from 'node:net';
+import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { LineSplitter } from '../src/jobs.ts';
 const worker = process.env.XRB_TEST_PROVIDER_WORKER, supervisor = process.env.XRB_TEST_PROVIDER_SUPERVISOR;
 const origin = 'http://127.0.0.1:33333';
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-async function fixture(supervised = false) {
+async function fixture(supervised = false, input: object = {}) {
   const token = randomBytes(32).toString('hex'), epoch = randomBytes(32).toString('hex');
   const child = spawn(supervised ? supervisor! : worker!, supervised ? [worker!, String(process.pid)] : [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   let url = '', workerPid = 0, ended = false; const stdout: string[] = [];
   child.once('close', () => { ended = true; });
   child.stdout.setEncoding('utf8').on('data', data => lines.push(data)); child.stderr.resume(); child.stdin.on('error', () => {});
   const lines = new LineSplitter(line => { stdout.push(line); if (line.startsWith('@provider ')) { const message = JSON.parse(line.slice(10)); if (message.url) { url = message.url; workerPid = message.pid; } } });
-  child.stdin.write(JSON.stringify({ version: 1, runtimeName: 'simulated', config: { hands: 2, rateHz: 120 }, parentPid: process.pid, testScope: randomBytes(32).toString('hex'), token, epoch, origin }) + '\n');
+  child.stdin.write(JSON.stringify({ version: 1, runtimeName: 'simulated', config: { hands: 2, rateHz: 120 }, parentPid: process.pid, testScope: randomBytes(32).toString('hex'), token, epoch, origin, ...input }) + '\n');
   const until = Date.now() + 5000;
   while (!url) { if (Date.now() > until || child.exitCode !== null) throw new Error(stdout.join('\n')); await delay(10); }
   return { child, token, epoch, url, workerPid, stdout, async close() { if (ended) return; const exited = once(child, 'close'); child.stdin.end('{"stop":true}\n'); const timer = setTimeout(() => child.kill(), 7000); try { await exited; } finally { clearTimeout(timer); } } };
@@ -106,6 +107,21 @@ test('headless socket requires exact Origin and first-message capability and nev
     finally { wrong.socket.destroy(); }
   } finally { await f.close(); }
 });
+test('filtered and intact observations share one consumption credit and newest pending slot', { skip: !worker || !process.env.XRB_TEST_PROVIDER_DLL, timeout: 15000 }, async () => {
+  const f = await fixture(false, { runtimeName: 'session-test', pluginPath: path.resolve(process.env.XRB_TEST_PROVIDER_DLL!), config: { invalidConfidence: true, sporadic: true } });
+  const peer = await connect(f.url);
+  try {
+    peer.send(Buffer.from(f.token)); let packet = await peer.next(); const kinds = new Set<number>();
+    for (let i = 0; i < 12; i++) {
+      kinds.add(packet[0]); assert.ok([21, 23].includes(packet[0]));
+      await delay(30); assert.equal(peer.packets.length, 0, 'no second observation before consumption, even across kinds');
+      const ack = Buffer.alloc(5); ack[0] = 110; ack.writeUInt32LE(packet.readUInt32LE(4), 1); peer.send(ack); packet = await peer.next();
+    }
+    assert.ok(kinds.has(23), 'marked filtered observation actually transported');
+    assert.ok(kinds.has(21), 'healthy observations actually recover');
+  } finally { peer.socket.destroy(); await f.close(); }
+});
+
 test('one in-flight frame plus newest pending survives a slow receiver, retains raw packets/epochs and answers clock mapping', { skip: !worker, timeout: 15000 }, async () => {
   const f = await fixture(); const peer = await connect(f.url);
   try {

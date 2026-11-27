@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
     acquired = acquisition::acceptHandoff(lease, widen(bootstrap["ticket"].get<std::string>()), "Hands provider session", &why);
   else if (acquired) acquired = lease.take("Hands provider session", &why);
   if (!acquired) { event({{"phase", "failed"}, {"reason", why}}); CloseHandle(parent); return 3; }
-  std::atomic<bool> quit{false}, done{false}, starting{true}; std::atomic<int> invalid{0};
+  std::atomic<bool> quit{false}, done{false}, starting{true};
   std::mutex reasonMutex; std::string failure, providerLog;
   auto fail = [&](const std::string& text) { std::lock_guard<std::mutex> lock(reasonMutex); if (failure.empty()) failure = text.substr(0, 1024); quit = true; };
   const auto begun = GetTickCount64();
@@ -90,10 +90,22 @@ int main(int argc, char** argv) {
   if (!deferReader) reader = std::thread(commands);
   plugins::Catalog catalog; providers::Input input; providers::Sink sink; session::Frames frames;
   sink.log = [&](const std::string&, int, const std::string& text) { std::lock_guard<std::mutex> lock(reasonMutex); providerLog = text.substr(0, 1024); };
+  double invalidWindowMs = 10000;
+#ifdef XRB_PROVIDER_TEST
+  invalidWindowMs = (std::max)(100.0, (std::min)(10000.0, bootstrap.value("invalidWindowMs", 10000.0)));
+#endif
+  session::RejectionWindow invalid(invalidWindowMs);
+  std::mutex admissionMutex;
   sink.hands = [&](const XrbHandFrame& frame) {
+    std::lock_guard<std::mutex> lock(admissionMutex);
     if (quit) return;
     std::string reason;
-    if (!frames.publish(frame, channel::hostTimeMs(), &reason) && (++invalid >= 3 || reason.find("clock") != std::string::npos)) fail(reason);
+    const auto now = channel::hostTimeMs();
+    const bool intact = frames.publish(frame, now, &reason);
+    const auto snapshot = frames.newest();
+    const bool healthy = intact || snapshot.sequence && snapshot.publicationMs == now && snapshot.count > 0;
+    if (invalid.observe(now, healthy)) fail("Persistently malformed provider stream (recent rejection rate); " + snapshot.diagnostic.text());
+    if (reason == "capture-clock-backwards") fail("Provider capture clock moved backwards; " + snapshot.diagnostic.text());
   };
   sink.inputStatus = [&](int state, float, const std::string& text) { if (state >= XRB_INPUT_NEEDS_SETUP) fail(text.empty() ? "Provider requires setup or failed" : text); };
   // Never enable debug image delivery. The worker transports skeletons only.
@@ -144,15 +156,16 @@ int main(int argc, char** argv) {
     const auto snapshot = frames.newest();
     if (snapshot.sequence >= 0xffffffffu) { fail("Provider frame sequence exhausted; start a new session"); break; }
     if (!transport.clientCount() && GetTickCount64() > connectedBy) { fail("Hands page did not connect before the session deadline"); break; }
-    if (channel::hostTimeMs() - (snapshot.sequence ? snapshot.publicationMs : streamBegan) > 10000) { fail("Provider stopped delivering valid frames"); break; }
+    if (channel::hostTimeMs() - (snapshot.sequence ? snapshot.publicationMs : streamBegan) > 10000) { fail("Provider stopped delivering usable frames for 10 seconds; " + snapshot.diagnostic.text()); break; }
     if (snapshot.sequence != sent && transport.clientCount()) {
       std::vector<uint8_t> payload(72 + snapshot.packet.size());
       memcpy(payload.data(), epoch.data(), 64); memcpy(payload.data() + 64, &snapshot.sequence, 8);
       memcpy(payload.data() + 72, snapshot.packet.data(), snapshot.packet.size());
-      transport.publish(static_cast<channel::MessageType>(21), payload.data(), payload.size()); sent = snapshot.sequence;
+      transport.publish(static_cast<channel::MessageType>(snapshot.filtered ? 23 : 21), payload.data(), payload.size()); sent = snapshot.sequence;
     }
     if (snapshot.sequence != last || channel::hostTimeMs() - reported >= 1000) {
-      event({{"phase", "running"}, {"sequence", snapshot.sequence}, {"hands", snapshot.count}, {"captureTimeMs", snapshot.captureMs}, {"publicationTimeMs", snapshot.publicationMs}});
+      event({{"phase", "running"}, {"sequence", snapshot.sequence}, {"hands", snapshot.count}, {"captureTimeMs", snapshot.captureMs}, {"publicationTimeMs", snapshot.publicationMs},
+        {"diagnostic", snapshot.diagnostic.text()}, {"rejectedFrames", snapshot.diagnostic.frames}, {"rejectedHands", snapshot.diagnostic.hands}});
       last = snapshot.sequence; reported = channel::hostTimeMs();
     }
     Sleep(20);
@@ -164,6 +177,6 @@ int main(int argc, char** argv) {
   if (deferReader) reader = std::thread(commands); // Deterministically exercise failure before the first read.
   reader.join();
   done = true; watchdog.join(); CloseHandle(parent);
-  { std::lock_guard<std::mutex> lock(reasonMutex); event({{"phase", failure.empty() ? "stopped" : "failed"}, {"reason", failure}}); }
+  { std::lock_guard<std::mutex> lock(reasonMutex); event({{"phase", failure.empty() ? "stopped" : "failed"}, {"reason", failure}, {"diagnostic", frames.newest().diagnostic.text()}}); }
   return failure.empty() ? 0 : 4;
 }

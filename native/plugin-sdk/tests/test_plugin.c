@@ -21,6 +21,7 @@ typedef struct TestPlugin {
   int fail_start;
   int stereo;
   int empty, malformed, hang_start, hang_stop, hang_destroy, test_hold;
+  int invalid_confidence, sporadic, mixed, nan_joint;
   volatile LONG running;
   HANDLE thread;
 } TestPlugin;
@@ -49,6 +50,10 @@ static TestPlugin* make(const XrbHost* host, const char* config) {
   p->hang_stop = config && strstr(config, "\"hangStop\":true") != NULL;
   p->hang_destroy = config && strstr(config, "\"hangDestroy\":true") != NULL;
   p->test_hold = config && strstr(config, "\"testHold\":true") != NULL;
+  p->invalid_confidence = config && strstr(config, "\"invalidConfidence\":true") != NULL;
+  p->nan_joint = config && strstr(config, "\"nanJoint\":true") != NULL;
+  p->sporadic = config && strstr(config, "\"sporadic\":true") != NULL;
+  p->mixed = config && strstr(config, "\"mixed\":true") != NULL;
   return p;
 }
 
@@ -75,7 +80,11 @@ static DWORD WINAPI input_hold(void* self) {
       for (k = 0; k < XRB_NUM_KEYPOINTS; k++) { hands[h].keypoints[k * 4] = x; hands[h].keypoints[k * 4 + 1] = .085f; hands[h].keypoints[k * 4 + 2] = .15f; hands[h].keypoints[k * 4 + 3] = .9f; }
     }
     frame.size = sizeof(frame); frame.capabilities = XRB_CAP_GRAB; frame.capture_time_ms = p->host->now_ms(p->host->ctx); frame.tracking_hz = 60;
-    frame.count = p->empty ? 0 : 2; frame.hands = p->empty ? NULL : hands;
+    if (!p->sporadic || tick % 3 == 0) for (h = 0; h < (p->mixed ? 1 : 2); h++) {
+      if (p->invalid_confidence) hands[h].keypoints[8 * 4 + 3] = 2.f;
+      if (p->nan_joint) hands[h].keypoints[8 * 4] = NAN;
+    }
+    frame.count = p->malformed ? 256 : p->empty ? 0 : 2; frame.hands = p->empty ? NULL : hands;
     p->host->publish_hands(p->host->ctx, &frame); tick++; Sleep(16);
   }
   return 0;
@@ -84,7 +93,7 @@ static int32_t XRB_CALL input_start(void* self) {
   TestPlugin* p = (TestPlugin*)self;
   if (p->hang_start) Sleep(INFINITE);
   if (p->fail_start) return 1;
-  if (p->test_hold) { InterlockedExchange(&p->running, 1); p->thread = CreateThread(NULL, 0, input_hold, p, 0, NULL); return p->thread ? 0 : 1; }
+  if (p->test_hold || p->malformed || p->invalid_confidence || p->nan_joint) { InterlockedExchange(&p->running, 1); p->thread = CreateThread(NULL, 0, input_hold, p, 0, NULL); return p->thread ? 0 : 1; }
   XrbHand hand;
   XrbHandFrame frame;
   memset(&hand, 0, sizeof(hand));

@@ -375,7 +375,9 @@ void Server::serve(std::shared_ptr<Client> c) {
 }
 
 std::vector<uint8_t> Server::publish(MessageType type, const void* payload, size_t size) {
-  if (!sessionToken.empty() && (size > 128 * 1024 - sizeof(Header) || type != sessionFrameType && size > 16384)) return {};
+  // Filtered session observations share the SAME newest slot and consumption credit as intact frames.
+  const uint8_t slot = !sessionToken.empty() && sessionFrameType == 21 && type == 23 ? sessionFrameType : static_cast<uint8_t>(type);
+  if (!sessionToken.empty() && (size > 128 * 1024 - sizeof(Header) || slot != sessionFrameType && size > 16384)) return {};
   const uint32_t sequence = ++seq_;
   if (!sessionToken.empty() && !sequence) { if (onDisconnect) onDisconnect(); return {}; }
   std::vector<uint8_t> msg(sizeof(Header) + size);
@@ -384,12 +386,12 @@ std::vector<uint8_t> Server::publish(MessageType type, const void* payload, size
   if (size) memcpy(msg.data() + sizeof(h), payload, size);
   std::vector<uint8_t> frame = encodeBinaryFrame(msg.data(), msg.size());
   std::lock_guard<std::mutex> g(clientsMutex_);
-  lastFrames_[type] = frame;
+  lastFrames_[slot] = frame;
   for (auto& c : clients_) {
     std::lock_guard<std::mutex> cg(c->m);
     if (c->closed || !sessionToken.empty() && !c->authenticated) continue;
-    if (!sessionToken.empty() && type == sessionFrameType) c->pendingSequence = h.seq;
-    c->pending[type] = frame;  // replaces any older unsent message of this type
+    if (!sessionToken.empty() && slot == sessionFrameType) c->pendingSequence = h.seq;
+    c->pending[slot] = frame;  // replaces any older unsent message of this type
     c->cv.notify_one();
   }
   return msg;

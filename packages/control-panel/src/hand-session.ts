@@ -21,7 +21,7 @@ export interface SessionDependencies {
 }
 type Phase = 'not-started' | 'starting' | 'running' | 'stopping' | 'stopped' | 'failed';
 interface Running {
-  id: string; epoch: string; owner: string; token: string; phase: Phase; reason: string; heartbeat: number;
+  id: string; epoch: string; owner: string; token: string; phase: Phase; reason: string; heartbeat: number; diagnostic?: string;
   source?: Awaited<ReturnType<typeof prepareHandSession>>['source']; url?: string; child?: ChildProcessWithoutNullStreams;
   pid?: number; ended: boolean; cancelled: boolean; preparing: boolean; drainTimedOut?: boolean; live?: LiveHands; release?: () => void; stop?: Promise<void>;
 }
@@ -43,7 +43,7 @@ export class HandSessions {
   status(owner = '') {
     const s = this.current, owns = !!s && s.owner === owner;
     return { supported: (this.deps.platform ?? process.platform) === 'win32', phase: s?.phase ?? 'not-started', reason: s?.reason ?? '', source: s?.source ?? null, busy: this.busy, owns,
-      sessionId: s?.id ?? null, ...(owns && this.busy ? { profile: s?.live?.envelope } : {}),
+      sessionId: s?.id ?? null, diagnostic: s?.diagnostic ?? '', ...(owns && this.busy ? { profile: s?.live?.envelope } : {}),
       delivery: s?.live?.delivery, deliveryState: s?.live?.deliveryState };
   }
   private authorize(req: IncomingMessage) {
@@ -123,6 +123,7 @@ export class HandSessions {
           if (!line.startsWith('@provider ')) continue;
           try {
             const event = JSON.parse(line.slice(10));
+            if (typeof event.diagnostic === 'string' && /^Rejected [a-z-]+; joint (?:n\/a|\d{1,2}); count \d{1,16} frames, \d{1,16} hands$/.test(event.diagnostic)) s.diagnostic = event.diagnostic;
             if (event.phase === 'acquiring' && Number.isSafeInteger(event.pid) && !handoff) {
               s.pid = event.pid; handoff = reservation!.handoff(event.pid); handoff.catch(() => { s.reason = 'Native acquisition handoff failed'; void this.stop(s, s.reason); });
             }

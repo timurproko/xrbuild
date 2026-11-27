@@ -31,6 +31,9 @@ test('owning client gates frames on profile/clock, ACKs only consumption, counts
     for (let i = 0; i < 40; i++) callback!();
     assert.equal(statuses.at(-1).trackingFps, 1, 'neither renders nor declared 120 Hz count as captured frames'); assert.equal(statuses.at(-1).phase, 'no-hands');
     assert.equal(client.recordingSource()!.globalAdjustmentsApplied, false);
+    const filtered = envelope(2); new DataView(filtered).setUint8(0, 23); socket.onmessage({ data: filtered }); callback!();
+    assert.equal(pushes, 2); assert.equal(samples.length, 1, 'filtered observation cannot impersonate unchanged raw recording');
+    assert.equal(statuses.at(-1).trackingFps, null, 'diagnostic-only clearing has no invented detection fps');
     now = 400; callback!(); assert.equal(held, false); assert.equal(statuses.at(-1).phase, 'stalled'); assert.equal(statuses.at(-1).trackingFps, null);
     await client.stop(); assert.equal(view.active, false); const before = pushes; socket.onmessage({ data: envelope(2) }); callback!(); assert.equal(pushes, before); assert.ok(clears > 0);
     assert.ok(calls.some(c => c.url.endsWith('/ack'))); assert.ok(calls.every(c => !c.url.includes('?')));

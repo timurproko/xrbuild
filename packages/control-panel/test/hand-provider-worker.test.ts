@@ -66,8 +66,8 @@ test('worker preserves create/start failure reasons and never substitutes synthe
 test('empty detections remain empty and malformed frames fail rather than becoming generated hands', { skip: !worker || !dll, timeout: 15000 }, async () => {
   const empty = await start('session-test', { empty: true }, path.resolve(dll!));
   try { const event = await empty.waitFor(value => value.phase === 'running' && value.sequence > 0); assert.equal(event.hands, 0); } finally { await empty.stop(); }
-  const bad = await start('session-test', { malformed: true }, path.resolve(dll!));
-  try { assert.match((await bad.waitFor(value => value.phase === 'failed')).reason, /Invalid provider frame/); assert.equal(bad.events.some(value => value.sequence > 0), false); } finally { await bad.stop(); }
+  const bad = await start('session-test', { malformed: true }, path.resolve(dll!), { invalidWindowMs: 200 });
+  try { assert.match((await bad.waitFor(value => value.phase === 'failed')).reason, /Persistently malformed.*Rejected frame-header; joint n\/a; count/); assert.equal(bad.events.some(value => value.sequence > 0), false); } finally { await bad.stop(); }
 });
 
 test('worker contains hung startup, stop and destruction with a bounded test-clock watchdog', { skip: !worker || !dll, timeout: 15000 }, async () => {
@@ -79,6 +79,25 @@ test('worker contains hung startup, stop and destruction with a bounded test-clo
       const limit = setTimeout(() => session.child.kill(), 5000);
       try { assert.equal((await exited)[0], 4); } finally { clearTimeout(limit); }
     } finally { await session.stop(); }
+  }
+});
+
+for (const kind of ['invalidConfidence', 'nanJoint']) test(`recent malformed ${kind} rate fails with a safe visible diagnostic, while healthy frames reset it`, { skip: !worker || !dll, timeout: 15000 }, async () => {
+  const broken = await start('session-test', { [kind]: true }, path.resolve(dll!), { invalidWindowMs: 200 });
+  try {
+    const failed = await broken.waitFor(e => e.phase === 'failed');
+    assert.match(failed.reason, /Persistently malformed.*Rejected (confidence-range|joint-nonfinite); joint 8; count \d+/);
+    assert.match(failed.diagnostic, /joint 8; count/);
+  } finally { await broken.stop(); }
+  for (const recovery of [{ sporadic: true }, { mixed: true }]) {
+    const healthy = await start('session-test', { [kind]: true, ...recovery }, path.resolve(dll!), { invalidWindowMs: 200 });
+    try {
+      await healthy.waitFor(e => e.sequence > 0);
+      await new Promise(r => setTimeout(r, 650));
+      assert.equal(healthy.events.some(e => e.phase === 'failed'), false, 'healthy output resets rate; intact peers remain usable');
+      await healthy.stop(); assert.equal(healthy.events.at(-1).phase, 'stopped');
+      assert.match(healthy.events.at(-1).diagnostic, /joint 8; count/);
+    } finally { await healthy.stop(); }
   }
 });
 

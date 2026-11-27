@@ -45,7 +45,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
         if (!s.sessionId) { const status = await request('/status', {}); if (status.owns) s.sessionId = status.sessionId; }
         const result = s.sessionId ? await request('/stop', { sessionId: s.sessionId }) : null;
         const failure = result?.reason || reason;
-        if (!disposed && current === s) notify({ phase: failure ? 'failed' : 'stopped', reason: failure, epoch: s.epoch, sessionId: s.sessionId });
+        if (!disposed && current === s) notify({ phase: failure ? 'failed' : 'stopped', reason: failure, diagnostic: result?.diagnostic || s.diagnostic || '', epoch: s.epoch, sessionId: s.sessionId });
       } catch (error) { if (!disposed && current === s) onStatus({ phase: 'failed', reason: error.message }); }
       if (current === s) current = null;
     })();
@@ -88,6 +88,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
         if (s.retired || current !== s) return;
         if (status.owns) { s.sessionId ??= status.sessionId; status = await request('/heartbeat', { sessionId: s.sessionId }); }
         if (s.retired || current !== s) return;
+        s.diagnostic = status.diagnostic || s.diagnostic;
         if (s.sessionId && (!status.owns || status.sessionId !== s.sessionId || ['failed', 'stopped'].includes(status.phase))) { void stop(status.reason || 'Provider session ended'); return; }
         if (status.profile && s.sessionId) { try { await applyProfile(s, status.profile); } catch { /* Persistence and actual SDK delivery remain separate; keep the last valid snapshot. */ } }
       } catch (error) { if (!s.retired && current === s) void stop(error.message); } finally { polling = false; }
@@ -123,9 +124,9 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
           if (mapped !== null) {
             // Each subscriber gets its own packet/frame, before shared profile ingress mutates nothing.
             const sample = { epoch: s.epoch, sequence: event.sequence, captureTimeMs: event.frame.captureTimeMs, publishTimeMs: event.frame.hostTimeMs, packet: event.packet, frame: event.frame };
-            for (const listener of raw) listener({ ...sample, packet: sample.packet.slice(), frame: structuredClone(sample.frame) });
+            if (!event.filtered) for (const listener of raw) listener({ ...sample, packet: sample.packet.slice(), frame: structuredClone(sample.frame) });
             if (view.pushFrame({ epoch: s.epoch, sequence: event.sequence, frame: event.frame, capturePageMs: mapped })) {
-              s.dropped += Math.max(0, event.sequence - (s.lastSequence ?? event.sequence) - 1); s.lastSequence = event.sequence; s.accepted++; s.invalidStreak = 0; s.lastFresh = now(); s.capture = mapped; s.hands = event.frame.hands.length; s.reportedHz = event.frame.trackingHz; s.times.push(now()); s.stale = false;
+              s.dropped += Math.max(0, event.sequence - (s.lastSequence ?? event.sequence) - 1); s.lastSequence = event.sequence; s.accepted++; s.invalidStreak = 0; s.lastFresh = now(); s.capture = mapped; s.hands = event.frame.hands.length; s.reportedHz = event.frame.trackingHz; if (!event.filtered) s.times.push(now()); s.filtered = event.filtered; s.stale = false;
               clearTimeout(s.freshness); s.freshness = setTimeout(() => { if (!s.retired && current === s) { s.stale = true; view.clearHands(); notify({ phase: 'stalled', epoch: s.epoch, sessionId: s.sessionId, trackingFps: null, frameAgeMs: null }); } }, SESSION_BOUNDS.age);
             } else s.rejected++;
           } else { s.rejected++; view.clearHands(); if (++s.invalidStreak >= 3) throw new Error('Repeated stale or invalid provider captures'); }
@@ -138,7 +139,7 @@ export function createHandsSession({ view, replaying = () => false, onStatus = (
         s.times = s.times.filter(t => at - t <= 1000);
         if (s.lastFresh !== null && at - s.lastFresh > SESSION_BOUNDS.age && !s.stale) { s.stale = true; view.clearHands(); }
         notify({ phase: s.lastFresh === null ? 'waiting' : s.stale ? 'stalled' : s.hands ? 'running' : 'no-hands', source: s.source, epoch: s.epoch, sessionId: s.sessionId,
-          trackingFps: s.lastFresh !== null && !s.stale ? s.times.length : null, frameAgeMs: s.lastFresh !== null && !s.stale ? Math.max(0, at - s.capture) : null, uncertaintyMs: s.clock.mapping?.uncertainty ?? null, reportedHz: s.reportedHz ?? null, dropped: s.dropped, rejected: s.rejected });
+          diagnostic: s.diagnostic || '', filtered: !!s.filtered, trackingFps: s.lastFresh !== null && !s.stale && !s.filtered ? s.times.length : null, frameAgeMs: s.lastFresh !== null && !s.stale ? Math.max(0, at - s.capture) : null, uncertaintyMs: s.clock.mapping?.uncertainty ?? null, reportedHz: s.reportedHz ?? null, dropped: s.dropped, rejected: s.rejected });
       }
     }
     if (!disposed) raf = frame(tick);
