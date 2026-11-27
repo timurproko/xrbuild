@@ -20,3 +20,4 @@
 
 - [x] 4.1 Add Position and Visual presets with save and delete, the Display multi-select, live slider application, the Log tab and the installed-tracker provider list.
 - [x] 4.2 Move post-processing into a Post tab of layers chosen from an Add layer multi-select, with Install for plugins that need prerequisites.
+- [x] 4.3 Make the side panel resizable with a splitter and collapse tabs that do not fit into a more menu.

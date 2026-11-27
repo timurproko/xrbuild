@@ -165,7 +165,7 @@ The Log tab SHALL list provider start and stop events, diagnostics and failure r
 
 ### Requirement: Post-processing layers
 
-The Post tab SHALL follow Setup and offer an Add layer multi-select of installed post-processing plugins. A chosen plugin SHALL show as a layer card with its settings and a remove action; one hand-mesh layer runs at a time, so adding another replaces it. A plugin whose runtime is not installed SHALL stay selectable and show Install when it exports a prerequisite setup. With none installed, the tab SHALL show a short empty note.
+The Post tab SHALL follow Setup and offer an Add layer multi-select of installed post-processing plugins. A chosen plugin SHALL show as a layer card with its settings and a remove action; one hand-mesh layer runs at a time, so adding another replaces it. A plugin whose runtime is not installed SHALL stay selectable and show a small Install action in its card header when it exports a prerequisite setup, and Ready once it can run. With none installed, the tab SHALL show a short empty note.
 
 #### Scenario: Adding a layer that needs prerequisites
 - **WHEN** the person adds a post-processing plugin whose runtime is not installed
@@ -174,3 +174,11 @@ The Post tab SHALL follow Setup and offer an Add layer multi-select of installed
 #### Scenario: Installing prerequisites
 - **WHEN** the person presses Install and accepts the shown downloads, sizes and licences
 - **THEN** the plugin's setup runs as a panel job with live output, Restart waits for it, and the layer becomes ready when it finishes
+
+### Requirement: Resizable side panel
+
+A splitter between the viewer and the side panel SHALL resize the panel by pointer drag or arrow keys, remember the width and redraw the viewer without blank frames. Tabs that do not fit SHALL move into a more menu at the end of the tab bar, keeping the selected tab visible.
+
+#### Scenario: Narrow side panel
+- **WHEN** the person drags the splitter until not every tab fits
+- **THEN** the last tabs move into the more menu, and choosing one there selects it

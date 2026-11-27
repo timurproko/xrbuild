@@ -4,6 +4,7 @@ import { mountHandsShell } from './hands-shell.js';
 import { mountProviderRecorder } from './hands-recorder.js';
 import { mountHandsPostprocessing } from './hands-postprocessing.js';
 import { handsWriteQueue, commitHandsFields } from './hands-commits.js';
+import { mountPanelSplitter, mountTabOverflow } from './hands-layout.js';
 const $ = id => document.getElementById(id), key = p => p ? `${p.owner}/${p.id}` : '';
 // Same key as HANDS_TAB_KEY in hands-adjustments.js (loaded later): show the remembered tab from the first paint.
 try {
@@ -15,6 +16,8 @@ try {
     const action = document.querySelector(`[data-tab-action="${saved}"]`); if (action) action.hidden = false;
   }
 } catch { /* Storage may be blocked; Setup stays first. */ }
+mountPanelSplitter($('hands-workspace'), $('hands-splitter'));
+mountTabOverflow(document.querySelector('.hands-adjustment-tabs'));
 let snapshot = null, view = null, adjustments = null, disposed = false, profileKey = '', profileGeneration = 0, writes = 0, readGeneration = 0;
 let sourceEdit = null, sourceConflict = null, sourceBusy = false, sourceReadError = false;
 const enqueue = handsWriteQueue();

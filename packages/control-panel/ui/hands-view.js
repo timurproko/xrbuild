@@ -111,7 +111,8 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   // 300x150 canvas (a small, zoomed-out flash); frames wait until the viewer has a real size.
   let sized = false;
   const fit = () => { const { width, height } = viewport.getBoundingClientRect(); sized = width > 0 && height > 0; if (!sized) return; renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); };
-  fit(); const resize = new ResizeObserver(fit); resize.observe(viewport);
+  // Resizing clears the canvas; draw again in the same frame so dragging the panel splitter never flashes an empty view.
+  fit(); const resize = new ResizeObserver(() => { fit(); if (sized && frameId !== undefined && !closed) { renderer.render(scene, camera); axes.render(renderer, camera); } }); resize.observe(viewport);
   // Reset frames the selected monitor (with a margin) when there is one, else the default hand workspace.
   let monitorSize = null;
   function resetView() {

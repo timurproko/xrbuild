@@ -45,10 +45,12 @@
   .hands-page { height: 100dvh; overflow: hidden; }
   /* The panels fill the window, so the bottom margin matches the sides. */
   #hands-workspace { padding-bottom: var(--xrb-workspace-inline); }
-  #hands-workspace { grid-template-columns: minmax(0, 1fr) minmax(var(--sidebar-compact-w), 340px); }
+  /* The splitter fills the gap between the viewer and the side panel; drag it to resize. */
+  #hands-workspace { grid-template-columns: minmax(0, 1fr) var(--xrb-workspace-gap) var(--hands-panel-w, 340px); column-gap: 0; }
 }
 @media (max-width: 1000px) {
   #hands-workspace { grid-template-columns: minmax(0, 1fr); }
+  .hands-splitter { display: none; }
   .hands-viewport { grid-column: 1 / -1; grid-row: 1; height: 50dvh; }
   .hands-panel { max-height: 70dvh; }
 }
@@ -83,8 +85,18 @@
 /* The name field takes the dropdown's place and size while saving. */
 .hands-preset-name > input { height: 36px; }
 /* Post tab: one card per post-processing layer. */
-.hands-mesh-layer { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+/* No fill, so the fields inside keep their normal outline and contrast. */
+.hands-mesh-layer { padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
 .hands-mesh-layer-header { align-items: center; gap: 8px; }
 .hands-mesh-layer-header strong { min-width: 0; overflow-wrap: anywhere; }
-.hands-mesh-setup-row { align-items: center; gap: 8px; }
-.hands-mesh-setup-row > .xrb-help { margin: 0; min-width: 0; }
+/* Viewer / side panel splitter. */
+.hands-splitter { position: relative; cursor: col-resize; touch-action: none; outline: none; }
+.hands-splitter::after { content: ""; position: absolute; inset: 0 calc(50% - 1px); border-radius: 1px; background: transparent; transition: background-color .12s; }
+.hands-splitter:hover::after, .hands-splitter:focus-visible::after, .hands-resizing .hands-splitter::after { background: var(--accent); }
+.hands-resizing, .hands-resizing * { cursor: col-resize !important; user-select: none; }
+.hands-resizing canvas { pointer-events: none; }
+/* Tabs that do not fit collapse into the more menu. */
+.hands-adjustment-tabs { min-width: 0; overflow: hidden; }
+.hands-adjustment-tabs > .xrb-tab { flex: none; white-space: nowrap; }
+.hands-adjustment-tabs > .hands-tab-more { display: flex; align-items: center; flex: none; }
+.hands-adjustment-tabs > .hands-tab-more[hidden], .hands-adjustment-tabs > .xrb-tab[hidden] { display: none; }

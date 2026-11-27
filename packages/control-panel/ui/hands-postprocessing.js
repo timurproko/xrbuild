@@ -21,8 +21,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     <div class="menu" id="${prefix}-menu" role="menu" aria-labelledby="${prefix}-settings" hidden><button type="button" role="menuitem" data-mesh-reset>Reset to defaults</button></div></div>
     <select data-mesh-selector aria-label="Hand mesh" hidden></select>
     <div class="dropdown" data-multi="true" data-mesh-layers data-summary="Add layer" data-options="" data-labels="{}"><input type="hidden" data-mesh-layer-value value="[]"><button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Add post-processing layer">Add layer</button></div>
-    <section class="hands-mesh-layer xrb-stack" data-mesh-layer hidden><div class="row hands-mesh-layer-header"><strong data-mesh-layer-title></strong><span class="spacer"></span><button type="button" class="xrb-icon-button" data-mesh-layer-remove aria-label="Remove layer" data-no-tooltip>${iconSvg('close')}</button></div>
-    <div class="row hands-mesh-setup-row" data-mesh-setup hidden><span class="xrb-help" data-mesh-setup-text>Needs prerequisites before it can run.</span><span class="spacer"></span><button type="button" class="small primary" data-mesh-install>Install</button></div>
+    <section class="hands-mesh-layer xrb-stack" data-mesh-layer hidden><div class="row hands-mesh-layer-header"><strong data-mesh-layer-title></strong><span class="spacer"></span><button type="button" class="xrb-setup-install" data-mesh-install hidden><span>Install</span></button><span class="state ok" data-mesh-ready hidden>Ready</span><button type="button" class="xrb-icon-button" data-mesh-layer-remove aria-label="Remove layer" data-no-tooltip>${iconSvg('close')}</button></div>
     <div class="xrb-stack" data-mesh-fields></div><p class="xrb-help" data-mesh-readiness hidden></p></section>
     <div class="hands-mesh-delivery"><p class="xrb-help" data-mesh-runtime role="status" aria-live="polite" hidden></p><button type="button" class="small" data-mesh-delivery-retry hidden>Retry</button></div>
     <div data-mesh-recovery hidden><p class="field-error" data-mesh-message role="alert"></p><div class="xrb-button-row"><button type="button" class="small" data-mesh-retry>Retry</button><button type="button" class="small" data-mesh-discard hidden>Use saved</button></div></div></form>`;
@@ -31,7 +30,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   const retryButton = root.querySelector('[data-mesh-retry]'), discard = root.querySelector('[data-mesh-discard]');
   const gear = root.querySelector('[data-mesh-gear]'), menu = root.querySelector('[role="menu"]'), reset = root.querySelector('[data-mesh-reset]');
   const layers = root.querySelector('[data-mesh-layers]'), layerValue = root.querySelector('[data-mesh-layer-value]'), layer = root.querySelector('[data-mesh-layer]');
-  const setupRow = root.querySelector('[data-mesh-setup]'), install = root.querySelector('[data-mesh-install]');
+  const ready = root.querySelector('[data-mesh-ready]'), install = root.querySelector('[data-mesh-install]');
   const events = new AbortController(), document = root.ownerDocument, edits = new Map();
   // On the Hands page the gear sits in the tab bar beside the Post tab, like Position and Visual.
   const slot = document.querySelector('[data-tab-action="post"]');
@@ -92,7 +91,8 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     layerValue.value = JSON.stringify(selected ? [selected] : []);
     layer.hidden = !selected;
     layer.querySelector('[data-mesh-layer-title]').textContent = p?.label ?? (selected ? `${selected} (missing)` : '');
-    setupRow.hidden = !(p?.needsSetup && p.setup);
+    // Like Build prerequisites: a small Install while setup is missing, Ready once the plugin can run.
+    install.hidden = !(p?.needsSetup && p.setup); ready.hidden = !p?.available;
     install.disabled = installing;
     for (const field of fields.querySelectorAll('[data-mesh-field]')) {
       const f = p.declaration.settings.find(f => f.key === field.dataset.meshField), edit = edits.get(editKey(selected, f.key));
@@ -148,6 +148,8 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     } else if (matches && d.phase === 'Ready' && Number.isSafeInteger(d.appliedGeneration) && d.requestedGeneration > 0 && d.appliedGeneration === d.requestedGeneration) {
       text = 'Applied'; state = 'applied';
     } else if ((d && d.phase !== 'Stopped') || snapshot?.running) { text = 'Saved; application not confirmed.'; state = 'applying'; }
+    // While the layer only waits for Install, the header says so; no extra status line.
+    if (plugin()?.needsSetup && state !== 'saving') text = '';
     status.textContent = text; status.hidden = !text; root.dataset.meshState = state;
     deliveryRetry.hidden = !d || state !== 'failed';
     deliveryRetry.disabled = busy || retrying || pending || !!snapshot?.problem;
