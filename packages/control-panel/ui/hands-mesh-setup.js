@@ -22,7 +22,7 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
       <span class="xrb-progress-check">${iconSvg('check-circle')}</span>
       <span class="xrb-progress-error">${iconSvg('error-circle')}</span>
     </span><div><h3 id="hands-mesh-setup-title">Install prerequisites</h3><p class="muted" data-setup-message role="status">Reading the setup plan…</p></div></div>
-    <div class="xrb-copy-block"><pre class="log" data-setup-output aria-label="Setup details"></pre></div>
+    <div class="xrb-copy-block"><pre class="log" data-setup-output aria-label="Setup details">Reading the setup plan…</pre></div>
     <div class="row ask-buttons"><span class="spacer"></span>
       <button type="button" class="action-button" data-setup-cancel>Cancel</button>
       <button type="button" class="action-button primary" data-setup-install disabled>Install</button></div>`;
@@ -44,7 +44,7 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
           '', 'Files come from their publishers under the licences listed above.'].join('\n');
         install.disabled = false;
         if (plan.installed) { message.textContent = `${label} prerequisites are already installed.`; install.textContent = 'Reinstall'; }
-      } catch (error) { state('failed'); message.textContent = error.message; }
+      } catch (error) { state('failed'); message.textContent = 'Could not read the setup plan.'; output.textContent = error.message; }
     })();
     install.addEventListener('click', async () => {
       if (!plan || running) return;
