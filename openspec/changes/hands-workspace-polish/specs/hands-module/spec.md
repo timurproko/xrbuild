@@ -194,7 +194,7 @@ A splitter between the viewer and the side panel SHALL resize the panel by point
 
 ### Requirement: Viewer display menu
 
-The viewer toolbar SHALL offer a Display multi-select after Reset, separated from it, listing Skeleton and the active post-processing mesh layer by name. Each choice SHALL only show or hide that drawing in the viewer, remembered in the browser, without changing saved adjustments or stopping the layer. The mesh layer card SHALL offer a view-only mesh color and opacity like the grid.
+The viewer toolbar SHALL offer a Display multi-select after Reset, separated from it, listing Skeleton and the active post-processing mesh layer by name. Each choice SHALL only show or hide that drawing in the viewer, remembered in the browser, without changing saved adjustments or stopping the layer. The mesh layer card SHALL offer a view-only mesh color and brightness, keeping the mesh opaque.
 
 #### Scenario: Hiding the skeleton
 - **WHEN** the person unchecks Skeleton while the mesh runs

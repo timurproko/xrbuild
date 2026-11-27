@@ -52,9 +52,9 @@ export class HandVisual extends THREE.Group {
   /** View-only display switches (a viewer's Display menu); the saved appearance still decides joints/bones/indicator. */
   private displaySkeleton = true;
   private displayMesh = true;
-  private meshViewStyle: { color: string; opacity: number } | null = null;
-  /** View-only mesh color and opacity (null returns to the bone color, opaque). */
-  setMeshStyle(style: { color: string; opacity: number } | null): void { this.meshViewStyle = style; this.meshVisual?.setViewStyle(style); }
+  private meshViewStyle: { color: string; brightness: number } | null = null;
+  /** View-only mesh color and brightness (null returns to the bone color). */
+  setMeshStyle(style: { color: string; brightness: number } | null): void { this.meshViewStyle = style; this.meshVisual?.setViewStyle(style); }
   setDisplay({ skeleton, mesh }: { skeleton?: boolean; mesh?: boolean }): void {
     if (skeleton !== undefined) this.displaySkeleton = skeleton;
     if (mesh !== undefined) this.displayMesh = mesh;

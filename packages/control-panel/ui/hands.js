@@ -174,17 +174,17 @@ function mountViewPreferences() {
   }
   applyPosition();
   installNumberSteppers($('hands-setup'));
-  // Mesh color (Post layer card): like the grid, a view-only color and opacity remembered in this browser.
-  const meshSwatch = $('hands-mesh-color'), meshOpacity = $('hands-mesh-opacity'), meshRange = $('hands-mesh-opacity-range');
+  // Mesh color (Post-process layer card): a view-only color and brightness (1 = as chosen, up to 2) remembered in this browser.
+  const meshSwatch = $('hands-mesh-color'), meshBrightness = $('hands-mesh-brightness'), meshRange = $('hands-mesh-brightness-range');
   if (meshSwatch) {
-    const savedMesh = Number.parseFloat(stored('xrb.hands.meshOpacity'));
+    const savedMesh = Number.parseFloat(stored('xrb.hands.meshBrightness'));
     let meshColor = /^#[0-9a-f]{6}$/i.test(stored('xrb.hands.meshColor')) ? stored('xrb.hands.meshColor') : '#e8b796';
-    let meshAlpha = Number.isFinite(savedMesh) ? Math.min(1, Math.max(0, savedMesh)) : 1;
-    const applyMesh = () => { meshSwatch.style.backgroundColor = meshColor; meshOpacity.value = String(meshAlpha); meshRange.value = String(meshAlpha); view?.setMeshStyle?.({ color: meshColor, opacity: meshAlpha }); };
-    const setMeshAlpha = (value, save) => { const next = Number.parseFloat(value); if (!Number.isFinite(next)) return; meshAlpha = Math.min(1, Math.max(0, next)); applyMesh(); if (save) store('xrb.hands.meshOpacity', String(meshAlpha)); };
-    meshRange.addEventListener('input', () => setMeshAlpha(meshRange.value, true));
-    meshOpacity.addEventListener('input', () => setMeshAlpha(meshOpacity.value, false));
-    meshOpacity.addEventListener('change', () => setMeshAlpha(meshOpacity.value, true));
+    let meshLight = Number.isFinite(savedMesh) ? Math.min(2, Math.max(0, savedMesh)) : 1;
+    const applyMesh = () => { meshSwatch.style.backgroundColor = meshColor; meshBrightness.value = String(meshLight); meshRange.value = String(meshLight); view?.setMeshStyle?.({ color: meshColor, brightness: meshLight }); };
+    const setMeshLight = (value, save) => { const next = Number.parseFloat(value); if (!Number.isFinite(next)) return; meshLight = Math.min(2, Math.max(0, next)); applyMesh(); if (save) store('xrb.hands.meshBrightness', String(meshLight)); };
+    meshRange.addEventListener('input', () => setMeshLight(meshRange.value, true));
+    meshBrightness.addEventListener('input', () => setMeshLight(meshBrightness.value, false));
+    meshBrightness.addEventListener('change', () => setMeshLight(meshBrightness.value, true));
     meshSwatch.addEventListener('click', () => openColorPopover(meshSwatch, { value: meshColor,
       onInput: color => { meshColor = color; applyMesh(); }, onClose: color => { meshColor = color; store('xrb.hands.meshColor', color); applyMesh(); } }));
     installNumberSteppers(meshSwatch.closest('.xrb-field-label'));
