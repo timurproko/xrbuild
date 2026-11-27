@@ -4,7 +4,7 @@
 
 ### Requirement: Core-owned Hands surface
 
-Hands SHALL remain accessible without optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands page, titled Hands, with the 3D viewer beside one side panel of Setup, Transform, Visual, Post and Log tabs, present with Start and status from the first paint, and no recording section. Old diagnostic routes and `/hand-tracking/` SHALL return normal not-found responses without redirects, and no separate diagnostic page or link SHALL remain.
+Hands SHALL remain accessible without optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands page, titled Hands, with the 3D viewer beside one side panel of Setup, Transform, Display, Post and Log tabs, present with Start and status from the first paint, and no recording section. Old diagnostic routes and `/hand-tracking/` SHALL return normal not-found responses without redirects, and no separate diagnostic page or link SHALL remain.
 
 #### Scenario: Diagnostic plugin absent
 - **WHEN** the user opens Hands without the optional hand tools plugin or checked tool build
@@ -66,14 +66,14 @@ Hands SHALL lead the viewer toolbar with Start/Stop and show the session status 
 
 ### Requirement: Grouped adjustment controls and explicit Apply
 
-Hands SHALL provide the Transform and Visual tabs in the side panel. Each SHALL start with a Preset dropdown offering Default, saved presets and Custom when the values match none, with save and delete actions. Per-tab Reset to defaults SHALL remain. Finished edits, slider drags, presets and resets SHALL save automatically, without Apply.
+Hands SHALL provide the Transform and Display tabs in the side panel. Each SHALL start with a Preset dropdown offering Default, saved presets and Custom when the values match none, with save and delete actions. Per-tab Reset to defaults SHALL remain. Finished edits, slider drags, presets and resets SHALL save automatically, without Apply.
 
 #### Scenario: Reset one group
 - **WHEN** the user resets Transform
 - **THEN** only geometry returns to defaults (offset zero, size one) and saves immediately; appearance, selected source and provider calibration remain unchanged
 
 #### Scenario: Appearance reset
-- **WHEN** the user resets Visual
+- **WHEN** the user resets Display
 - **THEN** default standard drawing saves immediately while geometry and source remain unchanged
 
 #### Scenario: Drag without Apply
@@ -105,7 +105,7 @@ Hands SHALL offer one object, a cube, sphere or Suzanne chosen in Setup at a set
 Each numeric adjustment SHALL have its label above one row with a number input on the left and synchronized slider on the right, all sliders in a tab sharing one width. Both controls SHALL retain existing bounds, steps and validation. Color swatches SHALL sit at the row end, aligned with the panel's content edge. Joints, bones and the pinch/grab indicator SHALL be one Display multi-select. The panel SHALL fit narrow widths without horizontal scrolling in light and dark themes.
 
 #### Scenario: Every numeric setting has paired controls
-- **WHEN** the person opens Transform or Visual
+- **WHEN** the person opens Transform or Display
 - **THEN** X (mm), Y (mm), Z (mm), Size, Joint diameter (mm), Bone diameter (mm), Skeleton opacity, Indicator diameter (mm) and Indicator opacity each show one labelled number-and-slider row
 
 #### Scenario: Number and slider stay synchronized
@@ -124,7 +124,7 @@ Each numeric adjustment SHALL have its label above one row with a number input o
 
 ### Requirement: Accessible section reset gear menus
 
-The Transform and Visual tabs SHALL each show a plain gear in the tab bar that opens a small menu containing only Reset to defaults, right-aligned under the gear. Buttons and menus SHALL support keyboard and screen-reader use, Escape and outside-click dismissal. The viewport Reset SHALL remain separate.
+The Transform and Display tabs SHALL each show a plain gear in the tab bar that opens a small menu containing only Reset to defaults, right-aligned under the gear. Buttons and menus SHALL support keyboard and screen-reader use, Escape and outside-click dismissal. The viewport Reset SHALL remain separate.
 
 #### Scenario: Opening and operating a section menu
 - **WHEN** the person activates a tab's gear by pointer, Enter or Space
@@ -165,7 +165,7 @@ The Log tab SHALL list provider start and stop events, diagnostics and failure r
 
 ### Requirement: Post-processing layers
 
-The Post tab SHALL follow Visual and offer an Add layer multi-select of installed post-processing plugins. A chosen plugin SHALL show as a layer card with its settings and a remove action; one hand-mesh layer runs at a time, so adding another replaces it. A plugin whose runtime is not installed SHALL stay selectable and show a small Install action in its card header when it exports a prerequisite setup, and Ready once it can run. With none installed, the tab SHALL show a short empty note.
+The Post tab SHALL follow Display and offer an Add layer multi-select of installed post-processing plugins. A chosen plugin SHALL show as a layer card with its settings and a remove action; one hand-mesh layer runs at a time, so adding another replaces it. A plugin whose runtime is not installed SHALL stay selectable and show a small Install action in its card header when it exports a prerequisite setup, and Ready once it can run. With none installed, the tab SHALL show a short empty note.
 
 #### Scenario: Adding a layer that needs prerequisites
 - **WHEN** the person adds a post-processing plugin whose runtime is not installed

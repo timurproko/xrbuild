@@ -24,7 +24,7 @@ test('section reset gears provide accessible keyboard menus with scoped dismissa
       };
       assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-reset-menu]'),button=>[button.getAttribute('aria-label'),button.className,button.getAttribute('aria-haspopup'),button.getAttribute('aria-expanded'),document.getElementById(button.getAttribute('aria-controls')).getAttribute('role')])`), [
         ['Transform settings', 'xrb-icon-button', 'menu', 'false', 'menu'],
-        ['Visual settings', 'xrb-icon-button', 'menu', 'false', 'menu'],
+        ['Display settings', 'xrb-icon-button', 'menu', 'false', 'menu'],
       ]);
       for (const section of ['geometry', 'appearance']) {
         const button = `[data-reset-menu="${section}"]`, item = `[data-reset="${section}"]`;

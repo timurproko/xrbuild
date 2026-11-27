@@ -18,7 +18,7 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     `<span class="hands-number-row${swatch ? ' hands-number-row--color' : ''}"><input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required><input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">${swatch}</span>`, { hint, tag: 'div' });
   // Presets: Default, saved presets, and Custom while the values match none. Saved in this browser.
   const presetRow = section => renderField('Preset', `<span class="hands-preset-row" data-preset-row="${section}">
-      <select data-preset="${section}" aria-label="${section === 'geometry' ? 'Transform' : 'Visual'} preset"></select>
+      <select data-preset="${section}" aria-label="${section === 'geometry' ? 'Transform' : 'Display'} preset"></select>
       <button type="button" class="xrb-icon-button" data-preset-save="${section}" aria-label="Save as preset" data-xrb-icon="plus" data-no-tooltip></button>
       <button type="button" class="xrb-icon-button" data-preset-delete="${section}" aria-label="Delete preset" data-xrb-icon="trash" data-no-tooltip></button>
     </span>
@@ -32,7 +32,7 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   const displayField = () => renderField('Display', `<div class="dropdown" data-multi="true" data-display-toggles data-options="${Object.keys(DISPLAY).join('|')}" data-labels='${JSON.stringify(DISPLAY)}'><input type="hidden" data-display-value value="[]"><button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false">None</button></div>${Object.keys(DISPLAY).map(key => `<input type="checkbox" data-field="appearance.${key}" aria-label="${DISPLAY[key]}" hidden>`).join('')}`);
   const color = (key, label) => `<span class="xrb-inline-icons"><input type="color" data-field="appearance.${key}" aria-label="${label}" hidden><button type="button" class="xrb-swatch" data-color="appearance.${key}" aria-label="Choose ${label.toLowerCase()}" aria-haspopup="dialog" aria-pressed="true"></button></span>`;
   const resetMenu = (section, label) => `<button type="button" class="xrb-icon-button" id="${prefix}-${section}-settings" data-reset-menu="${section}" aria-label="${label} settings" data-no-tooltip aria-haspopup="menu" aria-controls="${prefix}-${section}-menu" aria-expanded="false">${iconSvg('settings')}</button><div class="menu" id="${prefix}-${section}-menu" role="menu" aria-labelledby="${prefix}-${section}-settings" hidden><button type="button" role="menuitem" data-reset="${section}">Reset to defaults</button></div>`;
-  // Transform and Visual are tabs in the card's tab bar; each tab's reset menu sits at the bar's end.
+  // Transform and Display are tabs in the card's tab bar; each tab's reset menu sits at the bar's end.
   const tab = (section, label, selected) => `<button type="button" class="xrb-tab" role="tab" id="${prefix}-tab-${section}" data-tab="${section}" aria-controls="${prefix}-panel-${section}" aria-selected="${selected}" tabindex="${selected ? 0 : -1}">${label}</button>`;
   const tabAction = (section, label, selected) => `<span class="hands-tab-action" data-tab-action="${section}"${selected ? '' : ' hidden'}>${resetMenu(section, label)}</span>`;
   // The page may already hold the tab bar (shown before this editor loads); adopt it instead of rebuilding.
@@ -40,9 +40,9 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   const tabs = adopted ?? root.ownerDocument.createElement('div');
   if (!adopted) {
     tabs.className = 'xrb-tabs hands-adjustment-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Hand adjustments'); tabs.dataset.xrbTabsId = 'hands-adjustments';
-    tabs.innerHTML = `${setup ? tab('setup', 'Setup', true) : ''}${tab('geometry', 'Transform', !setup)}${tab('appearance', 'Visual', false)}`;
+    tabs.innerHTML = `${setup ? tab('setup', 'Setup', true) : ''}${tab('geometry', 'Transform', !setup)}${tab('appearance', 'Display', false)}`;
   } else for (const item of tabs.querySelectorAll('[data-tab]')) { item.id = `${prefix}-tab-${item.dataset.tab}`; item.setAttribute('aria-controls', `${prefix}-panel-${item.dataset.tab}`); }
-  tabs.insertAdjacentHTML('beforeend', `${tabAction('geometry', 'Transform', !setup)}${tabAction('appearance', 'Visual', false)}`);
+  tabs.insertAdjacentHTML('beforeend', `${tabAction('geometry', 'Transform', !setup)}${tabAction('appearance', 'Display', false)}`);
   if (setup) { setup.id ||= `${prefix}-panel-setup`; setup.setAttribute('role', 'tabpanel'); setup.setAttribute('aria-labelledby', `${prefix}-tab-setup`); tabs.querySelector('[data-tab="setup"]').setAttribute('aria-controls', setup.id); root.hidden = true; }
   if (!adopted) (setup ?? root).before(tabs);
   // Further page panels (such as Log) live beside Setup and switch with their tab.
