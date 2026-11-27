@@ -21,7 +21,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     <div class="menu" id="${prefix}-menu" role="menu" aria-labelledby="${prefix}-settings" hidden><button type="button" role="menuitem" data-mesh-reset>Reset to defaults</button></div></div>
     <select data-mesh-selector aria-label="Hand mesh" hidden></select>
     <div class="dropdown" data-multi="true" data-mesh-layers data-summary="Add layer" data-options="" data-labels="{}"><input type="hidden" data-mesh-layer-value value="[]"><button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Add post-processing layer">Add layer</button></div>
-    <section class="hands-mesh-layer xrb-stack" data-mesh-layer hidden><div class="row hands-mesh-layer-header"><strong data-mesh-layer-title></strong><span class="spacer"></span><button type="button" class="xrb-setup-install" data-mesh-install hidden><span>Install</span></button><span class="state ok" data-mesh-ready hidden>Ready</span><button type="button" class="xrb-icon-button" data-mesh-layer-remove aria-label="Remove layer" data-no-tooltip>${iconSvg('close')}</button></div>
+    <section class="hands-mesh-layer xrb-stack" data-mesh-layer hidden><div class="row hands-mesh-layer-header"><strong data-mesh-layer-title></strong><span class="spacer"></span><button type="button" class="xrb-setup-install" data-mesh-install hidden><span>Install</span></button><span class="state ok" data-mesh-ready hidden>Ready</span><label class="xrb-switch hands-mesh-layer-switch"><input type="checkbox" data-mesh-layer-enabled aria-label="Layer on"><span></span></label><button type="button" class="xrb-icon-button" data-mesh-layer-remove aria-label="Remove layer" data-no-tooltip>${iconSvg('close')}</button></div>
     <div class="xrb-stack" data-mesh-fields></div><p class="xrb-help" data-mesh-readiness hidden></p></section>
     <div class="hands-mesh-delivery"><p class="xrb-help" data-mesh-runtime role="status" aria-live="polite" hidden></p><button type="button" class="small" data-mesh-delivery-retry hidden>Retry</button></div>
     <div data-mesh-recovery hidden><p class="field-error" data-mesh-message role="alert"></p><div class="xrb-button-row"><button type="button" class="small" data-mesh-retry>Retry</button><button type="button" class="small" data-mesh-discard hidden>Use saved</button></div></div></form>`;
@@ -30,7 +30,8 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   const retryButton = root.querySelector('[data-mesh-retry]'), discard = root.querySelector('[data-mesh-discard]');
   const gear = root.querySelector('[data-mesh-gear]'), menu = root.querySelector('[role="menu"]'), reset = root.querySelector('[data-mesh-reset]');
   const layers = root.querySelector('[data-mesh-layers]'), layerValue = root.querySelector('[data-mesh-layer-value]'), layer = root.querySelector('[data-mesh-layer]');
-  const ready = root.querySelector('[data-mesh-ready]'), install = root.querySelector('[data-mesh-install]');
+  const ready = root.querySelector('[data-mesh-ready]'), install = root.querySelector('[data-mesh-install]'), layerOn = root.querySelector('[data-mesh-layer-enabled]');
+  let switching = false;
   const events = new AbortController(), document = root.ownerDocument, edits = new Map();
   // On the Hands page the gear sits in the tab bar beside the Post tab, like Position and Visual.
   const slot = document.querySelector('[data-tab-action="post"]');
@@ -96,6 +97,10 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     layer.querySelector('[data-mesh-layer-title]').textContent = p?.label ?? (selected ? `${selected} (missing)` : '');
     // Like Build prerequisites: a small Install while setup is missing, Ready once the plugin can run.
     install.hidden = !(p?.needsSetup && p.setup); ready.hidden = !p?.available;
+    // The switch shows the saved state; off keeps the layer and its settings but runs nothing.
+    if (!switching) layerOn.checked = snapshot.choice?.enabled !== false;
+    layer.classList.toggle('is-off', !layerOn.checked);
+    layerOn.disabled = busy || switching || !selected || key(snapshot.choice?.selected) !== selected || !!snapshot.problem;
     install.disabled = installing;
     for (const field of fields.querySelectorAll('[data-mesh-field]')) {
       const f = p.declaration.settings.find(f => f.key === field.dataset.meshField), edit = edits.get(editKey(selected, f.key));
@@ -337,6 +342,18 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     select.value = next; choose();
   });
   on(root.querySelector('[data-mesh-layer-remove]'), 'click', () => { select.value = ''; choose(); });
+  on(layerOn, 'change', async () => {
+    if (switching || busy || !snapshot) return;
+    switching = true; render();
+    try {
+      const current = await load(), target = key(current.choice?.selected);
+      if (!target) return;
+      const values = current.choice?.settings?.[target]?.values ?? {};
+      const result = await save({ selected: identity(target), enabled: layerOn.checked, values, revision: current.revision, registryRevision: current.registryRevision });
+      if (!disposed) incorporate({ ...current, ...result });
+    } catch (error) { if (!disposed && !isPanelUnavailable(error)) { failure = `Couldn't switch the layer. ${error.message}`; } }
+    finally { switching = false; if (!disposed) render(); }
+  });
   on(install, 'click', async () => {
     const p = plugin(); if (!p || installing) return;
     installing = true; buttons(); render();

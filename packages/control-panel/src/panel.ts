@@ -229,9 +229,11 @@ export class Panel {
     if (!run) return false;
     try {
       const choice = meshChoice(state.raw.postprocessing);
-      const plugin = choice.selected ? registry.plugins.find(p => meshKey(p) === meshKey(choice.selected!)) : null;
-      const saved = choice.selected ? choice.settings[meshKey(choice.selected)] : null;
-      if (choice.selected && (!plugin?.available || !saved || saved.version !== plugin.declaration.settingsVersion)) {
+      // A layer switched off runs nothing, exactly like no layer.
+      const selected = choice.enabled === false ? null : choice.selected;
+      const plugin = selected ? registry.plugins.find(p => meshKey(p) === meshKey(selected)) : null;
+      const saved = selected ? choice.settings[meshKey(selected)] : null;
+      if (selected && (!plugin?.available || !saved || saved.version !== plugin.declaration.settingsVersion)) {
         run.unavailable(state.revision); return false;
       }
       run.configure(plugin ?? null, saved?.values ?? {}, state.revision); return true;
@@ -2138,7 +2140,7 @@ export class Panel {
         if (this.handSessions.preparing || this.savingHands || this.preparingNativeRun || this.preparingPreview || this.changingPlugins || this.pluginConsumers || this.jobs.active().length) throw new HttpError(409, 'Wait for Hands preparation before saving');
         this.savingHands = true;
         try {
-          const body = await readJson<{ selected?: unknown; values?: unknown; revision?: unknown; registryRevision?: unknown }>(req);
+          const body = await readJson<{ selected?: unknown; enabled?: unknown; values?: unknown; revision?: unknown; registryRevision?: unknown }>(req);
           const registry = await discoverHandMeshPlugins(this.repo, this.workspace);
           const state = await readHandsState(this.repo, this.workspace);
           const initial = state.exists ? state.provider : selectedHandProvider(state, await discoverHandProviders(this.repo, this.workspace, this.nativeProviders), 'native').key;

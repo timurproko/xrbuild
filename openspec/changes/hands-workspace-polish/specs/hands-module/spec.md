@@ -171,9 +171,18 @@ The Post tab SHALL follow Visual and offer an Add layer multi-select of installe
 - **WHEN** the person adds a post-processing plugin whose runtime is not installed
 - **THEN** it becomes the saved layer with an Install action instead of an unavailable label
 
+#### Scenario: Switching a layer off
+- **WHEN** the person turns off a layer's switch in its card corner
+- **THEN** the layer and its settings stay saved, no mesh runs, and turning it on again resumes it
+
+#### Scenario: Cancelling an install
+- **WHEN** the person presses Cancel while an install runs
+- **THEN** the install stops, its downloads are kept, and the next Install continues where it stopped
+
 #### Scenario: Installing prerequisites
 - **WHEN** the person presses Install and accepts the shown downloads, sizes and licences
 - **THEN** the plugin's setup runs as a panel job with live output, Restart waits for it, and the layer becomes ready when it finishes
+- **AND** progress follows one core contract for every plugin, showing each step's percent or running time
 
 ### Requirement: Resizable side panel
 

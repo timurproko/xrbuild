@@ -101,3 +101,6 @@
 .hands-adjustment-tabs > .hands-tab-more[hidden], .hands-adjustment-tabs > .xrb-tab[hidden] { display: none; }
 /* Install dialog: the description stays one line so nothing moves between states. */
 .hands-mesh-setup [data-setup-message] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Layer on/off sits in the card's top-right corner; an off layer dims its settings. */
+.hands-mesh-layer-switch { margin: 0; }
+.hands-mesh-layer.is-off [data-mesh-fields] { opacity: .5; }
