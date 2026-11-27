@@ -46,6 +46,7 @@ import { HAND_APPEARANCE_DEFAULTS, type HandProfile } from '../../sdk/src/hand-p
 import { discoverHandMeshPlugins, type HandMeshRegistry } from './hand-mesh-plugins.ts';
 import { meshChoice, meshKey, saveMeshChoice } from './hand-mesh-state.ts';
 import { HandMeshRun } from './hand-mesh-run.ts';
+import { HandMeshRetirement } from './hand-mesh-retirement.ts';
 import { readHandsState, saveHandsState, saveHandAdjustments, selectedHandProvider, validHandProviderKey, prepareHandInput, resolveHandInput, type HandContext, type HandsState } from './hands-state.ts';
 import { ARCHIVE, buildTargetOf, compareVersions, defaultEntry, isArchivedId, liveId, MANIFEST, MoveRefused, nextVersion, PROJECTS, UNSORTED, readProject, saveManifest, selectionOf, validateManifest, type FieldError, type Manifest, type Project } from './projects.ts';
 import { archiveProject, readLayout, removeEmptyProjectSection, unarchiveProject } from './layout.ts';
@@ -221,9 +222,7 @@ export class Panel {
   private nativeHandPolicy: 'off' | 'native' | null = null;
   private meshRun: HandMeshRun | null = null;
   private meshStatus = 'None';
-  private meshCleanup: Promise<void> = Promise.resolve();
-  private meshCleanupFailed = false;
-  private retiredMeshRun: HandMeshRun | null = null;
+  private readonly meshRetirement = new HandMeshRetirement();
   private get activeMeshRun(): HandMeshRun | null { return this.handSessions?.meshRun ?? this.meshRun; }
   private applyMeshChoice(state: Pick<HandsState, 'raw' | 'revision'>, registry: HandMeshRegistry, run = this.activeMeshRun): boolean {
     if (!run) return false;
@@ -238,14 +237,9 @@ export class Panel {
     } catch { run.unavailable(state.revision); return false; }
   }
   private async stopMesh(): Promise<void> {
-    const run = this.meshRun ?? this.retiredMeshRun; this.meshRun = null;
-    if (run) {
-      this.retiredMeshRun = run;
-      this.meshCleanup = run.stop().then(() => { if (this.retiredMeshRun === run) this.retiredMeshRun = null; this.meshCleanupFailed = false; }).catch(() => {
-        this.meshCleanupFailed = true; this.meshStatus = 'Skeleton fallback: mesh child cleanup failed; retry cleanup before using mesh';
-      });
-      await this.meshCleanup;
-    }
+    const run = this.meshRun; this.meshRun = null;
+    const drained = await (run ? this.meshRetirement.retire(run) : this.meshRetirement.drain());
+    if (!drained) this.meshStatus = 'Skeleton fallback: mesh child cleanup failed; retry cleanup before using mesh';
   }
   private handRuntimeStates = new Map<string, string>();
   private savingHands = false;
@@ -336,10 +330,10 @@ export class Panel {
     this.projects = projects;
     this.bootstrapPackageLock = bootstrapPackageLock;
     this.hub = hub;
-    this.handSessions = new HandSessions({ origin: () => new URL(this.panelUrl!).origin,
+    this.handSessions = new HandSessions({ origin: () => new URL(this.panelUrl!).origin, meshRetirement: this.meshRetirement,
       prepare: request => prepareHandSession(this.repo, this.workspace, request, this.nativeProviders),
       mesh: prepared => {
-        const run = new HandMeshRun(() => [new URL(this.panelUrl!).origin], () => {}, { supervisor: path.join(path.dirname(prepared.workerExe), 'xrb-mesh-supervisor.exe') });
+        const run = new HandMeshRun(() => [new URL(this.panelUrl!).origin], () => {}, { supervisor: path.join(path.dirname(prepared.workerExe), 'xrb-mesh-supervisor.exe'), beforeProcessor: () => this.meshRetirement.drain() });
         // Gateway opens independently of provider startup; the owner retains it even on failed cleanup.
         void run.start(null, {}, prepared.revision).then(async () => {
           const registry = await discoverHandMeshPlugins(this.repo, this.workspace);
@@ -348,7 +342,7 @@ export class Panel {
             // A committed edit while old optional cleanup drained still belongs to this new consumer.
             this.applyMeshChoice(latest.revision === prepared.revision ? { raw: { postprocessing: prepared.postprocessing }, revision: prepared.revision } : latest, registry, run);
           }
-        }).catch(() => { void run.stop().catch(() => {}); });
+        }).catch(() => { void this.meshRetirement.retire(run); });
         return run;
       },
       acquire: () => {
@@ -1720,15 +1714,13 @@ export class Panel {
     const nativeHands = new LiveHands(selection.handProfile!, (await readHandsState(this.repo, this.workspace)).revision);
     this.setLiveHands(nativeHands);
     selection.handProfileRun = nativeHands.envelope;
-    await this.meshCleanup;
-    if (this.meshCleanupFailed) await this.stopMesh();
-    this.meshStatus = this.meshCleanupFailed ? 'Skeleton fallback: prior mesh cleanup failed; restart the panel before using mesh' : 'None';
+    this.meshStatus = 'None';
     let meshRuntime: import('../../sdk/src/hand-mesh-protocol.ts').MeshRuntime | null = null;
-    if (selection.handPolicy !== 'off' && !this.meshCleanupFailed) {
+    if (selection.handPolicy !== 'off') {
       try {
         const state = await readHandsState(this.repo, this.workspace);
         const registry = await discoverHandMeshPlugins(this.repo, this.workspace);
-        const run = new HandMeshRun(() => ['https://app.local', ...(this.panelUrl ? [new URL(this.panelUrl).origin] : []), ...(this.runner.state().devUrl ? [new URL(this.runner.state().devUrl!).origin] : [])], status => { if (this.meshRun === run) this.meshStatus = status; }, { supervisor: path.join(path.dirname(fresh.exe), 'xrb-mesh-supervisor.exe') });
+        const run = new HandMeshRun(() => ['https://app.local', ...(this.panelUrl ? [new URL(this.panelUrl).origin] : []), ...(this.runner.state().devUrl ? [new URL(this.runner.state().devUrl!).origin] : [])], status => { if (this.meshRun === run) this.meshStatus = status; }, { supervisor: path.join(path.dirname(fresh.exe), 'xrb-mesh-supervisor.exe'), beforeProcessor: () => this.meshRetirement.drain() });
         this.meshRun = run; this.meshStatus = 'Starting';
         meshRuntime = await run.start(null, {}, state.revision);
         this.applyMeshChoice(state, registry);
@@ -2409,10 +2401,11 @@ export class Panel {
   }
 
   async dispose(): Promise<void> {
-    await this.handSessions.close();
-    await this.remoteUpdates.close();
-    await this.stopMesh(); await this.meshCleanup;
+    // Start both retirements before awaiting optional verification. Input owners stop independently.
+    const hands = this.handSessions.close(), mesh = this.stopMesh();
     this.setLiveHands(null);
     if (this.runner.busy) await this.runner.stop();
+    await this.remoteUpdates.close();
+    await Promise.all([hands, mesh]);
   }
 }

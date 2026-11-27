@@ -10,6 +10,7 @@ import { createServer } from '../src/server.ts';
 import { freePort } from '../src/host-runner.ts';
 import { HandMeshRun } from '../src/hand-mesh-run.ts';
 import { HandMeshProcess } from '../src/hand-mesh-process.ts';
+import { readProject } from '../src/projects.ts';
 import { handProfile } from '../../sdk/src/hand-profile.ts';
 import { readHandsState, saveHandsState } from '../src/hands-state.ts';
 import { MESH_CAPABILITIES } from '../../sdk/src/hand-mesh-protocol.ts';
@@ -23,7 +24,7 @@ async function fixture(t: any) {
   const port = await freePort(), app = createServer({ repo: core, workspace, port }), panel = app.panel as any;
   app.server.listen(port, '127.0.0.1'); await once(app.server, 'listening');
   const origin = `http://127.0.0.1:${(app.server.address() as any).port}`; panel.panelUrl = origin;
-  const service = panel.handSessions, deps = service.deps;
+  const service = panel.handSessions, deps = service.deps, productionAcquire = deps.acquire;
   let release = 0, reserved = 0;
   const children: any[] = [];
   const state = await saveHandsState(core, workspace, { owner: 'core', id: 'simulated' }, (await readHandsState(core, workspace)).revision);
@@ -45,8 +46,89 @@ async function fixture(t: any) {
   const owner = (await call('/bootstrap', { document: crypto.randomUUID() })).value.capability;
   const start = () => call('', { provider: { owner: 'core', id: 'simulated' }, revision: state.revision, registryRevision: 'fixture' }, owner);
   t.after(async () => { children.forEach(c => c.exit()); await app.close(); await fs.rm(root, { recursive: true, force: true }); });
-  return { app, panel, service, deps, origin, core, workspace, children, call, owner, start, get release() { return release; }, get reserved() { return reserved; } };
+  return { app, panel, service, deps, productionAcquire, origin, core, workspace, children, call, owner, start, get release() { return release; }, get reserved() { return reserved; } };
 }
+
+async function selectFixtureMesh(f: Awaited<ReturnType<typeof fixture>>) {
+  const dir = path.join(f.workspace, 'plugins/example'); await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, 'worker.exe'), 'inert discovery fixture');
+  await fs.writeFile(path.join(dir, 'xrb-plugin.json'), JSON.stringify({ title: 'Example', type: 'plugin', version: '1.0.0', handMesh: { version: 2, id: 'surface', label: 'Surface', program: 'worker.exe', args: [], settingsVersion: 1, capabilities: MESH_CAPABILITIES,
+    settings: [{ key: 'vertices', label: 'Quality', type: 'number', min: 3, max: 9, default: 3, changeMode: 'live' }] } }));
+  const url = f.origin + '/api/hands/postprocessing', get = () => fetch(url).then(r => r.json()), selected = { owner: 'workspace:example', id: 'surface' };
+  const put = async (vertices: number) => { const data = await get(); return fetch(url, { method: 'PUT', headers: { origin: f.origin, 'content-type': 'application/json' }, body: JSON.stringify({ selected, values: { vertices }, revision: data.revision, registryRevision: data.registryRevision }) }); };
+  assert.equal((await put(3)).status, 200);
+  const retry = async (runId: string) => { const data = await get(); return fetch(url + '/retry', { method: 'POST', headers: { origin: f.origin, 'content-type': 'application/json' }, body: JSON.stringify({ runId, revision: data.revision }) }); };
+  return { get, put, retry };
+}
+async function prepareManagedFixture(f: Awaited<ReturnType<typeof fixture>>) {
+  const exe = path.join(f.core, 'native/host/build/Release/xrb-host.exe'), dir = path.join(f.workspace, 'projects/unsorted/example');
+  await fs.mkdir(path.dirname(exe), { recursive: true }); await fs.writeFile(exe, 'inert host; launch intercepted');
+  await fs.mkdir(path.join(dir, 'dist'), { recursive: true }); await fs.writeFile(path.join(dir, 'dist/index.html'), '<html>fixture</html>');
+  await fs.writeFile(path.join(dir, 'xrb-project.json'), JSON.stringify({ name: 'Example', kind: 'app', inputs: ['hand'], entry: 'dist' }));
+  let starts = 0;
+  f.panel.runner.start = async (request: any) => {
+    starts++; const config = JSON.parse(await fs.readFile(request.hostArgs.find((s: string) => s.startsWith('--config=')).slice(9), 'utf8'));
+    assert.equal(config.input, 'simulated'); assert.equal(config.handMeshRuntime.version, 1);
+    f.panel.runner.s = { ...f.panel.runner.s, phase: 'running', projectId: 'example' }; f.panel.runner.emit('state', f.panel.runner.state());
+  };
+  const project = (await readProject(dir, 'example', 'unsorted'))!;
+  return { start: () => f.panel.run(project, 'built'), get starts() { return starts; } };
+}
+for (const direction of ['app-to-Hands', 'Hands-to-app']) for (const cleanup of ['pending', 'failed', 'cancelled']) {
+  test(`${direction}: ${cleanup} old cleanup fences every new processor, not skeleton startup or live configuration`, { skip: !process.env.XRB_TEST_MESH_SUPERVISOR }, async t => {
+    const f = await fixture(t), controls = await selectFixtureMesh(f), managed = await prepareManagedFixture(f);
+    f.deps.acquire = f.productionAcquire; // Exercise production acquisition admission and both production mesh factories.
+    const original = HandMeshProcess.start; let launches = 0, oldStops = 0, fail = cleanup === 'failed', finish: () => void = () => {};
+    const join = new Promise<void>(resolve => { finish = resolve; });
+    const old: any = { descriptor: null, status: 'Ready', state: () => ({ phase: 'Ready' }), appStarted() {}, stop: async () => { oldStops++; if (fail) throw new Error('exact tree is not verified'); if (cleanup !== 'failed') await join; } };
+    t.mock.method(HandMeshProcess, 'start', function (_s, _p, _args, cwd, cancelled, created) { launches++; return original.call(this, process.env.XRB_TEST_MESH_SUPERVISOR, process.execPath, [fileURLToPath(new URL('./fixtures/hand-mesh-sidecar.mjs', import.meta.url))], cwd, cancelled, created); });
+    let retired: Promise<any> = Promise.resolve();
+    try {
+      if (direction === 'app-to-Hands') { f.panel.meshRun = old; retired = f.panel.stopMesh(); }
+      else {
+        const factory = f.deps.mesh; f.deps.mesh = () => old;
+        const prior = await f.start(); assert.equal(prior.status, 200); f.deps.mesh = factory;
+        retired = f.call('/stop', { sessionId: prior.value.sessionId }, f.owner);
+      }
+      await until(() => oldStops > 0 && !f.service.busy);
+      if (cleanup === 'failed') await retired;
+      assert.equal(f.panel.meshRetirement.blocked, true);
+      let sessionId: string | null = null;
+      if (direction === 'app-to-Hands') { const started = await f.start(); assert.equal(started.status, 200); sessionId = started.value.sessionId; assert.equal(f.service.busy, true); }
+      else { await managed.start(); assert.equal(managed.starts, 1); assert.equal(f.panel.runner.busy, true); }
+      const current = () => direction === 'app-to-Hands' ? f.service.meshRun : f.panel.meshRun;
+      await until(() => !!current()?.state().owner && (cleanup === 'failed' ? current().state().phase === 'Failed' : current().state().phase === 'Preparing'));
+      assert.equal(launches, 0, 'a new contained processor cannot bypass another consumer retirement');
+      if (cleanup === 'failed') assert.match(current().state().reason, /cleanup.*not verified/);
+      const runId = current().state().runId;
+      assert.equal((await controls.put(9)).status, 200, 'committed values remain independent of optional cleanup');
+      assert.equal((await controls.retry(runId)).status, 200);
+      assert.equal(launches, 0, 'apply and retry are also fenced, not merely initial launch');
+      if (cleanup === 'cancelled') {
+        if (sessionId) { const stopping = f.call('/stop', { sessionId }, f.owner); await until(() => !f.service.busy); finish(); await stopping; }
+        else { f.panel.runner.s.phase = 'idle'; f.panel.runner.emit('state', f.panel.runner.state()); finish(); await f.panel.stopMesh(); }
+        await retired; await until(() => !f.panel.meshRetirement.blocked); assert.equal(launches, 0, 'late verified cleanup cannot revive a retired target');
+      } else {
+        fail = false; finish(); await retired;
+        if (cleanup === 'failed') assert.equal((await controls.retry(runId)).status, 200);
+        await until(() => current()?.state().phase === 'Ready' && current()?.state().owner === 'workspace:example');
+        assert.equal(launches, 1); assert.equal((current() as any).stage.values.vertices, 9);
+        assert.equal(direction === 'app-to-Hands' ? f.children.length : managed.starts, 1, 'mesh recovery did not restart the new input consumer');
+        assert.equal(f.panel.meshRetirement.blocked, false);
+      }
+    } finally { fail = false; finish(); await retired; f.panel.runner.s.phase = 'idle'; f.panel.runner.emit('state', f.panel.runner.state()); }
+  });
+}
+
+test('panel exit stops the managed input owner before awaiting another mesh tree verification', async t => {
+  const f = await fixture(t), managed = await prepareManagedFixture(f); let fail = true, stopped = false;
+  f.panel.meshRun = { stop: async () => { if (fail) throw new Error('old exact tree unknown'); } };
+  await f.panel.stopMesh(); await managed.start();
+  f.panel.runner.stop = async () => { stopped = true; f.panel.runner.s.phase = 'idle'; f.panel.runner.emit('state', f.panel.runner.state()); };
+  const closing = f.app.close();
+  try { await until(() => stopped); assert.equal(f.panel.meshRetirement.blocked, true); }
+  finally { fail = false; await closing; }
+});
 
 test('Hands owns a None gateway, owner-only descriptor, and disposes it on Stop without another lease', async t => {
   const f = await fixture(t), result = await f.start(); assert.equal(result.status, 200);
@@ -91,7 +173,7 @@ test('mesh attachment allowance starts only after provider startup, not early op
   await f.call('/stop', { sessionId: result.value.sessionId }, f.owner);
 });
 
-test('slow previous mesh cleanup never delays a replacement skeleton; late optional attachment is session fenced', async t => {
+test('slow previous mesh cleanup never delays a replacement skeleton or its processor-free gateway', async t => {
   const f = await fixture(t); let finish: () => void = () => {}, created = 0, attached = 0;
   const draining = new Promise<void>(r => { finish = r; });
   f.deps.mesh = () => { const generation = ++created; return { descriptor: null, status: 'Ready', state: () => ({ phase: 'Ready' }), appStarted() { attached++; }, stop: () => generation === 1 ? draining : Promise.resolve() }; };
@@ -99,7 +181,8 @@ test('slow previous mesh cleanup never delays a replacement skeleton; late optio
   const stopping = f.call('/stop', { sessionId: first.value.sessionId }, f.owner);
   await until(() => !f.service.busy); assert.equal(f.release, 1);
   const second = await f.start(); assert.equal(second.status, 200); assert.equal(f.children.length, 2);
-  assert.equal(f.service.meshRun, null, 'unverified old cleanup cannot be bypassed for optional processing'); assert.equal(created, 1);
+  assert.ok(f.service.meshRun, 'gateway allocation does not start a processor or wait for prior cleanup'); assert.equal(created, 2);
+  assert.equal(f.service.status(f.owner).meshCleanupPending, true);
   finish(); await stopping; await until(() => created === 2);
   assert.equal(f.service.status(f.owner).sessionId, second.value.sessionId); assert.equal(attached, 2);
   await f.call('/stop', { sessionId: second.value.sessionId }, f.owner);

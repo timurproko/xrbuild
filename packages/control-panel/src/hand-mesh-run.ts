@@ -22,9 +22,9 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 type Work = { frame: MeshFrame; response: http.ServerResponse; at: number; stage: Stage; timers: ReturnType<typeof setTimeout>[]; done: () => void };
 const failureReasons: Record<string, string> = { 'configuration-rejected': 'Mesh configuration rejected', 'preparation-failed': 'Mesh preparation failed',
   'runtime-unavailable': 'Mesh runtime unavailable; prepare explicitly', 'unsupported-setting': 'Mesh setting unsupported' };
-const coreReasons = new Set([...Object.values(failureReasons), 'Mesh preparation timed out', 'Mesh live configuration timed out', 'Processor does not support live configuration; relaunch']);
+const coreReasons = new Set([...Object.values(failureReasons), 'Mesh preparation timed out', 'Mesh live configuration timed out', 'Processor does not support live configuration; relaunch', 'Previous mesh cleanup is not verified; retry cleanup']);
 type Ack = { stage: Stage; target: Target; type: 'ready' | 'configured'; resolve: () => void; reject: (e: Error) => void };
-export interface MeshRunOptions { startupMs?: number; connectMs?: number; supervisor?: string }
+export interface MeshRunOptions { startupMs?: number; connectMs?: number; supervisor?: string; beforeProcessor?: () => Promise<boolean> }
 /** Stable authenticated run gateway; only its optional, contained processor is replaceable. */
 export class HandMeshRun {
   status = 'Starting';
@@ -173,6 +173,9 @@ export class HandMeshRun {
           this.stage = stage; this.data.owner = target.plugin.owner; this.data.id = target.plugin.id;
           this.setStatus(target.plugin.declaration.version === 1 ? 'Starting' : 'Preparing');
           const signal = stage.validation.signal;
+          // Cross-consumer cleanup gates only optional processing, never the gateway or skeleton owner.
+          if (this.options.beforeProcessor && !await abortable(this.options.beforeProcessor(), signal)) throw new Error('Previous mesh cleanup is not verified; retry cleanup');
+          if (this.closed || stage.retired) throw superseded;
           const launch = await abortable(target.plugin.launch ? target.plugin.launch(signal) : Promise.resolve({ program: target.plugin.program!, cwd: path.dirname(target.plugin.program!) }), signal);
           if (this.closed || stage.retired) throw superseded;
           const spawningStage = stage;

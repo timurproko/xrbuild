@@ -18,6 +18,7 @@ import { decodeMessage, type HandsMessage } from '../../sdk/src/protocol.ts';
 import { handsMessage } from '../../sdk/test/fixtures.ts';
 
 test('managed mesh gateway survives dev startup, follows None and keeps missing choices without blocking input', { skip: !process.env.XRB_TEST_MESH_SUPERVISOR }, async t => {
+  let cleanupFails = false;
   const parent = path.resolve(process.env.XRB_TEST_ROOT ?? '.artifacts'); await fs.mkdir(parent, { recursive: true });
   const root = await fs.mkdtemp(path.join(parent, 'mesh-api-')), core = path.join(root, 'core'), workspace = path.join(root, 'user');
   const write = async (file: string, value: unknown) => { await fs.mkdir(path.dirname(file), { recursive: true }); await fs.writeFile(file, typeof value === 'string' ? value : JSON.stringify(value)); };
@@ -33,7 +34,7 @@ test('managed mesh gateway survives dev startup, follows None and keeps missing 
   const port = await freePort(), app = createServer({ repo: core, workspace, port }), panel = app.panel as any;
   panel.nativeProviders = async () => ({ providers: [{ name: 'simulated', role: 'input', builtin: true, path: null, version: '1', description: 'fake' }], rejected: [], error: null });
   app.server.listen(port, '127.0.0.1'); await once(app.server, 'listening');
-  t.after(async () => { panel.runner.s.phase = 'idle'; panel.runner.emit('state', panel.runner.state()); await app.close(); await fs.rm(root, { recursive: true, force: true }); });
+  t.after(async () => { cleanupFails = false; panel.runner.s.phase = 'idle'; panel.runner.emit('state', panel.runner.state()); await app.close(); await fs.rm(root, { recursive: true, force: true }); });
   const url = `http://127.0.0.1:${port}/api/hands/postprocessing`;
   const get = () => fetch(url).then(r => r.json());
   const put = (body: unknown) => fetch(url, { method: 'PUT', headers: { origin: `http://127.0.0.1:${port}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -93,9 +94,12 @@ test('managed mesh gateway survives dev startup, follows None and keeps missing 
   assert.equal((await get()).delivery.phase, 'Failed');
   assert.deepEqual((await get()).choice.selected, selected, 'missing selected identity is preserved');
   panel.runner.s.phase = 'idle'; panel.runner.emit('state', panel.runner.state());
-  panel.meshRun = { stop: async () => { throw new Error('simulated owned cleanup failure'); } };
+  await write(path.join(plugin, 'missing-runtime.exe'), 'inert discovery fixture');
+  cleanupFails = true;
+  panel.meshRun = { stop: async () => { if (cleanupFails) throw new Error('simulated owned cleanup failure'); } };
   await panel.stopMesh();
   await panel.run(project, 'built');
-  assert.equal(config.input, 'simulated'); assert.equal(config.handMeshRuntime, undefined);
-  assert.match((await get()).status, /cleanup failed/, 'failed optional cleanup blocks only new mesh, not input/app launch');
+  assert.equal(config.input, 'simulated'); assert.equal(config.handMeshRuntime.version, 1, 'a processor-free gateway permits live retry without delaying input');
+  assert.match((await get()).delivery.reason, /cleanup.*not verified/, 'failed optional cleanup blocks only new mesh, not input/app launch');
+  cleanupFails = false; await panel.stopMesh();
 });
