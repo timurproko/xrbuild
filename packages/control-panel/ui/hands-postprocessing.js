@@ -1,5 +1,5 @@
 import { renderField, setFieldError, installNumberSteppers, iconSvg, openFloating, positionFloating } from './design-system.js';
-import { menuKeyboard } from './navigation.js';
+import { menuKeyboard, isPanelUnavailable } from './navigation.js';
 import { openMeshSetup } from './hands-mesh-setup.js';
 const key = p => p ? `${p.owner}/${p.id}` : '';
 const identity = value => value ? { owner: value.slice(0, value.lastIndexOf('/')), id: value.slice(value.lastIndexOf('/') + 1) } : null;
@@ -8,7 +8,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 let mounts = 0;
 async function request(method, body, suffix = '') {
   const res = await fetch(`/api/hands/postprocessing${suffix}`, { method, cache: 'no-store', ...(body ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) { const error = new Error(data.error ?? 'Post-processing request failed'); error.status = res.status; throw error; }
   return data;
 }
@@ -179,7 +179,11 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
         if (discardEdits) { edits.clear(); failure = conflict = null; }
         incorporate(data);
       }
-    } catch (error) { if (!disposed && token === epoch) { failure = error.message; delivery = null; if (!snapshot) root.hidden = false; buttons(); } }
+    } catch (error) {
+      // A restarting panel is not a failure: the page reloads when it returns.
+      if (isPanelUnavailable(error)) return;
+      if (!disposed && token === epoch) { failure = error.message; delivery = null; if (!snapshot) root.hidden = false; buttons(); }
+    }
     finally { reading = false; }
   }
   function editField(field, committed = false) {
@@ -265,7 +269,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
         failure = conflict = null; incorporate(result); success = true; break;
       }
     } catch (error) {
-      if (disposed) return;
+      if (disposed || isPanelUnavailable(error)) return;
       conflict = error.current ? error : null;
       const saved = conflict?.keys.map(name => name === '$selection' ? `Hand mesh: ${key(error.current.choice?.selected) || 'None'}`
         : `${error.sent.get(name).name}: ${JSON.stringify(valueAt(error.current, error.sent.get(name).id, error.sent.get(name).name))}`).join(', ');
@@ -310,7 +314,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
         deliveryFailure = 'Run or saved configuration changed. Review current status before Retry.'; return;
       }
       acceptDelivery(result);
-    } catch (error) { if (!disposed && token === epoch) deliveryFailure = `Couldn't apply post-processing. ${error.message}`; }
+    } catch (error) { if (!disposed && token === epoch && !isPanelUnavailable(error)) deliveryFailure = `Couldn't apply post-processing. ${error.message}`; }
     finally { retrying = false; if (!disposed) buttons(); }
   }
   const on = (element, name, listener, options = {}) => element.addEventListener(name, listener, { ...options, signal: events.signal });
