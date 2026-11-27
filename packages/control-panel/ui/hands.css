@@ -5,7 +5,8 @@
 .hands-source { overflow: auto; }
 .hands-adjustment-sections { gap: var(--xrb-space-section); }
 .hands-number-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 24px; align-items: center; gap: var(--xrb-space-stack); min-width: 0; }
-/* Every row reserves the swatch column so all sliders share one width. */
+/* Rows reserve the swatch column only in a tab that has swatches; elsewhere sliders use the full width. */
+.xrb-sidebar-section:not(:has(.xrb-swatch)) .hands-number-row { grid-template-columns: 92px minmax(0, 1fr); }
 .hands-number-row > .xrb-number-control { min-width: 0; grid-column: 1; grid-row: 1; }
 .hands-number-row > .xrb-range { grid-column: 2; grid-row: 1; }
 .hands-number-row > .xrb-inline-icons { grid-column: 3; grid-row: 1; }
