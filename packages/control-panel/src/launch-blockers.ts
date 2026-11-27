@@ -44,6 +44,7 @@ export function launchBlocker(state: LaunchState): LaunchBlocker | null {
  */
 export function restartBlocker(activeJobKinds: readonly string[]): string | null {
   if (activeJobKinds.includes('desktop-setup')) return 'Wait for desktop setup to finish; the installer must not be interrupted';
+  if (activeJobKinds.includes('mesh-setup')) return 'Wait for the post-processing install to finish; the installer must not be interrupted';
   if (activeJobKinds.includes('update')) return 'Wait for Update to finish; restarting now would stop it partway through';
   if (activeJobKinds.includes('host-rebuild')) return 'Wait for Rebuild to finish; restarting now would stop it partway through';
   return null;

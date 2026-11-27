@@ -3,7 +3,7 @@
 import { spawn, type SpawnOptions } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 
-export type JobKind = 'run' | 'preview-run' | 'web-build' | 'package' | 'packager-setup' | 'tool-setup' | 'publication' | 'host-rebuild' | 'icon-render' | 'cache-cleanup' | 'desktop-setup' | 'update';
+export type JobKind = 'run' | 'preview-run' | 'web-build' | 'package' | 'packager-setup' | 'tool-setup' | 'publication' | 'host-rebuild' | 'icon-render' | 'cache-cleanup' | 'desktop-setup' | 'mesh-setup' | 'update';
 export type JobState = 'queued' | 'running' | 'done' | 'failed';
 export type JobOperation = 'publish' | 'update' | 'activate' | 'delete-release' | 'unpublish';
 

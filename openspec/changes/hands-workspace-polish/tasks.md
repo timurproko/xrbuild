@@ -19,3 +19,4 @@
 ## 4. Hands settings
 
 - [x] 4.1 Add Position and Visual presets with save and delete, the Display multi-select, live slider application, the Log tab and the installed-tracker provider list.
+- [x] 4.2 Move post-processing into a Post tab of layers chosen from an Add layer multi-select, with Install for plugins that need prerequisites.

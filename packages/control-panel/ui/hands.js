@@ -175,6 +175,9 @@ function mountViewPreferences() {
 }
 const disposeShell = mountHandsShell({ resetView: () => view?.resetView(), setViewOptions: options => view?.setViewOptions(options) });
 const postprocessing = mountHandsPostprocessing($('hands-postprocessing-root'));
+// The Post tab stays in place; with no post-processing plugin it shows a short empty note.
+const showPostEmpty = () => { $('hands-post-empty').hidden = !$('hands-postprocessing-root').hidden; };
+new MutationObserver(showPostEmpty).observe($('hands-postprocessing-root'), { attributes: true, attributeFilter: ['hidden'] }); showPostEmpty();
 try {
   const { createHandsView } = await import('./hands-view.js');
   view = createHandsView({ canvas: $('hands-canvas'), viewport: $('hands-viewport'),

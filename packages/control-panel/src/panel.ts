@@ -28,6 +28,7 @@ import { launchBlocker, restartBlocker, type LaunchState } from './launch-blocke
 import { log } from './env.ts';
 import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHost, clearProviderCache } from './host-build.ts';
 import { DesktopSetup } from './desktop-setup.ts';
+import { installMeshSetup, meshSetupOwners, meshSetupPlan, MeshSetupUnavailable } from './hand-mesh-setup.ts';
 import { panelFreshness, panelSourceRoots, type PanelFreshness } from './panel-freshness.ts';
 import { HostRunner, type RunMode, type RunState } from './host-runner.ts';
 import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings, type PluginSetting, type SettingValue } from './plugin-manager.ts';
@@ -2086,10 +2087,31 @@ export class Panel {
         const run = this.activeMeshRun, delivery = run?.state() ?? null;
         const active = delivery?.owner && delivery.id ? { owner: delivery.owner, id: delivery.id,
           label: registry.plugins.find(p => p.owner === delivery.owner && p.id === delivery.id)?.label ?? delivery.id } : null;
-        sendJson(res, 200, { plugins: registry.plugins.map(({ program, launch, ...p }) => ({ ...p, declaration: { ...p.declaration, program: undefined, args: undefined } })),
+        const setups = await meshSetupOwners(this.repo, this.workspace);
+        sendJson(res, 200, { plugins: registry.plugins.map(({ program, launch, ...p }) => ({ ...p, setup: setups.has(p.owner), declaration: { ...p.declaration, program: undefined, args: undefined } })),
           revision: state.revision, registryRevision: registry.revision, choice, problem, status: run?.status ?? (this.handSessions.meshStatus || this.meshStatus),
           running: this.handSessions.busy || this.runner.busy && this.nativeHandPolicy !== null, active, delivery });
         return true;
+      }
+      case 'POST hands/postprocessing/setup-plan': {
+        const body = await readJson<{ owner?: unknown }>(req);
+        if (typeof body.owner !== 'string') throw new HttpError(400, 'Choose a post-processing plugin');
+        try { sendJson(res, 200, await meshSetupPlan(this.repo, this.workspace, body.owner)); }
+        catch (e) { if (e instanceof MeshSetupUnavailable) throw new HttpError(404, e.message); throw e; }
+        return true;
+      }
+      case 'POST hands/postprocessing/setup': {
+        const body = await readJson<{ owner?: unknown; consent?: unknown }>(req);
+        if (typeof body.owner !== 'string' || typeof body.consent !== 'string') throw new HttpError(400, 'Setup needs a plugin and its consent code');
+        if (this.jobs.active().some(job => job.kind === 'mesh-setup')) throw new HttpError(409, 'A post-processing install is already running');
+        const owner = body.owner, consent = body.consent;
+        const plan = await meshSetupPlan(this.repo, this.workspace, owner).catch(e => { throw e instanceof MeshSetupUnavailable ? new HttpError(404, e.message) : e; });
+        if (plan.consent !== consent) throw new HttpError(409, 'The setup plan changed; review it again');
+        const job = this.startJob('mesh-setup', null, 'install post-processing prerequisites', async ctx => {
+          await installMeshSetup(this.repo, this.workspace, owner, consent, ctx);
+          this.hub.send('hands-changed', {});
+        });
+        sendJson(res, 200, job); return true;
       }
       case 'POST hands/postprocessing/retry': {
         const body = await readJson<{ runId?: unknown; revision?: unknown }>(req);

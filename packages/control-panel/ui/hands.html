@@ -46,9 +46,11 @@
       <!-- Present from the first paint; the adjustment editor adopts these tabs when it loads. -->
       <div class="xrb-tabs hands-adjustment-tabs" role="tablist" aria-label="Hand adjustments" data-xrb-tabs-id="hands-adjustments">
         <button type="button" class="xrb-tab" role="tab" data-tab="setup" aria-selected="true" tabindex="0">Setup</button>
+        <button type="button" class="xrb-tab" role="tab" data-tab="post" aria-selected="false" tabindex="-1">Post</button>
         <button type="button" class="xrb-tab" role="tab" data-tab="geometry" aria-selected="false" tabindex="-1">Position</button>
         <button type="button" class="xrb-tab" role="tab" data-tab="appearance" aria-selected="false" tabindex="-1">Visual</button>
         <button type="button" class="xrb-tab" role="tab" data-tab="log" aria-selected="false" tabindex="-1">Log</button>
+        <span class="hands-tab-action" data-tab-action="post" hidden></span>
         <span class="hands-tab-action" data-tab-action="log" hidden><button type="button" class="xrb-icon-button" id="hands-log-clear" aria-label="Clear log" data-xrb-icon="close" data-no-tooltip></button></span>
       </div>
       <div id="hands-setup" class="xrb-sidebar-content xrb-stack hands-source">
@@ -62,6 +64,9 @@
         </form>
         <p id="hands-message" class="field-error" role="alert" hidden></p>
         <div class="xrb-button-row" id="hands-source-recovery" hidden><button id="hands-source-retry" class="small" type="button">Retry</button><button id="hands-source-discard" class="small" type="button" hidden>Use saved</button></div>
+      </div>
+      <div id="hands-post-panel" class="xrb-sidebar-content xrb-stack" data-tab-panel="post" hidden>
+        <div id="hands-post-empty" class="empty-note">No post-processing plugins installed.</div>
         <div id="hands-postprocessing-root" hidden></div>
       </div>
       <div id="hands-log-panel" class="xrb-sidebar-content xrb-stack" data-tab-panel="log" hidden>

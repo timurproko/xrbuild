@@ -12,7 +12,7 @@
 .hands-number-row > .xrb-inline-icons { grid-column: 3; grid-row: 1; }
 .hands-number-row > .field-error { grid-column: 1 / -1; grid-row: 2; }
 /* Every tab's content starts the same distance below the tab bar. */
-#hands-adjustments-root, #hands-setup, #hands-log-panel { padding-top: 0; }
+#hands-adjustments-root, #hands-setup, #hands-post-panel, #hands-log-panel { padding-top: 0; }
 .hands-adjustment-tabs { flex: none; margin-bottom: var(--xrb-space-stack); }
 /* Four tabs and the reset gear fit the narrow panel: compact tab gap, gear pushed to the end without a spacer gap. */
 .hands-adjustment-tabs { gap: 18px; }
@@ -82,3 +82,9 @@
 .hands-preset-name[hidden], .hands-preset-row[hidden] { display: none; }
 /* The name field takes the dropdown's place and size while saving. */
 .hands-preset-name > input { height: 36px; }
+/* Post tab: one card per post-processing layer. */
+.hands-mesh-layer { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.hands-mesh-layer-header { align-items: center; gap: 8px; }
+.hands-mesh-layer-header strong { min-width: 0; overflow-wrap: anywhere; }
+.hands-mesh-setup-row { align-items: center; gap: 8px; }
+.hands-mesh-setup-row > .xrb-help { margin: 0; min-width: 0; }

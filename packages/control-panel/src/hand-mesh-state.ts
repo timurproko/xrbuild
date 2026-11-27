@@ -23,7 +23,8 @@ export async function saveMeshChoice(core: string, workspace: string, registry: 
   const selected = request.selected;
   if (selected !== null && (!validHandProviderKey(selected) || selected.owner === 'core')) throw new HttpError(400, 'Choose None or an installed mesh plugin');
   const plugin = selected && registry.plugins.find(p => meshKey(p) === meshKey(selected as HandProviderKey));
-  if (selected && !plugin?.available) throw new HttpError(409, 'Selected mesh plugin is unavailable; choose None or an installed plugin');
+  // A plugin waiting for its prerequisites can be chosen; it applies once its setup is installed.
+  if (selected && !plugin?.available && !plugin?.needsSetup) throw new HttpError(409, 'Selected mesh plugin is unavailable; choose None or an installed plugin');
   let values: Record<string, unknown> = {};
   if (plugin) {
     try { values = handMeshSettings(plugin.declaration, request.values ?? {}); }

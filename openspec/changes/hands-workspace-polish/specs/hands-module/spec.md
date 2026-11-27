@@ -4,7 +4,7 @@
 
 ### Requirement: Core-owned Hands surface
 
-Hands SHALL remain accessible without optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands page, titled Hands, with the 3D viewer beside one side panel of Setup, Position, Visual and Log tabs, present with Start and status from the first paint, and no recording section. Old diagnostic routes and `/hand-tracking/` SHALL return normal not-found responses without redirects, and no separate diagnostic page or link SHALL remain.
+Hands SHALL remain accessible without optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands page, titled Hands, with the 3D viewer beside one side panel of Setup, Post, Position, Visual and Log tabs, present with Start and status from the first paint, and no recording section. Old diagnostic routes and `/hand-tracking/` SHALL return normal not-found responses without redirects, and no separate diagnostic page or link SHALL remain.
 
 #### Scenario: Diagnostic plugin absent
 - **WHEN** the user opens Hands without the optional hand tools plugin or checked tool build
@@ -24,7 +24,7 @@ Hands SHALL remain accessible without optional input/tool plugins or compiled vi
 
 ### Requirement: Minimal provider picker with availability
 
-Hands SHALL lead the viewer toolbar with Start/Stop and show the session status in the header. The Setup tab SHALL hold the autosaving Skeleton provider, listing only workspace-installed trackers, plus optional post-processing controls. Selection SHALL save silently, retain missing identities and offer inline retry. Acquisition SHALL keep its launch source until Stop. Diagnostics SHALL go to the Log tab, with no viewer centre text, Save/Reload, recording UI or generated substitutes.
+Hands SHALL lead the viewer toolbar with Start/Stop and show the session status in the header. The Setup tab SHALL hold the autosaving Skeleton provider, listing only workspace-installed trackers. Selection SHALL save silently, retain missing identities and offer inline retry. Acquisition SHALL keep its launch source until Stop. Diagnostics SHALL go to the Log tab, with no viewer centre text, Save/Reload, recording UI or generated substitutes.
 
 #### Scenario: Saved source unavailable
 - **WHEN** the chosen provider is disabled, missing or failed
@@ -162,3 +162,15 @@ The Log tab SHALL list provider start and stop events, diagnostics and failure r
 #### Scenario: Provider lifecycle
 - **WHEN** a session starts, runs and stops
 - **THEN** the log shows one starting, one started, one stopping and one stopped row
+
+### Requirement: Post-processing layers
+
+The Post tab SHALL follow Setup and offer an Add layer multi-select of installed post-processing plugins. A chosen plugin SHALL show as a layer card with its settings and a remove action; one hand-mesh layer runs at a time, so adding another replaces it. A plugin whose runtime is not installed SHALL stay selectable and show Install when it exports a prerequisite setup. With none installed, the tab SHALL show a short empty note.
+
+#### Scenario: Adding a layer that needs prerequisites
+- **WHEN** the person adds a post-processing plugin whose runtime is not installed
+- **THEN** it becomes the saved layer with an Install action instead of an unavailable label
+
+#### Scenario: Installing prerequisites
+- **WHEN** the person presses Install and accepts the shown downloads, sizes and licences
+- **THEN** the plugin's setup runs as a panel job with live output, Restart waits for it, and the layer becomes ready when it finishes
