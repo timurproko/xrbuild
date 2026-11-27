@@ -21,3 +21,18 @@
 - [x] 4.1 Add Transform and Display presets with save and delete, the Display multi-select, live slider application, the Log tab and the installed-tracker provider list.
 - [x] 4.2 Move post-processing into a Post-process tab of layers chosen from an Add layer multi-select, with Install for plugins that need prerequisites.
 - [x] 4.3 Make the side panel resizable with a splitter and collapse tabs that do not fit into a more menu.
+
+## 5. Post-processing layers and setup
+
+- [x] 5.1 Give each layer card a live status badge, an on/off switch, Install or Retry in its header, a view-only mesh color and brightness, and log its states under the plugin name.
+- [x] 5.2 Run a plugin's own prerequisite setup as a cancellable job with one shared progress contract and declared install kinds such as a GPU runtime.
+- [x] 5.3 Add the viewer Display menu for the skeleton and the active mesh layer.
+
+## 6. Hand mesh delivery
+
+- [x] 6.1 Call the browser fetch correctly in the SDK mesh client, answer private-network preflights, and log the viewer's mesh connection.
+- [x] 6.2 Keep the mesh between slow results and over single bad tracking frames instead of flickering.
+
+## 7. Shared toasts
+
+- [x] 7.1 Add toasts that pages, core and plugins raise, and show recoverable Hands errors as toasts with their actions.
