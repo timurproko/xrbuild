@@ -543,9 +543,9 @@ dialog.xrb-rebuild-dialog, dialog.xrb-job-progress-dialog { width: min(660px, ca
 .xrb-progress-status-icon > * { grid-area: 1 / 1; }
 .xrb-progress-status-icon > svg { width: 28px; height: 28px; color: var(--accent); }
 .xrb-progress-check, .xrb-progress-error, .xrb-progress-idle { display: none; width: 28px; height: 28px; }
-/* The idle icon matches the check and error discs: a 28px ring with the symbol centred inside. */
-.xrb-progress-idle { box-sizing: border-box; border: 2.5px solid currentColor; border-radius: 50%; place-items: center; }
-.xrb-progress-idle svg { display: block; width: 17px; height: 17px; }
+/* The idle symbol fills the same 28px slot as the spinner, check and error icons. */
+.xrb-progress-idle { place-items: center; }
+.xrb-progress-idle svg { display: block; width: 28px; height: 28px; }
 /* Before work starts a progress dialog shows its own icon (for example a gear for setup) in the status slot. */
 .xrb-progress-status-icon[data-state="idle"] .xrb-progress-running { display: none; }
 .xrb-progress-status-icon[data-state="idle"] .xrb-progress-idle { display: grid; color: var(--accent); }
