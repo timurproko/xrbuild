@@ -58,7 +58,11 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   }
   theme(); const observer = new MutationObserver(theme); observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
   const system = matchMedia('(prefers-color-scheme: dark)'); system.addEventListener('change', theme);
-  const resize = new ResizeObserver(() => { const { width, height } = viewport.getBoundingClientRect(); renderer.setSize(width, height, false); camera.aspect = width / Math.max(height, 1); camera.updateProjectionMatrix(); }); resize.observe(viewport);
+  // Size the canvas to the viewer before the first frame, so a reload never shows the scene at the default
+  // 300x150 canvas (a small, zoomed-out flash); frames wait until the viewer has a real size.
+  let sized = false;
+  const fit = () => { const { width, height } = viewport.getBoundingClientRect(); sized = width > 0 && height > 0; if (!sized) return; renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); };
+  fit(); const resize = new ResizeObserver(fit); resize.observe(viewport);
   function resetView() { camera.position.set(0, .02, .72); controls.target.set(0, 0, .04); controls.update(); }
   resetView();
   let frameId, closed = false, ticks = 0, start = performance.now();
@@ -72,7 +76,8 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     sceneHands = currentHands.map(hand => toSceneHand(hand, panel));
     tests.setActive(stream.active && !recordedSession);
     interaction.update(sceneHands, 1); visual.update(currentHands, panel);
-    renderer.render(scene, camera); axes.render(renderer, camera); ticks++;
+    if (!sized) fit();
+    if (sized) { renderer.render(scene, camera); axes.render(renderer, camera); } ticks++;
     if (now - start >= 1000) { onMetrics({ renderFps: ticks * 1000 / (now - start), ...stream.metrics(), ...(recordedSession ? { trackingFps: null } : {}) }); ticks = 0; start = now; }
     frameId = requestAnimationFrame(render);
   }
