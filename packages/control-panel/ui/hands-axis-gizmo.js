@@ -45,7 +45,8 @@ export function createAxisGizmo({ size = 88, margin = 12 } = {}) {
       renderer.autoClear = false; renderer.clearDepth();
       renderer.setScissorTest(true); renderer.setScissor(margin, margin, size, size); renderer.setViewport(margin, margin, size, size);
       renderer.render(scene, camera);
-      renderer.setScissorTest(false); renderer.setViewport(full.x / renderer.getPixelRatio(), full.y / renderer.getPixelRatio(), full.z / renderer.getPixelRatio(), full.w / renderer.getPixelRatio());
+      // getViewport is in CSS pixels, the same units setViewport takes: restore it unchanged.
+      renderer.setScissorTest(false); renderer.setViewport(full);
       renderer.autoClear = autoClear;
     },
     dispose() {

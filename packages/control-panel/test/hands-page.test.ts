@@ -39,6 +39,8 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(viewSource, /fit\(\); const resize = new ResizeObserver\(fit\)/, 'the canvas is sized before the first frame');
   assert.match(viewSource, /if \(sized\) \{ renderer\.render\(scene, camera\)/, 'no frame draws at the default canvas size');
   assert.match(gizmo, /camera\.quaternion\.copy\(viewCamera\.quaternion\)/, 'the widget turns with the view camera');
+  assert.match(gizmo, /renderer\.getViewport\(full\)[\s\S]*renderer\.setViewport\(full\);/, 'the main viewport is restored in the same CSS units');
+  assert.doesNotMatch(gizmo, /getPixelRatio/, 'no pixel-ratio rescaling that would shrink the main view on scaled displays');
   assert.match(live, /for \(const label of \['Start', 'Stop'\]\)/, 'Start keeps one width for every label');
   assert.match(live, /button\.id = 'hands-start-stop'; button\.className = 'primary';/);
   assert.doesNotMatch(live, /Press Start to track the saved provider/);
