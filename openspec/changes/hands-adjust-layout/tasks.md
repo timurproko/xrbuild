@@ -2,10 +2,10 @@
 
 ## 1. Paired numeric adjustment rows preserve validation and finished-edit autosave in the narrow sidebar
 
-- [ ] 1.1 Capture the unchanged adjustment UI in an isolated disposable preview in light/dark at normal and narrow widths; retain baseline pictures in the task evidence folder before editing product code.
-- [ ] 1.2 Render all nine labelled number-left/slider-right rows and trailing diameter colour swatches using shared controls and local layout rules; assert paired controls, existing bounds/steps, alignment and no horizontal overflow at 340- and 320-pixel sidebar widths.
-- [ ] 1.3 Generalize Size-only synchronization to every numeric key while preserving draft/commit/reset/refresh behavior; adjustment browser tests cover both directions, invalid values, stepper commits, Enter/change deduplication, slider release and exact untouched colours.
-- [ ] 1.4 Run only adjustment-focused tests, capture numeric-row pictures in both themes and widths, and retain results with this outcome before committing it.
+- [x] 1.1 Capture the unchanged adjustment UI in an isolated disposable preview in light/dark at normal and narrow widths; retain baseline pictures in the task evidence folder before editing product code.
+- [x] 1.2 Render all nine labelled number-left/slider-right rows and trailing diameter colour swatches using shared controls and local layout rules; assert paired controls, existing bounds/steps, alignment and no horizontal overflow at 340- and 320-pixel sidebar widths.
+- [x] 1.3 Generalize Size-only synchronization to every numeric key while preserving draft/commit/reset/refresh behavior; adjustment browser tests cover both directions, invalid values, stepper commits, Enter/change deduplication, slider release and exact untouched colours.
+- [x] 1.4 Run only adjustment-focused tests, capture numeric-row pictures in both themes and widths, and retain results with this outcome before committing it.
 
 ## 2. Accessible gear menus reset only their own adjustment section and leave viewport Reset unchanged
 

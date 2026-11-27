@@ -4,6 +4,12 @@
 .hands-panel { min-width: 0; min-height: 0; margin: 0; display: flex; flex-direction: column; }
 .hands-source { overflow: auto; }
 .hands-adjustment-sections { gap: var(--xrb-space-section); }
+.hands-number-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: var(--xrb-space-stack); min-width: 0; }
+.hands-number-row--colour { grid-template-columns: 92px minmax(0, 1fr) auto; }
+.hands-number-row > .xrb-number-control { min-width: 0; grid-column: 1; grid-row: 1; }
+.hands-number-row > .xrb-range { grid-column: 2; grid-row: 1; }
+.hands-number-row > .xrb-inline-icons { grid-column: 3; grid-row: 1; }
+.hands-number-row > .field-error { grid-column: 1 / -1; grid-row: 2; }
 #hands-adjustments-root { padding-top: 0; }
 .hands-source p { margin: 0; }
 .hands-panel > .xrb-sidebar-content { flex: 1; min-height: 0; align-content: start; overflow-y: auto; overflow-wrap: anywhere; }

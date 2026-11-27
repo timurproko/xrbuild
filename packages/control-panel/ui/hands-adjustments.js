@@ -9,23 +9,25 @@ let mounts = 0;
 /** Root-scoped editor. Only finished values enter the serialized revision-safe save path. */
 export function mountHandAdjustments(root, { load, apply, serialize = operation => operation() }) {
   const prefix = `hands-adjustments-${++mounts}`;
-  const number = (key, label, min, max, step, hint = '', range = false) => renderField(label,
-    `<input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required>${range ? `<input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">` : ''}`, { hint });
+  const number = (key, label, min, max, step, hint = '', swatch = '') => renderField(label,
+    `<span class="hands-number-row${swatch ? ' hands-number-row--colour' : ''}"><input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required><input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">${swatch}</span>`, { hint });
   const toggle = (key, label) => `<label class="xrb-switch"><input type="checkbox" data-field="appearance.${key}"><span>${label}</span></label>`;
-  const colour = (key, label) => renderField(label, `<span class="xrb-inline-icons"><input type="color" data-field="appearance.${key}" aria-label="${label}" hidden><button type="button" class="xrb-swatch" data-colour="appearance.${key}" aria-label="Choose ${label.toLowerCase()}" aria-haspopup="dialog" aria-pressed="true"></button></span>`);
+  const colour = (key, label) => `<span class="xrb-inline-icons"><input type="color" data-field="appearance.${key}" aria-label="${label}" hidden><button type="button" class="xrb-swatch" data-colour="appearance.${key}" aria-label="Choose ${label.toLowerCase()}" aria-haspopup="dialog" aria-pressed="true"></button></span>`;
   root.innerHTML = `<form class="xrb-stack hands-adjustment-sections" aria-label="Hand adjustments">
     <section class="xrb-sidebar-section" aria-labelledby="${prefix}-position">
       <div class="row"><h2 id="${prefix}-position">Position and size</h2><span class="spacer"></span><button type="button" class="small" data-reset="geometry">Reset to defaults</button></div>
-      <div class="xrb-field-grid">${number('offsetMm.x', 'X (mm)', -150, 150, 1)}${number('offsetMm.y', 'Y (mm)', -150, 150, 1)}${number('offsetMm.z', 'Z (mm)', -150, 150, 1)}</div>
-      ${number('sizeFactor', 'Size', .5, 1.5, .01, 'Changes where the hand touches.', true)}
+      ${number('offsetMm.x', 'X (mm)', -150, 150, 1)}${number('offsetMm.y', 'Y (mm)', -150, 150, 1)}${number('offsetMm.z', 'Z (mm)', -150, 150, 1)}
+      ${number('sizeFactor', 'Size', .5, 1.5, .01, 'Changes where the hand touches.')}
     </section>
     <section class="xrb-sidebar-section" aria-labelledby="${prefix}-appearance">
       <div class="row"><h2 id="${prefix}-appearance">Appearance</h2><span class="spacer"></span><button type="button" class="small" data-reset="appearance">Reset to defaults</button></div>
       <div class="xrb-toggle-grid">${toggle('showJoints', 'Joints')}${toggle('showBones', 'Bones')}</div>
-      <div class="xrb-field-grid">${number('appearance.jointDiameterMm', 'Joint diameter (mm)', 1, 40, 1)}${colour('jointColorLinear', 'Joint colour')}${number('appearance.boneDiameterMm', 'Bone diameter (mm)', 1, 30, 1)}${colour('boneColorLinear', 'Bone colour')}</div>
+      ${number('appearance.jointDiameterMm', 'Joint diameter (mm)', 1, 40, 1, '', colour('jointColorLinear', 'Joint colour'))}
+      ${number('appearance.boneDiameterMm', 'Bone diameter (mm)', 1, 30, 1, '', colour('boneColorLinear', 'Bone colour'))}
       ${number('appearance.opacity', 'Skeleton opacity', 0, 1, .001)}
       ${toggle('showPinchGrabIndicator', 'Pinch / grab indicator')}
-      <div class="xrb-field-grid">${number('appearance.indicatorDiameterMm', 'Indicator diameter (mm)', 1, 60, 1)}${colour('indicatorColorLinear', 'Indicator colour')}${number('appearance.indicatorOpacity', 'Indicator opacity', 0, 1, .01)}</div>
+      ${number('appearance.indicatorDiameterMm', 'Indicator diameter (mm)', 1, 60, 1, '', colour('indicatorColorLinear', 'Indicator colour'))}
+      ${number('appearance.indicatorOpacity', 'Indicator opacity', 0, 1, .01)}
     </section>
     <div class="xrb-stack" data-recovery hidden><p class="field-error" data-status role="alert"></p><div class="xrb-button-row"><button type="button" class="small" data-action="retry">Retry</button><button type="button" class="small" data-action="discard" hidden>Use saved</button></div></div>
   </form>`;
@@ -78,10 +80,8 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     const base = sent && sent.version === previous?.version ? sent.value : previous?.base ?? sent?.value ?? read(state, key);
     // Opening, cancelling or returning a colour preview to its initial swatch preserves exact linear values.
     if (field.type === 'color' && field.value.toLowerCase() === linearToHex(base).toLowerCase()) value = structuredClone(base);
-    if (key === 'sizeFactor') {
-      if (field.type === 'range') root.querySelector('[data-field="sizeFactor"]').value = field.value;
-      else if (Number.isFinite(value)) root.querySelector('[data-range="sizeFactor"]').value = value;
-    }
+    if (field.type === 'range') root.querySelector(`[data-field="${key}"]`).value = field.value;
+    else if (field.type === 'number' && field.validity.valid) root.querySelector(`[data-range="${key}"]`).value = value;
     if (previous && equal(value, previous.value)) return key;
     if (!sent && equal(value, base) && equal(read(state, key), base)) {
       edits.delete(key); setFieldError(field);
