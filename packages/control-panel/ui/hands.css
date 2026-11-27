@@ -99,9 +99,5 @@
 .hands-adjustment-tabs > .xrb-tab { flex: none; white-space: nowrap; }
 .hands-adjustment-tabs > .hands-tab-more { display: flex; align-items: center; flex: none; }
 .hands-adjustment-tabs > .hands-tab-more[hidden], .hands-adjustment-tabs > .xrb-tab[hidden] { display: none; }
-/* Install dialog: nothing moves between plan, install and result. The title lines up with the log, the status
-   icon sits at the right edge (absent while reviewing the plan) and the description is always one line. */
-.hands-mesh-setup .xrb-progress-status { flex-direction: row-reverse; justify-content: space-between; min-height: 52px; }
-.hands-mesh-setup .xrb-progress-status > div { min-width: 0; flex: 1; }
-.hands-mesh-setup .xrb-progress-status-icon[hidden] { display: block; visibility: hidden; }
+/* Install dialog: the description stays one line so nothing moves between states. */
 .hands-mesh-setup [data-setup-message] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

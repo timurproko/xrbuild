@@ -538,10 +538,17 @@ dialog.xrb-rebuild-dialog, dialog.xrb-job-progress-dialog { width: min(660px, ca
 /* The job log keeps one fixed height while output streams in, so the dialog never grows with it. */
 .xrb-rebuild-dialog > .xrb-copy-block > .log, .xrb-job-progress-dialog > .xrb-copy-block > .log { height: min(33vh, 280px); max-height: none; }
 .xrb-rebuild-dialog > .xrb-copy-block:has(> .log[hidden]) { min-height: 36px; }
-.xrb-progress-status-icon { display: grid; place-items: center; width: 28px; height: 28px; flex: none; }
+/* Centred on the title and description, raised slightly so it reads level with the title block. */
+.xrb-progress-status-icon { display: grid; place-items: center; width: 28px; height: 28px; flex: none; margin-bottom: 8px; }
 .xrb-progress-status-icon > * { grid-area: 1 / 1; }
 .xrb-progress-status-icon > svg { width: 28px; height: 28px; color: var(--accent); }
-.xrb-progress-check, .xrb-progress-error { display: none; width: 28px; height: 28px; }
+.xrb-progress-check, .xrb-progress-error, .xrb-progress-idle { display: none; width: 28px; height: 28px; }
+/* The idle icon matches the check and error discs: a 28px ring with the symbol centred inside. */
+.xrb-progress-idle { box-sizing: border-box; border: 2.5px solid currentColor; border-radius: 50%; place-items: center; }
+.xrb-progress-idle svg { display: block; width: 17px; height: 17px; }
+/* Before work starts a progress dialog shows its own icon (for example a gear for setup) in the status slot. */
+.xrb-progress-status-icon[data-state="idle"] .xrb-progress-running { display: none; }
+.xrb-progress-status-icon[data-state="idle"] .xrb-progress-idle { display: grid; color: var(--accent); }
 .xrb-progress-check svg, .xrb-progress-error svg { display: block; width: 28px; height: 28px; }
 .xrb-progress-status-icon[data-state="done"] .xrb-progress-running, .xrb-progress-status-icon[data-state="failed"] .xrb-progress-running { display: none; }
 .xrb-progress-status-icon[data-state="done"] .xrb-progress-check { display: block; color: var(--ok); }

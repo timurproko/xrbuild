@@ -82,7 +82,7 @@ export function installTooltips(root=document){
  };
  const enter=event=>{if(event.pointerType==='touch')return;scan(event.target);const target=targetOf(event.target);if(target&&root.contains(target))show(target);};
  const leave=event=>{if(owner&&owner.contains(event.target)&&!owner.contains(event.relatedTarget))hide();};
- const focus=event=>{scan(event.target);const target=targetOf(event.target);if(target&&root.contains(target))show(target,0);};
+ let keyboard=false;const keyed=event=>{if(event.key==='Tab'||event.key.startsWith('Arrow'))keyboard=true;},pointed=()=>{keyboard=false;};addEventListener('keydown',keyed,true);addEventListener('pointerdown',pointed,true);const focus=event=>{scan(event.target);const target=targetOf(event.target);if(target&&root.contains(target)&&keyboard&&target.matches(':focus-visible'))show(target,0);};
  const key=event=>{if(event.key==='Escape')hide();};
  scan(root);
  const observer=new MutationObserver(records=>{
@@ -92,7 +92,7 @@ export function installTooltips(root=document){
  });
  observer.observe(root===document?document.documentElement:root,{childList:true,subtree:true,attributes:true,attributeFilter:['title','data-tooltip','data-xrb-tooltip-title','aria-label','hidden']});
  root.addEventListener('pointerover',enter,true);root.addEventListener('pointerout',leave,true);root.addEventListener('focusin',focus);root.addEventListener('focusout',hide);root.addEventListener('pointerdown',hide,true);root.addEventListener('keydown',key);root.addEventListener('close',hide,true);addEventListener('scroll',hide,true);addEventListener('resize',hide);
- return()=>{observer.disconnect();hide();root.removeEventListener('pointerover',enter,true);root.removeEventListener('pointerout',leave,true);root.removeEventListener('focusin',focus);root.removeEventListener('focusout',hide);root.removeEventListener('pointerdown',hide,true);root.removeEventListener('keydown',key);root.removeEventListener('close',hide,true);removeEventListener('scroll',hide,true);removeEventListener('resize',hide);};
+ return()=>{observer.disconnect();hide();root.removeEventListener('pointerover',enter,true);root.removeEventListener('pointerout',leave,true);root.removeEventListener('focusin',focus);removeEventListener('keydown',keyed,true);removeEventListener('pointerdown',pointed,true);root.removeEventListener('focusout',hide);root.removeEventListener('pointerdown',hide,true);root.removeEventListener('keydown',key);root.removeEventListener('close',hide,true);removeEventListener('scroll',hide,true);removeEventListener('resize',hide);};
 }
 export function installTabs(root=document){
  const selector='.xrb-tabs[role="tablist"],.activity-tabs[role="tablist"],.xrb-tabs[data-xrb-tabs-search]',mounted=new Map(),positions=new Map();

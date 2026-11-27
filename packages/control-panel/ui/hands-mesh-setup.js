@@ -1,5 +1,6 @@
 // Prerequisite install for a post-processing plugin: show its plan, take explicit consent, run it as a panel job.
 import { iconSvg } from './design-system.js';
+import { installJobLogCopy } from './job-log.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const size = bytes => bytes >= 2 ** 30 ? `${(bytes / 2 ** 30).toFixed(2)} GB` : `${(bytes / 2 ** 20).toFixed(1)} MB`;
@@ -18,11 +19,12 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
     dialog.className = 'xrb-dialog xrb-progress-dialog xrb-rebuild-dialog hands-mesh-setup';
     dialog.setAttribute('aria-labelledby', 'hands-mesh-setup-title');
     dialog.innerHTML = `<div class="xrb-progress-status"><span class="xrb-progress-status-icon" data-state="idle" aria-hidden="true">
+      <span class="xrb-progress-idle">${iconSvg('settings')}</span>
       <span class="xrb-spinner xrb-spinner-accent xrb-progress-running"></span>
       <span class="xrb-progress-check">${iconSvg('check-circle')}</span>
       <span class="xrb-progress-error">${iconSvg('error-circle')}</span>
     </span><div><h3 id="hands-mesh-setup-title">Install prerequisites</h3><p class="muted" data-setup-message role="status">Reading the setup plan…</p></div></div>
-    <div class="xrb-copy-block"><pre class="log" data-setup-output aria-label="Setup details">Reading the setup plan…</pre></div>
+    <div class="xrb-copy-block"><button type="button" class="xrb-icon-button xrb-copy-action" data-setup-copy aria-label="Copy setup log">${iconSvg('copy')}</button><pre class="log" data-setup-output aria-label="Setup details">Reading the setup plan…</pre></div>
     <div class="row ask-buttons"><span class="spacer"></span>
       <button type="button" class="action-button" data-setup-cancel>Cancel</button>
       <button type="button" class="action-button primary" data-setup-install disabled>Install</button></div>`;
@@ -30,9 +32,10 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
     const status = dialog.querySelector('.xrb-progress-status-icon'), message = dialog.querySelector('[data-setup-message]');
     const output = dialog.querySelector('[data-setup-output]'), cancel = dialog.querySelector('[data-setup-cancel]'), install = dialog.querySelector('[data-setup-install]');
     let plan = null, running = false, done = false;
-    // No status icon while reviewing the plan, so the title lines up with the details below.
+    installJobLogCopy(dialog.querySelector('[data-setup-copy]'), async () => output.textContent);
     new MutationObserver(() => { message.title = message.textContent; }).observe(message, { childList: true, characterData: true, subtree: true });
-    const state = value => { status.dataset.state = value; status.hidden = value === 'idle'; };
+    // Same template as Rebuild: a gear while reviewing, then spinner, check or error in the same place.
+    const state = value => { status.dataset.state = value; };
     const finish = () => { if (running) return; if (dialog.open) dialog.close(); dialog.remove(); resolve(done); };
     cancel.addEventListener('click', finish);
     dialog.addEventListener('cancel', event => { if (running) event.preventDefault(); else finish(); });

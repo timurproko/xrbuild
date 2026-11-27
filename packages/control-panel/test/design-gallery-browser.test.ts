@@ -149,7 +149,8 @@ test('Design Main collects shared primitives with interactive local-only example
     await within(`doc.querySelector('#example-tab-two').click()`);
     assert.equal(await within(`return doc.querySelector('#example-panel').textContent`),'Details panel');
     await within(`doc.querySelector('#example-tooltip').scrollIntoView()`);await sleep(100);
-    await within(`doc.querySelector('#example-tooltip').focus({preventScroll:true})`);
+    // Focus hints follow keyboard navigation.
+    await within(`doc.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true}));doc.querySelector('#example-tooltip').focus({preventScroll:true})`);
     await until(evaluate,`!!document.querySelector('.xrb-tooltip')`);
     await within(`doc.querySelector('[data-demo-dialog=confirm]').click()`);
     assert.equal(await within(`return doc.querySelector('#example-dialog').open`),true);
