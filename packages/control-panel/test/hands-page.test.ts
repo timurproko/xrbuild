@@ -30,11 +30,11 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(page, /view\.active \|\| view\.replaying/);
 });
 
-test('adjustment groups are direct standard sections, retain controls and only the size hint', async () => {
+test('adjustment groups are direct standard sections, retain controls without hint text', async () => {
   const component = await fs.readFile(path.join(ui, 'hands-adjustments.js'), 'utf8');
   assert.equal((component.match(/<section class="xrb-sidebar-section"/g) ?? []).length, 2);
   assert.doesNotMatch(component, /class="card|Drawing only|X right/);
-  assert.match(component, /Changes where the hand touches/);
+  assert.doesNotMatch(component, /Changes where the hand touches/);
   assert.match(component, /role="menuitem" data-reset="\$\{section\}">Reset to defaults/);
   assert.match(component, /tab\('geometry', 'Position', true\)\}\$\{tab\('appearance', 'Visual', false\)\}/);
   assert.match(component, /tabs\.className = 'xrb-tabs hands-adjustment-tabs'; tabs\.setAttribute\('role', 'tablist'\)/);

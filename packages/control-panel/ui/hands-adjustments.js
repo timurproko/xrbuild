@@ -25,7 +25,7 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   root.innerHTML = `<form class="xrb-stack hands-adjustment-sections" aria-label="Hand adjustments">
     <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-geometry" aria-labelledby="${prefix}-tab-geometry">
       ${number('offsetMm.x', 'X (mm)', -150, 150, 1)}${number('offsetMm.y', 'Y (mm)', -150, 150, 1)}${number('offsetMm.z', 'Z (mm)', -150, 150, 1)}
-      ${number('sizeFactor', 'Size', .5, 1.5, .01, 'Changes where the hand touches.')}
+      ${number('sizeFactor', 'Size', .5, 1.5, .01)}
     </section>
     <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-appearance" aria-labelledby="${prefix}-tab-appearance" hidden>
       <div class="xrb-toggle-grid">${toggle('showJoints', 'Joints')}${toggle('showBones', 'Bones')}</div>
