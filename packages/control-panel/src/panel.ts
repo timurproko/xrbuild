@@ -24,7 +24,7 @@ import { cleanWorkingCache, reviewWorkingCache } from './cache-maintenance.ts';
 import { requireProjectOutput, projectPreviewRoute } from './project-build.ts';
 import { assertEditableProject, assertUserRoot, assertWritablePath } from './project-access.ts';
 import { projectStateKey, readProjectRunSettings, saveProjectRunSettings, validateRunOverrides, withRunSettings } from './project-run-settings.ts';
-import { launchBlocker, type LaunchState } from './launch-blockers.ts';
+import { launchBlocker, restartBlocker, type LaunchState } from './launch-blockers.ts';
 import { log } from './env.ts';
 import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHost, clearProviderCache } from './host-build.ts';
 import { DesktopSetup } from './desktop-setup.ts';
@@ -2341,7 +2341,8 @@ export class Panel {
         return true;
       }
       case 'POST restart': {
-        if (this.jobs.active().some(job => job.kind === 'desktop-setup')) throw new HttpError(409, 'Wait for desktop setup to finish; the installer must not be interrupted', { retryWhenIdle: true });
+        const restartWait = restartBlocker(this.jobs.active().map(job => job.kind));
+        if (restartWait) throw new HttpError(409, restartWait, { retryWhenIdle: true });
         const { confirm, ifIdle, expectedInstanceId } = await readJson<{ confirm?: boolean; ifIdle?: boolean; expectedInstanceId?: string }>(req);
         if ((confirm !== undefined && typeof confirm !== 'boolean') || (ifIdle !== undefined && typeof ifIdle !== 'boolean')) throw new HttpError(400, 'Restart flags must be boolean');
         if (ifIdle && (confirm !== false || expectedInstanceId !== this.instanceId)) throw new HttpError(409, 'Automatic restart requires the current panel instance and cannot force active work');
