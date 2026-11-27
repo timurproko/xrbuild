@@ -33,6 +33,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   canvas.addEventListener('contextmenu', event => event.preventDefault());
   scene.add(new THREE.HemisphereLight('#e8f4ff', '#162338', 2.8));
   const light = new THREE.DirectionalLight('#ffffff', 3); light.position.set(.2, .4, .6); scene.add(light);
+  const panelCentre = new THREE.Vector3();
   // Endless grid in the panel plane (z = 0, the monitor's plane): 5 cm cells drawn in a shader, fading with distance.
   const grid = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
@@ -89,8 +90,9 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
       if (closed || request !== profileRequest || !isCurrent() || !allowed()) { resolve(false); return; }
       if (profile && !api.sameHandGeometry(profile, next)) { ingress.reset(performance.now()); clearHands(); }
       ingress.profile = next; visual.applyAppearance(next.appearance); profile = next; stream.setReady(true);
-      // Hands are shifted by the Position offset, so the real screen sits at that same offset in this view.
-      monitor.position.set(next.offsetMm.x / 1000, next.offsetMm.y / 1000, next.offsetMm.z / 1000); grid.position.copy(monitor.position); tests.setOrigin(monitor.position.x, monitor.position.y, monitor.position.z); resolve(true);
+      // The frame, grid and object stay centred; the hands are drawn without the Position offset, i.e. where they
+      // physically are relative to the screen (the offset only changes what apps receive).
+      panelCentre.set(-next.offsetMm.x / 1000, -next.offsetMm.y / 1000, -next.offsetMm.z / 1000); resolve(true);
     } }; });
   }
   function theme() {
@@ -123,7 +125,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     controls.update();
     grid.material.uniforms.focus.value.copy(controls.target); grid.material.uniforms.fade.value = Math.max(1, camera.position.distanceTo(controls.target) * 2.5);
     stream.tick();
-    panel.update({ mode: 'world', center: new THREE.Vector3(), scale: 1 }, camera);
+    panel.update({ mode: 'world', center: panelCentre, scale: 1 }, camera);
     currentHands = stream.active ? input.sample(now) : [];
     sceneHands = currentHands.map(hand => toSceneHand(hand, panel));
     tests.setActive(stream.active && !recordedSession);
