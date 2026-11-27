@@ -146,7 +146,7 @@ async function loadMonitors() {
     view?.setMonitor(frame, options);
   };
   resolution.addEventListener('change', () => { try { localStorage.setItem(MONITOR_RESOLUTION_KEY, resolution.value); } catch { /* Storage may be blocked. */ } apply({ keepView: true }); });
-  select.addEventListener('change', () => { try { localStorage.setItem(MONITOR_KEY, select.value); localStorage.removeItem(MONITOR_RESOLUTION_KEY); } catch { /* Storage may be blocked. */ } fillResolutions(monitors.find(m => m.device === select.value)); apply(); });
+  select.addEventListener('change', () => { try { localStorage.setItem(MONITOR_KEY, select.value); localStorage.removeItem(MONITOR_RESOLUTION_KEY); } catch { /* Storage may be blocked. */ } fillResolutions(monitors.find(m => m.device === select.value)); apply({ keepView: true }); });
   fillResolutions(monitors.find(m => m.device === select.value)); apply();
 }
 // Object shape and grid color are viewer preferences, remembered in this browser only.
