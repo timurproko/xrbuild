@@ -209,7 +209,7 @@ launches, including repository mode, default to `http://127.0.0.1:5181`. The two
 `XRB_PANEL_PORT` overrides either default for that invocation. If another checkout already owns 5181, the
 launcher refuses to open its different workspace; set a different `XRB_PANEL_PORT` for the new launch.
 
-The header's **update available** label and Update menu dot notice new commits on either repository's remote default branch. A lightweight read-only check runs at panel start and every five minutes while idle; it never fetches or pulls, skips active jobs, and stays silent offline. Local settings/project edits do not affect the notice. Click the label or **Update** to start the existing explicit update and safety checks.
+The header's **update** label and Update menu dot notice new commits on either repository's remote default branch. A lightweight read-only check runs at panel start and every five minutes while idle; it never fetches or pulls, skips active jobs, and stays silent offline. Local settings/project edits do not affect the notice. Click the label or **Update** to start the existing explicit update and safety checks.
 
 The panel lists the selected project root's projects while loading plugins and generated state from the integration workspace. It builds projects, runs them with their providers and live status, switches a 3D display between 2D
 and 3D, shows the input provider's camera view and renders app icons.

@@ -108,7 +108,7 @@ small { font-weight: normal; }
 .panel-menu { min-width: 210px; }
 .menu.panel-menu a[role="menuitem"] { position: relative; padding-left: 28px; }
 .menu.panel-menu a[role="menuitem"][aria-current="page"]::before { content: "✓"; position: absolute; left: 12px; top: 50%; transform: translateY(-52%); color: var(--accent); font-size: .72rem; font-weight: 700; }
-.panel-menu #host-rebuild, .panel-menu #panel-restart { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.panel-menu #host-rebuild, .panel-menu #panel-restart, .panel-menu #panel-update { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .menu-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--warn); }
 .menu-dot.rebuild { background: var(--rebuild); }
 .menu-dot.update { background: var(--update); }
@@ -271,7 +271,7 @@ a.xrb-path:hover, a.xrb-path:focus-visible { color: var(--accent); text-decorati
 .menu button:not(.xrb-swatch):hover:not(:disabled), .menu button:not(.xrb-swatch):focus-visible, .menu a[role="menuitem"]:hover, .menu a[role="menuitem"]:focus-visible { background: var(--accent-soft); color: var(--accent); outline: none; }
 .menu button.danger-item { color: var(--err); }
 .menu button.danger-item:hover:not(:disabled), .menu button.danger-item:focus-visible { background: var(--err-soft); color: var(--err); }
-.menu.panel-menu :is(#panel-restart, #host-rebuild), .menu.panel-menu :is(#panel-restart, #host-rebuild):hover, .menu.panel-menu :is(#panel-restart, #host-rebuild):focus-visible { color: var(--fg); }
+.menu.panel-menu :is(#panel-restart, #host-rebuild, #panel-update), .menu.panel-menu :is(#panel-restart, #host-rebuild, #panel-update):hover, .menu.panel-menu :is(#panel-restart, #host-rebuild, #panel-update):focus-visible { color: var(--fg); }
 
 /* Dropdown: one shared, styleable listbox replaces OS-rendered option popups. */
 .dropdown { position: relative; display: block; min-width: 0; }

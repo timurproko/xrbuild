@@ -2380,8 +2380,10 @@ function renderHost() {
   const chip = $('#host-chip');
   if (!h) return;
   const needsRebuild = updateRebuildChip(chip, h, `rebuilt ${ago(h.exeMs)}`);
+  const rebuildReason = chip.title;
   chip.title = h.componentsNeedRebuild ? 'Rebuild prepares changed application components and any outdated native output.' : h.hostProblem ?? (h.exists && h.staleHostPlugins?.length ? `plugins from an older build sit next to xrb-host.exe (${h.staleHostPlugins.join(', ')}): rebuild to use selected plugin roots`
     : h.exists && h.outdated ? `host sources or plugins changed (${h.newestSource ?? 'source membership'}): ${h.exe}` : `xrb-host.exe (${h.runtimeOrigin === 'cache' ? 'user cache' : 'product/source build'}): ${h.exe}`);
+  if (rebuildReason) chip.title = [rebuildReason, chip.title].filter(Boolean).join(': ');
   // Only a problem is worth a chip; the matching dot identifies its action in the menu.
   const rebuildDot = $('#host-rebuild-dot');
   rebuildDot.hidden = !needsRebuild;

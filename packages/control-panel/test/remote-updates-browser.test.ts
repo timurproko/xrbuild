@@ -20,7 +20,7 @@ test('all module headers share update indication and badge/menu invoke the same 
     for(const route of ['','plugins/','settings/','hands/','calibration/','design']){
       await navigate(panel.url+route,`!!document.querySelector('[data-maintenance="update"]:not([hidden])')`);
       const actual=await evaluate(`(()=>{const c=document.querySelector('[data-maintenance="update"]');return {text:c.textContent,style:c.className,role:c.getAttribute('role'),dot:!document.querySelector('#panel-update-dot')?.hidden};})()`);
-      assert.deepEqual(actual,{text:'update available',style:'chip update',role:'button',dot:true});
+      assert.deepEqual(actual,{text:'update',style:'chip update',role:'button',dot:true});
       await evaluate(`document.querySelector('[data-maintenance="update"]').click()`);
       for(let n=0;n<50&&await evaluate('updateCalls.length')!==1;n++)await sleep(30);
       assert.deepEqual(await evaluate('updateCalls'),['/api/update']);

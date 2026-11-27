@@ -93,7 +93,7 @@ export function renderRemoteUpdate(menu, status, activate) {
     if (!chip.isConnected) header.append(chip);
     orderMaintenanceLabels(header);
   }
-  chip.textContent = 'update available';chip.hidden = !status?.available;
+  chip.textContent = 'update';chip.hidden = !status?.available;
   chip.setAttribute('role', 'button');chip.tabIndex = 0;
   chip.title = ['core','workspace'].filter(role => status?.[role]?.available)
     .map(role => `${role}: origin/${status[role].branch}, checked ${new Date(status[role].checkedMs).toLocaleTimeString()}`).join('\n');

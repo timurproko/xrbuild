@@ -10,7 +10,7 @@ import { withBrowser } from './browser-fixture.ts';
 test('component refresh uses the existing Rebuild concept and truthful header state', () => {
   const chip = { className: '', textContent: '', hidden: true };
   assert.equal(updateRebuildChip(chip, { exists: true, outdated: false, componentsNeedRebuild: true }), true);
-  assert.equal(chip.textContent, 'rebuild needed'); assert.equal(chip.hidden, false);
+  assert.equal(chip.textContent, 'rebuild'); assert.equal(chip.hidden, false);
   assert.equal(rebuildPresentation({ kind: 'run', state: 'running', lines: ['Rebuild: preparing application components…'] }).message, 'Rebuild: preparing application components…');
   const restart = rebuildPresentation({ kind: 'run', state: 'failed', error: 'Restart the panel to load changed code.', result: { restart: true }, lines: [] });
   assert.equal(restart.title, 'Restart needed'); assert.equal(restart.succeeded, false);
