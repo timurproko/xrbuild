@@ -51,17 +51,19 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     activeMenu = null; menu.hidden = true; button.setAttribute('aria-expanded', 'false');
     if (restoreFocus) button.focus();
   }
+  // Reset menus open under the tab bar, right-aligned with their gear, so they stay inside the card.
+  const menuPlacement = button => ({ anchor: button, align: 'end', gap: Math.max(0, tabs.getBoundingClientRect().bottom - button.getBoundingClientRect().bottom) + 6 });
   function showMenu(button) {
     if (!state) return;
     closeMenu();
     const menu = tabs.querySelector(`#${button.getAttribute('aria-controls')}`);
     activeMenu = { button, menu }; button.setAttribute('aria-expanded', 'true');
-    openFloating(menu, { anchor: button });
+    openFloating(menu, menuPlacement(button));
   }
   const outside = event => { if (activeMenu && !activeMenu.button.contains(event.target) && !activeMenu.menu.contains(event.target)) closeMenu(); };
   document.addEventListener('click', outside, { signal: menuEvents.signal });
   document.addEventListener('focusin', outside, { signal: menuEvents.signal });
-  document.addEventListener('scroll', () => { if (activeMenu) positionFloating(activeMenu.menu, { anchor: activeMenu.button }); }, { capture: true, signal: menuEvents.signal });
+  document.addEventListener('scroll', () => { if (activeMenu) positionFloating(activeMenu.menu, menuPlacement(activeMenu.button)); }, { capture: true, signal: menuEvents.signal });
   document.defaultView.addEventListener('resize', () => closeMenu(), { signal: menuEvents.signal });
   disposers.push(() => { closeMenu(); menuEvents.abort(); });
   const read = (data, key) => key.startsWith('appearance.') ? data.profile.appearance[key.slice(11)] ?? data.appearanceDefaults[key.slice(11)] : key.startsWith('offsetMm.') ? data.profile.offsetMm[key.slice(9)] : data.profile[key];

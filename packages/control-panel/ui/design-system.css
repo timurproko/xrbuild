@@ -2,6 +2,7 @@
    Shared visual primitives for the control panel and workspace tools. Product modules own only
    their content layout; typography, application chrome, controls and surfaces live here. */
 :root {
+  --field-hover-line: color-mix(in srgb, var(--muted) 45%, var(--line));
   --bg: #f4f6f9; --surface: #ffffff; --surface-2: #edf0f5; --fg: #1a2230; --muted: #5b6677; --line: #d7dce5;
   --accent: #2c58cf; --accent-soft: #e5ebfb; --test: #3b7a20; --test-soft: #e5f1de;
   --ok: #23724a; --ok-soft: #dff1e6; --warn: #9a6200; --warn-soft: #fbefd6; --rebuild: #7a45c9; --rebuild-soft: #eee7fa; --update: #0b7285; --update-soft: #daf1f4; --err: #b0261d; --err-soft: #fbe3e0;
@@ -138,10 +139,10 @@ button.xrb-icon-button:hover:not(:disabled), a.xrb-icon-button:hover { backgroun
 .xrb-tooltip { position: fixed; inset: auto; margin: 0; z-index: 1000; width: max-content; white-space: pre-line; overflow-wrap: anywhere; max-width: min(260px, calc(100vw - 16px)); padding: 5px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-2); color: var(--fg); box-shadow: 0 6px 18px rgba(0,0,0,.24); font-size: .72rem; font-weight: 400; line-height: 1.25; pointer-events: none; }
 button.action-button { min-width: var(--action-button-w); height: 34px; padding: 6px 12px; }
 input, select { font: inherit; font-size: .9rem; color: var(--fg); background: var(--surface-2); border: 1px solid transparent; border-radius: 6px; padding: 7px 10px; width: 100%; }
-input:hover, select:hover { border-color: var(--line); }
+/* Every field shares the dropdown's hover border; a number field highlights while its stepper is hovered too. */
+input:hover, select:hover, .xrb-number-control:hover input:not(:disabled) { border-color: var(--field-hover-line); }
 input:disabled, select:disabled, input:read-only[aria-disabled="true"] { color: var(--muted); -webkit-text-fill-color: var(--muted); opacity: .5; cursor: default; border-color: transparent; }
 select { appearance: none; cursor: pointer; padding-right: 32px; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 17px) 52%, calc(100% - 12px) 52%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
-select:hover { border-color: color-mix(in srgb, var(--muted) 45%, var(--line)); }
 input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--err); }
 select:focus-visible { outline: none; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 select option { background: var(--surface); color: var(--fg); }
@@ -277,7 +278,7 @@ a.xrb-path:hover, a.xrb-path:focus-visible { color: var(--accent); text-decorati
 .dropdown { position: relative; display: block; min-width: 0; }
 .dropdown-btn { position: relative; width: 100%; box-sizing: border-box; text-align: left; font-size: .9rem; font-weight: 500; padding: 7px 34px 7px 10px; border-radius: 6px; background-color: var(--surface-2); border: 1px solid transparent; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .dropdown-btn::after { content: ""; position: absolute; right: 14px; top: 50%; width: 5px; height: 5px; border: solid var(--muted); border-width: 0 2px 2px 0; transform: translateY(-70%) rotate(45deg); transform-origin: center; transition: transform .12s, border-color .12s; }
-.dropdown-btn:hover:not(:disabled) { background-color: var(--surface-2); border-color: color-mix(in srgb, var(--muted) 45%, var(--line)); }
+.dropdown-btn:hover:not(:disabled) { background-color: var(--surface-2); border-color: var(--field-hover-line); }
 .dropdown-btn:hover:not(:disabled)::after { border-color: var(--fg); }
 .dropdown-btn[aria-invalid="true"] { border-color: var(--err); }
 .dropdown-btn[aria-expanded="true"], .dropdown-btn:focus-visible { outline: none; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }

@@ -2,8 +2,8 @@ export type XrbIconName='folder'|'open'|'rewind'|'play'|'pause'|'stop'|'search'|
 export function iconSvg(name:XrbIconName):string;
 export function installWorkspaceLayout(document?:Document):()=>void;
 export function installOverlayScrollbars(root?:Document):()=>void;
-export function positionFloating<T extends HTMLElement>(element:T,options?:{x?:number;y?:number;anchor?:HTMLElement|null;gap?:number}):T;
-export function openFloating<T extends HTMLElement>(element:T,options?:{x?:number;y?:number;anchor?:HTMLElement|null;gap?:number;focus?:boolean}):T;
+export function positionFloating<T extends HTMLElement>(element:T,options?:{x?:number;y?:number;anchor?:HTMLElement|null;gap?:number;align?:'start'|'end'}):T;
+export function openFloating<T extends HTMLElement>(element:T,options?:{x?:number;y?:number;anchor?:HTMLElement|null;gap?:number;align?:'start'|'end';focus?:boolean}):T;
 export function resumeAnimations(root?:Document|Element):Element[];
 export function installIcons(root?:Document|Element):()=>void;
 export function installTooltips(root?:Document|Element):()=>void;
