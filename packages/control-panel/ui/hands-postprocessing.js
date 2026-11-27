@@ -168,7 +168,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     badge.textContent = label; badge.className = `state ${tone}`; badge.hidden = !label || root.querySelector('[data-mesh-layer]').hidden;
     // Details go to the Log tab under the plugin's name; the card only shows the badge.
     const logged = state === 'preparing' ? 'Preparing' : state === 'applied' ? 'Running' : state === 'applying' ? 'Starting' : ['failed', 'unsupported'].includes(state) ? text : '';
-    if (p && logged && !root.querySelector('[data-mesh-layer]').hidden) handsLog(logged, { source: p.label, level: state === 'failed' ? 'err' : state === 'unsupported' ? 'warn' : '' });
+    if (p && logged && !root.querySelector('[data-mesh-layer]').hidden) handsLog(logged, { source: p.label.split(/\s+/)[0], level: state === 'failed' ? 'err' : state === 'unsupported' ? 'warn' : '' });
     status.textContent = text; status.hidden = true; root.dataset.meshState = state;
     deliveryRetry.hidden = !d || state !== 'failed';
     deliveryRetry.disabled = busy || retrying || pending || !!snapshot?.problem;

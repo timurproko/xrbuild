@@ -1,3 +1,4 @@
+import { handsLog } from './hands-log.js';
 import { mountToolNavigation, isPanelUnavailable } from './navigation.js';
 import { openColorPopover, installNumberSteppers } from './design-system.js';
 import { mountHandsShell } from './hands-shell.js';
@@ -178,6 +179,13 @@ function mountViewPreferences() {
 }
 const disposeShell = mountHandsShell({ resetView: () => view?.resetView(), setViewOptions: options => view?.setViewOptions(options) });
 const postprocessing = mountHandsPostprocessing($('hands-postprocessing-root'));
+// The viewer's own side of the mesh stream: whether it got the stream address and whether its connection works.
+{ let lastMesh = '';
+  setInterval(() => {
+    if (document.body.dataset.handsSession !== 'live' || !view) { lastMesh = ''; return; }
+    const status = view.meshStatus ?? 'None', text = status === 'None' ? 'No mesh stream address from the session yet' : status;
+    if (text !== lastMesh) { lastMesh = text; handsLog(text, { source: 'mesh', level: /fallback|unavailable|refused|failed/i.test(text) ? 'warn' : '' }); }
+  }, 1000); }
 // The Post tab stays in place; with no post-processing plugin it shows a short empty note.
 const showPostEmpty = () => { $('hands-post-empty').hidden = !$('hands-postprocessing-root').hidden; };
 new MutationObserver(showPostEmpty).observe($('hands-postprocessing-root'), { attributes: true, attributeFilter: ['hidden'] }); showPostEmpty();
