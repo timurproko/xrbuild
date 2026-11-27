@@ -52,7 +52,10 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     root.dataset.dirty = String(edits.size > 0); root.dataset.saving = String(busy);
     select.disabled = !snapshot || !!snapshot.problem;
     layers.querySelector('.dropdown-btn').disabled = select.disabled || !snapshot?.plugins.length;
-    gear.disabled = reset.disabled = !snapshot || !!snapshot.problem || !plugin()?.available || !plugin()?.declaration.settings.length;
+    gear.disabled = reset.disabled = !snapshot || !!snapshot.problem || !(plugin()?.available || plugin()?.needsSetup) || !plugin()?.declaration.settings.length;
+    // Like Setup: no layer with settings, no gear.
+    gear.hidden = !plugin()?.declaration.settings.length;
+    if (gear.hidden) closeMenu();
     message.textContent = failure ?? snapshot?.problem ?? '';
     recovery.hidden = !message.textContent; retryButton.disabled = busy;
     discard.hidden = !conflict; discard.disabled = busy;
