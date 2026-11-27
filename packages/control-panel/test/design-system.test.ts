@@ -32,3 +32,8 @@ test('dropdown lists open inside a fullscreen element that holds their dropdown'
   assert.equal(floatingHost(Object.assign(inside,{ownerDocument:doc})),viewer);
   assert.equal(floatingHost(Object.assign(outside,{ownerDocument:doc})),body);
 });
+
+test('icon buttons stay centred inside small toolbars',async()=>{
+  const css=await (await import('node:fs/promises')).readFile(new URL('../ui/design-system.css',import.meta.url),'utf8');
+  assert.match(css,/:is\(\.xrb-controls-small, \.xrb-controls-compact\) button\.xrb-icon-button \{ padding: 0; \}/);
+});

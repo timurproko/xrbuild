@@ -131,6 +131,8 @@ button.primary { --fill: var(--accent); --edge: var(--accent); }
 button.danger, button.danger-solid { --fill: var(--err); --edge: var(--err); }
 button.ghost { --fill: transparent; }
 button.small, :is(.xrb-controls-small, .xrb-controls-compact) button:not(.dropdown-btn) { min-height: 30px; padding: 4px 10px; font-size: .8rem; }
+/* Icon buttons keep their icon centred inside small toolbars. */
+:is(.xrb-controls-small, .xrb-controls-compact) button.xrb-icon-button { padding: 0; }
 button.xrb-icon-button, a.xrb-icon-button { align-self: center; flex: none; margin-left: auto; width: 28px; height: 28px; min-width: 28px; padding: 0; display: grid; place-items: center; box-sizing: border-box; border: 0; border-radius: 6px; background: transparent; color: color-mix(in srgb, var(--muted) 78%, transparent); text-decoration: none; }
 .xrb-inline-icons > .xrb-icon-button { margin-left: 0; }
 button.xrb-icon-button:hover:not(:disabled), a.xrb-icon-button:hover { background: var(--surface-2); border-color: transparent; color: var(--fg); }
