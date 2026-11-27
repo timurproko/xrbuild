@@ -16,7 +16,12 @@ export class HandMeshClient {
   /** How old a mesh result may be and how far the hand may have moved before it is hidden (defaults: 100 ms, 10 mm). */
   private maxAgeMs = MESH_MAX_SOURCE_AGE_MS;
   private maxResidualM = MESH_MAX_RESIDUAL_M;
-  setDrawLimits({ maxAgeMs, maxResidualM }: { maxAgeMs?: number; maxResidualM?: number }): void {
+  /** How long the last drawn mesh of a still-present hand survives a frame that yields none (0 = never). */
+  private carryMs = 0;
+  private carried = new Map<number, { surface: MeshDrawSurface; at: number }>();
+  private handsSeenAt = -Infinity;
+  setDrawLimits({ maxAgeMs, maxResidualM, carryMs }: { maxAgeMs?: number; maxResidualM?: number; carryMs?: number }): void {
+    if (Number.isFinite(carryMs)) this.carryMs = Math.min(1000, Math.max(0, carryMs!));
     if (Number.isFinite(maxAgeMs)) this.maxAgeMs = Math.round(Math.min(MESH_HOLD_LIMIT_MS, Math.max(MESH_MAX_SOURCE_AGE_MS, maxAgeMs!)));
     if (Number.isFinite(maxResidualM)) this.maxResidualM = Math.min(.1, Math.max(.001, maxResidualM!));
   }
@@ -95,9 +100,11 @@ export class HandMeshClient {
     if (key !== this.ids) { this.ids = key; this.invalidate(); }
   }
   invalidate(): void { this.revision++; this.pending = null; this.accepted = null; this.drawing = null; this.topologies.clear(); }
+  /** Drops carried meshes too (a new session or settings), unlike a routine hand-set change. */
+  private reset(): void { this.carried.clear(); this.invalidate(); }
   update(hands: Hand[], sampleMs: number, generation = 0, drawingEnabled = true): MeshDrawSurface[] {
     if (this.closed) return [];
-    if (generation !== this.generation) { this.generation = generation; this.invalidate(); }
+    if (generation !== this.generation) { this.generation = generation; this.reset(); }
     const shown = hands.filter(h => !h.coasting).slice(0, 2);
     let meshes: MeshDrawSurface[] = [];
     const accepted = this.accepted, age = accepted ? this.sourceAge(accepted.frame) : Infinity;
@@ -108,7 +115,18 @@ export class HandMeshClient {
         if (motion && motion.residualM <= this.maxResidualM) meshes.push({ ...surface, ...motion, sourceAgeMs: age });
       }
     }
-    if (!shown.length) { this.accepted = null; this.topologies.clear(); }
+    // Bridge single bad frames (a coasting hand, pose noise, a late result) with the last drawn mesh of a hand that is still there.
+    const now = this.now(), present = new Set(hands.map(h => h.id));
+    if (this.carryMs > 0) {
+      for (const mesh of meshes) this.carried.set(mesh.id, { surface: mesh, at: now });
+      for (const [id, last] of this.carried) {
+        if (meshes.some(m => m.id === id)) continue;
+        if (!present.has(id) || now - last.at > this.carryMs) { this.carried.delete(id); continue; }
+        meshes.push(last.surface);
+      }
+    }
+    if (shown.length) this.handsSeenAt = now;
+    if (!shown.length && now - this.handsSeenAt > this.carryMs) { this.accepted = null; this.topologies.clear(); this.carried.clear(); }
     this.status = meshes.length ? 'Running' : this.configuration?.phase === 'Preparing' ? 'Preparing'
       : this.configuration?.reason ? `Skeleton fallback: ${this.configuration.reason}` : 'Skeleton fallback: mesh not ready or current';
     this.drawing = this.protocol === 2 && meshes.length && drawingEnabled && accepted

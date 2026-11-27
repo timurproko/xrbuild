@@ -98,3 +98,18 @@ test('a viewer can hold mesh results longer, and the frame tells the server with
   assert.ok(sent.every(f => f.maxAgeMs === undefined || f.maxAgeMs <= 2000));
   client.close();
 });
+
+test('a carried mesh bridges a frame without a fresh mesh, only while the hand is still there', () => {
+  let now = 0;
+  const client = new HandMeshClient({ version: 1, url: 'http://127.0.0.1:1234', token: 'a'.repeat(64) }, (async () => new Response(null, { status: 204 })) as typeof fetch, () => now);
+  client.setDrawLimits({ carryMs: 250 });
+  client.update([], 0); // the first update starts the session's generation
+  const surface = { id: 1, topology: 't', positions: new Float32Array(9), indices: new Uint32Array([0, 1, 2]) } as any;
+  (client as any).carried.set(1, { surface, at: 0 });
+  const hand = { id: 1, coasting: true, handedness: 'left', keypoints: [] } as any;
+  now = 100; assert.equal(client.update([hand], now).length, 1, 'a coasting hand keeps its last mesh briefly');
+  now = 400; assert.equal(client.update([hand], now).length, 0, 'not beyond the carry time');
+  (client as any).carried.set(1, { surface, at: 400 });
+  now = 450; assert.equal(client.update([], now).length, 0, 'a hand that left drops its mesh at once');
+  client.close();
+});
