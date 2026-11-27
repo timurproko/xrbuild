@@ -13,9 +13,9 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.doesNotMatch(html, /hands-save|hands-reload|hands-availability|hands-session-status|hands-previous-session|hands-record/);
   assert.match(html, /id="hands-postprocessing-root" hidden/);
   assert.doesNotMatch(html, /hands-diagnostics|Acquisition diagnostics|Local fixture|Motion \+ pinch|Pause|Restart|Capture|Calibration/);
-  assert.equal((html.match(/role="tab"/g) ?? []).length, 5, 'only the Setup, Transform, Display, Post and Log tabs');
-  assert.match(html, /data-tab="appearance"[^>]*>Display<\/button>\s*<button[^>]*data-tab="post"[^>]*>Post<\/button>/, 'Post follows Display');
-  assert.match(html, /<div id="hands-post-panel"[^>]*data-tab-panel="post" hidden>\s*<div id="hands-post-empty" class="empty-note">/, 'the Post tab holds post-processing with an empty note');
+  assert.equal((html.match(/role="tab"/g) ?? []).length, 5, 'only the Setup, Transform, Display, Post-process and Log tabs');
+  assert.match(html, /data-tab="appearance"[^>]*>Display<\/button>\s*<button[^>]*data-tab="post"[^>]*>Post-process<\/button>/, 'Post follows Display');
+  assert.match(html, /<div id="hands-post-panel"[^>]*data-tab-panel="post" hidden>\s*<div id="hands-post-empty" class="empty-note">/, 'the Post-process tab holds post-processing with an empty note');
   const live = await fs.readFile(path.join(ui, 'hands-live-controls.js'), 'utf8');
   assert.match(live, /next Start or app launch/);
   assert.match(live, /active session is not switched/);
@@ -30,7 +30,7 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(live, /document\.getElementById\('hands-start-stop'\) \?\? document\.createElement\('button'\)/);
   assert.match(markup, /<div id="hands-adjustments-root" class="xrb-sidebar-content xrb-stack" hidden><\/div>/, 'adjustments stay hidden until their editor mounts');
   assert.doesNotMatch(markup, /unavailable in this version/);
-  assert.match(markup, /class="xrb-tabs hands-adjustment-tabs" role="tablist"[^>]*>\s*<button[^>]*data-tab="setup"[^>]*>Setup<\/button>\s*<button[^>]*data-tab="geometry"[^>]*>Transform<\/button>\s*<button[^>]*data-tab="appearance"[^>]*>Display<\/button>\s*<button[^>]*data-tab="post"[^>]*>Post<\/button>/, 'tabs exist before the editor loads');
+  assert.match(markup, /class="xrb-tabs hands-adjustment-tabs" role="tablist"[^>]*>\s*<button[^>]*data-tab="setup"[^>]*>Setup<\/button>\s*<button[^>]*data-tab="geometry"[^>]*>Transform<\/button>\s*<button[^>]*data-tab="appearance"[^>]*>Display<\/button>\s*<button[^>]*data-tab="post"[^>]*>Post-process<\/button>/, 'tabs exist before the editor loads');
   assert.doesNotMatch(markup, /hands-view-empty/, 'the viewer carries no centre text');
   assert.match(markup, /data-tab="log"[^>]*>Log<\/button>/);
   assert.match(markup, /<div id="hands-log-panel"[^>]*data-tab-panel="log" hidden>\s*<div id="hands-log-empty" class="empty-note">No log entries yet\.<\/div>\s*<div id="hands-log" class="console" role="log"/, 'diagnostics live in a Log tab, not in Setup');
@@ -64,7 +64,7 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.doesNotMatch(shell, /fetch\(|innerHTML\s*=.*tabpanel|replaceChildren/);
   const page = await fs.readFile(path.join(ui, 'hands.js'), 'utf8');
   assert.match(page, /import \{ mountHandsPostprocessing \} from '\.\/hands-postprocessing\.js'/);
-  assert.equal((page.match(/mountHandsPostprocessing\(\$\('hands-postprocessing-root'\)\)/g) ?? []).length, 1);
+  assert.equal((page.match(/mountHandsPostprocessing\(\$\('hands-postprocessing-root'\)/g) ?? []).length, 1);
   assert.match(page, /postprocessing\.dispose\(\)/);
   assert.doesNotMatch(page, /mountRecordingTools|mountHandsTools|import\(status\.module\)/);
   assert.match(page, /export const handsPage = \{ get view\(\)/);

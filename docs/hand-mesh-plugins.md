@@ -76,7 +76,7 @@ Discovery reads a bounded receipt and checks the launch file. Launch revalidates
 
 ## Setup export (`mesh-runtime-setup`)
 
-A hand mesh plugin whose runtime is installed separately can export `mesh-runtime-setup`. The Hands Post tab then shows
+A hand mesh plugin whose runtime is installed separately can export `mesh-runtime-setup`. The Hands Post-process tab then shows
 **Install** on its layer while the runtime is missing, and runs the setup as a panel job that Restart waits for.
 
 The module exports:

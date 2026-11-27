@@ -185,6 +185,8 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     setObject(kind) { return tests.setShape(kind); },
     setObjectPosition(x, y, z) { tests.setPosition(x, y, z); },
     /** Grid line color (hex) and opacity (0-1). */
+    setDisplay(options) { visual.setDisplay(options); },
+    setMeshStyle(style) { visual.setMeshStyle(style); },
     setGrid({ color, opacity }) { if (color) grid.material.uniforms.color.value.set(color); if (Number.isFinite(opacity)) grid.material.uniforms.opacity.value = opacity; },
     dispose() {
       if (closed) return; closed = true; pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; closeMesh(); stream.dispose(); tests.dispose(); clearLegacy(); cancelAnimationFrame(frameId); resize.disconnect(); observer.disconnect(); system.removeEventListener('change', theme); controls.dispose();

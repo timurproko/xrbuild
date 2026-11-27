@@ -1,6 +1,6 @@
 import { handsLog } from './hands-log.js';
 import { mountToolNavigation, isPanelUnavailable } from './navigation.js';
-import { openColorPopover, installNumberSteppers } from './design-system.js';
+import { openColorPopover, installNumberSteppers, refreshDropdown } from './design-system.js';
 import { mountHandsShell } from './hands-shell.js';
 import { mountProviderRecorder } from './hands-recorder.js';
 import { mountHandsPostprocessing } from './hands-postprocessing.js';
@@ -174,11 +174,40 @@ function mountViewPreferences() {
   }
   applyPosition();
   installNumberSteppers($('hands-setup'));
+  // Mesh color (Post layer card): like the grid, a view-only color and opacity remembered in this browser.
+  const meshSwatch = $('hands-mesh-color'), meshOpacity = $('hands-mesh-opacity'), meshRange = $('hands-mesh-opacity-range');
+  if (meshSwatch) {
+    const savedMesh = Number.parseFloat(stored('xrb.hands.meshOpacity'));
+    let meshColor = /^#[0-9a-f]{6}$/i.test(stored('xrb.hands.meshColor')) ? stored('xrb.hands.meshColor') : '#e8b796';
+    let meshAlpha = Number.isFinite(savedMesh) ? Math.min(1, Math.max(0, savedMesh)) : 1;
+    const applyMesh = () => { meshSwatch.style.backgroundColor = meshColor; meshOpacity.value = String(meshAlpha); meshRange.value = String(meshAlpha); view?.setMeshStyle?.({ color: meshColor, opacity: meshAlpha }); };
+    const setMeshAlpha = (value, save) => { const next = Number.parseFloat(value); if (!Number.isFinite(next)) return; meshAlpha = Math.min(1, Math.max(0, next)); applyMesh(); if (save) store('xrb.hands.meshOpacity', String(meshAlpha)); };
+    meshRange.addEventListener('input', () => setMeshAlpha(meshRange.value, true));
+    meshOpacity.addEventListener('input', () => setMeshAlpha(meshOpacity.value, false));
+    meshOpacity.addEventListener('change', () => setMeshAlpha(meshOpacity.value, true));
+    meshSwatch.addEventListener('click', () => openColorPopover(meshSwatch, { value: meshColor,
+      onInput: color => { meshColor = color; applyMesh(); }, onClose: color => { meshColor = color; store('xrb.hands.meshColor', color); applyMesh(); } }));
+    installNumberSteppers(meshSwatch.closest('.xrb-field-label'));
+    applyMesh();
+  }
   swatch.addEventListener('click', () => openColorPopover(swatch, { value: gridColor,
     onInput: color => { gridColor = color; applyGrid(); }, onClose: color => { gridColor = color; store('xrb.hands.gridColor', color); applyGrid(); } }));
 }
 const disposeShell = mountHandsShell({ resetView: () => view?.resetView(), setViewOptions: options => view?.setViewOptions(options) });
-const postprocessing = mountHandsPostprocessing($('hands-postprocessing-root'));
+// Display (viewer toolbar): show or hide the skeleton and the active mesh layer in the view only; remembered per browser.
+const displayValue = () => { try { return JSON.parse($('hands-display-options').value); } catch { return ['skeleton', 'mesh']; } };
+try { const saved = JSON.parse(stored('xrb.hands.display') || 'null'); if (Array.isArray(saved)) $('hands-display-options').value = JSON.stringify(saved); } catch {}
+const applyDisplay = () => { const value = displayValue(); view?.setDisplay?.({ skeleton: value.includes('skeleton'), mesh: value.includes('mesh') }); };
+$('hands-display-options').addEventListener('change', () => { store('xrb.hands.display', $('hands-display-options').value); applyDisplay(); });
+let displayLayer;
+const showLayer = label => {
+  if (label === displayLayer) return; displayLayer = label;
+  const owner = $('hands-display');
+  owner.dataset.options = label ? 'skeleton|mesh' : 'skeleton';
+  owner.dataset.labels = JSON.stringify(label ? { skeleton: 'Skeleton', mesh: label } : { skeleton: 'Skeleton' });
+  refreshDropdown(owner);
+};
+const postprocessing = mountHandsPostprocessing($('hands-postprocessing-root'), { onLayer: showLayer });
 // The viewer's own side of the mesh stream: whether it got the stream address and whether its connection works.
 { let lastMesh = '';
   setInterval(() => {
@@ -187,7 +216,7 @@ const postprocessing = mountHandsPostprocessing($('hands-postprocessing-root'));
     const text = status === 'None' ? 'No mesh stream address from the session yet' : error ? `Could not connect to the mesh stream: ${error}` : status;
     if (text !== lastMesh) { lastMesh = text; handsLog(text, { source: 'mesh', level: /fallback|unavailable|refused|failed/i.test(text) ? 'warn' : '' }); }
   }, 1000); }
-// The Post tab stays in place; with no post-processing plugin it shows a short empty note.
+// The Post-process tab stays in place; with no post-processing plugin it shows a short empty note.
 const showPostEmpty = () => { $('hands-post-empty').hidden = !$('hands-postprocessing-root').hidden; };
 new MutationObserver(showPostEmpty).observe($('hands-postprocessing-root'), { attributes: true, attributeFilter: ['hidden'] }); showPostEmpty();
 try {
@@ -201,6 +230,7 @@ try {
   });
   // Grid, axes and the monitor frame follow the View menu from the first frame (all on by default).
   view.setViewOptions(JSON.parse($('hands-view-options').value));
+  applyDisplay();
   mountResolution();
   mountViewPreferences();
 } catch (error) { $('hands-view-error').hidden = false; $('hands-view-error').textContent = `3D view unavailable: ${error.message}`; }

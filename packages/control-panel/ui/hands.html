@@ -37,6 +37,11 @@
           <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="View options" data-no-tooltip>View</button>
         </div>
         <button id="hands-view-reset" type="button" aria-label="Reset view" data-no-tooltip>Reset</button>
+        <span class="hands-tool-separator" aria-hidden="true"></span>
+        <div class="dropdown" data-multi="true" data-summary="Display" data-options="skeleton" data-labels='{"skeleton":"Skeleton"}' id="hands-display">
+          <input id="hands-display-options" type="hidden" value='["skeleton","mesh"]'>
+          <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Display options" data-no-tooltip>Display</button>
+        </div>
         <span class="spacer"></span>
         <button id="hands-fullscreen" type="button" class="xrb-icon-button" data-xrb-icon="fullscreen" aria-label="Enter fullscreen" data-no-tooltip></button>
       </div>
@@ -49,7 +54,7 @@
         <button type="button" class="xrb-tab" role="tab" data-tab="setup" aria-selected="true" tabindex="0">Setup</button>
         <button type="button" class="xrb-tab" role="tab" data-tab="geometry" aria-selected="false" tabindex="-1">Transform</button>
         <button type="button" class="xrb-tab" role="tab" data-tab="appearance" aria-selected="false" tabindex="-1">Display</button>
-        <button type="button" class="xrb-tab" role="tab" data-tab="post" aria-selected="false" tabindex="-1">Post</button>
+        <button type="button" class="xrb-tab" role="tab" data-tab="post" aria-selected="false" tabindex="-1">Post-process</button>
         <button type="button" class="xrb-tab" role="tab" data-tab="log" aria-selected="false" tabindex="-1">Log</button>
         <span class="hands-tab-action" data-tab-action="post" hidden></span>
         <span class="hands-tab-action" data-tab-action="log" hidden><button type="button" class="xrb-icon-button" id="hands-log-clear" aria-label="Clear log" data-xrb-icon="close" data-no-tooltip></button></span>

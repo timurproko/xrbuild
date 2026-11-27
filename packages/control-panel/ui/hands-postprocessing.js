@@ -14,7 +14,7 @@ async function request(method, body, suffix = '') {
   return data;
 }
 /** Independent root and revision-safe editor. Preview, persistence and runtime evidence are separate. */
-export function mountHandsPostprocessing(root, { load = () => request('GET'), save = body => request('PUT', body), retry = body => request('POST', body, '/retry'), pollMs = 1000 } = {}) {
+export function mountHandsPostprocessing(root, { load = () => request('GET'), save = body => request('PUT', body), retry = body => request('POST', body, '/retry'), pollMs = 1000, onLayer = () => {} } = {}) {
   const prefix = `hands-postprocessing-${++mounts}`;
   root.hidden = true;
   root.innerHTML = `<form class="xrb-stack hands-postprocessing" aria-label="Hand post-processing"><div class="row" data-mesh-header><span class="spacer"></span>
@@ -23,7 +23,9 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     <select data-mesh-selector aria-label="Hand mesh" hidden></select>
     <div class="dropdown" data-multi="true" data-mesh-layers data-summary="Add layer" data-options="" data-labels="{}"><input type="hidden" data-mesh-layer-value value="[]"><button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Add post-processing layer">Add layer</button></div>
     <section class="hands-mesh-layer xrb-stack" data-mesh-layer hidden><div class="row hands-mesh-layer-header"><strong data-mesh-layer-title></strong><span class="spacer"></span><button type="button" class="xrb-setup-install" data-mesh-install hidden><span>Install</span></button><span class="state ok" data-mesh-ready hidden>Ready</span><button type="button" class="xrb-setup-install" data-mesh-delivery-retry hidden><span>Retry</span></button><label class="xrb-switch hands-mesh-layer-switch"><input type="checkbox" data-mesh-layer-enabled aria-label="Layer on"></label><button type="button" class="xrb-icon-button" data-mesh-layer-remove aria-label="Remove layer" data-no-tooltip>${iconSvg('close')}</button></div>
-    <div class="xrb-stack" data-mesh-fields></div><p class="xrb-help" data-mesh-readiness hidden></p></section>
+    <div class="xrb-stack" data-mesh-fields></div>
+    <div class="xrb-field-label">Mesh color<span class="hands-number-row"><input type="number" id="hands-mesh-opacity" aria-label="Mesh opacity" min="0" max="1" step="0.01"><input class="xrb-range" type="range" id="hands-mesh-opacity-range" aria-label="Mesh opacity slider" min="0" max="1" step="0.01"><span class="xrb-inline-icons"><button type="button" id="hands-mesh-color" class="xrb-swatch" aria-label="Choose mesh color" aria-haspopup="dialog"></button></span></span></div>
+    <p class="xrb-help" data-mesh-readiness hidden></p></section>
     <p data-mesh-runtime role="status" hidden></p>
     <div data-mesh-recovery hidden><p class="field-error" data-mesh-message role="alert"></p><div class="xrb-button-row"><button type="button" class="small" data-mesh-retry>Retry</button><button type="button" class="small" data-mesh-discard hidden>Use saved</button></div></div></form>`;
   const form = root.querySelector('form'), select = root.querySelector('[data-mesh-selector]'), fields = root.querySelector('[data-mesh-fields]');
@@ -34,7 +36,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   const ready = root.querySelector('[data-mesh-ready]'), install = root.querySelector('[data-mesh-install]'), layerOn = root.querySelector('[data-mesh-layer-enabled]');
   let switching = false;
   const events = new AbortController(), document = root.ownerDocument, edits = new Map();
-  // On the Hands page the gear sits in the tab bar beside the Post tab, like Transform and Display.
+  // On the Hands page the gear sits in the tab bar beside the Post-process tab, like Transform and Display.
   const slot = document.querySelector('[data-tab-action="post"]');
   if (slot) { slot.append(gear, menu); root.querySelector('[data-mesh-header]').remove(); }
   let snapshot = null, selected = '', disposed = false, busy = false, reading = false, epoch = 0, version = 0, installing = false;
@@ -98,6 +100,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     layer.querySelector('[data-mesh-layer-title]').textContent = p?.label ?? (selected ? `${selected} (missing)` : '');
     // Like Build prerequisites: a small Install while setup is missing, Ready once the plugin can run.
     install.hidden = !(p?.needsSetup && p.setup);
+    onLayer(p && snapshot.choice?.enabled !== false ? p.label : null);
     // The switch shows the saved state; off keeps the layer and its settings but runs nothing.
     if (!switching) layerOn.checked = snapshot.choice?.enabled !== false;
     layer.classList.toggle('is-off', !layerOn.checked);

@@ -22,7 +22,7 @@
 .hands-postprocessing .hands-mesh-delivery > p { min-width: 0; overflow-wrap: anywhere; }
 .hands-postprocessing [data-mesh-message] { overflow-wrap: anywhere; }
 .hands-source p { margin: 0; }
-.hands-panel > .xrb-sidebar-content { flex: 1; min-height: 0; align-content: start; overflow-y: auto; overflow-wrap: anywhere; }
+.hands-panel > .xrb-sidebar-content { flex: 1; min-height: 0; align-content: start; overflow-y: auto; overflow-x: hidden; overflow-wrap: anywhere; }
 .hands-viewport { position: relative; min-height: 360px; padding: 0; margin: 0; overflow: hidden; }
 .hands-viewport canvas { display: block; width: 100%; height: 100%; position: absolute; inset: 0; }
 .hands-view-tools { position: absolute; top: var(--xrb-space-stack); left: var(--xrb-space-stack); right: var(--xrb-space-stack); z-index: 1; display: flex; gap: var(--xrb-space-stack); align-items: center; pointer-events: none; }
@@ -67,9 +67,9 @@
 /* The Log tab fills its panel with the shared dark log area. */
 #hands-log-panel > .console { flex: 1; max-height: none; margin: 0; }
 /* The Setup grid row reuses the adjustment row layout; its swatch matches the Visual swatches. */
-#hands-setup .hands-number-row button.xrb-swatch { width: 24px; height: 24px; border: 3px solid transparent; background-clip: padding-box; box-shadow: none; transform: none; }
-#hands-setup .hands-number-row button.xrb-swatch:hover:not(:disabled) { outline: 1px solid var(--field-hover-line); outline-offset: -1px; }
-#hands-setup .hands-number-row button.xrb-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#hands-setup .hands-number-row button.xrb-swatch, .hands-mesh-layer .hands-number-row button.xrb-swatch { width: 24px; height: 24px; border: 3px solid transparent; background-clip: padding-box; box-shadow: none; transform: none; }
+#hands-setup .hands-number-row button.xrb-swatch:hover:not(:disabled), .hands-mesh-layer .hands-number-row button.xrb-swatch:hover:not(:disabled) { outline: 1px solid var(--field-hover-line); outline-offset: -1px; }
+#hands-setup .hands-number-row button.xrb-swatch:focus-visible, .hands-mesh-layer .hands-number-row button.xrb-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* Object position: X, Y and Z side by side, each with its axis letter. */
 .hands-xyz { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--xrb-space-stack); }
 .hands-xyz-field { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -84,11 +84,12 @@
 .hands-preset-name[hidden], .hands-preset-row[hidden] { display: none; }
 /* The name field takes the dropdown's place and size while saving. */
 .hands-preset-name > input { height: 36px; }
-/* Post tab: one card per post-processing layer. */
+/* Post-process tab: one card per post-processing layer. */
 /* No fill, so the fields inside keep their normal outline and contrast. */
 .hands-mesh-layer { padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
 .hands-mesh-layer-header { align-items: center; gap: 12px; flex-wrap: nowrap; }
-.hands-mesh-layer-header strong { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.hands-mesh-layer-header strong { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.hands-mesh-layer-header > .spacer { display: none; }
 .hands-mesh-layer-header > :not(strong):not(.spacer) { flex: none; }
 /* Viewer / side panel splitter. */
 /* Only the cursor shows the split; no line. */
@@ -105,5 +106,7 @@
 /* Layer on/off sits in the card's top-right corner; an off layer dims its settings. */
 .hands-mesh-layer-switch { margin: 0; gap: 0; }
 /* Standard icon button (same hover square as the preset buttons); its padding is offset so the visible gaps stay even. */
-.hands-mesh-layer .hands-mesh-layer-header > button.xrb-icon-button[data-mesh-layer-remove] { margin: -4px -6px -4px -6px; }
+.hands-mesh-layer .hands-mesh-layer-header > button.xrb-icon-button[data-mesh-layer-remove] { margin: -4px 0 -4px -6px; }
+/* The header reaches 6px into the card padding so the x icon lines up with the content edge without overflowing. */
+.hands-mesh-layer > .hands-mesh-layer-header { margin-right: -6px; }
 .hands-mesh-layer.is-off [data-mesh-fields] { opacity: .5; }

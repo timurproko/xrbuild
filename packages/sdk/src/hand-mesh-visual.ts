@@ -7,10 +7,19 @@ import type { HandVisualStyle } from './hand-visual.ts';
 export class HandMeshVisual extends THREE.Group {
   private material = new THREE.MeshStandardMaterial({ transparent: false, opacity: 1, depthWrite: true, roughness: .5, side: THREE.FrontSide });
   private records = new Map<number, { surface: MeshSurface; mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> }>();
+  /** A viewer's own mesh color and opacity; without it the mesh uses the bone color and stays opaque. */
+  private viewStyle: { color: THREE.Color; opacity: number } | null = null;
+  setViewStyle(style: { color: string; opacity: number } | null): void {
+    this.viewStyle = style ? { color: new THREE.Color(style.color), opacity: Math.min(1, Math.max(0, style.opacity)) } : null;
+  }
   constructor() { super(); this.name = 'xrb-hand-mesh'; this.matrixAutoUpdate = false; }
   update(surfaces: MeshDrawSurface[], panel: PanelFrame, style: HandVisualStyle): void {
     this.matrix.copy(panel.toWorld); this.matrixWorldNeedsUpdate = true;
-    this.material.color.set(style.boneColor); // Skeleton opacity never makes skin translucent.
+    // Skeleton opacity never makes skin translucent; only a viewer's own mesh opacity does.
+    this.material.color.set(this.viewStyle?.color ?? style.boneColor);
+    const opacity = this.viewStyle?.opacity ?? 1, translucent = opacity < 1;
+    if (this.material.transparent !== translucent) { this.material.transparent = translucent; this.material.depthWrite = !translucent; this.material.needsUpdate = true; }
+    this.material.opacity = opacity;
     const ids = new Set(surfaces.map(s => s.id));
     for (const [id, r] of this.records) if (!ids.has(id)) { r.mesh.geometry.dispose(); this.remove(r.mesh); this.records.delete(id); }
     for (const surface of surfaces) {

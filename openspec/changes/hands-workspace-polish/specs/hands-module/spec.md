@@ -4,7 +4,7 @@
 
 ### Requirement: Core-owned Hands surface
 
-Hands SHALL remain accessible without optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands page, titled Hands, with the 3D viewer beside one side panel of Setup, Transform, Display, Post and Log tabs, present with Start and status from the first paint, and no recording section. Old diagnostic routes and `/hand-tracking/` SHALL return normal not-found responses without redirects, and no separate diagnostic page or link SHALL remain.
+Hands SHALL remain accessible without optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands page, titled Hands, with the 3D viewer beside one side panel of Setup, Transform, Display, Post-process and Log tabs, present with Start and status from the first paint, and no recording section. Old diagnostic routes and `/hand-tracking/` SHALL return normal not-found responses without redirects, and no separate diagnostic page or link SHALL remain.
 
 #### Scenario: Diagnostic plugin absent
 - **WHEN** the user opens Hands without the optional hand tools plugin or checked tool build
@@ -165,7 +165,7 @@ The Log tab SHALL list provider start and stop events, diagnostics and failure r
 
 ### Requirement: Post-processing layers
 
-The Post tab SHALL follow Display and offer an Add layer multi-select of installed post-processing plugins. A chosen plugin SHALL show as a layer card with its settings and a remove action; one hand-mesh layer runs at a time, so adding another replaces it. A plugin whose runtime is not installed SHALL stay selectable and show a small Install action in its card header when it exports a prerequisite setup, and Ready once it can run. With none installed, the tab SHALL show a short empty note.
+The Post-process tab SHALL follow Display and offer an Add layer multi-select of installed post-processing plugins. A chosen plugin SHALL show as a layer card with its settings, a live status badge, an on/off switch and a remove action; one hand-mesh layer runs at a time. A plugin whose runtime is missing SHALL stay selectable and show Install when it exports a setup. With none installed, the tab shows a short empty note.
 
 #### Scenario: Adding a layer that needs prerequisites
 - **WHEN** the person adds a post-processing plugin whose runtime is not installed
@@ -191,3 +191,11 @@ A splitter between the viewer and the side panel SHALL resize the panel by point
 #### Scenario: Narrow side panel
 - **WHEN** the person drags the splitter until not every tab fits
 - **THEN** the last tabs move into the more menu, and choosing one there selects it
+
+### Requirement: Viewer display menu
+
+The viewer toolbar SHALL offer a Display multi-select after Reset, separated from it, listing Skeleton and the active post-processing mesh layer by name. Each choice SHALL only show or hide that drawing in the viewer, remembered in the browser, without changing saved adjustments or stopping the layer. The mesh layer card SHALL offer a view-only mesh color and opacity like the grid.
+
+#### Scenario: Hiding the skeleton
+- **WHEN** the person unchecks Skeleton while the mesh runs
+- **THEN** the viewer draws only the mesh, and the saved joint and bone settings stay unchanged
