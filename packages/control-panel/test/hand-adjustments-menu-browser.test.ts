@@ -71,6 +71,12 @@ test('section reset gears provide accessible keyboard menus with scoped dismissa
       const swatchPoint = await evaluate(`(()=>{const r=document.querySelector('[data-color="appearance.jointColorLinear"]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...swatchPoint });
       assert.deepEqual((await evaluate(swatchStyle)).slice(0, 2), ['solid', '1px'], 'hovered swatch shows the 1px hover line');
+      // The selected tab survives a reload (restart) without first flashing Setup.
+      await evaluate(`document.querySelector('[data-tab="appearance"]').click()`);
+      await navigate(`http://127.0.0.1:${port}/hands/`, `document.querySelector('[data-field="sizeFactor"]')?.value==='1'`);
+      assert.deepEqual(await evaluate(`[document.querySelector('[data-tab="appearance"]').getAttribute('aria-selected'),document.getElementById('hands-setup').hidden]`), ['true', true]);
+      await evaluate(`document.querySelector('[data-tab="setup"]').click()`);
+      await evaluate(`document.querySelector('[data-tab="appearance"]').click()`);
       const menuFor = (key: string) => `(()=>{const s=document.querySelector('[data-color="appearance.${key}"]'),r=s.getBoundingClientRect();s.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+2,clientY:r.top+2}));return !document.querySelector('[data-color-action="copy"]').closest('.menu').hidden;})()`;
       assert.equal(await evaluate(menuFor('jointColorLinear')), true, 'right-click opens the color menu');
       await evaluate(`document.querySelector('[data-color-action="copy"]').click()`); await sleep(50);

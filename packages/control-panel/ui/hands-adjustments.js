@@ -7,6 +7,10 @@ export const hexToLinear = hex => [1, 3, 5].map(i => { const v = parseInt(hex.sl
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const set = (profile, key, value) => { const parts = key.split('.'); if (parts.length === 2) profile[parts[0]][parts[1]] = structuredClone(value); else profile[key] = structuredClone(value); };
 let mounts = 0;
+/** The selected side-panel tab survives reloads and restarts in this browser only. */
+export const HANDS_TAB_KEY = 'xrb.hands.tab';
+const rememberedTab = () => { try { return localStorage.getItem(HANDS_TAB_KEY) ?? ''; } catch { return ''; } };
+const rememberTab = section => { try { localStorage.setItem(HANDS_TAB_KEY, section); } catch { /* Storage may be blocked; the tab still works. */ } };
 /** Root-scoped editor. Only finished values enter the serialized revision-safe save path. */
 export function mountHandAdjustments(root, { load, apply, serialize = operation => operation(), setup = null }) {
   const prefix = `hands-adjustments-${++mounts}`;
@@ -198,7 +202,8 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     if (event.key === 'Enter' && event.target.matches('[data-field]')) { event.preventDefault(); commit(event.target); }
   };
   const submit = event => event.preventDefault();
-  function selectTab(section, focus = false) {
+  function selectTab(section, focus = false, remember = true) {
+    if (remember && adopted) rememberTab(section);
     closeMenu(); closeColorPopover();
     for (const item of tabs.querySelectorAll('[data-tab]')) {
       const selected = item.dataset.tab === section;
@@ -292,6 +297,8 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   document.addEventListener('pointerdown', colorOutside, { capture: true, signal: menuEvents.signal });
   const beforeunload = event => { if (edits.size || busy) { event.preventDefault(); event.returnValue = ''; } };
   addEventListener('beforeunload', beforeunload);
+  // Only the Hands page (whose tab bar this editor adopted) restores the remembered tab.
+  if (adopted) { const saved = rememberedTab(); if (tabs.querySelector(`[data-tab="${saved}"]`)) selectTab(saved, false, false); }
   form.addEventListener('input', input); form.addEventListener('change', change); form.addEventListener('keydown', keydown); form.addEventListener('submit', submit); root.addEventListener('click', click); tabs.addEventListener('click', click); tabs.addEventListener('keydown', tabKeydown);
   render();
   return { refresh, markStale() { void load().then(refresh).catch(error => { failure = error.message; buttons(); }); }, reviewToken: () => undefined,

@@ -4,6 +4,14 @@ import { mountProviderRecorder } from './hands-recorder.js';
 import { mountHandsPostprocessing } from './hands-postprocessing.js';
 import { handsWriteQueue, commitHandsFields } from './hands-commits.js';
 const $ = id => document.getElementById(id), key = p => p ? `${p.owner}/${p.id}` : '';
+// Same key as HANDS_TAB_KEY in hands-adjustments.js (loaded later): show the remembered tab from the first paint.
+try {
+  const saved = localStorage.getItem('xrb.hands.tab');
+  if (saved && saved !== 'setup' && document.querySelector(`.hands-adjustment-tabs [data-tab="${saved}"]`)) {
+    for (const tab of document.querySelectorAll('.hands-adjustment-tabs [data-tab]')) { const on = tab.dataset.tab === saved; tab.setAttribute('aria-selected', String(on)); tab.tabIndex = on ? 0 : -1; }
+    $('hands-setup').hidden = true;
+  }
+} catch { /* Storage may be blocked; Setup stays first. */ }
 let snapshot = null, view = null, adjustments = null, disposed = false, profileKey = '', profileGeneration = 0, writes = 0, readGeneration = 0;
 let sourceEdit = null, sourceConflict = null, sourceBusy = false, sourceReadError = false;
 const enqueue = handsWriteQueue();
