@@ -49,6 +49,17 @@ Managed apps receive the workspace Hands profile automatically after a normal SD
 
 [Hands settings and bounds](../../docs/hands.md) describe storage and controls. Explicit Apply updates a running managed app through a run-bound ordered profile: geometry releases held interactions and resets filters; appearance-only changes retain them. SDK acknowledgement determines Applied, not a successful socket send. Deployment snapshots are frozen and never discover a panel or workspace; old packages/bundles require rebuilding. Appearance affects only standard SDK drawing, never where the hand touches. Custom canvas/mesh diagnostics remain app-owned; absent global overrides retain explicit constructor styles. `handVisual: false` still disables attachment only, not adjusted input or interaction.
 
+## Optional React components (new)
+
+[`@xr-build/react`](../react/README.md) adds React 19 / Fiber 9 components through this runtime,
+not through a competing Canvas. Its new mount API retains SDK rendering, projection, stereo, WebXR
+and input ownership. Vanilla apps, UI Kit and the template need no changes or React dependency.
+
+The new `app.onComponentFrame(callback)` subscription is for component integrations: after processed
+hands are sampled, before interaction and drawing, with the SDK frame clock and current XRFrame.
+It returns an unsubscribe function. Ordinary `app.setFrame` callbacks keep their existing pre-render
+ordering. `app.isRunning` and `app.isDisposed` expose lifecycle state for safe attachment.
+
 ## Minimal app
 
 ```ts

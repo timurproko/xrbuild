@@ -2,12 +2,12 @@
 
 ## 1. Optional Fiber bridge shares SDK frames, projection and owned-resource lifecycle
 
-- [ ] 1.1 Add the optional React source package and compatible pinned React 19/latest stable Fiber 9.x dependencies, keeping vanilla SDK imports React-free; verify package export resolution, frozen core installation and the new package's targeted type check.
-- [ ] 1.2 Add an opt-in SDK component phase after current hand sampling and before interaction/drawing, carrying the SDK clock and current XRFrame; verify existing vanilla frame order plus new sample/component/interaction/draw ordering with focused SDK runtime tests.
-- [ ] 1.3 Configure a custom Fiber root with the SDK scene/camera and guarded renderer/XR facade, never Canvas; verify one root advance and one SDK submission per frame, no independent RAF/raw draw, and preserved size/DPR/camera identity across mono projection, stereo and resize fixtures.
-- [ ] 1.4 Implement mount readiness, update and idempotent asynchronous disposal with owned versus borrowed runtime boundaries and generation fencing; verify real React StrictMode effect replay, repeated mount/unmount, setup failure/cancellation, borrowed context survival and HMR replacement tests.
-- [ ] 1.5 Cover XR entry, exit and re-entry plus icon mode using focused bridge/SDK tests; assert no Fiber session listeners or loop writes, no doubled component updates, restored SDK dimensions and correct icon draw ownership.
-- [ ] 1.6 Document every new mount/handle API, frame phase, ownership rule and supported Fiber integration limit in the React package and SDK README; verify examples compile and the focused bridge suite passes.
+- [x] 1.1 Add the optional React source package and compatible pinned React 19/latest stable Fiber 9.x dependencies, keeping vanilla SDK imports React-free; verify package export resolution, frozen core installation and the new package's targeted type check.
+- [x] 1.2 Add an opt-in SDK component phase after current hand sampling and before interaction/drawing, carrying the SDK clock and current XRFrame; verify existing vanilla frame order plus new sample/component/interaction/draw ordering with focused SDK runtime tests.
+- [x] 1.3 Configure a custom Fiber root with the SDK scene/camera and guarded renderer/XR facade, never Canvas; verify one root advance and one SDK submission per frame, no independent RAF/raw draw, and preserved size/DPR/camera identity across mono projection, stereo and resize fixtures.
+- [x] 1.4 Implement mount readiness, update and idempotent asynchronous disposal with owned versus borrowed runtime boundaries and generation fencing; verify real React StrictMode effect replay, repeated mount/unmount, setup failure/cancellation, borrowed context survival and HMR replacement tests.
+- [x] 1.5 Cover XR entry, exit and re-entry plus icon mode using focused bridge/SDK tests; assert no Fiber session listeners or loop writes, no doubled component updates, restored SDK dimensions and correct icon draw ownership.
+- [x] 1.6 Document every new mount/handle API, frame phase, ownership rule and supported Fiber integration limit in the React package and SDK README; verify examples compile and the focused bridge suite passes.
 
 ## 2. Documented React hooks use SDK hands, picking and target capture without duplicate input
 
