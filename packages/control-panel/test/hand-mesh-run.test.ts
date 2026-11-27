@@ -6,6 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { HandMeshRun } from '../src/hand-mesh-run.ts';
+import { meshFixtureOutput, stopMeshFixture } from './helpers/mesh-process-fixture.ts';
 import { handMeshDeclaration } from '../src/hand-mesh-contract.ts';
 import { decodeMeshResult, type MeshFrame } from '../../sdk/src/hand-mesh-protocol.ts';
 const fixture = fileURLToPath(new URL('./fixtures/hand-mesh-sidecar.mjs', import.meta.url));
@@ -74,15 +75,16 @@ test('owner process death closes the private pipe and the real child exits', asy
   const script = path.join(root, 'owner.mjs');
   await fs.writeFile(script, `import {HandMeshRun} from ${JSON.stringify(new URL('../src/hand-mesh-run.ts', import.meta.url).href)};
     const run = new HandMeshRun(()=>['https://app.local'],()=>{}, {supervisor:${JSON.stringify(process.env.XRB_TEST_MESH_SUPERVISOR)}}); await run.start(${JSON.stringify(plugin('normal', 0, 3))}, {});
-    while (!run.stage?.owned?.pid) await new Promise(resolve=>setTimeout(resolve,10));
+    const deadline=performance.now()+5000;
+    while (!run.stage?.owned?.pid && performance.now()<deadline && run.state().phase!=='Failed') await new Promise(resolve=>setTimeout(resolve,10));
+    if(!run.stage?.owned?.pid) { await run.stop(); throw new Error('Owned fixture failed before process birth'); }
     console.log(run.stage.owned.pid);`);
   const owner = spawn(process.execPath, [script], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-  t.after(async () => { owner.kill(); await fs.rm(root, { recursive: true, force: true }); });
-  childPid = await new Promise<number>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('owner startup timeout')), 5000);
-    owner.stdout.once('data', bytes => { clearTimeout(timer); resolve(Number(bytes.toString().trim())); });
-    owner.once('error', reject);
+  t.after(async () => {
+    try { await stopMeshFixture(owner); }
+    finally { await fs.rm(root, { recursive: true, force: true }); }
   });
+  childPid = Number((await meshFixtureOutput(owner)).toString().trim());
   assert.ok(childPid > 0); owner.kill();
   let alive = true;
   for (let i = 0; i < 200; i++) { try { process.kill(childPid, 0); } catch { alive = false; break; } await wait(10); }
