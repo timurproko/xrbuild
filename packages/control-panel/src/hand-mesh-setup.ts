@@ -83,15 +83,17 @@ export function formatSetupProgress(event: SetupProgress & { percent: number | n
 }
 
 /** Runs the plugin's installer for the exact plan the person agreed to, reporting progress as job lines. */
-export async function installMeshSetup(core: string, workspace: string, owner: string, consent: string, ctx: JobContext): Promise<void> {
+export async function installMeshSetup(core: string, workspace: string, owner: string, consent: string, ctx: JobContext, signal?: AbortSignal): Promise<void> {
   const { module, plugin } = await setupModule(core, workspace, owner);
   let last = '';
   ctx.line(`Installing ${plugin.meta.title ?? plugin.id}.`);
-  await module.install({ consent, core, workspace, owner: plugin.key, onProgress: (raw: unknown) => {
+  await module.install({ consent, core, workspace, owner: plugin.key, signal, onProgress: (raw: unknown) => {
     const event = setupProgress(raw); if (!event) return;
     // Byte counters fire per chunk: log a new line only when the visible text changes.
     const line = formatSetupProgress(event.unit === 'bytes' ? { ...event, detail: undefined } : event);
     if (line !== last) { ctx.line(line); last = line; }
   } });
+  // A setup that ignores the signal still finishes, so report the cancel only when it actually stopped.
+  signal?.throwIfAborted();
   ctx.line(`${plugin.meta.title ?? plugin.id} installed.`);
 }

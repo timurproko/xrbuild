@@ -37,7 +37,14 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
     // Same template as Rebuild: a gear while reviewing, then spinner, check or error in the same place.
     const state = value => { status.dataset.state = value; };
     const finish = () => { if (running) return; if (dialog.open) dialog.close(); dialog.remove(); resolve(done); };
-    cancel.addEventListener('click', finish);
+    // While installing, Cancel stops the install (its downloads are kept); afterwards it closes the dialog.
+    let cancelling = false;
+    cancel.addEventListener('click', async () => {
+      if (!running) { finish(); return; }
+      if (cancelling) return;
+      cancelling = true; cancel.disabled = true; message.textContent = `Cancelling ${label}…`;
+      try { await post('/api/hands/postprocessing/setup/cancel', {}); } catch { cancelling = false; cancel.disabled = false; }
+    });
     dialog.addEventListener('cancel', event => { if (running) event.preventDefault(); else finish(); });
     state('idle');
     (async () => {
@@ -52,7 +59,7 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
     })();
     install.addEventListener('click', async () => {
       if (!plan || running) return;
-      running = true; install.hidden = true; cancel.disabled = true; state('running');
+      running = true; install.hidden = true; state('running');
       let stepLine = '', stepStarted = Date.now();
       message.textContent = `Installing ${label}…`; output.textContent = 'Starting…';
       try {
@@ -68,18 +75,26 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
           if (last !== stepLine) { stepLine = last; stepStarted = Date.now(); }
           const percent = /\((\d+)%\)/.exec(last)?.[1], step = /^([a-z-]+)(?::|…)/i.exec(last)?.[1];
           const seconds = Math.floor((Date.now() - stepStarted) / 1000), elapsed = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-          message.textContent = step ? `Installing ${label} · ${step} ${percent ? `${percent}%` : elapsed}` : `Installing ${label}…`;
+          if (!cancelling) message.textContent = step ? `Installing ${label} · ${step} ${percent ? `${percent}%` : elapsed}` : `Installing ${label}…`;
         }
         done = job.state === 'done';
-        state(done ? 'done' : 'failed');
-        message.textContent = done ? `${label} is ready.` : job.error || 'Install failed; review the output and try again.';
+        if (cancelling && !done) {
+          // A cancel is not a failure: back to the plan, ready to continue from the kept downloads.
+          state('idle'); message.textContent = `Install cancelled. Install again to continue where it stopped.`;
+          install.hidden = false; install.textContent = 'Install';
+        } else {
+          state(done ? 'done' : 'failed');
+          message.textContent = done ? `${label} is ready.` : job.error || 'Install failed; review the output and try again.';
+        }
       } catch (error) {
         state('failed');
         const rebuild = /choose Rebuild/i.test(error.message);
         message.textContent = rebuild ? 'Rebuild first, then install.' : 'Install could not start.';
         output.textContent = rebuild ? 'Application components changed since the last Rebuild. Choose Rebuild from the XR Build menu, then press Install again.' : error.message;
       }
-      running = false; cancel.disabled = false; cancel.textContent = 'Close'; cancel.classList.add('primary');
+      const again = !install.hidden;
+      running = false; cancelling = false; cancel.disabled = false;
+      cancel.textContent = again ? 'Cancel' : 'Close'; cancel.classList.toggle('primary', !again);
     });
     dialog.showModal();
   });

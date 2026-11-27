@@ -244,6 +244,8 @@ export class Panel {
   }
   private handRuntimeStates = new Map<string, string>();
   private savingHands = false;
+  /** Aborts the running post-processing install; its downloads are kept for the next Install. */
+  private meshSetupAbort: AbortController | null = null;
   private preparingNativeRun = false;
   private preparingPreview = false;
   private changingPlugins = false;
@@ -2107,11 +2109,20 @@ export class Panel {
         const owner = body.owner, consent = body.consent;
         const plan = await meshSetupPlan(this.repo, this.workspace, owner).catch(e => { throw e instanceof MeshSetupUnavailable ? new HttpError(404, e.message) : e; });
         if (plan.consent !== consent) throw new HttpError(409, 'The setup plan changed; review it again');
+        const abort = new AbortController(); this.meshSetupAbort = abort;
         const job = this.startJob('mesh-setup', null, 'install post-processing prerequisites', async ctx => {
-          await installMeshSetup(this.repo, this.workspace, owner, consent, ctx);
+          try { await installMeshSetup(this.repo, this.workspace, owner, consent, ctx, abort.signal); }
+          catch (error) {
+            if (abort.signal.aborted) { ctx.line('Install cancelled. Downloaded files are kept, so Install continues where it stopped.'); throw new Error('Install cancelled'); }
+            throw error;
+          } finally { if (this.meshSetupAbort === abort) this.meshSetupAbort = null; }
           this.hub.send('hands-changed', {});
         });
         sendJson(res, 200, job); return true;
+      }
+      case 'POST hands/postprocessing/setup/cancel': {
+        if (!this.meshSetupAbort) throw new HttpError(409, 'No post-processing install is running');
+        this.meshSetupAbort.abort(); sendJson(res, 200, { cancelled: true }); return true;
       }
       case 'POST hands/postprocessing/retry': {
         const body = await readJson<{ runId?: unknown; revision?: unknown }>(req);

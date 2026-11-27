@@ -36,6 +36,9 @@ test('post-processing plugins offer their prerequisite setup and stay selectable
     assert.equal(options.consent, 'c0ffee'); assert.equal(options.owner, 'workspace:fixture-mesh'); assert.equal(options.core, core); assert.equal(options.workspace, workspace);
     assert.equal(lines[0], 'Installing Fixture mesh.'); assert.deepEqual(lines.slice(1), ['download: 1.0 MB of 2.0 MB (50%)', 'self-check…', 'Fixture mesh installed.']);
     await assert.rejects(meshSetupPlan(core, workspace, 'workspace:missing'), MeshSetupUnavailable);
+    const abort = new AbortController(); abort.abort();
+    await assert.rejects(installMeshSetup(core, workspace, 'workspace:fixture-mesh', 'c0ffee', { line: () => {}, run: async () => {} }, abort.signal), /abort/i, 'a cancelled install is never reported as installed');
+    assert.equal((globalThis as any).fixtureInstall.signal, abort.signal, 'the setup receives the cancel signal');
     assert.match(restartBlocker(['mesh-setup']) ?? '', /post-processing install/);
   } finally {
     delete (globalThis as any).fixtureInstall;
