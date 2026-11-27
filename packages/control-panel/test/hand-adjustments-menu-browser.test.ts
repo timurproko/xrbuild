@@ -60,6 +60,10 @@ test('section reset gears provide accessible keyboard menus with scoped dismissa
       assert.equal(await evaluate(`!!document.querySelector('.xrb-color-popover')`), true);
       await evaluate(`document.querySelector('[data-color="appearance.jointColorLinear"]').click()`);
       assert.equal(await evaluate(`!!document.querySelector('.xrb-color-popover')`), false, 'clicking the open swatch again closes its popover');
+      // Hovering a slider highlights only the slider, never its paired number field.
+      const slider = await evaluate(`(()=>{const r=document.querySelector('[data-range="appearance.jointDiameterMm"]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...slider });
+      assert.deepEqual(await evaluate(`[document.querySelector('[data-range="appearance.jointDiameterMm"]').matches(':hover'),document.querySelector('[data-field="appearance.jointDiameterMm"]').matches(':hover')]`), [true, false]);
       const menuFor = (key: string) => `(()=>{const s=document.querySelector('[data-color="appearance.${key}"]'),r=s.getBoundingClientRect();s.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+2,clientY:r.top+2}));return !document.querySelector('[data-color-action="copy"]').closest('.menu').hidden;})()`;
       assert.equal(await evaluate(menuFor('jointColorLinear')), true, 'right-click opens the color menu');
       await evaluate(`document.querySelector('[data-color-action="copy"]').click()`); await sleep(50);

@@ -127,9 +127,10 @@ export function setPageIdentity(product,emoji,filter=''){document.title=`XR Buil
 export function updateRebuildChip(chip,status,readyLabel=''){const active=!!status.componentsNeedRebuild||!status.exists||status.outdated;chip.className=`chip ${active?'rebuild':'good'}`;chip.textContent=active?'rebuild':readyLabel;chip.title=status.componentsNeedRebuild?'Rebuild needed':!status.exists?'Rebuild required':status.outdated?'Rebuild available':'';chip.hidden=!active;return active;}
 export function updateRestartChip(chip,outdated){const active=!!outdated;chip.className='chip warn';chip.textContent='restart';chip.title='Restart available';chip.hidden=!active;return active;}
 /** Shared field wrapper: callers supply trusted label/control HTML; user hint/error copy is escaped here. */
-export function renderField(labelHtml,controlHtml,{hint='',error=''}={}) {
+export function renderField(labelHtml,controlHtml,{hint='',error='',tag='label'}={}) {
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  return `<label class="xrb-field-label">${labelHtml}${controlHtml}${hint?`<span class="xrb-help">${escape(hint)}</span>`:''}${error?`<span class="xrb-help field-error">${escape(error)}</span>`:''}</label>`;
+  // tag:'div' groups several controls whose own labels name them, so hovering one never highlights another.
+  return `<${tag} class="xrb-field-label">${labelHtml}${controlHtml}${hint?`<span class="xrb-help">${escape(hint)}</span>`:''}${error?`<span class="xrb-help field-error">${escape(error)}</span>`:''}</${tag}>`;
 }
 export function sentenceText(value){let text=String(value??'').trim();if(!text)return'';text=text.replace(/\p{L}/u,letter=>letter.toLocaleUpperCase());text=text.replace(/[.!?…,;:]*$/u,'')+'.';return text;}
 function normalizeHelp(element){const next=sentenceText(element.textContent);if(element.textContent!==next)element.textContent=next;}

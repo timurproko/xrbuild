@@ -11,7 +11,7 @@ let mounts = 0;
 export function mountHandAdjustments(root, { load, apply, serialize = operation => operation(), setup = null }) {
   const prefix = `hands-adjustments-${++mounts}`;
   const number = (key, label, min, max, step, hint = '', swatch = '') => renderField(label,
-    `<span class="hands-number-row${swatch ? ' hands-number-row--color' : ''}"><input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required><input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">${swatch}</span>`, { hint });
+    `<span class="hands-number-row${swatch ? ' hands-number-row--color' : ''}"><input type="number" data-field="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" required><input class="xrb-range" type="range" data-range="${key}" aria-label="${label} slider" min="${min}" max="${max}" step="${step}">${swatch}</span>`, { hint, tag: 'div' });
   // What the skeleton shows is one multi-select; hidden checkboxes stay the saved fields behind it.
   const DISPLAY = { showJoints: 'Joints', showBones: 'Bones', showPinchGrabIndicator: 'Pinch/grab' };
   const displayField = () => renderField('Display', `<div class="dropdown" data-multi="true" data-display-toggles data-options="${Object.keys(DISPLAY).join('|')}" data-labels='${JSON.stringify(DISPLAY)}'><input type="hidden" data-display-value value="[]"><button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false">None</button></div>${Object.keys(DISPLAY).map(key => `<input type="checkbox" data-field="appearance.${key}" aria-label="${DISPLAY[key]}" hidden>`).join('')}`);
