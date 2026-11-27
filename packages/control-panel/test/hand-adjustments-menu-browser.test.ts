@@ -64,6 +64,12 @@ test('section reset gears provide accessible keyboard menus with scoped dismissa
       const slider = await evaluate(`(()=>{const r=document.querySelector('[data-range="appearance.jointDiameterMm"]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...slider });
       assert.deepEqual(await evaluate(`[document.querySelector('[data-range="appearance.jointDiameterMm"]').matches(':hover'),document.querySelector('[data-field="appearance.jointDiameterMm"]').matches(':hover')]`), [true, false]);
+      // Swatches show no idle outline and hover with the shared 1px field hover line, like slider thumbs.
+      const swatchStyle = `(()=>{const c=getComputedStyle(document.querySelector('[data-color="appearance.jointColorLinear"]'));return [c.outlineStyle,c.outlineWidth,c.boxShadow];})()`;
+      assert.deepEqual(await evaluate(swatchStyle), ['none', '0px', 'none'], 'idle swatch has no outline');
+      const swatchPoint = await evaluate(`(()=>{const r=document.querySelector('[data-color="appearance.jointColorLinear"]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...swatchPoint });
+      assert.deepEqual((await evaluate(swatchStyle)).slice(0, 2), ['solid', '1px'], 'hovered swatch shows the 1px hover line');
       const menuFor = (key: string) => `(()=>{const s=document.querySelector('[data-color="appearance.${key}"]'),r=s.getBoundingClientRect();s.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+2,clientY:r.top+2}));return !document.querySelector('[data-color-action="copy"]').closest('.menu').hidden;})()`;
       assert.equal(await evaluate(menuFor('jointColorLinear')), true, 'right-click opens the color menu');
       await evaluate(`document.querySelector('[data-color-action="copy"]').click()`); await sleep(50);
