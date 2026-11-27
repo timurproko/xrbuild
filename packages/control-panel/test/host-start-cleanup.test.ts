@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import type { ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -120,6 +120,51 @@ test('late handoff failure cannot stop or overwrite a replacement launch', { tim
   assert.equal(runner.state().warning, null);
   assert.ok(!runner.logLines().some(line => line.includes('late handoff failure')));
 });
+
+for (const mode of ['built', 'dev'] as const) {
+  test(`late handoff failure cannot overwrite a replacement ${mode} preview`, { timeout: 10000 }, async t => {
+    const handed = deferred<number>(), fail = deferred();
+    const killed: number[] = [];
+    const { runner, req, children } = await fixture(t, async pid => { killed.push(pid); });
+    t.after(() => { fail.resolve(); });
+    const spawnChild = () => {
+      const child = spawn(process.execPath, req.hostArgs, { stdio: 'ignore', windowsHide: true });
+      children.set(child, new Promise(resolve => child.once('close', () => resolve())));
+      return child;
+    };
+    runner.reserveAcquisition = async () => ({ ticket: 'fake-ticket',
+      handoff: async pid => { handed.resolve(pid); await fail.promise; throw new Error('late handoff failure'); }, close: async () => {} });
+    const rejected = assert.rejects(runner.start(req), /late handoff failure/);
+    process.kill(await handed.promise);
+    await Promise.all(children.values());
+    let dev: ChildProcess | null = null;
+    const devUrl = 'http://127.0.0.1:54321/';
+    (runner as any).startDev = async () => {
+      dev = spawnChild();
+      (runner as any).dev = dev;
+      (runner as any).set({ devUrl });
+      return devUrl;
+    };
+    await runner.startPreview({ projectId: 'replacement-preview', projectDir: req.projectDir }, mode, async url => {
+      assert.equal(url, mode === 'dev' ? devUrl : null);
+      return spawnChild();
+    });
+    const state = runner.state();
+    const preview = (runner as any).preview as ChildProcess;
+    fail.resolve();
+    await rejected;
+    assert.deepEqual(runner.state(), state, 'late native failure must preserve the entire preview state');
+    assert.equal(runner.busy, true);
+    assert.equal(runner.projectId, 'replacement-preview');
+    assert.equal((runner as any).preview, preview);
+    assert.equal((runner as any).dev, dev);
+    assert.deepEqual(killed, [], 'the replacement dev server must not receive a stop request');
+    process.kill(preview.pid!, 0);
+    if (dev) process.kill((dev as ChildProcess).pid!, 0);
+    assert.ok(!runner.logLines().some(line => line.includes('late handoff failure')));
+    await assert.rejects(runner.start(req), /already running/);
+  });
+}
 
 test('late reservation cancellation cannot overwrite a replacement launch', { timeout: 10000 }, async t => {
   const reserving = deferred(), release = deferred();

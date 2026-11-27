@@ -332,6 +332,8 @@ export class HostRunner extends EventEmitter {
   /** Starts and owns one standalone browser preview, including its optional dev server. */
   async startPreview(req: PreviewRequest, mode: RunMode, launch: (devUrl: string | null) => Promise<ChildProcess>): Promise<void> {
     if (this.busy) throw new Error(`${this.s.projectId} is already running; stop it first`);
+    // Preview replacement also retires any native startup still awaiting handoff.
+    this.startEpoch++;
     this.log = [];
     this.set({ projectId: req.projectId, mode, flat: !!req.flat, switchable: false, switchView: false, cameraAvailable: false, cameraView: false, phase: 'starting', pid: null, startedMs: Date.now(), channelUrl: null, devUrl: null, status: null, warning: null, foreign: [] });
     try {
