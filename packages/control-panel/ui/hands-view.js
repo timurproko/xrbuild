@@ -20,7 +20,21 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.DOLLY };
   scene.add(new THREE.HemisphereLight('#e8f4ff', '#162338', 2.8));
   const light = new THREE.DirectionalLight('#ffffff', 3); light.position.set(.2, .4, .6); scene.add(light);
-  const grid = new THREE.GridHelper(.6, 12); grid.rotation.x = Math.PI / 2; grid.position.z = -.02; scene.add(grid);
+  // Endless grid in the panel plane (z = 0, the monitor's plane): 5 cm cells drawn in a shader, fading with distance.
+  const grid = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: { color: { value: new THREE.Color('#ffffff') }, opacity: { value: .5 }, cell: { value: .05 }, fade: { value: 2 }, focus: { value: new THREE.Vector3() } },
+    vertexShader: 'varying vec3 vWorld; void main() { vec4 world = modelMatrix * vec4(position, 1.0); vWorld = world.xyz; gl_Position = projectionMatrix * viewMatrix * world; }',
+    fragmentShader: `uniform vec3 color; uniform float opacity; uniform float cell; uniform float fade; uniform vec3 focus; varying vec3 vWorld;
+      void main() {
+        vec2 c = vWorld.xy / cell, w = fwidth(c), g = abs(fract(c - .5) - .5) / w;
+        float line = 1.0 - min(min(g.x, g.y), 1.0);
+        float a = line * opacity * (1.0 - smoothstep(fade * .35, fade, length(vWorld.xy - focus.xy)));
+        if (a < .004) discard;
+        gl_FragColor = vec4(color, a);
+      }`,
+  }));
+  grid.frustumCulled = false; grid.renderOrder = -1; scene.add(grid);
   // The selected monitor as a frame in the panel plane: hands are in panel metres (x right, y up, z toward the
   // viewer, origin at the screen), so the frame shows where hands are relative to the screen.
   const monitor = new THREE.Group(); monitor.visible = false; scene.add(monitor);
@@ -64,14 +78,10 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
       ingress.profile = next; visual.applyAppearance(next.appearance); profile = next; stream.setReady(true); resolve(true);
     } }; });
   }
-  let gridColor = '';
   function theme() {
     const css = getComputedStyle(document.documentElement);
     scene.background = new THREE.Color(css.getPropertyValue('--log-bg').trim());
     tests.theme(css.getPropertyValue('--accent').trim());
-    for (const material of Array.isArray(grid.material) ? grid.material : [grid.material]) {
-      material.color.set(gridColor || css.getPropertyValue('--line').trim()); material.transparent = true; material.opacity = gridColor ? 1 : .5;
-    }
   }
   theme(); const observer = new MutationObserver(theme); observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
   const system = matchMedia('(prefers-color-scheme: dark)'); system.addEventListener('change', theme);
@@ -96,6 +106,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     if (closed) return;
     if (pendingProfile) { const pending = pendingProfile; pendingProfile = null; pending.apply(); }
     controls.update();
+    grid.material.uniforms.focus.value.copy(controls.target); grid.material.uniforms.fade.value = Math.max(1, camera.position.distanceTo(controls.target) * 2.5);
     stream.tick();
     panel.update({ mode: 'world', center: new THREE.Vector3(), scale: 1 }, camera);
     currentHands = stream.active ? input.sample(now) : [];
@@ -137,8 +148,9 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     setViewOptions(options) { grid.visible = options.includes('grid'); axes.visible = options.includes('axes'); monitorShown = options.includes('monitor'); monitor.visible = monitorShown && monitor.children.length > 0; tests.setVisible(options.includes('object')); },
     setMonitor,
     setObject(kind) { return tests.setShape(kind); },
-    /** A custom grid color, or '' for the theme's line color. */
-    setGridColor(color) { gridColor = color || ''; theme(); },
+    setObjectPosition(x, y, z) { tests.setPosition(x, y, z); },
+    /** Grid line color (hex) and opacity (0-1). */
+    setGrid({ color, opacity }) { if (color) grid.material.uniforms.color.value.set(color); if (Number.isFinite(opacity)) grid.material.uniforms.opacity.value = opacity; },
     dispose() {
       if (closed) return; closed = true; pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; stream.dispose(); tests.dispose(); clearLegacy(); cancelAnimationFrame(frameId); resize.disconnect(); observer.disconnect(); system.removeEventListener('change', theme); controls.dispose();
       scene.traverse(object => { object.geometry?.dispose(); for (const material of object.material ? Array.isArray(object.material) ? object.material : [object.material] : []) material.dispose(); });

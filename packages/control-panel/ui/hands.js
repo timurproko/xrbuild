@@ -1,5 +1,5 @@
 import { mountToolNavigation, isPanelUnavailable } from './navigation.js';
-import { openColorPopover } from './design-system.js';
+import { openColorPopover, installNumberSteppers } from './design-system.js';
 import { mountHandsShell } from './hands-shell.js';
 import { mountProviderRecorder } from './hands-recorder.js';
 import { mountHandsPostprocessing } from './hands-postprocessing.js';
@@ -139,16 +139,36 @@ async function loadMonitors() {
 const stored = key => { try { return localStorage.getItem(key) ?? ''; } catch { return ''; } };
 const store = (key, value) => { try { localStorage.setItem(key, value); } catch { /* Storage may be blocked. */ } };
 function mountViewPreferences() {
-  const object = $('hands-object'), swatch = $('hands-grid-color'), label = $('hands-grid-color-value');
+  const object = $('hands-object'), swatch = $('hands-grid-color');
   object.value = ['cube', 'sphere', 'suzanne'].includes(stored('xrb.hands.object')) ? stored('xrb.hands.object') : 'cube';
   object.addEventListener('change', () => { store('xrb.hands.object', object.value); void view?.setObject(object.value); });
   void view?.setObject(object.value);
-  const themeLine = () => { const probe = document.createElement('span'); probe.style.color = 'var(--line)'; document.body.append(probe); const rgb = getComputedStyle(probe).color.match(/\d+/g) ?? ['0', '0', '0']; probe.remove(); return '#' + rgb.slice(0, 3).map(n => Number(n).toString(16).padStart(2, '0')).join(''); };
-  const show = color => { swatch.style.backgroundColor = color || themeLine(); label.textContent = color || 'Theme'; };
-  const apply = color => { view?.setGridColor(color); show(color); };
-  apply(/^#[0-9a-f]{6}$/i.test(stored('xrb.hands.gridColor')) ? stored('xrb.hands.gridColor') : '');
-  swatch.addEventListener('click', () => openColorPopover(swatch, { value: stored('xrb.hands.gridColor') || themeLine(),
-    onInput: color => apply(color), onClose: color => { store('xrb.hands.gridColor', color); apply(color); } }));
+  const opacity = $('hands-grid-opacity'), range = $('hands-grid-opacity-range');
+  const savedOpacity = Number.parseFloat(stored('xrb.hands.gridOpacity'));
+  let gridColor = /^#[0-9a-f]{6}$/i.test(stored('xrb.hands.gridColor')) ? stored('xrb.hands.gridColor') : '#ffffff';
+  let gridOpacity = Number.isFinite(savedOpacity) ? Math.min(1, Math.max(0, savedOpacity)) : .5;
+  const applyGrid = () => { swatch.style.backgroundColor = gridColor; opacity.value = String(gridOpacity); range.value = String(gridOpacity); view?.setGrid({ color: gridColor, opacity: gridOpacity }); };
+  const setOpacity = (value, save) => { const next = Number.parseFloat(value); if (!Number.isFinite(next)) return; gridOpacity = Math.min(1, Math.max(0, next)); applyGrid(); if (save) store('xrb.hands.gridOpacity', String(gridOpacity)); };
+  range.addEventListener('input', () => setOpacity(range.value, true));
+  opacity.addEventListener('input', () => setOpacity(opacity.value, false));
+  opacity.addEventListener('change', () => setOpacity(opacity.value, true));
+  applyGrid();
+  // Object position (mm, panel space; default the screen centre 0, 0, 0).
+  let position = { x: 0, y: 0, z: 0 };
+  try { const saved = JSON.parse(stored('xrb.hands.objectPosition') || 'null'); if (saved) for (const axis of ['x', 'y', 'z']) if (Number.isFinite(saved[axis])) position[axis] = Math.min(300, Math.max(-300, saved[axis])); } catch { /* Defaults stay. */ }
+  const applyPosition = () => {
+    for (const axis of ['x', 'y', 'z']) { $(`hands-object-${axis}`).value = String(position[axis]); $(`hands-object-${axis}-range`).value = String(position[axis]); }
+    view?.setObjectPosition(position.x / 1000, position.y / 1000, position.z / 1000);
+  };
+  for (const field of document.querySelectorAll('[data-object-axis]')) {
+    const update = save => { const value = Number.parseFloat(field.value); if (!Number.isFinite(value)) return; position[field.dataset.objectAxis] = Math.min(300, Math.max(-300, value)); applyPosition(); if (save) store('xrb.hands.objectPosition', JSON.stringify(position)); };
+    field.addEventListener('input', () => update(field.type === 'range'));
+    field.addEventListener('change', () => update(true));
+  }
+  applyPosition();
+  installNumberSteppers($('hands-setup'));
+  swatch.addEventListener('click', () => openColorPopover(swatch, { value: gridColor,
+    onInput: color => { gridColor = color; applyGrid(); }, onClose: color => { gridColor = color; store('xrb.hands.gridColor', color); applyGrid(); } }));
 }
 const disposeShell = mountHandsShell({ resetView: () => view?.resetView(), setViewOptions: options => view?.setViewOptions(options) });
 const postprocessing = mountHandsPostprocessing($('hands-postprocessing-root'));

@@ -3,7 +3,7 @@ import { PinchTarget, GrabTarget } from '/sdk/interaction/core/targets.js';
 
 /** Shapes the viewer can show as its single centre object. */
 export const VIEW_OBJECTS = { cube: 'Cube', sphere: 'Sphere', suzanne: 'Suzanne' };
-const START = new THREE.Vector3(0, 0, .15), SIZE = .05;
+const START = new THREE.Vector3(0, 0, 0), SIZE = .05;
 let suzanne = null;
 /** The Suzanne test mesh (Blender's free test model), stored centred with a 1 m largest extent. */
 async function suzanneGeometry() {
@@ -57,6 +57,8 @@ export function createHandTestTargets(scene, interaction, onFeedback = () => {})
     setActive(value) { active = value; enable(); },
     setVisible(value) { shown = value; object.visible = value; enable(); },
     setShape,
+    /** Rest position in panel metres; the object returns there on reset. */
+    setPosition(x, y, z) { START.set(x, y, z); if (!targets.some(target => target.state.held)) object.position.copy(START); },
     theme(color) { object.material.color.set(color); },
     reset,
     dispose() { targets.forEach(t => interaction.remove(t)); scene.remove(object); object.geometry.dispose(); object.material.dispose(); },
