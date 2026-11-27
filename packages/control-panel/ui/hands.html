@@ -32,8 +32,8 @@
         <!-- Present and disabled from the first paint; live controls adopt it once loaded. -->
         <div id="hands-session-actions" class="hands-session-actions"><button type="button" id="hands-start-stop" class="primary" disabled>Start</button></div>
         <span class="hands-tool-separator" aria-hidden="true"></span>
-        <div class="dropdown" data-multi="true" data-summary="View" data-options="grid|axes" data-labels='{"grid":"Grid","axes":"Axes"}'>
-          <input id="hands-view-options" type="hidden" value='["grid","axes"]'>
+        <div class="dropdown" data-multi="true" data-summary="View" data-options="grid|axes|monitor" data-labels='{"grid":"Grid","axes":"Axes","monitor":"Monitor"}'>
+          <input id="hands-view-options" type="hidden" value='["grid","axes","monitor"]'>
           <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="View options" data-no-tooltip>View</button>
         </div>
         <button id="hands-view-reset" type="button" aria-label="Reset view" data-no-tooltip>Reset</button>
@@ -53,6 +53,7 @@
       <div id="hands-setup" class="xrb-sidebar-content xrb-stack hands-source">
         <form id="hands-form" class="xrb-stack">
           <label class="xrb-field-label" for="hands-provider">Skeleton provider<select id="hands-provider" name="provider" aria-label="Skeleton provider" disabled></select></label>
+          <label class="xrb-field-label" for="hands-monitor">Monitor<select id="hands-monitor" aria-label="Monitor" disabled><option value="">None</option></select></label>
         </form>
         <p id="hands-message" class="field-error" role="alert" hidden></p>
         <div class="xrb-button-row" id="hands-source-recovery" hidden><button id="hands-source-retry" class="small" type="button">Retry</button><button id="hands-source-discard" class="small" type="button" hidden>Use saved</button></div>

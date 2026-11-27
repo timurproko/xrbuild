@@ -110,6 +110,24 @@ $('hands-form').addEventListener('submit', event => event.preventDefault());
 $('hands-source-retry').addEventListener('click', () => { if (sourceEdit) void saveSource(true); else { message(); void load(); } });
 $('hands-source-discard').addEventListener('click', () => { sourceEdit = sourceConflict = null; message(); void load(); });
 const navigation = mountToolNavigation($('hands-menu-button'), $('hands-menu'), { origin: location.origin, current: 'hands' });
+// Monitor frame: pick a monitor in Setup (remembered in this browser); its EDID size draws the frame.
+const MONITOR_KEY = 'xrb.hands.monitor';
+async function loadMonitors() {
+  const select = $('hands-monitor');
+  let monitors = [];
+  try { monitors = (await (await fetch('/api/monitors', { cache: 'no-store' })).json()).monitors ?? []; } catch { /* No monitor list: the frame stays off. */ }
+  let saved = ''; try { saved = localStorage.getItem(MONITOR_KEY) ?? ''; } catch { /* Storage may be blocked. */ }
+  const sized = monitors.filter(m => m.widthMm && m.heightMm);
+  if (!monitors.some(m => m.device === saved && m.widthMm)) saved = (sized.find(m => m.primary) ?? sized[0])?.device ?? '';
+  select.replaceChildren(new Option('None', ''), ...monitors.map(m => {
+    const option = new Option(m.widthMm ? `${m.name} · ${m.widthMm} × ${m.heightMm} mm` : `${m.name} · size unknown`, m.device);
+    option.disabled = !m.widthMm; return option;
+  }));
+  select.value = saved; select.disabled = !sized.length;
+  const apply = () => { view?.setMonitor(monitors.find(m => m.device === select.value) ?? null); };
+  select.addEventListener('change', () => { try { localStorage.setItem(MONITOR_KEY, select.value); } catch { /* Storage may be blocked. */ } apply(); });
+  apply();
+}
 const disposeShell = mountHandsShell({ resetView: () => view?.resetView(), setViewOptions: options => view?.setViewOptions(options) });
 const postprocessing = mountHandsPostprocessing($('hands-postprocessing-root'));
 try {
@@ -121,8 +139,9 @@ try {
       if (status.phase === 'idle') { profileKey = ''; $('hands-tracking-fps').textContent = '—'; }
     },
   });
-  // Grid and axes follow the View menu from the first frame (both on by default).
+  // Grid, axes and the monitor frame follow the View menu from the first frame (all on by default).
   view.setViewOptions(JSON.parse($('hands-view-options').value));
+  void loadMonitors();
 } catch (error) { $('hands-view-error').hidden = false; $('hands-view-error').textContent = `3D view unavailable: ${error.message}`; }
 // Retained integration API only: no recorder nodes or legacy tools enter the simplified page.
 const recorder = mountProviderRecorder({ actions: document.createElement('div'), status: document.createElement('p'), view,

@@ -11,6 +11,9 @@ export interface Monitor {
   height: number;
   internal?: boolean;
   mirrored?: boolean;
+  /** Physical image size from the monitor's EDID, when it reports one. */
+  widthMm?: number;
+  heightMm?: number;
 }
 
 /** Friendly presentation never changes the device identity, order or saved numeric selection. */
@@ -26,7 +29,9 @@ export function monitorNames(value: unknown): Monitor[] {
         || /^(?:generic(?: pnp| non-pnp)? monitor|default monitor|monitor)$/i.test(reported);
       const name = entry.mirrored === true ? 'Mirrored displays' : entry.internal === true ? 'Built-in display'
         : !generic ? reported : entry.primary ? 'Primary display' : `Display ${entry.index + 1}`;
-      return {...entry, name};
+      const physical = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 50 && v <= 5000;
+      const {widthMm, heightMm, ...rest} = entry;
+      return {...rest, name, ...(physical(widthMm) && physical(heightMm) ? {widthMm, heightMm} : {})};
     });
 }
 

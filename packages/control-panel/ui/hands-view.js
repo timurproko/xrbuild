@@ -20,6 +20,19 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   scene.add(new THREE.HemisphereLight('#e8f4ff', '#162338', 2.8));
   const light = new THREE.DirectionalLight('#ffffff', 3); light.position.set(.2, .4, .6); scene.add(light);
   const grid = new THREE.GridHelper(.6, 12); grid.rotation.x = Math.PI / 2; grid.position.z = -.02; scene.add(grid);
+  // The selected monitor as a frame in the panel plane: hands are in panel metres (x right, y up, z toward the
+  // viewer, origin at the screen), so the frame shows where hands are relative to the screen.
+  const monitor = new THREE.Group(); monitor.visible = false; scene.add(monitor);
+  let monitorShown = true;
+  function setMonitor(value) {
+    for (const object of [...monitor.children]) { object.geometry.dispose(); object.material.dispose(); monitor.remove(object); }
+    if (!value?.widthMm || !value?.heightMm) { monitor.visible = false; monitorSize = null; return; }
+    const w = value.widthMm / 1000, h = value.heightMm / 1000, color = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#86a4ff';
+    const corners = [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]].map(([x, y]) => new THREE.Vector3(x, y, 0));
+    monitor.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(corners), new THREE.LineBasicMaterial({ color })));
+    monitor.add(new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .06, depthWrite: false, side: THREE.DoubleSide })));
+    monitor.visible = monitorShown; monitorSize = { w, h }; resetView();
+  }
   // Axes appear as an orientation widget in the bottom-left corner (View › Axes), not at the origin.
   const axes = createAxisGizmo(); axes.visible = false;
   const panel = new PanelFrame(), input = new HandInput(), ingress = new HandFrameIngress(input, 'native'), visual = new HandVisual(), interaction = new Interactor();
@@ -63,7 +76,16 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   let sized = false;
   const fit = () => { const { width, height } = viewport.getBoundingClientRect(); sized = width > 0 && height > 0; if (!sized) return; renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); };
   fit(); const resize = new ResizeObserver(fit); resize.observe(viewport);
-  function resetView() { camera.position.set(0, .02, .72); controls.target.set(0, 0, .04); controls.update(); }
+  // Reset frames the selected monitor (with a margin) when there is one, else the default hand workspace.
+  let monitorSize = null;
+  function resetView() {
+    let distance = .72;
+    if (monitorSize) {
+      const half = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+      distance = Math.min(controls.maxDistance, Math.max(controls.minDistance, 1.15 * Math.max(monitorSize.h / 2 / half, monitorSize.w / 2 / (half * camera.aspect))));
+    }
+    camera.position.set(0, .02, distance); controls.target.set(0, 0, monitorSize ? 0 : .04); controls.update();
+  }
   resetView();
   let frameId, closed = false, ticks = 0, start = performance.now();
   function render(now) {
@@ -108,7 +130,8 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     },
     clearLegacy() { clearLegacy(); if (!stream.active) onStatus({ phase: 'idle', hands: null }); },
     resetView,
-    setViewOptions(options) { grid.visible = options.includes('grid'); axes.visible = options.includes('axes'); },
+    setViewOptions(options) { grid.visible = options.includes('grid'); axes.visible = options.includes('axes'); monitorShown = options.includes('monitor'); monitor.visible = monitorShown && monitor.children.length > 0; },
+    setMonitor,
     dispose() {
       if (closed) return; closed = true; pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; stream.dispose(); tests.dispose(); clearLegacy(); cancelAnimationFrame(frameId); resize.disconnect(); observer.disconnect(); system.removeEventListener('change', theme); controls.dispose();
       scene.traverse(object => { object.geometry?.dispose(); for (const material of object.material ? Array.isArray(object.material) ? object.material : [object.material] : []) material.dispose(); });

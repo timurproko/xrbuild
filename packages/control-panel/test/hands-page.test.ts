@@ -32,7 +32,7 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.doesNotMatch(markup, /hands-view-empty/, 'the viewer carries no centre text');
   assert.match(markup, /data-tab="log"[^>]*>Log<\/button>/);
   assert.match(markup, /<div id="hands-log-panel"[^>]*data-tab-panel="log" hidden>\s*<div id="hands-log-empty" class="empty-note">No log entries yet\.<\/div>\s*<pre id="hands-log" class="log"/, 'diagnostics live in a Log tab, not in Setup');
-  assert.match(markup, /id="hands-view-options" type="hidden" value='\["grid","axes"\]'/, 'axes show by default');
+  assert.match(markup, /id="hands-view-options" type="hidden" value='\["grid","axes","monitor"\]'/, 'axes and the monitor frame show by default');
   const viewSource = await fs.readFile(path.join(ui, 'hands-view.js'), 'utf8'), gizmo = await fs.readFile(path.join(ui, 'hands-axis-gizmo.js'), 'utf8');
   assert.match(viewSource, /renderer\.render\(scene, camera\); axes\.render\(renderer, camera\);/, 'axes render as a corner widget after the scene');
   assert.doesNotMatch(viewSource, /AxesHelper/);
@@ -41,6 +41,10 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(gizmo, /camera\.quaternion\.copy\(viewCamera\.quaternion\)/, 'the widget turns with the view camera');
   assert.match(gizmo, /renderer\.getViewport\(full\)[\s\S]*renderer\.setViewport\(full\);/, 'the main viewport is restored in the same CSS units');
   assert.doesNotMatch(gizmo, /getPixelRatio/, 'no pixel-ratio rescaling that would shrink the main view on scaled displays');
+  assert.match(markup, /<select id="hands-monitor" aria-label="Monitor"/, 'Setup chooses the monitor to frame');
+  assert.match(markup, /data-options="grid\|axes\|monitor/, 'View toggles the monitor frame');
+  assert.match(viewSource, /new THREE\.LineLoop\(/, 'the monitor draws as a frame in the panel plane');
+  assert.match(await fs.readFile(path.join(ui, '..', 'src', 'list-monitors.ps1'), 'utf8'), /function Get-EdidSizeMm/, 'physical size comes from the monitor EDID');
   assert.match(live, /for \(const label of \['Start', 'Stop'\]\)/, 'Start keeps one width for every label');
   assert.match(live, /button\.id = 'hands-start-stop'; button\.className = 'primary';/);
   assert.doesNotMatch(live, /Press Start to track the saved provider/);
