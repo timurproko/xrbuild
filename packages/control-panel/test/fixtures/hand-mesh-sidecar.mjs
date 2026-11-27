@@ -28,6 +28,7 @@ process.stdin.on('data', chunk => {
     }
     if (m.type !== 'frame') process.exit(2);
     if (settings.mode === 'crash') process.exit(7);
+    if (start?.version === 2 && !start.capabilities.includes('final-pose-observations-v1') && m.hands.some(h => h.observations !== undefined)) process.exit(8);
     const values = { ...settings }; // Work snapshots never relabel old frames after configuration.
     setTimeout(() => {
       const count = values.vertices ?? 3;

@@ -77,7 +77,7 @@ test('owner process death closes the private pipe and the real child exits', asy
     while (!run.stage?.owned?.pid) await new Promise(resolve=>setTimeout(resolve,10));
     console.log(run.stage.owned.pid);`);
   const owner = spawn(process.execPath, [script], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-  t.after(async () => { owner.kill(); if (childPid) { try { process.kill(childPid); } catch {} } await fs.rm(root, { recursive: true, force: true }); });
+  t.after(async () => { owner.kill(); await fs.rm(root, { recursive: true, force: true }); });
   childPid = await new Promise<number>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('owner startup timeout')), 5000);
     owner.stdout.once('data', bytes => { clearTimeout(timer); resolve(Number(bytes.toString().trim())); });

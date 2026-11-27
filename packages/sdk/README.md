@@ -187,6 +187,8 @@ of skeleton grace. `handVisual:false` suppresses both standard drawings without 
 are disposed on replacement/stop. Preview, publication, offline packages and unmanaged runs remain skeleton-only;
 no mesh runtime credential is portable. Rebuild the host and app SDK bundles to use this optional desktop path.
 
+Mesh on/off is the post-processing selection, independent of skeleton Joints/Bones switches. Neither automatically hides the other. The v2 SDK fences geometry/topology on settings-generation changes and exposes `xrb.handMeshState` separately from `xrb.handMeshStatus`: saved/requested, processor-applied and drawing generations are distinct. Preparing/repreparing uses the skeleton with the person's existing appearance choices and never resets a held interaction. Legacy peers negotiate only their supported contract.
+
 - `xrb.currentHands`: tracked hands for this frame, smoothed (One Euro filter) and predicted to
   display time. Keypoints are in panel metres, in the common 21-point hand landmark order (`KP.INDEX_TIP` = 8, ...).
   Each hand also has `tip`, `pinchPoint`, `pinching`, `pinchStrength` (0 open .. 1 pinched, for

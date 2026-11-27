@@ -31,6 +31,7 @@ export class HandMeshRun {
   private validation = new AbortController();
   private closed = false;
   private stopping: Promise<void> | null = null;
+  private openingReject: (() => void) | null = null;
   private current: Work | null = null;
   private pending: Work | null = null;
   private epoch = '';
@@ -40,6 +41,7 @@ export class HandMeshRun {
   private lastSequence = -1;
   private lastRequest = 0;
   private deliveredGeneration: number | null = null;
+  private deliveredAt = -Infinity;
   private appStartedAtLeastOnce = false;
   private openedAt = 0;
   private startupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -56,7 +58,7 @@ export class HandMeshRun {
     this.server = http.createServer((req, res) => { void this.request(req, res).catch(() => { if (!res.headersSent) res.writeHead(400); res.end(); }); });
     this.server.requestTimeout = 3000; this.server.headersTimeout = 3000;
   }
-  state(): MeshState { return { ...this.data }; }
+  state(): MeshState { return { ...this.data, drawingGeneration: performance.now() - this.deliveredAt <= 33 ? this.data.drawingGeneration : null }; }
   private setStatus(value: string) { if (this.status !== value) { this.status = value; this.changed(value); } }
   private later(fn: () => void, ms: number) {
     const timer = setTimeout(() => { this.timers.delete(timer); fn(); }, ms); this.timers.add(timer); return timer;
@@ -77,7 +79,16 @@ export class HandMeshRun {
   async start(plugin: HandMeshPlugin | null, settings: unknown = {}, savedRevision: string | null = null): Promise<MeshRuntime> {
     if (this.descriptor || this.closed) throw new Error('Mesh run already started or stopped');
     if (plugin && (!plugin.available || !plugin.program)) throw new Error('Mesh plugin unavailable');
-    await new Promise<void>((resolve, reject) => { this.server.once('error', reject); this.server.listen(0, '127.0.0.1', () => { this.server.removeListener('error', reject); resolve(); }); });
+    if (plugin) { handMeshSettings(plugin.declaration, settings); meshPreparationAllowance(plugin.declaration); }
+    await new Promise<void>((resolve, reject) => {
+      this.openingReject = () => reject(new Error('Mesh start cancelled'));
+      const error = (cause: Error) => { this.openingReject = null; reject(cause); };
+      this.server.once('error', error);
+      this.server.listen(0, '127.0.0.1', () => {
+        this.server.removeListener('error', error); this.openingReject = null;
+        if (this.closed) { this.server.close(); reject(new Error('Mesh start cancelled')); } else resolve();
+      });
+    });
     if (this.closed) { this.server.close(); throw new Error('Mesh start cancelled'); }
     const address = this.server.address(); if (!address || typeof address === 'string') throw new Error('No mesh endpoint');
     const descriptor: MeshRuntime = { version: 1, url: `http://127.0.0.1:${address.port}`, token: randomBytes(32).toString('hex') }; this.descriptor = descriptor;
@@ -122,7 +133,7 @@ export class HandMeshRun {
         if (this.closed) return;
         let stage = this.stage;
         if (stage && (this.modernConsumer === false || stage.plugin.declaration.version === 1) && target.plugin) {
-          this.data.phase = 'Failed'; this.data.reason = 'Saved; rebuild/relaunch for live mesh configuration'; this.setStatus(`Skeleton fallback: ${this.data.reason}`); continue;
+          this.data.phase = this.modernConsumer === false ? 'Ready' : 'Failed'; this.data.reason = 'Saved; rebuild/relaunch for live mesh configuration'; this.setStatus(`Skeleton fallback: ${this.data.reason}`); continue;
         }
         const same = stage && target.plugin && stage.plugin.owner === target.plugin.owner && stage.plugin.id === target.plugin.id
           && JSON.stringify(stage.plugin.declaration) === JSON.stringify(target.plugin.declaration) && !stage.retired;
@@ -197,7 +208,11 @@ export class HandMeshRun {
     if (!stage?.ready || stage.retired || this.current || !this.pending || this.closed || this.data.phase !== 'Ready') return;
     this.current = this.pending; this.pending = null; const work = this.current;
     if (stage.plugin.declaration.version === 2) {
-      work.frame = { ...work.frame, version: 2, runId: this.runId, settingsGeneration: stage.generation };
+      const f = work.frame;
+      work.frame = { type: 'frame', epoch: f.epoch, sequence: f.sequence, revision: f.revision, sentMs: f.sentMs, sampleMs: f.sampleMs,
+        version: 2, runId: this.runId, settingsGeneration: stage.generation,
+        hands: f.hands.map(({ id, handedness, keypoints, observations }) => ({ id, handedness, keypoints,
+          ...(stage.plugin.declaration.capabilities?.includes('final-pose-observations-v1') ? { observations } : {}) })) };
     } else {
       const f = work.frame;
       work.frame = { type: 'frame', epoch: f.epoch, sequence: f.sequence, revision: f.revision, sentMs: f.sentMs, sampleMs: f.sampleMs,
@@ -252,9 +267,9 @@ export class HandMeshRun {
         if (!work || work.stage !== stage || result.epoch !== work.frame.epoch || result.sequence !== work.frame.sequence || result.revision !== work.frame.revision
           || result.meshes.some(m => !work.frame.hands.some(h => h.id === m.id))) throw new Error('association');
         if (stage.plugin.declaration.version === 2 && (result.version !== 2 || result.runId !== this.runId || result.settingsGeneration !== work.frame.settingsGeneration)) throw new Error('settings association');
-        if (result.epoch === this.epoch && performance.now() - work.at <= 33 && stage.generation === this.data.requestedGeneration && this.data.phase === 'Ready') {
-          this.setStatus('Running');
-          if (result.meshes.length) this.deliveredGeneration = stage.generation;
+        if (result.epoch === this.epoch && performance.now() - work.at <= 33 && (stage.generation === this.data.requestedGeneration || this.modernConsumer === false) && this.data.phase === 'Ready') {
+          if (!this.data.reason) this.setStatus('Running');
+          if (result.meshes.length) { this.deliveredGeneration = stage.generation; this.deliveredAt = work.at; }
           this.reply(work, encodeMeshResult({ ...result, ...(this.modernConsumer ? { version: 2 as const, runId: this.runId, settingsGeneration: stage.generation } : { version: undefined }) }));
         } else { this.setStatus(this.data.phase === 'Preparing' ? 'Preparing' : 'Skeleton fallback: mesh is late'); this.reply(work); }
         this.finishWork(); if (!this.pendingTarget) this.pump();
@@ -284,7 +299,8 @@ export class HandMeshRun {
     if (req.url !== '/frame' || frame.epoch !== this.epoch || frame.sequence <= this.lastSequence) { res.writeHead(409); res.end(); return; }
     this.lastSequence = frame.sequence; this.lastRequest = performance.now();
     if (this.modernConsumer && (frame.version !== 2 || frame.runId !== this.runId || frame.settingsGeneration !== this.data.requestedGeneration)) { this.headers(res); res.writeHead(204); res.end(); return; }
-    this.data.drawingGeneration = this.modernConsumer && frame.drawingGeneration === this.data.appliedGeneration && frame.drawingGeneration === this.deliveredGeneration
+    if (!frame.hands.length) this.deliveredGeneration = null;
+    this.data.drawingGeneration = this.modernConsumer && frame.hands.length > 0 && performance.now() - this.deliveredAt <= 33 && frame.drawingGeneration === this.data.appliedGeneration && frame.drawingGeneration === this.deliveredGeneration
       && frame.drawingGeneration === this.data.requestedGeneration ? frame.drawingGeneration! : null;
     const stage = this.stage;
     if (stage?.plugin.declaration.capabilities?.includes('final-pose-observations-v1') && (!this.modernConsumer || frame.hands.some(h => !h.observations))) this.setStatus('Skeleton fallback: rebuild/relaunch for observation support');
@@ -312,6 +328,7 @@ export class HandMeshRun {
   stop(stopped = true): Promise<void> {
     if (this.stopping) return this.stopping;
     this.closed = true; this.descriptor = null; this.pendingTarget = null; this.validation.abort();
+    this.openingReject?.(); this.openingReject = null;
     if (this.ack) this.ack.reject(new Error('Mesh stopped'));
     for (const t of this.timers) clearTimeout(t); this.timers.clear();
     this.reply(this.current); this.reply(this.pending); this.pending = null; this.finishWork();

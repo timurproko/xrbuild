@@ -31,6 +31,22 @@ async function mesh(f: Awaited<ReturnType<typeof fixture>>, extra = {}) {
   for (let i = 0; i < 40; i++) { const r = await f.request('/frame', extra); if (r.status === 200) return decodeMeshResult(new Uint8Array(await r.arrayBuffer())); await wait(5); }
   assert.fail(f.run.status);
 }
+test('Stop before gateway listen completion rejects startup without leaving an endpoint', async () => {
+  const run = new HandMeshRun(() => ['https://app.local']);
+  const rejection = assert.rejects(run.start(null), /cancelled/);
+  await run.stop(); await rejection; await wait(10);
+  assert.equal(run.server.listening, false); assert.equal(run.state().phase, 'Stopped');
+});
+test('late launch validation completion cannot revive a stopped run or spawn a processor', async () => {
+  let release!: (value: { program: string; cwd: string }) => void;
+  const p = { ...plugin(), launch: () => new Promise<{ program: string; cwd: string }>(resolve => { release = resolve; }) };
+  const run = new HandMeshRun(() => ['https://app.local']);
+  try {
+    await run.start(p); await wait(0); assert.ok(release);
+    await run.stop(); release({ program: process.execPath, cwd: process.cwd() }); await wait(10);
+    assert.equal((run as any).stage, null); assert.equal(run.state().phase, 'Stopped'); assert.equal(run.server.listening, false);
+  } finally { await run.stop(); }
+});
 test('live configure ACKs settings without restarting, coalesces newest and fences old generations', { skip: !process.env.XRB_TEST_MESH_SUPERVISOR }, async t => {
   const f = await fixture(t), pid = (f.run as any).stage.owned.pid;
   assert.equal((await mesh(f)).meshes[0].positions.length, 9);

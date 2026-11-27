@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { handMeshRegistry } from '../src/hand-mesh-plugins.ts';
+import type { PluginCatalog } from '../src/extension-catalog.ts';
 import { handMeshDeclaration } from '../src/hand-mesh-contract.ts';
 import { meshRuntimeReceipt, resolveMeshRuntime, meshUserRoot, MESH_RUNTIME_RECEIPT } from '../src/hand-mesh-runtime.ts';
 import { MESH_CAPABILITIES } from '../../sdk/src/hand-mesh-protocol.ts';
@@ -38,6 +40,16 @@ test('receipt source, declaration, ownership, completeness and source changes ar
   }
   await fs.writeFile(f.file, JSON.stringify(f.receipt)); await fs.writeFile(path.join(f.sourceRoot, 'source.txt'), 'new source');
   await assert.rejects(resolveMeshRuntime(f.owner, { userRoot: f.userRoot, verify: true }), /changed/);
+});
+test('registry retains passive checked launch and refuses post-discovery mutation', async t => {
+  const f = await fixture(t);
+  const plugin = { key: f.owner.owner, id: 'surface', sourceRoot: f.sourceRoot, meta: { handMesh: f.owner.declaration } };
+  const catalog = { plugins: [plugin], selected: [plugin], prefs: { disabled: [] }, problems: [] } as unknown as PluginCatalog;
+  const registry = await handMeshRegistry(catalog, { userRoot: f.userRoot });
+  assert.equal(registry.plugins[0].available, true); assert.ok(registry.plugins[0].launch);
+  await registry.plugins[0].launch!();
+  await fs.writeFile(path.join(f.runtime, 'worker.exe'), 'mutated-after-discovery');
+  await assert.rejects(registry.plugins[0].launch!(), /changed/);
 });
 test('linked receipt/program, added output, traversing reference and cancelled validation are refused', async t => {
   const f = await fixture(t);

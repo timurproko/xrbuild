@@ -34,6 +34,6 @@
 
 ## 6. Independent mesh appearance and integrated fake-processor regression
 
-- [ ] 6.1 Keep mesh enablement independent of Joints/Bones appearance and remove any dispatch/drawing coupling; verify focused SDK scene tests cover all joint/bone switch combinations with selected mesh, None, unavailable/preparing mesh and handVisual false, preserving bone color/opacity and exactly-once transforms.
-- [ ] 6.2 Exercise the negotiated service/client/standard-drawing path with fake processors across live quality, reprepare, stale generation, replacement, failure and disposal; verify skeleton coordinates, gestures and held interaction traces match the None baseline and every task-owned process is joined.
-- [ ] 6.3 Reconcile neutral docs/spec acceptance with executed targeted results and explicit excluded-context/legacy/native-test limitations; verify the change and PR body validators pass without claiming real processor, camera, Hands viewport, browser/WebXR or offline-package acceptance.
+- [x] 6.1 Keep mesh enablement independent of Joints/Bones appearance and remove any dispatch/drawing coupling; verify focused SDK scene tests cover all joint/bone switch combinations with selected mesh, None, unavailable/preparing mesh and handVisual false, preserving bone color/opacity and exactly-once transforms.
+- [x] 6.2 Exercise the negotiated service/client/standard-drawing path with fake processors across live quality, reprepare, stale generation, replacement, failure and disposal; verify skeleton coordinates, gestures and held interaction traces match the None baseline and every task-owned process is joined.
+- [x] 6.3 Reconcile neutral docs/spec acceptance with executed targeted results and explicit excluded-context/legacy/native-test limitations; verify the change and PR body validators pass without claiming real processor, camera, Hands viewport, browser/WebXR or offline-package acceptance.

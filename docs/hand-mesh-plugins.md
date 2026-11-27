@@ -42,13 +42,37 @@ Declaration/discovery, profile persistence, optional desktop-run supervision and
 
 See [the sidecar protocol](hand-mesh-protocol.md) for packet layout, bounded lifecycle, two-hand capacity and mandatory owner-loss cleanup. Missing/late/failed output visibly returns to the skeleton without delaying or changing interaction. Browser previews, published web builds and offline packages remain unaffected. No processor or model ships with this mechanism.
 
+## Modern declaration example
+
+```json
+{
+  "version": 2,
+  "id": "surface",
+  "label": "Example surface",
+  "program": "bin/worker.exe",
+  "args": [],
+  "runtime": { "id": "surface-runtime", "generation": "g1" },
+  "capabilities": ["final-pose-observations-v1", "live-configure-v1", "preparation-progress-v1"],
+  "preparationTimeoutMs": 60000,
+  "settingsVersion": 1,
+  "settings": [
+    { "key": "quality", "label": "Quality", "type": "select", "default": "detailed", "changeMode": "live",
+      "options": [{ "value": "standard", "label": "Standard" }, { "value": "detailed", "label": "Detailed" }] },
+    { "key": "device", "label": "Execution device", "type": "select", "default": "cpu", "changeMode": "reprepare",
+      "options": [{ "value": "cpu", "label": "CPU" }, { "value": "gpu", "label": "GPU" }] }
+  ]
+}
+```
+
+This is the `handMesh` member, not a complete plugin manifest. Values/labels/available devices belong to the plugin; core does not discover a GPU or install anything. A capability omitted by the declaration is not sent as an optional frame extension. See the protocol for exact ready/configure/ACK/progress fields.
+
 ## Prepared user-home runtimes (declaration v2)
 
 Runtime/model files belong to the **user's** `~/.xrbuild/plugins/<runtime.id>/<runtime.generation>/`, never the selected workspace, `XRB_HOME`, or the plugin source tree. V2 may declare `runtime:{id:"surface-runtime",generation:"g1"}` with a relative `program` inside that generation. The default root is always `os.homedir()/.xrbuild`; only an injected `userRoot` in tests changes it. Discovery and resolution write nothing and never install/download/import/query a program.
 
 An explicit external setup contribution can use `meshRuntimeReceipt(owner, generationRoot)` from `src/hand-mesh-runtime.ts` to construct data, then publish `.xrb-hand-mesh-runtime.json` after its own authorized provisioning. Core provides no installer here. The complete version-one receipt contains `status:"complete"`, qualified `owner`, local mesh `id`, canonical source `source`, source `inputs` SHA-256, parsed `declaration` SHA-256, and `files:[{file,bytes,sha256}]`. The helper computes the canonical inventory; provisioners must retain that order. Source fingerprints exclude root `.git`, `node_modules`, `build`, `bin` and `dist`; immutable runtime inventories exclude only the receipt. Keep writable caches outside the immutable generation.
 
-Discovery reads a bounded receipt and checks the launch file. Launch revalidates source/declaration identity and every inventoried output, refuses unexpected files, checks regular unlinked files/ancestors again, and uses the generation as cwd. Stale/incomplete/foreign/missing/modified/linked state is unavailable with explicit preparation guidance, never PATH fallback. These checks are consistency boundaries for trusted installed code, not a sandbox against a malicious same-user writer. Resolved paths and launch closures stay server-private and out of portable output. Source-contained legacy programs remain supported.
+Discovery reads a bounded receipt and checks the launch file. Launch revalidates source/declaration identity and every inventoried output, refuses unexpected files, checks regular unlinked files/ancestors again, and uses the generation as cwd. Stale/incomplete/foreign/missing/modified/linked state is unavailable with explicit preparation guidance, never PATH fallback. These checks are consistency boundaries for trusted installed code, not a sandbox against a malicious same-user writer. Resolved paths and launch closures stay server-private and out of portable output. Source-contained legacy programs remain supported. Prepared runtime and source trees must be disjoint; use a distinct runtime ID when source is itself installed beneath the user's plugins directory, avoiding source/receipt self-inclusion.
 
 ## Hands component
 

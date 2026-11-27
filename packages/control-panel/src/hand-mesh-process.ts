@@ -28,6 +28,7 @@ export class HandMeshProcess {
   private supervisor: string;
   constructor(supervisor: string, program: string, args: string[], cwd: string) {
     this.supervisor = supervisor;
+    const bootstrap = meshProcessBootstrap(program, args, cwd, this.job); // Validate before any process exists.
     this.child = spawn(supervisor, [], { cwd, windowsHide: true, shell: false, stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '', PYTHONSTARTUP: '', HF_HUB_OFFLINE: '1' } });
     const child = this.child;
@@ -49,7 +50,7 @@ export class HandMeshProcess {
         } catch { child.kill(); }
       }
     });
-    child.stdin.write(meshProcessBootstrap(program, args, cwd, this.job));
+    child.stdin.write(bootstrap);
   }
   static async start(supervisor: string | undefined, program: string, args: string[], cwd: string, cancelled = () => false): Promise<HandMeshProcess> {
     if (process.platform !== 'win32' || !supervisor || !path.isAbsolute(supervisor)) throw new Error('Mesh containment unavailable; Rebuild the host');

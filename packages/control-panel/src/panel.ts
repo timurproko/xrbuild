@@ -221,7 +221,6 @@ export class Panel {
   private nativeHandPolicy: 'off' | 'native' | null = null;
   private meshRun: HandMeshRun | null = null;
   private meshStatus = 'None';
-  private activeMesh: { owner: string; id: string; label: string } | null = null;
   private meshCleanup: Promise<void> = Promise.resolve();
   private meshCleanupFailed = false;
   private retiredMeshRun: HandMeshRun | null = null;
@@ -232,14 +231,13 @@ export class Panel {
       const plugin = choice.selected ? registry.plugins.find(p => meshKey(p) === meshKey(choice.selected!)) : null;
       const saved = choice.selected ? choice.settings[meshKey(choice.selected)] : null;
       if (choice.selected && (!plugin?.available || !saved || saved.version !== plugin.declaration.settingsVersion)) {
-        run.unavailable(state.revision); this.activeMesh = null; return;
+        run.unavailable(state.revision); return;
       }
       run.configure(plugin ?? null, saved?.values ?? {}, state.revision);
-      this.activeMesh = plugin ? { owner: plugin.owner, id: plugin.id, label: plugin.label } : null;
     } catch { run.unavailable(state.revision); }
   }
   private async stopMesh(): Promise<void> {
-    const run = this.meshRun ?? this.retiredMeshRun; this.meshRun = null; this.activeMesh = null;
+    const run = this.meshRun ?? this.retiredMeshRun; this.meshRun = null;
     if (run) {
       this.retiredMeshRun = run;
       this.meshCleanup = run.stop().then(() => { if (this.retiredMeshRun === run) this.retiredMeshRun = null; this.meshCleanupFailed = false; }).catch(() => {
@@ -2079,9 +2077,12 @@ export class Panel {
         const [registry, state] = await Promise.all([discoverHandMeshPlugins(this.repo, this.workspace), readHandsState(this.repo, this.workspace)]);
         let choice; let problem: string | null = null;
         try { choice = meshChoice(state.raw.postprocessing); } catch (e) { problem = (e as Error).message; }
+        const delivery = this.meshRun?.state() ?? null;
+        const active = delivery?.owner && delivery.id ? { owner: delivery.owner, id: delivery.id,
+          label: registry.plugins.find(p => p.owner === delivery.owner && p.id === delivery.id)?.label ?? delivery.id } : null;
         sendJson(res, 200, { plugins: registry.plugins.map(({ program, launch, ...p }) => ({ ...p, declaration: { ...p.declaration, program: undefined, args: undefined } })),
           revision: state.revision, registryRevision: registry.revision, choice, problem, status: this.meshRun?.status ?? this.meshStatus,
-          running: this.runner.busy && this.nativeHandPolicy !== null, active: this.activeMesh, delivery: this.meshRun?.state() ?? null });
+          running: this.runner.busy && this.nativeHandPolicy !== null, active, delivery });
         return true;
       }
       case 'POST hands/postprocessing/retry': {
