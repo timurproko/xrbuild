@@ -104,6 +104,6 @@
 .hands-mesh-setup [data-setup-message] { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Layer on/off sits in the card's top-right corner; an off layer dims its settings. */
 .hands-mesh-layer-switch { margin: 0; gap: 0; }
-/* The remove button is trimmed to its icon so badge, switch and x sit at even gaps. */
-.hands-mesh-layer .hands-mesh-layer-header > button.xrb-icon-button[data-mesh-layer-remove] { width: 20px; height: 20px; min-width: 0; padding: 0; margin-left: -2px; }
+/* Standard icon button (same hover square as the preset buttons); its padding is offset so the visible gaps stay even. */
+.hands-mesh-layer .hands-mesh-layer-header > button.xrb-icon-button[data-mesh-layer-remove] { margin: -4px -6px -4px -6px; }
 .hands-mesh-layer.is-off [data-mesh-fields] { opacity: .5; }
