@@ -60,10 +60,10 @@ test('finished edits autosave, retain exact colours, reset independently, surviv
       await set('appearance.jointColorLinear', '#ff0000');
       for (const key of ['boneColorLinear', 'indicatorColorLinear']) await set('appearance.' + key, '#ff0000');
       assert.deepEqual((await readHandsState(core, workspace)).profile.appearance.indicatorColorLinear, [1, 0, 0]);
-      await evaluate(`document.querySelector('[data-reset="appearance"]').click()`); await settled();
+      await evaluate(`document.querySelector('[data-reset-menu="appearance"]').click();document.querySelector('[data-reset="appearance"]').click()`); await settled();
       state = await readHandsState(core, workspace); assert.deepEqual(state.profile.appearance, HAND_APPEARANCE_DEFAULTS); assert.equal(state.profile.sizeFactor, .8);
       await set('appearance.showBones', false); await input('appearance.opacity', .42);
-      await evaluate(`document.querySelector('[data-reset="geometry"]').click()`);
+      await evaluate(`document.querySelector('[data-reset-menu="geometry"]').click();document.querySelector('[data-reset="geometry"]').click()`);
       await until(evaluate, `document.querySelector('#hands-adjustments-root').dataset.saving==='false'`);
       state = await readHandsState(core, workspace); assert.equal(state.profile.sizeFactor, 1); assert.equal(state.profile.offsetMm.x, 0); assert.equal(state.profile.appearance.showBones, false);
       assert.equal(state.profile.appearance.opacity, .333, 'geometry reset never commits the other section unfinished input');

@@ -35,9 +35,11 @@ test('adjustment groups are direct standard sections, retain controls and only t
   assert.equal((component.match(/<section class="xrb-sidebar-section"/g) ?? []).length, 2);
   assert.doesNotMatch(component, /class="card|Drawing only|X right/);
   assert.match(component, /Changes where the hand touches/);
-  assert.equal((component.match(/Reset to defaults/g) ?? []).length, 2);
-  assert.match(component, /class="small" data-reset="geometry"/);
-  assert.match(component, /class="small" data-reset="appearance"/);
+  assert.match(component, /role="menuitem" data-reset="\$\{section\}">Reset to defaults/);
+  assert.match(component, /resetMenu\('geometry', 'Position and size'\)/);
+  assert.match(component, /resetMenu\('appearance', 'Appearance'\)/);
+  assert.match(component, /class="xrb-icon-button"[^>]+aria-haspopup="menu"/);
+  assert.doesNotMatch(component, /class="small" data-reset=/);
 });
 
 test('stale diagnostic tool declarations cannot register or return to navigation', () => {

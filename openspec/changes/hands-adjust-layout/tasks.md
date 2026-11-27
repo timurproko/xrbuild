@@ -9,9 +9,9 @@
 
 ## 2. Accessible gear menus reset only their own adjustment section and leave viewport Reset unchanged
 
-- [ ] 2.1 Replace heading reset text buttons with shared settings icons and single-item floating menus; browser assertions cover accessible names, popup/expanded state, Enter/Space opening, focused menu items and section-only reset behavior.
-- [ ] 2.2 Add Escape/outside-click/focus-leave dismissal and scoped cleanup; browser tests exercise focus restoration, mount isolation, reparenting, disposal and preservation of unfinished edits in the other section.
-- [ ] 2.3 Run the adjustment-only regression checks and capture final light/dark normal/narrow pictures with the menus visible where useful; attach before/after proof and record that viewport Reset and session/provider files are unchanged.
+- [x] 2.1 Replace heading reset text buttons with shared settings icons and single-item floating menus; browser assertions cover accessible names, popup/expanded state, Enter/Space opening, focused menu items and section-only reset behavior.
+- [x] 2.2 Add Escape/outside-click/focus-leave dismissal and scoped cleanup; browser tests exercise focus restoration, mount isolation, reparenting, disposal and preservation of unfinished edits in the other section.
+- [x] 2.3 Run the adjustment-only regression checks and capture final light/dark normal/narrow pictures with the menus visible where useful; attach before/after proof and record that viewport Reset and session/provider files are unchanged.
 
 ## Workflow follow-up
 
