@@ -24,8 +24,8 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     </span>
     <span class="hands-preset-name" data-preset-name-row="${section}" hidden>
       <input type="text" data-preset-name="${section}" aria-label="Preset name" placeholder="Preset name" maxlength="40">
-      <button type="button" class="small" data-preset-confirm="${section}">Save</button>
-      <button type="button" class="small" data-preset-cancel="${section}">Cancel</button>
+      <button type="button" class="xrb-icon-button" data-preset-confirm="${section}" aria-label="Save preset" data-xrb-icon="check" data-no-tooltip></button>
+      <button type="button" class="xrb-icon-button" data-preset-cancel="${section}" aria-label="Cancel" data-xrb-icon="close" data-no-tooltip></button>
     </span>`, { tag: 'div' });
   // What the skeleton shows is one multi-select; hidden checkboxes stay the saved fields behind it.
   const DISPLAY = { showJoints: 'Joints', showBones: 'Bones', showPinchGrabIndicator: 'Pinch/grab' };
@@ -294,14 +294,14 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     }
     const save = event.target.closest('[data-preset-save]'), remove = event.target.closest('[data-preset-delete]');
     const confirm = event.target.closest('[data-preset-confirm]'), cancel = event.target.closest('[data-preset-cancel]');
-    if (save && state) { const section = save.dataset.presetSave, row = root.querySelector(`[data-preset-name-row="${section}"]`); row.hidden = false; row.querySelector('input').value = ''; row.querySelector('input').focus(); return; }
-    if (cancel) { root.querySelector(`[data-preset-name-row="${cancel.dataset.presetCancel}"]`).hidden = true; return; }
+    if (save && state) { const section = save.dataset.presetSave, row = root.querySelector(`[data-preset-name-row="${section}"]`); root.querySelector(`[data-preset-row="${section}"]`).hidden = true; row.hidden = false; row.querySelector('input').value = ''; row.querySelector('input').focus(); return; }
+    if (cancel) { const section = cancel.dataset.presetCancel; root.querySelector(`[data-preset-name-row="${section}"]`).hidden = true; root.querySelector(`[data-preset-row="${section}"]`).hidden = false; return; }
     if (confirm && state) {
       const section = confirm.dataset.presetConfirm, input = root.querySelector(`[data-preset-name="${section}"]`), name = input.value.trim();
       if (!name || name.toLowerCase() === 'default' || name.toLowerCase() === 'custom') { input.focus(); return; }
       const presets = loadPresets(), values = Object.fromEntries(sectionFields(section).map(field => [field.dataset.field, structuredClone(currentValue(field.dataset.field))]));
       presets[section] = [...presets[section].filter(preset => preset.name !== name), { name, values }]; savePresets(presets);
-      root.querySelector(`[data-preset-name-row="${section}"]`).hidden = true; renderPresets(); return;
+      root.querySelector(`[data-preset-name-row="${section}"]`).hidden = true; root.querySelector(`[data-preset-row="${section}"]`).hidden = false; renderPresets(); return;
     }
     if (remove && state) {
       const section = remove.dataset.presetDelete, select = root.querySelector(`[data-preset="${section}"]`);

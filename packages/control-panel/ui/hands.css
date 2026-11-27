@@ -76,4 +76,6 @@
 .hands-preset-row, .hands-preset-name { display: flex; align-items: center; gap: var(--xrb-space-field); }
 .hands-preset-row > select, .hands-preset-row > .dropdown { flex: 1; min-width: 0; }
 .hands-preset-name > input { flex: 1; min-width: 0; }
-.hands-preset-name[hidden] { display: none; }
+.hands-preset-name[hidden], .hands-preset-row[hidden] { display: none; }
+/* The name field takes the dropdown's place and size while saving. */
+.hands-preset-name > input { height: 36px; }
