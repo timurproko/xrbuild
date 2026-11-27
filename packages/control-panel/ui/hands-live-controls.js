@@ -5,16 +5,17 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   root.id = 'hands-session-actions'; root.className = 'hands-session-actions'; root.hidden = false;
   const button = document.createElement('button'), state = document.createElement('span'), diagnostic = document.createElement('small');
   diagnostic.id = 'hands-live-diagnostic'; diagnostic.setAttribute('role', 'status'); diagnostic.hidden = true;
-  button.type = 'button'; button.id = 'hands-start-stop'; state.id = 'hands-live-state'; state.className = 'chip'; state.setAttribute('role', 'status');
+  button.type = 'button'; button.id = 'hands-start-stop'; button.className = 'primary'; state.id = 'hands-live-state'; state.className = 'chip'; state.setAttribute('role', 'status');
   // Start/Stop leads the viewer toolbar; the status sits in the header; diagnostics stay beside the provider.
   const header = document.getElementById('hands-header-status');
   root.replaceChildren(button); if (!root.isConnected) (provider.closest('label') ?? provider).before(root);
   if (header) header.replaceChildren(state); else root.append(state);
   (provider.closest('label') ?? provider).before(diagnostic);
-  // Keep one width for every label so the toolbar never shifts when Start becomes Stop.
+  // Start and Stop share one width, the size of Reset, so the toolbar never shifts between them.
   const lockWidth = () => { if (!button.isConnected || button.style.minWidth) return; const current = button.textContent; let widest = 0;
-    for (const label of ['Start', 'Stop', 'Stopping…', 'Take over']) { button.textContent = label; widest = Math.max(widest, button.getBoundingClientRect().width); }
-    button.textContent = current; if (widest) button.style.minWidth = `${Math.ceil(widest)}px`; };
+    for (const label of ['Start', 'Stop']) { button.textContent = label; widest = Math.max(widest, button.getBoundingClientRect().width); }
+    widest = Math.max(widest, document.getElementById('hands-view-reset')?.getBoundingClientRect().width ?? 0);
+    button.textContent = current; if (widest) button.style.minWidth = `${widest}px`; };
   provider.title = 'Provider changes are saved for the next Start or app launch; the active session is not switched.';
   let status = { phase: 'not-started' }, data = null, supported = true, starting = false, stopping = false, closed = false, polling = false, generation = 0, lastDiagnostic = '';
   const rates = document.getElementById('hands-tracking-fps'), overlay = document.getElementById('hands-view-empty');

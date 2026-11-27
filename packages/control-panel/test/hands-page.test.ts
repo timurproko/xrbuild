@@ -26,7 +26,8 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.equal((markup.match(/class="xrb-card hands-panel"/g) ?? []).length, 1);
   assert.match(markup, /class="hands-view-tools xrb-controls-small">\s*<div id="hands-session-actions" class="hands-session-actions" hidden><\/div>\s*<span class="hands-tool-separator"/, 'Start leads the viewer toolbar, set apart by a separator');
   assert.match(markup, /<div id="hands-header-status" class="hands-header-status"><\/div>/);
-  assert.match(live, /for \(const label of \['Start', 'Stop', 'Stopping…', 'Take over'\]\)/, 'Start keeps one width for every label');
+  assert.match(live, /for \(const label of \['Start', 'Stop'\]\)/, 'Start keeps one width for every label');
+  assert.match(live, /button\.id = 'hands-start-stop'; button\.className = 'primary';/);
   assert.doesNotMatch(live, /Press Start to track the saved provider/);
   assert.match(await fs.readFile(path.join(ui, 'hands.js'), 'utf8'), /setup: \$\('hands-setup'\)/);
   assert.match(await fs.readFile(path.join(ui, 'hands-adjustments.js'), 'utf8'), /aria-label="\$\{label\} settings" data-no-tooltip/);
