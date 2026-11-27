@@ -34,7 +34,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   const ready = root.querySelector('[data-mesh-ready]'), install = root.querySelector('[data-mesh-install]'), layerOn = root.querySelector('[data-mesh-layer-enabled]');
   let switching = false;
   const events = new AbortController(), document = root.ownerDocument, edits = new Map();
-  // On the Hands page the gear sits in the tab bar beside the Post tab, like Position and Visual.
+  // On the Hands page the gear sits in the tab bar beside the Post tab, like Transform and Visual.
   const slot = document.querySelector('[data-tab-action="post"]');
   if (slot) { slot.append(gear, menu); root.querySelector('[data-mesh-header]').remove(); }
   let snapshot = null, selected = '', disposed = false, busy = false, reading = false, epoch = 0, version = 0, installing = false;

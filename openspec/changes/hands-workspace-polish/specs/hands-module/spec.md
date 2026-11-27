@@ -4,7 +4,7 @@
 
 ### Requirement: Core-owned Hands surface
 
-Hands SHALL remain accessible without optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands page, titled Hands, with the 3D viewer beside one side panel of Setup, Position, Visual, Post and Log tabs, present with Start and status from the first paint, and no recording section. Old diagnostic routes and `/hand-tracking/` SHALL return normal not-found responses without redirects, and no separate diagnostic page or link SHALL remain.
+Hands SHALL remain accessible without optional input/tool plugins or compiled viewers. `/hands/` SHALL be the sole Hands page, titled Hands, with the 3D viewer beside one side panel of Setup, Transform, Visual, Post and Log tabs, present with Start and status from the first paint, and no recording section. Old diagnostic routes and `/hand-tracking/` SHALL return normal not-found responses without redirects, and no separate diagnostic page or link SHALL remain.
 
 #### Scenario: Diagnostic plugin absent
 - **WHEN** the user opens Hands without the optional hand tools plugin or checked tool build
@@ -66,10 +66,10 @@ Hands SHALL lead the viewer toolbar with Start/Stop and show the session status 
 
 ### Requirement: Grouped adjustment controls and explicit Apply
 
-Hands SHALL provide the Position and Visual tabs in the side panel. Each SHALL start with a Preset dropdown offering Default, saved presets and Custom when the values match none, with save and delete actions. Per-tab Reset to defaults SHALL remain. Finished edits, slider drags, presets and resets SHALL save automatically, without Apply.
+Hands SHALL provide the Transform and Visual tabs in the side panel. Each SHALL start with a Preset dropdown offering Default, saved presets and Custom when the values match none, with save and delete actions. Per-tab Reset to defaults SHALL remain. Finished edits, slider drags, presets and resets SHALL save automatically, without Apply.
 
 #### Scenario: Reset one group
-- **WHEN** the user resets Position
+- **WHEN** the user resets Transform
 - **THEN** only geometry returns to defaults (offset zero, size one) and saves immediately; appearance, selected source and provider calibration remain unchanged
 
 #### Scenario: Appearance reset
@@ -105,7 +105,7 @@ Hands SHALL offer one object, a cube, sphere or Suzanne chosen in Setup at a set
 Each numeric adjustment SHALL have its label above one row with a number input on the left and synchronized slider on the right, all sliders in a tab sharing one width. Both controls SHALL retain existing bounds, steps and validation. Color swatches SHALL sit at the row end, aligned with the panel's content edge. Joints, bones and the pinch/grab indicator SHALL be one Display multi-select. The panel SHALL fit narrow widths without horizontal scrolling in light and dark themes.
 
 #### Scenario: Every numeric setting has paired controls
-- **WHEN** the person opens Position or Visual
+- **WHEN** the person opens Transform or Visual
 - **THEN** X (mm), Y (mm), Z (mm), Size, Joint diameter (mm), Bone diameter (mm), Skeleton opacity, Indicator diameter (mm) and Indicator opacity each show one labelled number-and-slider row
 
 #### Scenario: Number and slider stay synchronized
@@ -124,7 +124,7 @@ Each numeric adjustment SHALL have its label above one row with a number input o
 
 ### Requirement: Accessible section reset gear menus
 
-The Position and Visual tabs SHALL each show a plain gear in the tab bar that opens a small menu containing only Reset to defaults, right-aligned under the gear. Buttons and menus SHALL support keyboard and screen-reader use, Escape and outside-click dismissal. The viewport Reset SHALL remain separate.
+The Transform and Visual tabs SHALL each show a plain gear in the tab bar that opens a small menu containing only Reset to defaults, right-aligned under the gear. Buttons and menus SHALL support keyboard and screen-reader use, Escape and outside-click dismissal. The viewport Reset SHALL remain separate.
 
 #### Scenario: Opening and operating a section menu
 - **WHEN** the person activates a tab's gear by pointer, Enter or Space
@@ -149,10 +149,10 @@ The Position and Visual tabs SHALL each show a plain gear in the tab bar that op
 
 ### Requirement: Viewer reference scene
 
-The viewer SHALL show an endless grid and a monitor frame in the screen plane, a bottom-left orientation widget and the centre object, each on by default and toggled from View. The frame SHALL follow the Monitor resolution (4K by default, 2K or custom). Hands SHALL be drawn where they physically are relative to the frame; the Position offset changes only what apps receive. Left drag SHALL orbit, middle drag pan and right drag zoom, without smoothing.
+The viewer SHALL show an endless grid and a monitor frame in the screen plane, a bottom-left orientation widget and the centre object, each on by default and toggled from View. The frame SHALL follow the Monitor resolution (4K by default, 2K or custom). Hands SHALL be drawn where they physically are relative to the frame; the Transform offset changes only what apps receive. Left drag SHALL orbit, middle drag pan and right drag zoom, without smoothing.
 
 #### Scenario: Hands relative to the screen
-- **WHEN** a Position offset is set and a tracked hand is in front of the screen's top-left corner
+- **WHEN** a Transform offset is set and a tracked hand is in front of the screen's top-left corner
 - **THEN** the viewer draws that hand in front of the frame's top-left corner
 
 ### Requirement: Hands log tab

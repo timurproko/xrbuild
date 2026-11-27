@@ -72,7 +72,7 @@ export function createHandTestTargets(scene, interaction, onFeedback = () => {})
     setShape,
     /** Rest position in panel metres relative to the screen frame; the object returns there on reset. */
     setPosition(x, y, z) { rest.set(x, y, z); place(); },
-    /** The screen frame's origin (the hand Position offset), so the object stays centred on the frame. */
+    /** The screen frame's origin (the hand Transform offset), so the object stays centred on the frame. */
     setOrigin(x, y, z) { origin.set(x, y, z); place(); },
     theme(color) { object.material.color.set(color); },
     reset,

@@ -13,7 +13,7 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.doesNotMatch(html, /hands-save|hands-reload|hands-availability|hands-session-status|hands-previous-session|hands-record/);
   assert.match(html, /id="hands-postprocessing-root" hidden/);
   assert.doesNotMatch(html, /hands-diagnostics|Acquisition diagnostics|Local fixture|Motion \+ pinch|Pause|Restart|Capture|Calibration/);
-  assert.equal((html.match(/role="tab"/g) ?? []).length, 5, 'only the Setup, Position, Visual, Post and Log tabs');
+  assert.equal((html.match(/role="tab"/g) ?? []).length, 5, 'only the Setup, Transform, Visual, Post and Log tabs');
   assert.match(html, /data-tab="appearance"[^>]*>Visual<\/button>\s*<button[^>]*data-tab="post"[^>]*>Post<\/button>/, 'Post follows Visual');
   assert.match(html, /<div id="hands-post-panel"[^>]*data-tab-panel="post" hidden>\s*<div id="hands-post-empty" class="empty-note">/, 'the Post tab holds post-processing with an empty note');
   const live = await fs.readFile(path.join(ui, 'hands-live-controls.js'), 'utf8');
@@ -30,7 +30,7 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.match(live, /document\.getElementById\('hands-start-stop'\) \?\? document\.createElement\('button'\)/);
   assert.match(markup, /<div id="hands-adjustments-root" class="xrb-sidebar-content xrb-stack" hidden><\/div>/, 'adjustments stay hidden until their editor mounts');
   assert.doesNotMatch(markup, /unavailable in this version/);
-  assert.match(markup, /class="xrb-tabs hands-adjustment-tabs" role="tablist"[^>]*>\s*<button[^>]*data-tab="setup"[^>]*>Setup<\/button>\s*<button[^>]*data-tab="geometry"[^>]*>Position<\/button>\s*<button[^>]*data-tab="appearance"[^>]*>Visual<\/button>\s*<button[^>]*data-tab="post"[^>]*>Post<\/button>/, 'tabs exist before the editor loads');
+  assert.match(markup, /class="xrb-tabs hands-adjustment-tabs" role="tablist"[^>]*>\s*<button[^>]*data-tab="setup"[^>]*>Setup<\/button>\s*<button[^>]*data-tab="geometry"[^>]*>Transform<\/button>\s*<button[^>]*data-tab="appearance"[^>]*>Visual<\/button>\s*<button[^>]*data-tab="post"[^>]*>Post<\/button>/, 'tabs exist before the editor loads');
   assert.doesNotMatch(markup, /hands-view-empty/, 'the viewer carries no centre text');
   assert.match(markup, /data-tab="log"[^>]*>Log<\/button>/);
   assert.match(markup, /<div id="hands-log-panel"[^>]*data-tab-panel="log" hidden>\s*<div id="hands-log-empty" class="empty-note">No log entries yet\.<\/div>\s*<div id="hands-log" class="console" role="log"/, 'diagnostics live in a Log tab, not in Setup');
@@ -77,9 +77,9 @@ test('adjustment groups are direct standard sections, retain controls without hi
   assert.doesNotMatch(component, /class="card|Drawing only|X right/);
   assert.doesNotMatch(component, /Changes where the hand touches/);
   assert.match(component, /role="menuitem" data-reset="\$\{section\}">Reset to defaults/);
-  assert.match(component, /\$\{setup \? tab\('setup', 'Setup', true\) : ''\}\$\{tab\('geometry', 'Position', !setup\)\}\$\{tab\('appearance', 'Visual', false\)\}/);
+  assert.match(component, /\$\{setup \? tab\('setup', 'Setup', true\) : ''\}\$\{tab\('geometry', 'Transform', !setup\)\}\$\{tab\('appearance', 'Visual', false\)\}/);
   assert.match(component, /tabs\.className = 'xrb-tabs hands-adjustment-tabs'; tabs\.setAttribute\('role', 'tablist'\)/);
-  assert.match(component, /tabAction\('geometry', 'Position', !setup\)\}\$\{tabAction\('appearance', 'Visual', false\)\}/);
+  assert.match(component, /tabAction\('geometry', 'Transform', !setup\)\}\$\{tabAction\('appearance', 'Visual', false\)\}/);
   assert.match(component, /role="tabpanel" id="\$\{prefix\}-panel-appearance" aria-labelledby="\$\{prefix\}-tab-appearance" hidden/);
   assert.match(component, /tabs\.remove\(\)/);
   assert.match(component, /class="xrb-icon-button"[^>]+aria-haspopup="menu"/);

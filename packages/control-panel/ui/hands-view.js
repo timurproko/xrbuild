@@ -35,7 +35,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
   scene.add(new THREE.HemisphereLight('#e8f4ff', '#162338', 2.8));
   const light = new THREE.DirectionalLight('#ffffff', 3); light.position.set(.2, .4, .6); scene.add(light);
   const panelCentre = new THREE.Vector3();
-  /** Hands are drawn where they physically are relative to the screen: the Position offset only changes what apps receive. */
+  /** Hands are drawn where they physically are relative to the screen: the Transform offset only changes what apps receive. */
   function placeHands() { const d = profile ? profile.offsetMm : { x: 0, y: 0, z: 0 }; panelCentre.set(-d.x / 1000, -d.y / 1000, -d.z / 1000); }
   // Endless grid in the panel plane (z = 0, the monitor's plane): 5 cm cells drawn in a shader, fading with distance.
   const grid = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.ShaderMaterial({
@@ -95,7 +95,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
       if (closed || request !== profileRequest || !isCurrent() || !allowed()) { resolve(false); return; }
       if (profile && !api.sameHandGeometry(profile, next)) { ingress.reset(performance.now()); clearHands(); }
       ingress.profile = next; visual.applyAppearance(next.appearance); profile = next; stream.setReady(true);
-      // The frame, grid and object stay centred; the hands are drawn without the Position offset, i.e. where they
+      // The frame, grid and object stay centred; the hands are drawn without the Transform offset, i.e. where they
       // physically are relative to the screen (the offset only changes what apps receive).
       placeHands(); resolve(true);
     } }; });
