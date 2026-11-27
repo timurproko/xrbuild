@@ -52,8 +52,8 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     activeMenu = null; menu.hidden = true; button.setAttribute('aria-expanded', 'false');
     if (restoreFocus) button.focus();
   }
-  // Reset menus open under the tab bar, right-aligned with their gear, so they stay inside the card.
-  const menuPlacement = button => ({ anchor: button, align: 'end', gap: Math.max(0, tabs.getBoundingClientRect().bottom - button.getBoundingClientRect().bottom) + 6 });
+  // Reset menus open just below their gear, right-aligned with it, so they stay inside the card.
+  const menuPlacement = button => ({ anchor: button, align: 'end' });
   function showMenu(button) {
     if (!state) return;
     closeMenu();
