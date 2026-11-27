@@ -316,7 +316,8 @@ export class HandMeshRun {
     if (this.closed || !descriptor || !origin || !this.origins().includes(origin)) { res.writeHead(403); res.end(); return; }
     res.setHeader('access-control-allow-origin', origin); res.setHeader('vary', 'Origin'); res.setHeader('cache-control', 'no-store');
     res.setHeader('access-control-expose-headers', 'x-xrb-mesh-status, x-xrb-mesh-state');
-    if (req.method === 'OPTIONS') { res.setHeader('access-control-allow-methods', 'POST'); res.setHeader('access-control-allow-headers', 'authorization, content-type'); res.writeHead(204); res.end(); return; }
+    // Newer browsers ask before a page reaches another local port (Private Network Access); this stream is meant for it.
+    if (req.method === 'OPTIONS') { if (req.headers['access-control-request-private-network'] === 'true') res.setHeader('access-control-allow-private-network', 'true'); res.setHeader('access-control-allow-methods', 'POST'); res.setHeader('access-control-allow-headers', 'authorization, content-type'); res.writeHead(204); res.end(); return; }
     const token = Buffer.from(req.headers.authorization?.replace(/^Bearer /, '') ?? ''), expected = Buffer.from(descriptor.token);
     if (req.method !== 'POST' || token.length !== expected.length || !timingSafeEqual(token, expected)) { res.writeHead(403); res.end(); return; }
     let bytes = Buffer.alloc(0);

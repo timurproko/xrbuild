@@ -13,6 +13,8 @@ export function meshRuntime(value: string | undefined): MeshRuntime | null {
 /** Optional drawing transport, deliberately independent of HandInput/filter/gesture state. */
 export class HandMeshClient {
   status = 'Starting';
+  /** Why the first connection failed, for diagnostics (null while connecting or once connected). */
+  connectError: string | null = null;
   private runtime: MeshRuntime;
   private fetcher: typeof fetch;
   private now: () => number;
@@ -58,7 +60,11 @@ export class HandMeshClient {
       }
       if (this.closed) return;
       this.connected = true; this.pump();
-    }).catch(() => { if (!this.closed) this.status = 'Skeleton fallback: mesh connection unavailable'; }).finally(() => clearTimeout(timer));
+    }).catch(error => {
+      if (this.closed) return;
+      this.status = 'Skeleton fallback: mesh connection unavailable';
+      this.connectError = controller.signal.aborted ? 'no reply within 2 s' : error instanceof Error ? error.message : String(error);
+    }).finally(() => clearTimeout(timer));
   }
   private applyState(value: unknown): void {
     if (!validMeshState(value) || value.runId !== this.runId) throw new Error('Invalid mesh configuration state');

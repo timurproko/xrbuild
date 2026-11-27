@@ -156,6 +156,7 @@ export function createHandsView({ canvas, viewport, onMetrics = () => {}, onStat
     },
     get meshState() { return meshClient?.state ?? null; },
     get meshStatus() { return meshClient?.status ?? 'None'; },
+    get meshConnectError() { return meshClient?.connectError ?? null; },
     pushFrame(value) { const accepted = stream.pushFrame(value); if (accepted) meshClient?.observed(value.frame.hands.map(h => h.id)); if (accepted) onStatus({ phase: recordedSession ? 'replay' : 'running', hands: value.frame.hands.length }); return accepted; },
     clearHands() { stream.clearHands(); },
     clearSession() { pendingProfile?.resolve(false); pendingProfile = null; profileRequest++; closeMesh(); stream.clearSession(); recordedSession = false; onStatus({ phase: 'idle', hands: null }); },
