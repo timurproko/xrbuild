@@ -36,8 +36,11 @@ test('adjustment groups are direct standard sections, retain controls and only t
   assert.doesNotMatch(component, /class="card|Drawing only|X right/);
   assert.match(component, /Changes where the hand touches/);
   assert.match(component, /role="menuitem" data-reset="\$\{section\}">Reset to defaults/);
-  assert.match(component, /resetMenu\('geometry', 'Position and size'\)/);
-  assert.match(component, /resetMenu\('appearance', 'Appearance'\)/);
+  assert.match(component, /tab\('geometry', 'Position', true\)\}\$\{tab\('appearance', 'Visual', false\)\}/);
+  assert.match(component, /tabs\.className = 'xrb-tabs hands-adjustment-tabs'; tabs\.setAttribute\('role', 'tablist'\)/);
+  assert.match(component, /tabAction\('geometry', 'Position', true\)\}\$\{tabAction\('appearance', 'Visual', false\)\}/);
+  assert.match(component, /role="tabpanel" id="\$\{prefix\}-panel-appearance" aria-labelledby="\$\{prefix\}-tab-appearance" hidden/);
+  assert.match(component, /tabs\.remove\(\)/);
   assert.match(component, /class="xrb-icon-button"[^>]+aria-haspopup="menu"/);
   assert.doesNotMatch(component, /class="small" data-reset=/);
 });

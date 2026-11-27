@@ -15,14 +15,19 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   const toggle = (key, label) => `<label class="xrb-switch"><input type="checkbox" data-field="appearance.${key}"><span>${label}</span></label>`;
   const colour = (key, label) => `<span class="xrb-inline-icons"><input type="color" data-field="appearance.${key}" aria-label="${label}" hidden><button type="button" class="xrb-swatch" data-colour="appearance.${key}" aria-label="Choose ${label.toLowerCase()}" aria-haspopup="dialog" aria-pressed="true"></button></span>`;
   const resetMenu = (section, label) => `<button type="button" class="xrb-icon-button" id="${prefix}-${section}-settings" data-reset-menu="${section}" aria-label="${label} settings" aria-haspopup="menu" aria-controls="${prefix}-${section}-menu" aria-expanded="false">${iconSvg('settings')}</button><div class="menu" id="${prefix}-${section}-menu" role="menu" aria-labelledby="${prefix}-${section}-settings" hidden><button type="button" role="menuitem" data-reset="${section}">Reset to defaults</button></div>`;
+  // Position and Visual are tabs in the card's tab bar; each tab's reset menu sits at the bar's end.
+  const tab = (section, label, selected) => `<button type="button" class="xrb-tab" role="tab" id="${prefix}-tab-${section}" data-tab="${section}" aria-controls="${prefix}-panel-${section}" aria-selected="${selected}" tabindex="${selected ? 0 : -1}">${label}</button>`;
+  const tabAction = (section, label, selected) => `<span class="hands-tab-action" data-tab-action="${section}"${selected ? '' : ' hidden'}>${resetMenu(section, label)}</span>`;
+  const tabs = root.ownerDocument.createElement('div');
+  tabs.className = 'xrb-tabs hands-adjustment-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Hand adjustments'); tabs.dataset.xrbTabsId = 'hands-adjustments';
+  tabs.innerHTML = `${tab('geometry', 'Position', true)}${tab('appearance', 'Visual', false)}<span class="spacer"></span>${tabAction('geometry', 'Position', true)}${tabAction('appearance', 'Visual', false)}`;
+  root.before(tabs);
   root.innerHTML = `<form class="xrb-stack hands-adjustment-sections" aria-label="Hand adjustments">
-    <section class="xrb-sidebar-section" aria-labelledby="${prefix}-position">
-      <div class="row"><h2 id="${prefix}-position">Position and size</h2><span class="spacer"></span>${resetMenu('geometry', 'Position and size')}</div>
+    <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-geometry" aria-labelledby="${prefix}-tab-geometry">
       ${number('offsetMm.x', 'X (mm)', -150, 150, 1)}${number('offsetMm.y', 'Y (mm)', -150, 150, 1)}${number('offsetMm.z', 'Z (mm)', -150, 150, 1)}
       ${number('sizeFactor', 'Size', .5, 1.5, .01, 'Changes where the hand touches.')}
     </section>
-    <section class="xrb-sidebar-section" aria-labelledby="${prefix}-appearance">
-      <div class="row"><h2 id="${prefix}-appearance">Appearance</h2><span class="spacer"></span>${resetMenu('appearance', 'Appearance')}</div>
+    <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-appearance" aria-labelledby="${prefix}-tab-appearance" hidden>
       <div class="xrb-toggle-grid">${toggle('showJoints', 'Joints')}${toggle('showBones', 'Bones')}</div>
       ${number('appearance.jointDiameterMm', 'Joint diameter (mm)', 1, 40, 1, '', colour('jointColorLinear', 'Joint colour'))}
       ${number('appearance.boneDiameterMm', 'Bone diameter (mm)', 1, 30, 1, '', colour('boneColorLinear', 'Bone colour'))}
@@ -49,7 +54,7 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   function showMenu(button) {
     if (!state) return;
     closeMenu();
-    const menu = root.querySelector(`#${button.getAttribute('aria-controls')}`);
+    const menu = tabs.querySelector(`#${button.getAttribute('aria-controls')}`);
     activeMenu = { button, menu }; button.setAttribute('aria-expanded', 'true');
     openFloating(menu, { anchor: button });
   }
@@ -84,7 +89,7 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
       range.disabled = !state;
       if (state) range.value = edits.get(range.dataset.range)?.value ?? read(state, range.dataset.range);
     }
-    for (const reset of root.querySelectorAll('[data-reset],[data-reset-menu]')) reset.disabled = !state;
+    for (const reset of tabs.querySelectorAll('[data-reset],[data-reset-menu]')) reset.disabled = !state;
     buttons();
   }
   function refresh(next, { discard: discardEdits = false } = {}) {
@@ -168,7 +173,28 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     if (event.key === 'Enter' && event.target.matches('[data-field]')) { event.preventDefault(); commit(event.target); }
   };
   const submit = event => event.preventDefault();
+  function selectTab(section, focus = false) {
+    closeMenu();
+    for (const item of tabs.querySelectorAll('[data-tab]')) {
+      const selected = item.dataset.tab === section;
+      item.setAttribute('aria-selected', String(selected)); item.tabIndex = selected ? 0 : -1;
+      if (selected && focus) item.focus();
+    }
+    for (const action of tabs.querySelectorAll('[data-tab-action]')) action.hidden = action.dataset.tabAction !== section;
+    for (const panel of root.querySelectorAll('[role="tabpanel"]')) panel.hidden = panel.id !== `${prefix}-panel-${section}`;
+  }
+  const tabKeydown = event => {
+    const current = event.target.closest('[data-tab]');
+    if (current && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+      const all = [...tabs.querySelectorAll('[data-tab]')], index = all.indexOf(current);
+      const next = event.key === 'Home' ? all[0] : event.key === 'End' ? all.at(-1) : all[(index + (event.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length];
+      event.preventDefault(); selectTab(next.dataset.tab, true); return;
+    }
+    keydown(event);
+  };
   const click = event => {
+    const tabButton = event.target.closest('[data-tab]');
+    if (tabButton) { selectTab(tabButton.dataset.tab); return; }
     const menuButton = event.target.closest('[data-reset-menu]');
     if (menuButton) {
       if (activeMenu?.button === menuButton) closeMenu(); else showMenu(menuButton);
@@ -207,12 +233,12 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   };
   const beforeunload = event => { if (edits.size || busy) { event.preventDefault(); event.returnValue = ''; } };
   addEventListener('beforeunload', beforeunload);
-  form.addEventListener('input', input); form.addEventListener('change', change); form.addEventListener('keydown', keydown); form.addEventListener('submit', submit); root.addEventListener('click', click);
+  form.addEventListener('input', input); form.addEventListener('change', change); form.addEventListener('keydown', keydown); form.addEventListener('submit', submit); root.addEventListener('click', click); tabs.addEventListener('click', click); tabs.addEventListener('keydown', tabKeydown);
   render();
   return { refresh, markStale() { void load().then(refresh).catch(error => { failure = error.message; buttons(); }); }, reviewToken: () => undefined,
     get dirty() { return edits.size > 0; }, get revision() { return state?.revision; }, get deliveryEpoch() { return deliveryEpoch; },
     updateDelivery(_text, deliveryState, revision, epoch) {
       if (epoch === deliveryEpoch && revision === state?.revision && !edits.size && !busy) { retryDelivery = deliveryState === 'failed'; buttons(); }
     },
-    dispose() { disposed = true; removeEventListener('beforeunload', beforeunload); form.removeEventListener('input', input); form.removeEventListener('change', change); form.removeEventListener('keydown', keydown); form.removeEventListener('submit', submit); root.removeEventListener('click', click); disposers.reverse().forEach(fn => fn()); root.replaceChildren(); } };
+    dispose() { disposed = true; removeEventListener('beforeunload', beforeunload); form.removeEventListener('input', input); form.removeEventListener('change', change); form.removeEventListener('keydown', keydown); form.removeEventListener('submit', submit); root.removeEventListener('click', click); tabs.removeEventListener('click', click); tabs.removeEventListener('keydown', tabKeydown); tabs.remove(); disposers.reverse().forEach(fn => fn()); root.replaceChildren(); } };
 }

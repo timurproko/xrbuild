@@ -11,6 +11,9 @@
 .hands-number-row > .xrb-inline-icons { grid-column: 3; grid-row: 1; }
 .hands-number-row > .field-error { grid-column: 1 / -1; grid-row: 2; }
 #hands-adjustments-root { padding-top: 0; }
+.hands-adjustment-tabs { flex: none; margin-bottom: var(--xrb-space-stack); }
+.hands-adjustment-tabs > .hands-tab-action { display: flex; align-items: center; }
+.hands-adjustment-tabs > .hands-tab-action[hidden] { display: none; }
 .hands-source p { margin: 0; }
 .hands-panel > .xrb-sidebar-content { flex: 1; min-height: 0; align-content: start; overflow-y: auto; overflow-wrap: anywhere; }
 .hands-viewport { position: relative; min-height: 360px; padding: 0; margin: 0; overflow: hidden; }
