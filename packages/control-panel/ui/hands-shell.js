@@ -5,6 +5,7 @@ export function mountHandsShell(view) {
   const events = new AbortController(), signal = events.signal;
   const disposers = [installWorkspaceLayout(document), installOverlayScrollbars(document), enhanceSelects(), installDropdowns(), installTabs(), installIcons(), installTooltips()];
   for (const list of document.querySelectorAll('[role="tablist"]')) {
+    if (list.classList.contains('hands-adjustment-tabs')) continue; // The adjustment editor owns these tabs.
     const tabs = [...list.querySelectorAll('[role="tab"]')];
     const select = tab => {
       for (const item of tabs) {

@@ -57,3 +57,5 @@
 .hands-number-row button.xrb-swatch[aria-pressed="true"] { box-shadow: none; }
 .hands-number-row button.xrb-swatch:hover:not(:disabled) { transform: none; outline: 1px solid var(--field-hover-line); outline-offset: -1px; }
 .hands-number-row button.xrb-swatch:focus-visible { transform: none; outline: 2px solid var(--accent); outline-offset: -2px; }
+/* The Log tab fills its panel with the shared dark log area. */
+#hands-log-panel > .log { flex: 1; max-height: none; margin: 0; }

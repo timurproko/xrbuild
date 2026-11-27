@@ -5,14 +5,23 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   const root = document.getElementById('hands-session-actions') ?? document.createElement('div');
   root.id = 'hands-session-actions'; root.className = 'hands-session-actions'; root.hidden = false;
   // Adopt the page's Start and status (shown disabled before this loads) so nothing appears or disappears.
-  const button = document.getElementById('hands-start-stop') ?? document.createElement('button'), state = document.getElementById('hands-live-state') ?? document.createElement('span'), diagnostic = document.createElement('small');
-  diagnostic.id = 'hands-live-diagnostic'; diagnostic.setAttribute('role', 'status'); diagnostic.hidden = true;
+  const button = document.getElementById('hands-start-stop') ?? document.createElement('button'), state = document.getElementById('hands-live-state') ?? document.createElement('span'), diagnostic = document.getElementById('hands-log') ?? document.createElement('small');
+  diagnostic.id ||= 'hands-live-diagnostic'; diagnostic.hidden = true;
   button.type = 'button'; button.id = 'hands-start-stop'; button.className = 'primary'; state.id = 'hands-live-state'; state.className = 'chip'; state.setAttribute('role', 'status');
   // Start/Stop leads the viewer toolbar; the status sits in the header; diagnostics stay beside the provider.
   const header = document.getElementById('hands-header-status');
   root.replaceChildren(button); if (!root.isConnected) (provider.closest('label') ?? provider).before(root);
   if (header) header.replaceChildren(state); else root.append(state);
-  (provider.closest('label') ?? provider).before(diagnostic);
+  if (!diagnostic.isConnected) (provider.closest('label') ?? provider).before(diagnostic);
+  // Diagnostics and reasons become timestamped lines in the Log tab (newest last, bounded), never repeated back to back.
+  const logEmpty = document.getElementById('hands-log-empty'); let lastLogged = '';
+  const log = text => {
+    if (!text || text === lastLogged) return; lastLogged = text;
+    const time = new Date().toLocaleTimeString([], { hour12: false });
+    const lines = diagnostic.textContent ? diagnostic.textContent.split('\n') : [];
+    lines.push(`${time}  ${text}`); diagnostic.textContent = lines.slice(-200).join('\n');
+    diagnostic.hidden = false; if (logEmpty) logEmpty.hidden = true; diagnostic.scrollTop = diagnostic.scrollHeight;
+  };
   // Start and Stop share one width, the size of Reset, so the toolbar never shifts between them.
   const lockWidth = () => { if (!button.isConnected || button.style.minWidth) return; const current = button.textContent; let widest = 0;
     for (const label of ['Start', 'Stop']) { button.textContent = label; widest = Math.max(widest, button.getBoundingClientRect().width); }
@@ -27,9 +36,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     const active = session.active || starting, phase = status.phase;
     document.body.dataset.handsSession = active ? 'live' : '';
     lastDiagnostic = status.diagnostic || lastDiagnostic;
-    // Failure reasons appear beside the provider; the viewer itself carries no text.
-    const shown = ['failed', 'occupied', 'cleanup'].includes(status.phase) && status.reason ? status.reason : lastDiagnostic;
-    diagnostic.textContent = shown; diagnostic.hidden = !shown;
+    log(['failed', 'occupied', 'cleanup'].includes(status.phase) && status.reason ? status.reason : lastDiagnostic);
     const source = data?.providers?.find(p => key(p) === provider.value);
     const unavailable = !supported ? 'Standalone Hands currently supports Windows x64 only.' : !view?.profile ? 'Wait for the shared SDK view and valid profile.' : !source ? 'Choose an available skeleton provider.' : source.transport !== 'native' ? 'WebXR requires its explicit app XR session.' : !source.available ? source.reason : '';
     const cleanupPending = session.blocked || status.cleanupPending;

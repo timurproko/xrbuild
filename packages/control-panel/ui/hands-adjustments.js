@@ -34,6 +34,8 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   tabs.insertAdjacentHTML('beforeend', `<span class="spacer" data-tab-extra></span>${tabAction('geometry', 'Position', !setup)}${tabAction('appearance', 'Visual', false)}`);
   if (setup) { setup.id ||= `${prefix}-panel-setup`; setup.setAttribute('role', 'tabpanel'); setup.setAttribute('aria-labelledby', `${prefix}-tab-setup`); tabs.querySelector('[data-tab="setup"]').setAttribute('aria-controls', setup.id); root.hidden = true; }
   if (!adopted) (setup ?? root).before(tabs);
+  // Further page panels (such as Log) live beside Setup and switch with their tab.
+  const pagePanels = adopted ? [...tabs.parentElement.querySelectorAll(':scope > [data-tab-panel]')] : [];
   root.innerHTML = `<form class="xrb-stack hands-adjustment-sections" aria-label="Hand adjustments">
     <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-geometry" aria-labelledby="${prefix}-tab-geometry"${setup ? ' hidden' : ''}>
       ${number('offsetMm.x', 'X (mm)', -150, 150, 1)}${number('offsetMm.y', 'Y (mm)', -150, 150, 1)}${number('offsetMm.z', 'Z (mm)', -150, 150, 1)}
@@ -212,7 +214,8 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     }
     for (const action of tabs.querySelectorAll('[data-tab-action]')) action.hidden = action.dataset.tabAction !== section;
     for (const panel of root.querySelectorAll('[role="tabpanel"]')) panel.hidden = panel.id !== `${prefix}-panel-${section}`;
-    if (setup) { setup.hidden = section !== 'setup'; root.hidden = section === 'setup'; }
+    for (const panel of pagePanels) panel.hidden = panel.dataset.tabPanel !== section;
+    if (setup) { setup.hidden = section !== 'setup'; root.hidden = section !== 'geometry' && section !== 'appearance'; }
   }
   const tabKeydown = event => {
     const current = event.target.closest('[data-tab]');

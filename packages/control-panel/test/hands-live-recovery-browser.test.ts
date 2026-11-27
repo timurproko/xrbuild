@@ -20,10 +20,11 @@ test('mounted controls keep rejection kind, joint and count visible across healt
       await navigate(`http://127.0.0.1:${(server.address() as any).port}`, 'window.ready');
       const diagnostic = 'Rejected confidence-range; joint 8; count 3 frames, 3 hands';
       await evaluate(`session.active=true;update({phase:'no-hands',filtered:true,diagnostic:${JSON.stringify(diagnostic)}})`);
-      assert.equal(await evaluate(`document.querySelector('#hands-live-diagnostic').textContent`), diagnostic);
+      assert.match(await evaluate(`document.querySelector('#hands-live-diagnostic').textContent`), new RegExp(`\\d\\d:\\d\\d:\\d\\d  ${diagnostic.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`), 'diagnostics are timestamped log lines');
       assert.equal(await evaluate(`document.querySelector('#hands-live-diagnostic').hidden`), false);
       await evaluate(`update({phase:'running',trackingFps:60});session.active=false;update({phase:'failed',reason:'Persistent malformed output'})`);
-      assert.equal(await evaluate(`document.querySelector('#hands-live-diagnostic').textContent`), 'Persistent malformed output', 'a failure reason replaces the last diagnostic');
+      const logged = await evaluate(`document.querySelector('#hands-live-diagnostic').textContent.split('\\n')`);
+      assert.ok(logged.at(-2).endsWith(diagnostic) && logged.at(-1).endsWith('Persistent malformed output'), 'a failure reason is appended after the earlier diagnostic');
       assert.equal(await evaluate(`document.querySelector('#hands-start-stop').textContent`), 'Start');
       await evaluate(`window.remote={busy:true,owns:true,phase:'failed',sessionId:'old',cleanupPending:true};session.status=async()=>remote;session.recover=async()=>{remote={busy:false,owns:true,phase:'stopped'};return remote}`);
       await sleep(1100);

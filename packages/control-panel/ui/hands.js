@@ -10,6 +10,7 @@ try {
   if (saved && saved !== 'setup' && document.querySelector(`.hands-adjustment-tabs [data-tab="${saved}"]`)) {
     for (const tab of document.querySelectorAll('.hands-adjustment-tabs [data-tab]')) { const on = tab.dataset.tab === saved; tab.setAttribute('aria-selected', String(on)); tab.tabIndex = on ? 0 : -1; }
     $('hands-setup').hidden = true;
+    const panel = document.querySelector(`[data-tab-panel="${saved}"]`); if (panel) panel.hidden = false;
   }
 } catch { /* Storage may be blocked; Setup stays first. */ }
 let snapshot = null, view = null, adjustments = null, disposed = false, profileKey = '', profileGeneration = 0, writes = 0, readGeneration = 0;
@@ -120,6 +121,8 @@ try {
       if (status.phase === 'idle') { profileKey = ''; $('hands-tracking-fps').textContent = '—'; }
     },
   });
+  // Grid and axes follow the View menu from the first frame (both on by default).
+  view.setViewOptions(JSON.parse($('hands-view-options').value));
 } catch (error) { $('hands-view-error').hidden = false; $('hands-view-error').textContent = `3D view unavailable: ${error.message}`; }
 // Retained integration API only: no recorder nodes or legacy tools enter the simplified page.
 const recorder = mountProviderRecorder({ actions: document.createElement('div'), status: document.createElement('p'), view,

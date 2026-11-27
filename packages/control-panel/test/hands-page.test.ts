@@ -13,7 +13,7 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.doesNotMatch(html, /hands-save|hands-reload|hands-availability|hands-session-status|hands-previous-session|hands-record/);
   assert.match(html, /id="hands-postprocessing-root" hidden/);
   assert.doesNotMatch(html, /hands-diagnostics|Acquisition diagnostics|Local fixture|Motion \+ pinch|Pause|Restart|Capture|Calibration/);
-  assert.equal((html.match(/role="tab"/g) ?? []).length, 3, 'only the Setup, Position and Visual tabs');
+  assert.equal((html.match(/role="tab"/g) ?? []).length, 4, 'only the Setup, Position, Visual and Log tabs');
   const live = await fs.readFile(path.join(ui, 'hands-live-controls.js'), 'utf8');
   assert.match(live, /next Start or app launch/);
   assert.match(live, /active session is not switched/);
@@ -30,6 +30,9 @@ test('Hands has minimal persistent panels, stable live mounts and scene-only con
   assert.doesNotMatch(markup, /unavailable in this version/);
   assert.match(markup, /class="xrb-tabs hands-adjustment-tabs" role="tablist"[^>]*>\s*<button[^>]*data-tab="setup"[^>]*>Setup<\/button>\s*<button[^>]*data-tab="geometry"[^>]*>Position<\/button>\s*<button[^>]*data-tab="appearance"[^>]*>Visual<\/button>/, 'tabs exist before the editor loads');
   assert.doesNotMatch(markup, /hands-view-empty/, 'the viewer carries no centre text');
+  assert.match(markup, /data-tab="log"[^>]*>Log<\/button>/);
+  assert.match(markup, /<div id="hands-log-panel"[^>]*data-tab-panel="log" hidden>\s*<div id="hands-log-empty" class="empty-note">No log entries yet\.<\/div>\s*<pre id="hands-log" class="log"/, 'diagnostics live in a Log tab, not in Setup');
+  assert.match(markup, /id="hands-view-options" type="hidden" value='\["grid","axes"\]'/, 'axes show by default');
   const viewSource = await fs.readFile(path.join(ui, 'hands-view.js'), 'utf8'), gizmo = await fs.readFile(path.join(ui, 'hands-axis-gizmo.js'), 'utf8');
   assert.match(viewSource, /renderer\.render\(scene, camera\); axes\.render\(renderer, camera\);/, 'axes render as a corner widget after the scene');
   assert.doesNotMatch(viewSource, /AxesHelper/);
