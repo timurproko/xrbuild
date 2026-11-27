@@ -6,11 +6,12 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["node"],
     "strict": true,
+    "jsx": "react-jsx",
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
     "skipLibCheck": true
   },
-  "include": ["packages/*/src/**/*.ts", "tools/embedded/**/*.ts"],
+  "include": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx", "tools/embedded/**/*.ts"],
   "exclude": ["node_modules", "**/node_modules", "**/test", "**/build", "**/dist", "**/third_party", ".xrbuild", ".artifacts", "embedded"]
 }

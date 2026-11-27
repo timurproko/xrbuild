@@ -17,7 +17,8 @@ There is nothing to install or publish: apps (in your workspace, logically separ
 `@xr-build/ui-kit` straight from the core's sources. The package is TypeScript source (`src/index.ts`);
 Vite compiles it with your app.
 
-- An app depends on `three` (>= 0.160) and `vite` only, never on `@xr-build/sdk` or `@xr-build/ui-kit`.
+- A vanilla app depends on `three` (>= 0.160) and `vite` only, never on `@xr-build/sdk` or `@xr-build/ui-kit`.
+  Opt-in React apps additionally install the pinned React/Fiber dependencies in the [React guide](../react/README.md).
 - The control panel sets `XRB_CORE` (the core repo it runs from) for every build and dev server it starts.
 - The app's `vite.config.js` maps the two names to the core and keeps one three.js. "New project" in the
   panel creates this from `templates/app`:
@@ -48,6 +49,19 @@ export default defineConfig({
 Managed apps receive the workspace Hands profile automatically after a normal SDK-consuming rebuild; app code and acquisition plugins need no adjustment wiring. After the provider's existing calibration/rig correction and panel conversion, SDK ingress applies `p' = w + sizeFactor * (p - w) + offsetMm / 1000` about each hand's own original wrist, then runs existing filters/gestures, scene mapping, interaction and pointer. Optional native pinch/grab/palm positions transform too; vectors, scores and native gesture decisions do not. Identity returns the original frame untouched. Native pinch/grab policy and metre thresholds are unchanged; there is no second rig correction in core.
 
 [Hands settings and bounds](../../docs/hands.md) describe storage and controls. Explicit Apply updates a running managed app through a run-bound ordered profile: geometry releases held interactions and resets filters; appearance-only changes retain them. SDK acknowledgement determines Applied, not a successful socket send. Deployment snapshots are frozen and never discover a panel or workspace; old packages/bundles require rebuilding. Appearance affects only standard SDK drawing, never where the hand touches. Custom canvas/mesh diagnostics remain app-owned; absent global overrides retain explicit constructor styles. `handVisual: false` still disables attachment only, not adjusted input or interaction.
+
+## Optional React components (new)
+
+[`@xr-build/react`](../react/README.md) adds React 19 / Fiber 9 components through this runtime,
+not through a competing Canvas. Its new mount API retains SDK rendering, projection, stereo, WebXR
+and input ownership. Vanilla apps, UI Kit and the template need no changes or React dependency.
+
+The new `app.onComponentFrame(callback)` subscription is for component integrations: after processed
+hands are sampled, before interaction and drawing, with the SDK frame clock and current XRFrame.
+It returns an unsubscribe function. The optional new low-level `xrb.componentPointer.add(object, handlers, options?)`
+registers SDK-picked mesh handlers and returns an unregister function; the React guide documents its event types,
+capture policy and optional historical camera-ray compatibility. Ordinary `app.setFrame` callbacks keep their existing pre-render
+ordering. `app.isRunning` and `app.isDisposed` expose lifecycle state for safe attachment.
 
 ## Minimal app
 
@@ -96,6 +110,9 @@ existing explicit `xrb.bindMouse()` calls are idempotent and listeners are remov
 Set `xrb: { mouse: false }` to disable mouse binding and the cursor. Panel launches carry the selected Mouse input
 through `xrb-mouse=0|1`, including launcher destinations and returns. Input selection applies on the next run;
 it does not hot-swap native input providers. `pointer: false` separately disables hand-to-pointer emulation, not the mouse.
+Component handlers still receive SDK-marked hand-pointer events when Mouse is disabled, without enabling Mouse
+capture, cursor or unmarked native input. Stereo hand-pointer coordinates span the whole panel and use the
+centre-viewer ray; native Mouse picking still selects an eye and its half of the canvas.
 
 Settings → Apps → Cursor selects `system` (default), `ring`, or `ring-dot` for the next launch. The managed
 `xrb-cursor` preference overrides `xrb: { cursor: ... }` and survives launcher navigation. System hides the scene

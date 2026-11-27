@@ -86,11 +86,11 @@ export async function buildInventory(root: string, filtered = false, excluded: s
 export async function embeddedInputs(core: string, excluded: string | string[] = []) {
   const root = await containedPath(canonicalFuturePath(core), 'embedded');
   const tree = await buildInventory(root, true, excluded), sdk: string[] = [];
-  for (const relative of ['packages/sdk/src', 'packages/ui-kit/src', 'packages/app-icon/src']) {
+  for (const relative of ['packages/sdk/src', 'packages/ui-kit/src', 'packages/app-icon/src', 'packages/react/src']) {
     const source = await containedPath(canonicalFuturePath(core), relative).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
     sdk.push(source ? (await buildInventory(source)).fingerprint : 'missing');
   }
-  for (const relative of ['package.json', 'pnpm-lock.yaml', 'tools/fetch-deps/deps.lock.json', 'packages/sdk/package.json', 'packages/ui-kit/package.json', 'packages/control-panel/package.json', 'packages/control-panel/src/browser-build.ts', 'packages/control-panel/src/project-build.ts', 'packages/control-panel/src/embedded-inputs.ts', 'packages/control-panel/src/embedded-workspace.ts', 'packages/control-panel/src/embedded-project-state.ts', 'packages/control-panel/src/embedded-source-refresh.ts', 'packages/control-panel/src/embedded-project-output.ts', 'packages/control-panel/src/service-artifacts.ts', 'packages/control-panel/src/component-resolver.ts', 'packages/control-panel/src/plugin-manager.ts']) {
+  for (const relative of ['package.json', 'pnpm-lock.yaml', 'tools/fetch-deps/deps.lock.json', 'packages/sdk/package.json', 'packages/ui-kit/package.json', 'packages/react/package.json', 'packages/control-panel/package.json', 'packages/control-panel/src/browser-build.ts', 'packages/control-panel/src/project-build.ts', 'packages/control-panel/src/embedded-inputs.ts', 'packages/control-panel/src/embedded-workspace.ts', 'packages/control-panel/src/embedded-project-state.ts', 'packages/control-panel/src/embedded-source-refresh.ts', 'packages/control-panel/src/embedded-project-output.ts', 'packages/control-panel/src/service-artifacts.ts', 'packages/control-panel/src/component-resolver.ts', 'packages/control-panel/src/plugin-manager.ts']) {
     const file = await containedPath(canonicalFuturePath(core), relative).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
     if (file && (await fs.lstat(file)).nlink !== 1) throw new Error('Core build input uses a hard link');
     sdk.push(file ? inputHash(await fs.readFile(file, 'utf8')) : 'missing');

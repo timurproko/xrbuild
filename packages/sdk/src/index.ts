@@ -26,7 +26,7 @@ import { iconControls, IconStage, type IconFactory } from './icon-object.ts';
 import { appLaunchContextFromLocation, appResumeProjectionFromLocation, type CameraProjection, type LaunchLocationLike } from './launch-context.ts';
 import { loadReturnOverlay } from './return-overlay.ts';
 import type { ReturnControl } from './return-control.ts';
-import { PointerEmulation } from './pointer.ts';
+import { PointerEmulation, pointerProvenance } from './pointer.ts';
 import { type HandCapabilities, type PagePerformance, type PlatformInfo, type StatusMessage, type Vec3 } from './protocol.ts';
 import { toSceneHand, type SceneHand } from './scene-hands.ts';
 import { nominalEyes, panelCropPlanes, StereoRenderer, type AppCamera, type EyePair, type PanelMapping } from './stereo.ts';
@@ -34,6 +34,9 @@ import { handProfile, type HandProfile } from './hand-profile.ts';
 import { HandProfileReceiver } from './hand-profile-control.ts';
 import { previewHandScope, subscribeHandProfile } from './hand-profile-preview.ts';
 import { HandFrameIngress, handSourcePolicy } from './hand-source.ts';
+import { disposeObject } from './dispose-object.ts';
+import { ComponentPointer } from './component-pointer.ts';
+export type { ComponentPointerEvent, ComponentPointerHandlers, ComponentPointerType, ComponentPointerOptions } from './component-pointer.ts';
 import { detectXrMode, eyesInPanel, headOf, rigMatrix, virtualDisplay, VirtualPanel, wantsAutoEnter, XrHands, type XrFrameLike, type XrMode, type XrOptions, type XrSessionLike, type XrSystemLike } from './webxr.ts';
 
 export * from './protocol.ts';
@@ -120,6 +123,8 @@ export class Xrb {
   readonly hands: HandInput;
   readonly view: StereoRenderer;
   readonly pointer: PointerEmulation | null;
+  /** New: optional SDK-picked mesh handlers. Physical interaction targets take precedence. */
+  readonly componentPointer = new ComponentPointer();
   /** shared interaction core: register poke / pinch / grab / volume targets, updated before each render */
   readonly interaction: Interactor;
   /** add to your scene to see tracked hands */
@@ -155,6 +160,8 @@ export class Xrb {
   private unbindMouse: (() => void) | null = null;
   private resumeCover: HTMLElement | null;
   private disposed = false;
+  private offIconControls: (() => void) | undefined;
+  private offIconServing: (() => void) | undefined;
 
   private readonly renderer: THREE.WebGLRenderer;
   private readonly displayLatencyMs: number;
@@ -249,7 +256,7 @@ export class Xrb {
       for (const fn of this.projectionListeners) fn(projection);
     });
     this.iconOptions = { autoReady: options.icon?.autoReady ?? true, readyMs: options.icon?.readyMs ?? 1000 };
-    this.pointer = options.pointer === false || this.icon ? null : new PointerEmulation({ element: renderer.domElement });
+    this.pointer = options.pointer === false || this.icon ? null : new PointerEmulation({ element: renderer.domElement, captured: (handId) => !!this.interaction.captured(handId) });
     this.configureHandProfile();
     if (this.icon) this.startIcon(this.icon.size);
     if (this.icon && options.icon?.create) this.createIconStage(options.icon.create);
@@ -325,6 +332,7 @@ export class Xrb {
     this.renderer.xr.setReferenceSpaceType('local');
     this.xrPanel.reset();
     await this.renderer.xr.setSession(session as unknown as XRSession);
+    if (this.disposed) { await session.end(); this.renderer.xr.enabled = false; return; }
     // After the renderer's own end handler, so the page is no longer presenting when the view is reported.
     session.addEventListener('end', () => this.xrEnded());
     // The headset moved its origin (the user recentred the headset): place the panel in front of them again.
@@ -530,22 +538,33 @@ export class Xrb {
    * mouse-over, press / take on button down, drag while held, release on button up. Returns an unbind function.
    */
   bindMouse(): () => void {
-    if (!this.mouseEnabled) return () => {};
+    if (!this.mouseEnabled && !this.pointer) return () => {};
     if (this.unbindMouse) return this.unbindMouse;
     // Perspective/stereo views map the pointer to the physical glass and viewer. Orthographic mono
     // views draw through the app camera directly, so their pick ray must come from that camera too.
     // ManagedCamera changes projection in place, so use its standard camera flag rather than instanceof.
-    const unbind = this.interaction.bindMouse(this.renderer.domElement, (u, v) => {
+    const unbind = this.interaction.bindMouse(this.renderer.domElement, (u, v, event) => {
       if (!this.stereo && isOrthographicCamera(this.appCamera)) return pointerRayFromCamera(this.appCamera, u, v);
+      // Emulated hands map the WHOLE panel across the canvas, not one eye-half.
+      // Only provenance (not pointerType, which is 'mouse' for both) distinguishes them.
+      const hand = !!event && !!pointerProvenance(event);
+      const eyeHalf = this.stereo && !hand;
       const d = this.display;
-      const rightEye = this.stereo && u >= 0.5;
-      const panelU = this.stereo ? Math.min(1, rightEye ? (u - 0.5) * 2 : u * 2) : u;
+      const rightEye = eyeHalf && u >= 0.5;
+      const panelU = eyeHalf ? Math.min(1, rightEye ? (u - 0.5) * 2 : u * 2) : u;
       const glass = this.view.panel.pointToWorld([(panelU - 0.5) * d.widthM, (0.5 - v) * d.heightM, 0], new THREE.Vector3());
       const l = this.currentEyes.left, r = this.currentEyes.right;
-      const e: Vec3 = this.stereo ? (rightEye ? r : l) : [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2, (l[2] + r[2]) / 2];
+      const e: Vec3 = eyeHalf ? (rightEye ? r : l) : [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2, (l[2] + r[2]) / 2];
       const eye = this.view.panel.pointToWorld(e, new THREE.Vector3());
       return new THREE.Ray(eye, glass.sub(eye).normalize());
-    }, { systemCursor: this.cursorStyle === 'system' });
+    }, {
+      systemCursor: this.cursorStyle === 'system',
+      accept: (event) => this.mouseEnabled || !!pointerProvenance(event),
+      interact: this.mouseEnabled,
+      observe: (type, ray, event, blocked) => {
+        this.componentPointer.dispatch(type, ray, event, blocked, this.renderer.domElement.getBoundingClientRect());
+      },
+    });
     const release = () => {
       if (this.unbindMouse !== release) return;
       unbind();
@@ -561,9 +580,10 @@ export class Xrb {
   }
 
   /** Renders one frame: updates eyes, hands and pointer, then draws both eyes. */
-  render(scene: THREE.Scene, camera: AppCamera): void {
+  render(scene: THREE.Scene, camera: AppCamera, componentFrame?: () => void): void {
     this.appCamera = camera;
     if (this.icon) {
+      componentFrame?.();
       this.renderIcon(scene, camera);
       return;
     }
@@ -586,6 +606,16 @@ export class Xrb {
     this.view.panel.update(this.view.mapping, camera);
     this.returnControl?.attach(scene, this.view.panel, this.visibleDisplay(), isOrthographicCamera(camera) ? 'orthographic' : 'perspective');
     this.sceneHands = this.currentHands.map((h) => toSceneHand(h, this.view.panel));
+    if (componentFrame) {
+      this.view.syncHeadCamera(camera);
+      componentFrame();
+      // Component controls may move the managed camera or scene objects. Resynchronize
+      // mapping before picking, without sampling input or advancing components twice.
+      scene.updateMatrixWorld(true);
+      camera.updateMatrixWorld();
+      this.view.panel.update(this.view.mapping, camera);
+      this.sceneHands = this.currentHands.map((h) => toSceneHand(h, this.view.panel));
+    }
     this.interaction.update(this.sceneHands, this.metre);
     this.returnControl?.update(now);
     if (!this.mouseEnabled) this.cursorObject.visible = false;
@@ -726,12 +756,15 @@ export class Xrb {
   private createIconStage(create: IconFactory): void {
     this.iconStagePending = true;
     void Promise.resolve().then(create).then((object) => {
+      if (this.disposed) { disposeObject(object); return; }
       const stage = new IconStage(object);
+      // Own the stage while its assets load, so disposal can release it immediately.
+      this.iconStage = stage;
       return stage.ready.then(() => {
-        this.iconStage = stage;
+        if (this.disposed) return;
         // Shown at once: the icon studio may already hold the app's frames (paused preview).
         stage.draw(this.renderer);
-        if (this.icon?.interactive) iconControls(this.renderer.domElement, stage, this.icon.size, () => stage.draw(this.renderer));
+        if (this.icon?.interactive) this.offIconControls = iconControls(this.renderer.domElement, stage, this.icon.size, () => stage.draw(this.renderer));
       });
     }, (error: unknown) => console.error('[xrb-icon] createIcon failed', error)).finally(() => { this.iconStagePending = false; });
   }
@@ -766,7 +799,7 @@ export class Xrb {
       // The app's own serveIconCapture (custom framing) takes precedence.
       // A 3D icon holds still (no Pause) and offers Reset; the developer turns and zooms it.
       if (!iconServing()) {
-        serveIconCapture(this.renderer.domElement, draw, icon.size, undefined,
+        this.offIconServing = serveIconCapture(this.renderer.domElement, draw, icon.size, undefined,
           stage ? { reset: () => { stage.reset(); draw(); }, pausable: false } : {});
       }
     } else if (this.iconOptions.autoReady && !this.iconSignalled) {
@@ -780,7 +813,11 @@ export class Xrb {
   }
 
   dispose(): void {
+    if (this.disposed) return;
     this.disposed = true;
+    this.offIconControls?.(); this.offIconServing?.();
+    if (this.iconStage) disposeObject(this.iconStage.scene);
+    this.iconStage = null;
     this.handProfileReceiver?.close(); this.handProfileTransport?.close();
     this.meshClient?.close(); this.handsObject.disposeMeshes();
     this.handIngress.close();
@@ -788,17 +825,19 @@ export class Xrb {
     this.currentHands = []; this.sceneHands = [];
     this.interaction.update([], this.metre);
     this.unbindMouse?.();
+    this.componentPointer.clear();
     this.restoreCursor();
     this.disposeShell();
-    this.cursorObject.removeFromParent();
-    this.handsObject.removeFromParent();
+    disposeObject(this.cursorObject);
+    disposeObject(this.handsObject);
     this.returnControl?.dispose();
     this.resumeCover?.remove();
     this.resumeCover = null;
     this.channel?.close();
     this.xrButton?.remove();
     this.handProblemNotice?.remove();
-    void this.exitXR();
+    // Final disposal is best-effort even when a retiring browser session rejects end().
+    void this.exitXR().catch(() => {});
   }
 }
 
@@ -989,6 +1028,8 @@ export interface XrbAppFrame {
   camera: AppCamera;
   renderer: THREE.WebGLRenderer;
   xrb: Xrb;
+  /** Current headset frame, or null outside an immersive SDK frame. */
+  xrFrame?: XRFrame | null;
 }
 
 export interface XrbAppOptions {
@@ -1011,8 +1052,10 @@ export class XrbAppRuntime {
   readonly xrb: Xrb;
   private readonly orthographicHeight: number | undefined;
   private frame: ((frame: XrbAppFrame) => void) | undefined;
-  private lastTimeMs = 0;
+  private lastTimeMs: number | null = null;
   private running = false;
+  private disposed = false;
+  private readonly componentFrames = new Set<(frame: XrbAppFrame) => void>();
   private readonly offView: () => void;
   private readonly offProjection: () => void;
   private readonly offPreviewProjection: () => void;
@@ -1059,15 +1102,30 @@ export class XrbAppRuntime {
     this.frame = frame;
   }
 
+  /** New: optional component phase, after sampled hands and before interaction/drawing. */
+  onComponentFrame(callback: (frame: XrbAppFrame) => void): () => void {
+    if (this.disposed) throw new Error('The SDK runtime is disposed');
+    this.componentFrames.add(callback);
+    return () => { this.componentFrames.delete(callback); };
+  }
+
+  get isRunning(): boolean { return this.running; }
+  get isDisposed(): boolean { return this.disposed; }
+
   start(): void {
-    if (this.running) return;
+    if (this.running || this.disposed) return;
     this.running = true;
-    this.lastTimeMs = 0;
+    this.lastTimeMs = null;
     this.xrb.setAnimationLoop((timeMs) => {
-      const deltaSeconds = this.lastTimeMs ? Math.max(0, timeMs - this.lastTimeMs) / 1000 : 0;
+      if (!this.running || this.disposed) return;
+      const deltaSeconds = this.lastTimeMs === null ? 0 : Math.max(0, timeMs - this.lastTimeMs) / 1000;
       this.lastTimeMs = timeMs;
-      this.frame?.({ timeMs, deltaSeconds, scene: this.scene, camera: this.camera, renderer: this.renderer, xrb: this.xrb });
-      this.xrb.render(this.scene, this.camera);
+      const frame: XrbAppFrame = { timeMs, deltaSeconds, scene: this.scene, camera: this.camera, renderer: this.renderer, xrb: this.xrb,
+        xrFrame: this.xrb.presenting ? this.renderer.xr.getFrame() : null };
+      this.frame?.(frame);
+      this.xrb.render(this.scene, this.camera, this.componentFrames.size ? () => {
+        for (const callback of this.componentFrames) callback(frame);
+      } : undefined);
     });
   }
 
@@ -1078,7 +1136,10 @@ export class XrbAppRuntime {
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.stop();
+    this.componentFrames.clear();
     globalThis.removeEventListener?.('resize', this.onResize);
     this.offView();
     this.offProjection();

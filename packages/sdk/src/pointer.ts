@@ -28,6 +28,11 @@ export function choosePointerHand(hands: Hand[], current: number | null): Hand |
   return hands.reduce((a, b) => (a.keypoints[KP.INDEX_TIP][2] < b.keypoints[KP.INDEX_TIP][2] ? a : b));
 }
 
+/** Internal provenance avoids treating SDK-emulated hand events as a second physical mouse. */
+export interface PointerProvenance { handId: number | null; captured: boolean; cancelled: boolean }
+const provenance = new WeakMap<Event, PointerProvenance>();
+export function pointerProvenance(event: Event): PointerProvenance | undefined { return provenance.get(event); }
+
 export interface PointerTarget {
   getBoundingClientRect(): { left: number; top: number; width: number; height: number };
   dispatchEvent(e: Event): boolean;
@@ -48,6 +53,8 @@ export interface PointerEmulationOptions {
   dragSlop?: number;
   /** creates events; default PointerEvent/MouseEvent from the page */
   createEvent?: (type: string, init: Record<string, unknown>) => Event;
+  /** SDK capture ownership; metadata only, never changes legacy DOM delivery. */
+  captured?: (handId: number) => boolean;
 }
 
 export interface PointerState {
@@ -68,6 +75,8 @@ export class PointerEmulation {
   private downTarget: PointerTarget | null = null;
   private downAt: { u: number; v: number } | null = null;
   private dragging = false;
+  private capturedGesture = false;
+  private cancelling = false;
 
   constructor(options: PointerEmulationOptions) {
     this.opts = options;
@@ -88,6 +97,8 @@ export class PointerEmulation {
       return;
     }
     this.state.handId = hand.id;
+    if (!this.state.down) this.capturedGesture = false;
+    this.capturedGesture ||= !!this.opts.captured?.(hand.id);
     let u = Math.min(1, Math.max(0, hit.u)), v = Math.min(1, Math.max(0, hit.v));
     if (this.state.down && this.downAt && !this.dragging) {
       if (Math.hypot(u - this.downAt.u, v - this.downAt.v) > (this.opts.dragSlop ?? 0.015)) this.dragging = true;
@@ -122,11 +133,13 @@ export class PointerEmulation {
   private release(click: boolean): void {
     const target = this.downTarget;
     this.state.down = false;
+    this.cancelling = !click;
     this.send('pointerup', target, 0);
     if (click && target && this.targetAt(this.state.clientX, this.state.clientY) === target) this.send('click', target, 0);
     this.downTarget = null;
     this.downAt = null;
     this.dragging = false;
+    this.cancelling = false;
   }
 
   private targetAt(x: number, y: number): PointerTarget {
@@ -149,7 +162,11 @@ export class PointerEmulation {
     };
     const make = this.opts.createEvent ?? ((ty: string, i: Record<string, unknown>) =>
       ty === 'click' || ty.startsWith('mouse') ? new MouseEvent(ty, i) : new PointerEvent(ty, i));
-    t.dispatchEvent(make(type, init));
-    if (this.opts.mouseEvents !== false && type.startsWith('pointer')) t.dispatchEvent(make(type.replace('pointer', 'mouse'), init));
+    const dispatch = (event: Event) => {
+      provenance.set(event, { handId: this.state.handId, captured: this.capturedGesture, cancelled: this.cancelling });
+      t.dispatchEvent(event);
+    };
+    dispatch(make(type, init));
+    if (this.opts.mouseEvents !== false && type.startsWith('pointer')) dispatch(make(type.replace('pointer', 'mouse'), init));
   }
 }

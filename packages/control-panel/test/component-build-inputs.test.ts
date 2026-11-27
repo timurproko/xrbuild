@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { test } from 'node:test';
+import { embeddedInputs } from '../src/embedded-inputs.ts';
+import { REPO } from '../src/env.ts';
+
+test('component source and manifest changes invalidate managed app output without changing embedded source ownership', async (t) => {
+  const scratch = process.env.XRB_TEST_ROOT ?? path.join(REPO, '.artifacts');
+  await fs.mkdir(scratch, { recursive: true });
+  const root = await fs.mkdtemp(path.join(scratch, 'component-inputs-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.mkdir(path.join(root, 'embedded'));
+  await fs.writeFile(path.join(root, 'embedded/package.json'), '{"private":true}');
+  const before = await embeddedInputs(root);
+  await fs.mkdir(path.join(root, 'packages/react/src'), { recursive: true });
+  await fs.writeFile(path.join(root, 'packages/react/src/index.ts'), 'export const bridge = 1;');
+  const source = await embeddedInputs(root);
+  assert.notEqual(source.fingerprint, before.fingerprint);
+  assert.equal(source.sourceFingerprint, before.sourceFingerprint);
+  await fs.writeFile(path.join(root, 'packages/react/package.json'), '{"name":"@fixture/components","version":"1.0.0"}');
+  const manifest = await embeddedInputs(root);
+  assert.notEqual(manifest.fingerprint, source.fingerprint);
+  assert.equal(manifest.sourceFingerprint, before.sourceFingerprint);
+  assert.deepEqual(await fs.readdir(path.join(root, 'embedded')), ['package.json']);
+});
