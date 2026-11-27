@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { meshSetupOwners, meshSetupPlan, installMeshSetup, MeshSetupUnavailable } from '../src/hand-mesh-setup.ts';
+import { meshSetupOwners, meshSetupPlan, installMeshSetup, MeshSetupUnavailable, setupProgress, formatSetupProgress } from '../src/hand-mesh-setup.ts';
 import { handMeshRegistry } from '../src/hand-mesh-plugins.ts';
 import { resolvePluginCatalog } from '../src/extension-catalog.ts';
 import { restartBlocker } from '../src/launch-blockers.ts';
@@ -41,4 +41,15 @@ test('post-processing plugins offer their prerequisite setup and stay selectable
     delete (globalThis as any).fixtureInstall;
     await fs.rm(workspace, { recursive: true, force: true });
   }
+});
+
+test('every setup reports progress through one shape that core validates and formats', () => {
+  const line = (raw: unknown) => { const event = setupProgress(raw); return event && formatSetupProgress(event); };
+  assert.equal(line({ step: 'download', done: 1048576, total: 2097152, file: 'model.bin' }), 'download: 1.0 MB of 2.0 MB (50%)', 'bytes are the default unit');
+  assert.equal(line({ step: 'self-check', done: 3, total: 7, unit: 'items', detail: 'torch' }), 'self-check: 3 of 7 (42%) · torch');
+  assert.equal(line({ step: 'unpack' }), 'unpack…');
+  for (const bad of [null, {}, { step: 'Download!' }, { step: 'x', total: -1 }, { step: 'x', total: 0 }, { step: 'x', done: 1, total: 'a' }, { step: 'x', unit: 'files', total: 2 }])
+    assert.equal(setupProgress(bad), null, JSON.stringify(bad));
+  assert.equal(setupProgress({ step: 'x', done: 9, total: 4, unit: 'items' })?.done, 4, 'done never passes total');
+  assert.equal(setupProgress({ step: 'x', detail: 'ab'.padEnd(200, 'c') })?.detail?.length, 80, 'detail is single-line and bounded');
 });
