@@ -53,6 +53,7 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
     install.addEventListener('click', async () => {
       if (!plan || running) return;
       running = true; install.hidden = true; cancel.disabled = true; state('running');
+      let stepLine = '', stepStarted = Date.now();
       message.textContent = `Installing ${label}…`; output.textContent = 'Starting…';
       try {
         let job = await post('/api/hands/postprocessing/setup', { owner, consent: plan.consent });
@@ -61,6 +62,13 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
           const jobs = (await (await fetch('/api/jobs', { cache: 'no-store' })).json()).jobs ?? [];
           job = jobs.find(candidate => candidate.id === job.id) ?? job;
           if (job.lines?.length) { output.textContent = job.lines.slice(-20).join('\n'); output.scrollTop = output.scrollHeight; }
+          // The status line names the current step: its percent when the setup reports one, otherwise how long it has run,
+          // so a long step such as the self-check visibly keeps going.
+          const last = job.lines?.at(-1) ?? '';
+          if (last !== stepLine) { stepLine = last; stepStarted = Date.now(); }
+          const percent = /\((\d+)%\)/.exec(last)?.[1], step = /^([a-z-]+)(?::|…)/i.exec(last)?.[1];
+          const seconds = Math.floor((Date.now() - stepStarted) / 1000), elapsed = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+          message.textContent = step ? `Installing ${label} · ${step} ${percent ? `${percent}%` : elapsed}` : `Installing ${label}…`;
         }
         done = job.state === 'done';
         state(done ? 'done' : 'failed');
