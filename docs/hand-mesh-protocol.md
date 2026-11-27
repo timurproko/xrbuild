@@ -36,6 +36,15 @@ Windows managed runs require checked `xrb-mesh-supervisor.exe` beside the select
 
 Stop sends processor Stop plus EOF, permits two seconds of grace, then terminates only its owned job and allows five seconds to verify all processes ended. The panel bounds an unresponsive supervisor and uses read-only exact-identity/job verification if its receipt is lost. Failed verification remains retryable and blocks reuse; it is never labelled Stopped. Owner/supervisor death cannot leave an uncontained processor. No provider/acquisition job or unrelated process is touched. Other platforms need equivalent containment, not a claim that cooperative EOF is crash-safe.
 
+Within a panel, Hands and managed-native consumers use one retirement registry, not separate cleanup flags.
+Retirement registers the exact run and revokes its gateway before owner release. The internal
+`MeshRunOptions.beforeProcessor` hook waits for verified previous-tree cleanup before validation/spawn; it
+is cancellable by Stop, None, replacement and retired generations. A failed verification yields
+`Previous mesh cleanup is not verified; retry cleanup`, preserving saved values and the current gateway for
+explicit current-run Retry. The hook guards every new processor, so live configuration cannot bypass a
+pending cross-owner join. Gateway negotiation and input startup do not await this optional barrier. This is
+server lifecycle wiring only; no processor capability, frame packet or portable profile field changes.
+
 Standalone focused build: `cmake -S native/mesh-supervisor -B <isolated-output> -A x64`, then `cmake --build <isolated-output> --config Release`. Set `XRB_TEST_MESH_SUPERVISOR` to that executable for actual fake-child/grandchild tests. A skipped check is not containment evidence.
 
 ## Legacy ownership and lifecycle

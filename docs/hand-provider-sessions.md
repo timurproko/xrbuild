@@ -74,6 +74,15 @@ crash and panel exit retire the gateway and drain its separately contained proce
 visible and retryable and blocks mesh reuse, but does not retain the provider's camera lease after verified
 provider death. No mesh failure substitutes another source or resets skeleton interaction.
 
+The optional-process reuse fence is shared by Hands and managed apps in this panel, in both transition
+directions. Releasing provider ownership is not proof that its optional tree ended. Every retired mesh owner
+stays recorded until exact-tree termination is verified; pending joins coalesce and failed joins remain retryable.
+A replacement consumer can start its skeleton and processor-free gateway immediately, but the processor-start
+hook cannot launch through that fence, including after a settings Apply or Retry. Failed verification reports
+an independent mesh failure; verified cleanup permits the latest requested generation without restarting input.
+Stopping a new gateway revokes its credentials immediately even while an older tree is joining. Panel exit starts
+both retirements and stops input owners before waiting for optional verification.
+
 ## Raw recording hooks, without recorder UI
 
 `handsPage.session` exposes `recordingSource()`, `subscribeRawFrames(listener)` and `subscribeLifecycle(listener)`. Each raw listener receives its own unchanged HANDS v2 packet and decoded convenience frame before profile ingress; geometry/filter/render output is never recorded. `hands-provider-format.js` supplies bounded version-1 validation and replay; `createProviderRecording` supplies the raw capture helper. The simplified page does not mount a recorder UI.

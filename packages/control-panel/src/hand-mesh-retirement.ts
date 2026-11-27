@@ -44,9 +44,9 @@ export class HandMeshRetirement {
         }));
       }
     }).finally(() => {
-      if (this.draining === operation) this.draining = null;
+      if (this.draining === operation) { this.draining = null; this.joining.clear(); }
       if ([...this.retired].some(([run, entry]) => !attempted.has(run) && entry.pending)) void this.drain();
-    });
+    }).then(() => !this.blocked);
     this.draining = operation;
     return operation;
   }
