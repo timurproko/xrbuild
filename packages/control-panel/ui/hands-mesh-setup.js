@@ -61,7 +61,12 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
         done = job.state === 'done';
         state(done ? 'done' : 'failed');
         message.textContent = done ? `${label} is ready.` : job.error || 'Install failed; review the output and try again.';
-      } catch (error) { state('failed'); message.textContent = error.message; }
+      } catch (error) {
+        state('failed');
+        const rebuild = /choose Rebuild/i.test(error.message);
+        message.textContent = rebuild ? 'Rebuild first, then install.' : 'Install could not start.';
+        output.textContent = rebuild ? 'Application components changed since the last Rebuild. Choose Rebuild from the XR Build menu, then press Install again.' : error.message;
+      }
       running = false; cancel.disabled = false; cancel.textContent = 'Close'; cancel.classList.add('primary');
     });
     dialog.showModal();
