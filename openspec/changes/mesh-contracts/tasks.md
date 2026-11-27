@@ -20,11 +20,11 @@
 
 ## 4. Live configuration and settings-generation fences
 
-- [ ] 4.1 Separate the stable run gateway from its replaceable child stage and provide run-bound configure/selection/None/retry controls with one applying and newest pending transaction; verify fake tests cover startup with None, enabling later, selection drain-before-replace, rapid edits, Stop-wins cancellation and no idle processor start.
-- [ ] 4.2 Add per-setting live/reprepare modes, exact applied acknowledgements and ordered settings generations distinct from profile/pose revisions; verify schema/value rejection, duplicate/out-of-order/foreign ACKs, configure timeout/failure and unchanged skeleton holds.
-- [ ] 4.3 Fence frame/result/topology caches and expose desired/requested/applied/drawing generations through authenticated SDK/service status; verify late old-generation geometry never resurfaces and ready/write success cannot count as actual drawing.
-- [ ] 4.4 Reconcile committed profile changes into existing compatible managed desktop ownership after persistence and expose safe backend status; verify focused API tests preserve revisions/unrelated drafts, distinguish save from delivery failures, retain legacy next-run guidance and never start Hands acquisition.
-- [ ] 4.5 Update neutral configuration docs and only the existing selector's inaccurate next-run/status copy, without adding controls or Hands viewport wiring; verify targeted existing selector/API checks describe the negotiated behavior honestly.
+- [x] 4.1 Separate the stable run gateway from its replaceable child stage and provide run-bound configure/selection/None/retry controls with one applying and newest pending transaction; verify fake tests cover startup with None, enabling later, selection drain-before-replace, rapid edits, Stop-wins cancellation and no idle processor start.
+- [x] 4.2 Add per-setting live/reprepare modes, exact applied acknowledgements and ordered settings generations distinct from profile/pose revisions; verify schema/value rejection, duplicate/out-of-order/foreign ACKs, configure timeout/failure and unchanged skeleton holds.
+- [x] 4.3 Fence frame/result/topology caches and expose desired/requested/applied/drawing generations through authenticated SDK/service status; verify late old-generation geometry never resurfaces and ready/write success cannot count as actual drawing.
+- [x] 4.4 Reconcile committed profile changes into existing compatible managed desktop ownership after persistence and expose safe backend status; verify focused API tests preserve revisions/unrelated drafts, distinguish save from delivery failures, retain legacy next-run guidance and never start Hands acquisition.
+- [x] 4.5 Update neutral configuration docs and only the existing selector's inaccurate next-run/status copy, without adding controls or Hands viewport wiring; verify targeted existing selector/API checks describe the negotiated behavior honestly.
 
 ## 5. Declared bounded preparation and in-session repreparation
 

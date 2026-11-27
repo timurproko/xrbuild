@@ -74,7 +74,8 @@ test('owner process death closes the private pipe and the real child exits', asy
   const script = path.join(root, 'owner.mjs');
   await fs.writeFile(script, `import {HandMeshRun} from ${JSON.stringify(new URL('../src/hand-mesh-run.ts', import.meta.url).href)};
     const run = new HandMeshRun(()=>['https://app.local'],()=>{}, {supervisor:${JSON.stringify(process.env.XRB_TEST_MESH_SUPERVISOR)}}); await run.start(${JSON.stringify(plugin('normal', 0, 3))}, {});
-    console.log(run.child.pid);`);
+    while (!run.stage?.owned?.pid) await new Promise(resolve=>setTimeout(resolve,10));
+    console.log(run.stage.owned.pid);`);
   const owner = spawn(process.execPath, [script], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   t.after(async () => { owner.kill(); if (childPid) { try { process.kill(childPid); } catch {} } await fs.rm(root, { recursive: true, force: true }); });
   childPid = await new Promise<number>((resolve, reject) => {

@@ -30,6 +30,16 @@ export interface MeshState {
 }
 export interface MeshSurface { id: number; topology: string; positions: Float32Array; normals?: Float32Array; indices: Uint32Array }
 export interface MeshResult { type: 'result'; epoch: string; sequence: number; revision: number; meshes: MeshSurface[]; version?: 2; runId?: string; settingsGeneration?: number }
+export function validMeshState(v: unknown): v is MeshState {
+  return object(v) && typeof v.runId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(v.runId)
+    && ['Preparing', 'Ready', 'Failed', 'Stopped'].includes(v.phase as string) && integer(v.requestedGeneration)
+    && (v.appliedGeneration === null || integer(v.appliedGeneration) && v.appliedGeneration <= v.requestedGeneration)
+    && (v.drawingGeneration === null || integer(v.drawingGeneration) && v.drawingGeneration === v.appliedGeneration)
+    && (v.progress === null || typeof v.progress === 'number' && Number.isFinite(v.progress) && v.progress >= 0 && v.progress <= 1)
+    && (v.reason === null || typeof v.reason === 'string' && v.reason.length <= 240 && !/[\x00-\x1f\x7f]/.test(v.reason))
+    && (v.savedRevision === null || typeof v.savedRevision === 'string' && v.savedRevision.length <= 128)
+    && (v.owner === null || typeof v.owner === 'string' && v.owner.length <= 160) && (v.id === null || typeof v.id === 'string' && v.id.length <= 128);
+}
 export interface MeshRuntime { version: 1; url: string; token: string }
 const enc = new TextEncoder(), dec = new TextDecoder('utf-8', { fatal: true });
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);

@@ -1,5 +1,5 @@
 import type { Hand } from './hands.ts';
-import { decodeMeshResult, MESH_CAPABILITIES, validMeshCapabilities, unknownMeshObservations, MESH_MAX_BYTES, type MeshFrame, type MeshRuntime, type MeshSurface } from './hand-mesh-protocol.ts';
+import { decodeMeshResult, MESH_CAPABILITIES, validMeshCapabilities, validMeshState, unknownMeshObservations, MESH_MAX_BYTES, type MeshFrame, type MeshRuntime, type MeshState, type MeshSurface } from './hand-mesh-protocol.ts';
 
 export function meshRuntime(value: string | undefined): MeshRuntime | null {
   if (!value) return null;
@@ -20,6 +20,8 @@ export class HandMeshClient {
   private protocol: 1 | 2 = 1;
   private runId = '';
   private settingsGeneration = 1;
+  private configuration: MeshState | null = null;
+  get state(): MeshState | null { return this.configuration ? { ...this.configuration } : null; }
   private epoch = crypto.randomUUID();
   private sequence = 0;
   private revision = 0;
@@ -42,10 +44,18 @@ export class HandMeshClient {
         if (hello.protocolVersion !== 2 || !validMeshCapabilities(hello.capabilities) || typeof hello.runId !== 'string'
           || !/^[a-zA-Z0-9-]{1,80}$/.test(hello.runId) || !Number.isSafeInteger(hello.settingsGeneration) || hello.settingsGeneration < 0) throw new Error('mesh negotiation failed');
         this.protocol = 2; this.runId = hello.runId; this.settingsGeneration = hello.settingsGeneration;
+        if (hello.state !== undefined) this.applyState(hello.state);
       }
       if (this.closed) return;
       this.connected = true; this.pump();
     }).catch(() => { if (!this.closed) this.status = 'Skeleton fallback: mesh connection unavailable'; }).finally(() => clearTimeout(timer));
+  }
+  private applyState(value: unknown): void {
+    if (!validMeshState(value) || value.runId !== this.runId) throw new Error('Invalid mesh configuration state');
+    if (value.requestedGeneration < this.settingsGeneration) return;
+    if (value.requestedGeneration !== this.settingsGeneration) { this.settingsGeneration = value.requestedGeneration; this.invalidate(); }
+    this.configuration = { ...value };
+    if (value.phase !== 'Ready' || value.appliedGeneration !== value.requestedGeneration) { this.accepted = null; this.topologies.clear(); }
   }
   private frame(hands: Hand[], sampleMs: number): MeshFrame {
     return { type: 'frame', epoch: this.epoch, sequence: this.sequence++, revision: this.revision, sentMs: this.now(), sampleMs,
@@ -59,7 +69,7 @@ export class HandMeshClient {
     if (key !== this.ids) { this.ids = key; this.invalidate(); }
   }
   invalidate(): void { this.revision++; this.pending = null; this.accepted = null; this.topologies.clear(); }
-  update(hands: Hand[], sampleMs: number, generation = 0): MeshSurface[] {
+  update(hands: Hand[], sampleMs: number, generation = 0, drawingEnabled = true): MeshSurface[] {
     if (this.closed) return [];
     if (generation !== this.generation) { this.generation = generation; this.invalidate(); }
     const shown = hands.filter(h => !h.coasting).slice(0, 2);
@@ -72,8 +82,11 @@ export class HandMeshClient {
       });
     }
     if (!shown.length) { this.accepted = null; this.topologies.clear(); }
-    this.status = meshes.length ? 'Running' : 'Skeleton fallback: mesh not ready or current';
-    this.pending = this.frame(shown, sampleMs); this.pump();
+    this.status = meshes.length ? 'Running' : this.configuration?.phase === 'Preparing' ? 'Preparing'
+      : this.configuration?.reason ? `Skeleton fallback: ${this.configuration.reason}` : 'Skeleton fallback: mesh not ready or current';
+    this.pending = this.frame(shown, sampleMs);
+    if (this.protocol === 2) this.pending.drawingGeneration = meshes.length && drawingEnabled ? this.settingsGeneration : null;
+    this.pump();
     return meshes;
   }
   private send(route: string, frame: MeshFrame, signal: AbortSignal) {
@@ -87,6 +100,9 @@ export class HandMeshClient {
     const timer = setTimeout(() => controller.abort(), 1000);
     void (async () => {
       const response = await this.send('/frame', frame, controller.signal);
+      if (this.closed) return;
+      const state = response.headers.get('x-xrb-mesh-state');
+      if (this.protocol === 2 && state) { if (state.length > 4096) throw new Error('Oversized mesh state'); this.applyState(JSON.parse(state)); }
       if (response.status === 204) { this.status = response.headers.get('x-xrb-mesh-status') ?? 'Skeleton fallback: mesh is late'; return; }
       if (!response.ok || !response.body) throw new Error('mesh unavailable');
       const reader = response.body.getReader(), parts: Uint8Array[] = []; let length = 0;
@@ -94,7 +110,8 @@ export class HandMeshClient {
         const r = await reader.read(); if (r.done) break;
         length += r.value.length; if (length > MESH_MAX_BYTES) { await reader.cancel(); throw new Error('oversized mesh'); } parts.push(r.value);
       }
-      if (this.closed || frame.revision !== this.revision || this.now() - frame.sentMs > 33) return;
+      if (this.closed || frame.revision !== this.revision || this.now() - frame.sentMs > 33
+        || this.protocol === 2 && (frame.settingsGeneration !== this.settingsGeneration || this.configuration && (this.configuration.phase !== 'Ready' || this.configuration.appliedGeneration !== this.settingsGeneration))) return;
       const bytes = new Uint8Array(length); let offset = 0; for (const p of parts) { bytes.set(p, offset); offset += p.length; }
       const result = decodeMeshResult(bytes);
       if (this.protocol === 2 && (result.version !== 2 || result.runId !== this.runId || result.settingsGeneration !== frame.settingsGeneration)) throw new Error('wrong settings generation');
