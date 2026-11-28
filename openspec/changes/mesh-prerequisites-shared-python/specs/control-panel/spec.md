@@ -12,7 +12,7 @@ Native Rebuild and its freshness check SHALL build and require a host plugin DLL
 
 ### Requirement: Core-provisioned plugin Python
 
-A plugin SHALL be able to declare an exact Python version and hash-locked wheels, with optional named wheel sets that may use their own https index. Core SHALL provision them with one pinned package manager verified by size and SHA-256, install only the declared wheels by hash without dependency resolution or source builds, and never use a Python or package manager already on the machine or change PATH or the registry. Core SHALL offer a reusable environment under the user's `~/.xrbuild/python` and a placement inside a plugin's own runtime folder. Downloads that are still needed SHALL join the plugin's install plan and consent.
+A plugin SHALL be able to declare an exact Python version and hash-locked wheels, with optional named wheel sets that may use their own https index. Core SHALL provision them with one pinned, verified package manager, as a reusable environment under the user's `~/.xrbuild/python` or inside a plugin's own runtime folder. Downloads that are still needed SHALL join the plugin's install plan and consent.
 
 #### Scenario: Setup-time environment
 - **WHEN** a plugin's install plan asks for its Python environment and it is not ready
@@ -21,6 +21,10 @@ A plugin SHALL be able to declare an exact Python version and hash-locked wheels
 #### Scenario: Runtime-folder placement
 - **WHEN** a plugin's install plan asks for Python inside its runtime folder
 - **THEN** the exact interpreter is copied there with a path file pointing only at its own library and the runtime's site-packages, the chosen wheel set is installed there as plain files, and the plugin's receipt covers them
+
+#### Scenario: Isolated, exact installation
+- **WHEN** core provisions a plugin's Python
+- **THEN** the package manager is verified by size and SHA-256, only the declared wheels are installed by hash without dependency resolution or source builds, and no Python or package manager already on the machine is used and PATH and the registry are unchanged
 
 #### Scenario: Invalid declaration
 - **WHEN** a manifest declares a version range, a wheel without a SHA-256, a duplicate wheel, an unknown field or a non-https index
