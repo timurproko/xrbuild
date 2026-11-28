@@ -2,12 +2,12 @@
 
 ## 1. Complete visual-theme contract and unchanged Default
 
-- [ ] 1.1 Preserve a fresh baseline from the starting default-branch revision with the prior fixed-clock/no-MSAA proof method; completion is a retained source revision, capture configuration and baseline inventory in the external task evidence folder.
-- [ ] 1.2 Add complete typed visual roles, built-in IDs/resolution and explicit ownership boundaries, including primitive/text/state roles and dynamic Slider fill; verify completeness and invalid-selection cases in focused theme-contract tests.
-- [ ] 1.3 Extract Default from existing builders, remaining control-local meshes/colours, Dialog, Trackball, Board, Label, Icon, GlassEdge and feedback without visual changes; verify old constructor/helper compatibility and a React-free imperative consumer build.
-- [ ] 1.4 Keep targets, contact planes, layout anchors, timing and SDK behavior outside the theme contract; verify target-definition snapshots and existing control/lifetime regressions.
-- [ ] 1.5 Document the contract, Default compatibility and theme-authoring bounds in the UI Kit guide; verify the documented API through the contract/import fixtures.
-- [ ] 1.6 Compare Default controls/variants and consuming-app states against the preserved baseline in all three views; require byte-identical deterministic pairs including no-MSAA captures and retain separate product-MSAA repeat diagnostics without changing renderer defaults.
+- [x] 1.1 Preserve a fresh baseline from the starting default-branch revision with the prior fixed-clock/no-MSAA proof method; completion is a retained source revision, capture configuration and baseline inventory in the external task evidence folder.
+- [x] 1.2 Add complete typed visual roles, built-in IDs/resolution and explicit ownership boundaries, including primitive/text/state roles and dynamic Slider fill; verify completeness and invalid-selection cases in focused theme-contract tests.
+- [x] 1.3 Extract Default from existing builders, remaining control-local meshes/colours, Dialog, Trackball, Board, Label, Icon, GlassEdge and feedback without visual changes; verify old constructor/helper compatibility and a React-free imperative consumer build.
+- [x] 1.4 Keep targets, contact planes, layout anchors, timing and SDK behavior outside the theme contract; verify target-definition snapshots and existing control/lifetime regressions.
+- [x] 1.5 Document the contract, Default compatibility and theme-authoring bounds in the UI Kit guide; verify the documented API through the contract/import fixtures.
+- [x] 1.6 Compare Default controls/variants and consuming-app states against the preserved baseline in all three views; require byte-identical deterministic pairs including no-MSAA captures and retain separate product-MSAA repeat diagnostics without changing renderer defaults.
 
 ## 2. Complete Chamfer mesh style
 

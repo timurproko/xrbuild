@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { DotShell, Trackball as SdkTrackball, VolumeTarget, type TrackballAxis } from '@xr-build/sdk';
 import { Control } from './control.ts';
 import { COLORS, approach, material } from './theme.ts';
+import { styleMesh, type ThemeOptions } from './visual-theme.ts';
 
 const AXES: Record<Exclude<TrackballAxis, 'free'>, THREE.Vector3> = {
   x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1),
@@ -28,7 +29,7 @@ export class Trackball extends Control {
   private mouse: THREE.Vector3 | null = null;
   private wasTouching = false;
 
-  constructor(title: string, radius: number) {
+  constructor(title: string, radius: number, options: ThemeOptions = {}) {
     super(title, -radius - 0.02);
     this.radius = radius;
     const visual = trackballVisual(radius);
@@ -49,6 +50,7 @@ export class Trackball extends Control {
     });
     this.showStatus();
     this.visuals.capture(this);
+    if (options.theme) this.setTheme(options.theme);
   }
 
   get axis(): TrackballAxis {
@@ -133,12 +135,13 @@ function trackballVisual(radius: number) {
   object.add(robotHead(radius * 0.62));
   const rings: Record<string, THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>> = {};
   for (const [key, axis] of Object.entries(AXES)) {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.8, radius * 0.012, 8, 96), new THREE.MeshBasicMaterial({ color: COLORS.accent, transparent: true, opacity: 0 }));
+    const ring = styleMesh(new THREE.Mesh(new THREE.TorusGeometry(radius * 0.8, radius * 0.012, 8, 96), new THREE.MeshBasicMaterial({ color: COLORS.accent, transparent: true, opacity: 0 })), 'trackballRing', { shape: 'torus', args: [radius * 0.8, radius * 0.012, 8, 96] });
     ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
     ring.visible = false; ring.userData.keepLook = true; ring.raycast = () => {};
     rings[key] = ring; object.add(ring);
   }
   const shell = new DotShell({ radius, color: COLORS.accent, dotRadius: 0.02 });
+  styleMesh(shell, 'trackballShell', { shape: 'circle', args: [radius * 0.02, 12] });
   shell.userData.keepLook = true; shell.raycast = () => {}; object.add(shell);
   return { object, rings, shell };
 }
@@ -150,25 +153,25 @@ function trackballVisual(radius: number) {
 export function robotHead(size: number): THREE.Group {
   const g = new THREE.Group();
   const shell = material('#9aa6b8', { flatShading: true, roughness: 0.55, metalness: 0.15 });
-  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(size, 1), shell);
+  const head = styleMesh(new THREE.Mesh(new THREE.IcosahedronGeometry(size, 1), shell), 'robotHead', { shape: 'ico', args: [size, 1] });
   head.scale.set(1, 0.92, 0.88);
   const dark = material('#1c2230', { roughness: 0.3 });
   const glow = material(COLORS.accent, { emissive: COLORS.accent, emissiveIntensity: 0.8 });
   for (const x of [-0.36, 0.36]) {
-    const socket = new THREE.Mesh(new THREE.SphereGeometry(size * 0.24, 16, 12), dark);
+    const socket = styleMesh(new THREE.Mesh(new THREE.SphereGeometry(size * 0.24, 16, 12), dark), 'robotSocket', { shape: 'sphere', args: [size * 0.24, 16, 12] });
     socket.position.set(x * size, size * 0.15, size * 0.72);
-    const pupil = new THREE.Mesh(new THREE.SphereGeometry(size * 0.1, 12, 8), glow);
+    const pupil = styleMesh(new THREE.Mesh(new THREE.SphereGeometry(size * 0.1, 12, 8), glow), 'robotEye', { shape: 'sphere', args: [size * 0.1, 12, 8] });
     pupil.position.set(x * size, size * 0.15, size * 0.9);
     g.add(socket, pupil);
   }
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(size * 0.12, size * 0.35, 6).rotateX(Math.PI / 2), shell);
+  const nose = styleMesh(new THREE.Mesh(new THREE.ConeGeometry(size * 0.12, size * 0.35, 6).rotateX(Math.PI / 2), shell), 'robotNose', { shape: 'cone', args: [size * 0.12, size * 0.35, 6], finish: g => g.rotateX(Math.PI / 2) });
   nose.position.set(0, -size * 0.12, size * 0.95);
-  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(size * 0.03, size * 0.03, size * 0.4, 6), dark);
+  const antenna = styleMesh(new THREE.Mesh(new THREE.CylinderGeometry(size * 0.03, size * 0.03, size * 0.4, 6), dark), 'robotAntenna', { shape: 'cylinder', args: [size * 0.03, size * 0.03, size * 0.4, 6] });
   antenna.position.y = size * 1.05;
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(size * 0.09, 12, 8), glow);
+  const tip = styleMesh(new THREE.Mesh(new THREE.SphereGeometry(size * 0.09, 12, 8), glow), 'robotTip', { shape: 'sphere', args: [size * 0.09, 12, 8] });
   tip.position.y = size * 1.27;
   for (const x of [-1, 1]) {
-    const ear = new THREE.Mesh(new THREE.CylinderGeometry(size * 0.2, size * 0.2, size * 0.14, 8).rotateZ(Math.PI / 2), dark);
+    const ear = styleMesh(new THREE.Mesh(new THREE.CylinderGeometry(size * 0.2, size * 0.2, size * 0.14, 8).rotateZ(Math.PI / 2), dark), 'robotEar', { shape: 'cylinder', args: [size * 0.2, size * 0.2, size * 0.14, 8], finish: g => g.rotateZ(Math.PI / 2) });
     ear.position.x = x * size * 0.98;
     g.add(ear);
   }

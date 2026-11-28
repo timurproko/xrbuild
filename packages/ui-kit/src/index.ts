@@ -2,6 +2,8 @@
 // Every control is a THREE.Group with a title and status line. Hands drive it through the SDK's
 // interaction core (control.attach(xrb.interaction)), the mouse through xrb.bindMouse(); the app
 // calls control.update(dt) each frame.
+export { Board, type BoardOptions } from './board.ts';
+export { defaultTheme, resolveUiKitTheme, visualRoles, type UiKitTheme, type UiKitThemeId, type UiKitThemeSelection, type ThemeOptions, type VisualRole, type VisualRecipe, type GeometryInput } from './visual-theme.ts';
 export { Button, type ButtonOptions } from './button.ts';
 export { Control, sourceOf, touchCursor, placeCursor, type Listener } from './control.ts';
 export { Dial } from './dial.ts';

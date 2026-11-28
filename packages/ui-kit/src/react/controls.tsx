@@ -2,7 +2,6 @@ import { useLayoutEffect, useRef, useImperativeHandle, type Ref, type ReactNode 
 import * as THREE from 'three';
 import { useXrb, useXrbFrame } from '../../../react/src/index.ts';
 import * as Kit from '../index.ts';
-import { VisualResources } from '../resources.ts';
 
 type Detail = Record<string, unknown>;
 type Handler = (detail: Detail) => void;
@@ -110,16 +109,6 @@ export function Icon(props: IconProps) { return <Adapter {...props} create={() =
 export type GlassEdgeProps = ComponentProps<Kit.GlassEdge> & Kit.GlassEdgeOptions;
 export function GlassEdge(props: GlassEdgeProps) { return <Adapter {...props} create={() => new Kit.GlassEdge(props)} />; }
 
-export interface BoardOptions { width: number; height: number; depth?: number; radius?: number; color?: THREE.ColorRepresentation; material?: THREE.MeshStandardMaterialParameters }
-class BoardObject extends THREE.Group {
-  private readonly resources = new VisualResources();
-  constructor(options: BoardOptions) {
-    super();
-    this.add(new THREE.Mesh(Kit.roundedBox(options.width, options.height, options.depth ?? 0.006, options.radius ?? 0.014), Kit.material(options.color ?? '#1c222b', { roughness: 0.72, metalness: 0.03, ...options.material })));
-    // Material parameters can contain caller-owned texture maps.
-    this.resources.capture(this, false);
-  }
-  dispose() { this.resources.dispose(); this.removeFromParent(); }
-}
-export type BoardProps = ComponentProps<BoardObject> & BoardOptions;
-export function Board(props: BoardProps) { return <Adapter {...props} create={() => new BoardObject(props)} />; }
+export type BoardOptions = Kit.BoardOptions;
+export type BoardProps = ComponentProps<Kit.Board> & BoardOptions;
+export function Board(props: BoardProps) { return <Adapter {...props} create={() => new Kit.Board(props)} />; }

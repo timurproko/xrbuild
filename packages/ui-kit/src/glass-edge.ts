@@ -5,8 +5,9 @@
 // (each eye of a 3D display sees it slightly differently, like a real glass edge).
 import * as THREE from 'three';
 import { VisualResources } from './resources.ts';
+import { defaultTheme, registerVisualStyle, resolveUiKitTheme, styleMesh, type ThemeOptions, type UiKitThemeSelection } from './visual-theme.ts';
 
-export interface GlassEdgeOptions {
+export interface GlassEdgeOptions extends ThemeOptions {
   width: number;
   height: number;
   radius: number;
@@ -56,6 +57,8 @@ void main() {
 
 export class GlassEdge extends THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial> {
   private readonly eye = new THREE.Vector3();
+  private theme = defaultTheme;
+  get themeId(): string { return this.theme.id; }
   private readonly resources = new VisualResources();
   /** eased tilt per eye camera: head tracking jitters, and a jittering highlight strobes */
   private readonly tilts = new Map<string, { v: THREE.Vector2; at: number }>();
@@ -84,8 +87,13 @@ export class GlassEdge extends THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMater
     this.userData.keepLook = true;
     this.raycast = () => {};
     this.renderOrder = 2;
+    styleMesh(this, 'glassEdge', { shape: 'plane', args: [o.width, o.height] });
+    registerVisualStyle(this, { prepare: theme => ({ commit: () => { this.theme = theme; this.tilts.clear(); }, discard() {} }) });
     this.resources.capture(this);
+    if (o.theme) this.setTheme(o.theme);
   }
+
+  setTheme(theme: UiKitThemeSelection): void { if (resolveUiKitTheme(theme) !== this.theme) this.resources.setTheme(theme); }
 
   dispose(): void { this.resources.dispose(); this.tilts.clear(); this.removeFromParent(); }
 

@@ -49,6 +49,14 @@ For source aliases, match `@xr-build/ui-kit/react` exactly to `packages/ui-kit/s
 
 Imperative callers retain chainable `on`; `off(type, handler)` selectively removes one listener, and `subscribe(type, handler)` returns an idempotent unsubscribe function. `detach()` is reversible; `dispose()` is final and idempotent. Only construction-owned resources are disposed.
 
+## Visual theme contract
+
+`defaultTheme` is the current authored look, unchanged. Omitting a theme preserves existing constructors, helper exports, control bounds and React-free imperative imports. `resolveUiKitTheme` accepts a built-in ID or a complete immutable `UiKitTheme` definition; unknown IDs and missing visual roles fail before retiring live graphics.
+
+A theme supplies every `visualRoles` entry through geometry/material recipes, plus state colours, typography and icon stroke defaults. Roles include all controls, Board, text/icons, glass edges, feedback cues and dynamic Slider fill. Factories receive readonly visual dimensions and geometry-local orientation, never targets or interaction tuning. The same material class is required for each role so existing animation handles remain compatible. Reusable material handles stay live; temporary material copies and replaced geometry are disposed. Factories must not allocate textures or untracked resources, register input or start work; return only the owned geometry/material being requested.
+
+Visuals must fit the original footprint, text allocation and contact plane. Target bounds, poke depth/travel, pinch positions, volume radius, state, animation timing, sounds and layout are not theme options. Explicit consumer options remain authoritative. Board is also available imperatively, with the same options and owned/borrowed-map rules as its React adapter.
+
 ## Controls and events
 
 | control | hands | events (`detail`) |

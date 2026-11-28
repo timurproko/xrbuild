@@ -3,8 +3,9 @@
 import * as THREE from 'three';
 import { COLORS } from './theme.ts';
 import { VisualResources } from './resources.ts';
+import { defaultTheme, registerVisualStyle, resolveUiKitTheme, styleMesh, type ThemeOptions, type UiKitThemeSelection } from './visual-theme.ts';
 
-export interface LabelOptions {
+export interface LabelOptions extends ThemeOptions {
   /** font size in metres */
   size?: number;
   color?: string;
@@ -18,32 +19,46 @@ export class Label extends THREE.Object3D {
   private readonly canvas = document.createElement('canvas');
   private readonly texture = new THREE.CanvasTexture(this.canvas);
   private readonly mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
-  private readonly o: Required<LabelOptions>;
+  private readonly o: Required<Omit<LabelOptions, 'theme'>>;
+  private theme = defaultTheme;
+  get themeId(): string { return this.theme.id; }
   private text = '';
   private color: string;
   private readonly resources = new VisualResources();
 
+  private readonly options: LabelOptions;
   constructor(text: string, options: LabelOptions = {}) {
     super();
+    this.options = options;
     this.o = { size: 0.011, color: COLORS.text, weight: 600, align: 'center', ...options };
     this.color = this.o.color;
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.anisotropy = 4;
-    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, depthWrite: false }));
+    this.mesh = styleMesh(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, depthWrite: false })), 'label', { shape: 'plane', args: [1, 1] });
+    registerVisualStyle(this, { prepare: theme => ({ commit: () => {
+      this.theme = theme;
+      this.o.weight = this.options.weight ?? theme.typography.weight;
+      this.draw(this.text, this.options.color ?? this.color, true);
+    }, discard() {} }) });
     this.mesh.raycast = () => {};  // text never takes the mouse from the control under it
     this.add(this.mesh);
     this.set(text);
     this.resources.capture(this);
+    if (options.theme) this.setTheme(options.theme);
   }
+
+  setTheme(theme: UiKitThemeSelection): void { if (resolveUiKitTheme(theme) !== this.theme) this.resources.setTheme(theme); }
 
   dispose(): void { this.resources.dispose(); this.removeFromParent(); }
 
-  set(text: string, color = this.color): void {
-    if (text === this.text && color === this.color) return;
+  set(text: string, color = this.color): void { this.draw(text, color); }
+
+  private draw(text: string, color: string, force = false): void {
+    if (!force && text === this.text && color === this.color) return;
     this.text = text;
     this.color = color;
     const ctx = this.canvas.getContext('2d')!;
-    const font = `${this.o.weight} ${FONT_PX}px "Segoe UI", system-ui, sans-serif`;
+    const font = `${this.o.weight} ${FONT_PX}px ${this.theme.typography.family}`;
     ctx.font = font;
     const lines = text.split('\n');
     const lineH = FONT_PX * 1.3;
