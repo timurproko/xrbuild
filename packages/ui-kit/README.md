@@ -70,7 +70,7 @@ and a slider that fills inside its dark channel with a half-accent, half-white f
 | Switch | A capsule track like the pill Button with an accent puck thumb that fills it |
 | Continuous/stepped Slider | Dark filleted channel filled inside with a half-accent fill, upright accent capsule thumb with one white line the size of the dial's pointer |
 | Trackball | The faceted open sample head from the three.js examples (MIT, notice in `src/sample-head.ts`) as its model; its own dot shell shows while it turns |
-| Dialog and GlassEdge | Unchanged frosted sheet, film and highlight |
+| Dialog and GlassEdge | A solid dark satin panel with a faint accent tint instead of frosted glass; no glass highlight edge |
 | Label, Icon, touch cues | Fixed text metrics; text and icons on control bodies take the `onCap` ink |
 
 A saved `chamfer` choice, the style Accent replaced, resolves to `accent`.

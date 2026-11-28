@@ -13,6 +13,8 @@ const COLORS = {
   text: '#e8ecf2', muted: '#8a94a6', done: '#5bd18b', onCap: '#ffffff',
 } as const;
 /** The slider fill: half accent, half white, so it is never a flat, harsh accent. */
+/** The dialog panel: a dark satin surface between the scene background and the control bodies. */
+const PANEL = '#232a35';
 const FILL = new THREE.Color(ACCENT).lerp(new THREE.Color('#ffffff'), 0.5).getStyle();
 
 /** A rounded rectangle extruded along +z (0..depth) with a smooth fillet on its front and back edges. */
@@ -57,10 +59,11 @@ const MARK_W = 0.00205, MARK_L = 0.011, MARK_D = 0.0006;
 const wellRoles = new Set<VisualRole>(['buttonWellPill', 'buttonWellRound', 'dialWell']);
 /** The trackball model is the sample head alone (the trackball's own dot shell shows while it turns); the mascot's other parts are not drawn. */
 const hiddenRobotRoles = new Set<VisualRole>(['robotSocket', 'robotEye', 'robotNose', 'robotAntenna', 'robotTip', 'robotEar']);
-const flatRoles = new Set<VisualRole>(['dialogPane', 'dialogFilm', 'glassEdge', 'label', 'icon', 'touchCursor']);
+const flatRoles = new Set<VisualRole>(['label', 'icon', 'touchCursor']);
 function geometry(role: VisualRole, input: GeometryInput): THREE.BufferGeometry {
   const a = input.args;
-  if (wellRoles.has(role) || hiddenRobotRoles.has(role)) return new THREE.BufferGeometry();
+  // The Accent dialog is a solid satin panel, not frosted glass: no glass highlight edge.
+  if (wellRoles.has(role) || hiddenRobotRoles.has(role) || role === 'glassEdge') return new THREE.BufferGeometry();
   if (role === 'robotHead') {
     // The trackball model: the sample head facing the viewer, about as wide as the mascot it replaces with its ears.
     const fit = (a[0] * 1.45) / SAMPLE_HEAD_HALF.x;
@@ -102,6 +105,12 @@ function material(role: VisualRole, authored: THREE.Material): THREE.Material {
     // Marks drawn on a body (the dial's pointer) use the same white ink as button text.
     if (role === 'dialPointer') { authored.color.set(COLORS.onCap); authored.roughness = 0.4; authored.metalness = 0; }
   }
+  // The dialog: an opaque dark satin panel (no transmission) with a faint accent tint on its face.
+  if (role === 'dialogPane' && authored instanceof THREE.MeshPhysicalMaterial) {
+    authored.transmission = 0; authored.thickness = 0; authored.color.set(PANEL);
+    authored.roughness = 0.55; authored.metalness = 0; authored.clearcoat = 0.12; authored.clearcoatRoughness = 0.5;
+  }
+  if (role === 'dialogFilm' && authored instanceof THREE.MeshBasicMaterial) { authored.color.set(ACCENT); authored.opacity = 0.07; }
   // The head keeps the trackball's own faceted shell material (flat shading, its colour and enabled/disabled fade).
   return authored;
 }
