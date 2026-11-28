@@ -1,6 +1,6 @@
 // XR Build control panel UI: plain ES module, no build step. Talks to the panel server
 // (same origin) over JSON and a Server-Sent Events stream.
-import { listenForToasts, toast } from './toast.js';
+import { listenForToasts, toast, closeToast } from './toast.js';
 import { pendingSwitch } from './pending-switch.js';
 import { SettingsWriter } from './settings-writer.js';
 import {installJobLogCopy, readJobLog} from './job-log.js';
@@ -84,26 +84,21 @@ const settingsWriter = new SettingsWriter({
   changed: (id) => { if (selected()?.id === id) renderSettingsStatus(); },
 });
 
+/** The last failure shown per project, so repaints never re-raise the same toast. */
+const shownSaveErrors = new Map();
 function renderSettingsStatus() {
-  const p = selected(), form = $('#settings');
-  if (!p || !form) return;
-  let status = $('#detail [data-settings-status]');
-  const entry = settingsWriter.entry(p.id);
-  // Pending/successful writes have no UI at all. Failure feedback shares the existing
-  // action row's height instead of inserting a block between the form and Run.
-  if (!entry?.error) { status?.remove(); return; }
-  const actions = $('#detail .project-actions');
-  if (!actions) return;
-  if (!status) { status = document.createElement('div'); status.dataset.settingsStatus = ''; status.className = 'project-save-status'; actions.append(status); }
-  status.replaceChildren();
-  const text = document.createElement('span'); text.className = 'xrb-help field-error'; text.setAttribute('role', 'status');
+  const p = selected();
+  if (!p) return;
+  $('#detail [data-settings-status]')?.remove();
+  const entry = settingsWriter.entry(p.id), id = `settings-save-${p.id}`;
+  // Pending/successful writes have no UI at all; a failure is a toast with Retry, like every other recoverable error.
+  if (!entry?.error) { if (shownSaveErrors.delete(p.id)) closeToast(id); return; }
   const message = String(entry.error.message).replace(/^Not saved[:.]?\s*/i, '');
-  text.textContent = 'Not saved.'; text.title = message;
-  const detail = document.createElement('span'); detail.className = 'xrb-visually-hidden'; detail.textContent = ` ${message}`; text.append(detail);status.append(text);
-  for (const [label, glyph, run] of [['Retry', 'reset', async () => { await settingsWriter.retry(p.id); await loadProjects(); }], ['Reload', 'rewind', async () => { settingsWriter.discard(p.id); state.dirty = false; await loadProjects(); renderDetail(true); }]]) {
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'xrb-icon-button'; button.innerHTML = iconSvg(glyph);button.setAttribute('aria-label',label);
-    button.addEventListener('click', action(run)); status.append(button);
-  }
+  if (shownSaveErrors.get(p.id) === message) return;
+  shownSaveErrors.set(p.id, message);
+  toast({ id, title: 'Not saved', message, tone: 'err', actions: [{ label: 'Retry', onClick: action(async () => {
+    shownSaveErrors.delete(p.id); await settingsWriter.retry(p.id); await loadProjects();
+  }) }] });
 }
 
 async function api(method, path, body) {
@@ -2365,7 +2360,10 @@ async function saveSettings(p, form, changedName) {
         await loadProjects();
         return;
       }
-      showFieldErrors({ '': `Not saved. ${error.message}` });
+      // A conflicting edit elsewhere: a toast whose one action loads the saved state, never an inline row.
+      toast({ id: `settings-save-${p.id}`, title: 'Not saved', message: error.message, tone: 'err', actions: [{ label: 'Reload', onClick: action(async () => {
+        state.dirty = false; await loadProjects(); renderDetail(true);
+      }) }] });
       return;
     }
     clearPublicationSave();
