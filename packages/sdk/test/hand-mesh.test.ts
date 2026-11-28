@@ -113,3 +113,31 @@ test('a carried mesh bridges a frame without a fresh mesh, only while the hand i
   now = 450; assert.equal(client.update([], now).length, 0, 'a hand that left drops its mesh at once');
   client.close();
 });
+
+test('a valid result that leaves a hand out keeps its held mesh, fitted to the current pose, until the source-age bound', async () => {
+  let now = 0, respond: ((r: Response) => void) | null = null;
+  const sent: MeshFrame[] = [];
+  const fetcher = (async (url: string, init: RequestInit) => {
+    if (url.endsWith('/connect')) return new Response(null, { status: 204 });
+    sent.push(JSON.parse(init.body as string)); return new Promise<Response>(resolve => { respond = resolve; });
+  }) as typeof fetch;
+  const client = new HandMeshClient({ version: 1, url: 'http://127.0.0.1:1234', token: 'a'.repeat(64) }, fetcher, () => now);
+  await tick();
+  const input = new HandInput({ smoothing: false, prediction: false });
+  input.push(decodeMessage(handsMessage([{ id: 1 }], 0)) as HandsMessage, 0);
+  const hands = input.sample(0); client.observed([1]);
+  const reply = (frame: MeshFrame, meshes: any[]) => { respond!(new Response(encodeMeshResult({ type: 'result', epoch: frame.epoch, sequence: frame.sequence, revision: frame.revision, meshes }) as BodyInit)); };
+  client.update(hands, 0); reply(sent[0], [surface()]); await tick(); await tick();
+  assert.equal(client.update(hands, 10).length, 1);
+  // A processor that does not refit a repeated sample answers with no mesh for the hand: the held one stays.
+  reply(sent[1], []); await tick(); await tick();
+  now = 40; const moved = hands.map(h => ({ ...h, keypoints: h.keypoints.map(p => [p[0] + .05, p[1], p[2]] as [number, number, number]) }));
+  const held = client.update(moved, 40);
+  assert.equal(held.length, 1, 'no flicker on a result without the hand');
+  assert.ok(Math.abs((held[0] as any).transform[12] - .05) < 1e-6, 'the held mesh follows the current wrist, not a stale pose');
+  // Topology stays cached per hand, so the next result may omit indices.
+  reply(sent[2], [{ ...surface(), indices: new Uint32Array(0) }]); await tick(); await tick();
+  assert.equal(client.update(moved, 41).length, 1);
+  now = 400; assert.equal(client.update(moved, 400).length, 0, 'the held mesh expires on its source age, never refreshed by renders');
+  client.close(); respond?.(new Response(null, { status: 204 }));
+});

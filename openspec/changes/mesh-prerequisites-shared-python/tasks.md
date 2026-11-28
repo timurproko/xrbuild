@@ -30,3 +30,7 @@
 ## 7. Start explains why it cannot run
 
 - [x] 7.1 Keep Start clickable when only the provider choice blocks it, and show the reason with Open Setup as a toast on click; align the toast close button with its title; cover both in a browser test.
+
+## 8. Steady mesh when a processor skips frames
+
+- [x] 8.1 Hold each hand's latest valid surface in the SDK mesh client, compensated every render until its source age expires, keep topology per hand, and clear on failures; cover it in an SDK test.

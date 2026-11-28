@@ -29,3 +29,11 @@ A setup plan SHALL be able to name one local file the person must choose, by lab
 #### Scenario: Licensed archive
 - **WHEN** a setup needs a licensed archive that cannot be downloaded
 - **THEN** the person chooses it in the Install dialog, no command is needed, and no copy remains after the install
+
+### Requirement: Per-hand held mesh between results
+
+The SDK mesh client SHALL keep each hand's latest valid surface with the pose it was fitted for and draw it, compensated to the current skeleton every render, until that source sample passes the source-age bound or the residual check fails. A valid result that omits a hand SHALL NOT clear that hand's surface, and cached topology SHALL stay per hand. A failed or malformed exchange, a retired configuration or revision, or hands leaving SHALL still clear it at once.
+
+#### Scenario: Processor skips repeated samples
+- **WHEN** a processor answers renders that repeat the same provider sample with no mesh for a hand
+- **THEN** the hand keeps its mesh following the current wrist without flicker, and it expires on its source age rather than on render activity

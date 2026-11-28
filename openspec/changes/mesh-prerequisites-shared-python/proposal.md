@@ -13,6 +13,7 @@ Rebuild failed on a hand-mesh plugin whose CMake project builds a standalone pro
 - Core provisions plugin Python: a plugin declares an exact Python and hash-locked wheel sets in its manifest, and core installs them with one pinned uv, either as a reusable environment or inside the plugin's own runtime folder covered by its receipt. The downloads join the same consent plan.
 - The setup dialog keeps long messages within its width.
 - Plugin and layer on/off switches share one behaviour: they move and lock on click, show the requested state at once and unlock when it is confirmed.
+- The SDK mesh client holds each hand's latest valid mesh, compensated to the current pose until it ages out, so processors that skip repeated samples no longer flicker.
 - Hands keeps Start clickable when only the provider choice blocks it and explains the reason in a toast with Open Setup.
 
 ## Capabilities
