@@ -20,11 +20,11 @@
 
 ## 3. Scoped selection and leak-free live switching
 
-- [ ] 3.1 Add backward-compatible imperative theme options and visual-only setTheme to controls/primitives, using staged owned bundles and stable moving/target hosts; verify same-theme no-ops, failed-swap cleanup and stable object/target identity.
-- [ ] 3.2 Add UiKitThemeProvider, a resolved-theme hook and per-control overrides to optional React adapters; verify nested precedence, inheritance after override removal, independent roots, latest callbacks and no imperative React dependency.
-- [ ] 3.3 Retain held poke/press/pinch/rotation state and open Dialog/Close state during switches, including enabled/compact/hidden and explicit overrides; verify equal continuation traces and no synthesized activation or registration changes.
-- [ ] 3.4 Exercise repeated Default/Chamfer cycles, dynamic fill replacement, nested Close ownership, StrictMode, HMR and final teardown; verify bounded live counts, once-only disposal/updates and survival of borrowed texture maps, caller children and sibling instances.
-- [ ] 3.5 Document provider/override precedence, imperative selection, mesh-customization boundaries and resource ownership in the UI Kit guide; verify examples through focused component/import fixtures.
+- [x] 3.1 Add backward-compatible imperative theme options and visual-only setTheme to controls/primitives, using staged owned bundles and stable moving/target hosts; verify same-theme no-ops, failed-swap cleanup and stable object/target identity.
+- [x] 3.2 Add UiKitThemeProvider, a resolved-theme hook and per-control overrides to optional React adapters; verify nested precedence, inheritance after override removal, independent roots, latest callbacks and no imperative React dependency.
+- [x] 3.3 Retain held poke/press/pinch/rotation state and open Dialog/Close state during switches, including enabled/compact/hidden and explicit overrides; verify equal continuation traces and no synthesized activation or registration changes.
+- [x] 3.4 Exercise repeated Default/Chamfer cycles, dynamic fill replacement, nested Close ownership, StrictMode, HMR and final teardown; verify bounded live counts, once-only disposal/updates and survival of borrowed texture maps, caller children and sibling instances.
+- [x] 3.5 Document provider/override precedence, imperative selection, mesh-customization boundaries and resource ownership in the UI Kit guide; verify examples through focused component/import fixtures.
 
 ## 4. Theme-aware UI Kit and Launcher app boundaries
 

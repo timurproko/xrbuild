@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useImperativeHandle, type Ref, type ReactNode 
 import * as THREE from 'three';
 import { useXrb, useXrbFrame } from '../../../react/src/index.ts';
 import * as Kit from '../index.ts';
+import { useUiKitTheme } from './theme.tsx';
 
 type Detail = Record<string, unknown>;
 type Handler = (detail: Detail) => void;
@@ -32,6 +33,7 @@ const eventProp = (name: typeof events[number]) => `on${name[0].toUpperCase()}${
 /** Adapter ownership is independent of default mesh construction and of the SDK input state machine. */
 function useObject<T extends Owned>(create: () => T, props: ComponentProps<T>, update?: (object: T) => void) {
   const app = useXrb();
+  const theme = useUiKitTheme(props.theme);
   const host = useRef<THREE.Group>(null);
   const object = useRef<T | null>(null);
   const latest = useRef(props);
@@ -40,7 +42,7 @@ function useObject<T extends Owned>(create: () => T, props: ComponentProps<T>, u
   useLayoutEffect(() => {
     if (app.xrb.icon) return;
     const owned = create();
-    owned.setTheme(props.theme ?? 'default');
+    owned.setTheme(theme);
     object.current = owned;
     host.current!.add(owned);
     props.configure?.(owned);
@@ -66,6 +68,7 @@ function useObject<T extends Owned>(create: () => T, props: ComponentProps<T>, u
   useLayoutEffect(() => {
     const owned = object.current;
     if (!owned) return;
+    owned.setTheme(theme);
     if (props.visible !== undefined) owned.visible = props.visible;
     if (owned instanceof Kit.Control) {
       owned.setEnabled(props.enabled ?? true);
@@ -99,8 +102,11 @@ export function Dial(props: DialProps) { return <Adapter {...props} create={() =
 export type TrackballProps = ComponentProps<Kit.Trackball> & { title: string; radius: number; axis?: Kit.Trackball['axis'] };
 export function Trackball(props: TrackballProps) { return <Adapter {...props} create={() => new Kit.Trackball(props.title, props.radius)} apply={object => { if (props.axis !== undefined) object.axis = props.axis; }} />; }
 export type DialogProps = ComponentProps<Kit.Dialog> & Kit.DialogOptions & { open?: boolean; closeButtonVisible?: boolean };
-export function Dialog(props: DialogProps) { return <Adapter {...props} create={() => new Kit.Dialog(props)} apply={object => {
-  if (props.open !== undefined) props.open ? object.open() : object.close();
+export function Dialog(props: DialogProps) {
+  const declared = useRef<{ object: Kit.Dialog; open: boolean | undefined } | null>(null);
+  return <Adapter {...props} create={() => new Kit.Dialog(props)} apply={object => {
+  if (props.open !== undefined && (declared.current?.object !== object || declared.current.open !== props.open)) props.open ? object.open() : object.close();
+  declared.current = { object, open: props.open };
   if (props.closeButtonVisible !== undefined) { object.closeButton.visible = props.closeButtonVisible; if (!props.closeButtonVisible) object.closeButton.setEnabled(false); }
 }} />; }
 export type LabelProps = ComponentProps<Kit.Label> & Kit.LabelOptions & { text: string };

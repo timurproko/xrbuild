@@ -41,9 +41,9 @@ export function Controls() {
 }
 ```
 
-The optional entry exports Board, Button, Switch, Segmented, Slider, Dial, Trackball, Dialog, Label, Icon and GlassEdge. Existing control options become props; Switch uses `initialOn`, Segmented uses `initialIndex`, Label uses `text`, and Trackball requires `radius`. Construction options (including initial slider value) remain stable for a mounted instance: use a React key to deliberately construct a replacement. Transforms, visibility, enabled state, callbacks, text/icon content, Trackball `axis` and Dialog `open` update in place. `ref` exposes the existing object; `configure` is a construction-only callback. `compact` hides a control's title/status. Dialog `interactive={false}` draws a visual-only sheet with no blocker/Close registrations; `closeButtonVisible={false}` hides and disables Close.
+The optional entry exports Board, Button, Switch, Segmented, Slider, Dial, Trackball, Dialog, Label, Icon and GlassEdge. Existing control options become props; Switch uses `initialOn`, Segmented uses `initialIndex`, Label uses `text`, and Trackball requires `radius`. Construction options (including initial slider value) remain stable for a mounted instance: use a React key to deliberately construct a replacement. Theme selection is mutable and never requires a key. Transforms, visibility, enabled state, callbacks, text/icon content, Trackball `axis` and Dialog `open` update in place. `ref` exposes the existing object; `configure` is a construction-only callback. `compact` hides a control's title/status. Dialog `interactive={false}` draws a visual-only sheet with no blocker/Close registrations; `closeButtonVisible={false}` hides and disables Close.
 
-Adapters attach existing SDK targets, never duplicate their mesh events. They update once per SDK frame with delta capped at 0.1 seconds, including stereo; Dialog alone updates its internal Close button. Callback changes retain object identity/capture. Unmount removes subscriptions/capture and disposes construction-owned geometry, materials and textures, not consumer-added children or the SDK renderer. Default visual builders remain separate from input behavior; no theme provider or settings registry is included.
+Adapters attach existing SDK targets, never duplicate their mesh events. They update once per SDK frame with delta capped at 0.1 seconds, including stereo; Dialog alone updates its internal Close button. Callback changes retain object identity/capture. Unmount removes subscriptions/capture and disposes construction-owned geometry, materials and textures, not consumer-added children or the SDK renderer. Theme visuals remain separate from input behavior; no settings registry or persistence is included.
 
 For source aliases, match `@xr-build/ui-kit/react` exactly to `packages/ui-kit/src/react/index.ts` before the imperative root alias. Also alias `@xr-build/react` to `packages/react/src/index.ts` and deduplicate `three`, `react`, `react-dom`, `@react-three/fiber`. Use the React bridge's pinned versions and JSX tooling. Run `pnpm --filter @xr-build/ui-kit test:react` for the component fixtures.
 
@@ -71,6 +71,23 @@ Visuals must fit the original footprint, text allocation and contact plane. Targ
 | Label, Icon, touch cues | Fixed text metrics, squared icon strokes and a faceted touch ring |
 
 Both styles cover every variant and state, including Dialog's Close button. They have identical targets, contact depths, animation timing, sounds and event semantics. Typography keeps the same allocation so apps never reflow; explicit text/icon/material options override theme defaults.
+
+### Selecting and switching a theme
+
+```tsx
+import { UiKitThemeProvider, Button } from '@xr-build/ui-kit/react';
+
+<UiKitThemeProvider theme="chamfer">
+  <Button title="Action" shape="pill" text="Press" />
+  <Button theme="default" title="Reference" shape="round" text="+" />
+</UiKitThemeProvider>
+```
+
+Resolution is a control's explicit `theme`, nearest explicit provider, inherited provider value, app `defaultTheme` fallback, then library Default. `useUiKitTheme()` exposes the resolved definition. Removing an override restores inheritance; separate providers do not share mutable style. A provider's `defaultTheme` never masks an inherited choice.
+
+Imperative callers use `new Button({ title: 'Action', shape: 'pill', text: 'Press', theme: 'chamfer' })` and `button.setTheme('default')`. Positional constructors accept trailing theme options: `new Switch('Switch', false, { theme: 'chamfer' })`, `new Dial('Dial', { theme: 'chamfer' })`, `new Trackball('Trackball', 0.056, { theme: 'chamfer' })`; Segmented accepts `theme` in its existing behavior options. Board, Dialog, Label, Icon and GlassEdge also accept `theme` and `setTheme`.
+
+Provider/prop updates retain the control, targets, held press/pinch/grab, current values, animation phase, dialog state and trackball rotation. Dialog synchronizes `open` when that prop changes, not on unrelated theme/callback renders. Switching stages replacement geometry/material recipes before retiring old geometry, reuses compatible animated material handles, refreshes current colours without advancing a frame and disposes temporary materials. Failed staging keeps the previous style live. Final teardown releases only owned resources; borrowed maps and caller-added children survive. Do not retain or mutate a theme-owned mesh expecting its geometry to survive a style change; customize stable control hosts or supply explicit supported options. `configure` remains construction-only and is not rerun by theming.
 
 ## Controls and events
 

@@ -25,8 +25,6 @@ export abstract class Control extends THREE.Group {
   setTheme(selection: UiKitThemeSelection): void {
     if (resolveUiKitTheme(selection) === this.theme) return;
     this.visuals.setTheme(selection);
-    // Redraw colours at the retained animation phase, without advancing state/time.
-    this.refreshTheme();
   }
   protected refreshTheme(): void {}
   readonly title: Label;
@@ -43,7 +41,7 @@ export abstract class Control extends THREE.Group {
   constructor(title: string, labelY: number) {
     super();
     this.userData.control = this;
-    registerVisualStyle(this, { prepare: theme => ({ commit: () => { this.theme = theme; }, discard() {} }) });
+    registerVisualStyle(this, { prepare: theme => ({ commit: () => { this.theme = theme; }, discard() {}, refresh: () => this.refreshTheme() }) });
     this.title = new Label(title, { size: 0.0085, weight: 700 });
     this.title.position.set(0, labelY, 0.001);
     this.status = new Label('', { size: 0.0068, weight: 500, color: COLORS.muted });

@@ -24,6 +24,7 @@ export class Label extends THREE.Object3D {
   get themeId(): string { return this.theme.id; }
   private text = '';
   private color: string;
+  private explicitColor?: string;
   private readonly resources = new VisualResources();
 
   private readonly options: LabelOptions;
@@ -32,13 +33,14 @@ export class Label extends THREE.Object3D {
     this.options = options;
     this.o = { size: 0.011, color: COLORS.text, weight: 600, align: 'center', ...options };
     this.color = this.o.color;
+    this.explicitColor = options.color;
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.anisotropy = 4;
     this.mesh = styleMesh(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, depthWrite: false })), 'label', { shape: 'plane', args: [1, 1] });
     registerVisualStyle(this, { prepare: theme => ({ commit: () => {
       this.theme = theme;
       this.o.weight = this.options.weight ?? theme.typography.weight;
-      this.draw(this.text, this.options.color ?? this.color, true);
+      this.draw(this.text, this.explicitColor ?? theme.typography.color, true);
     }, discard() {} }) });
     this.mesh.raycast = () => {};  // text never takes the mouse from the control under it
     this.add(this.mesh);
@@ -51,7 +53,10 @@ export class Label extends THREE.Object3D {
 
   dispose(): void { this.resources.dispose(); this.removeFromParent(); }
 
-  set(text: string, color = this.color): void { this.draw(text, color); }
+  set(text: string, color?: string): void {
+    if (color !== undefined) this.explicitColor = color;
+    this.draw(text, color ?? this.color);
+  }
 
   private draw(text: string, color: string, force = false): void {
     if (!force && text === this.text && color === this.color) return;

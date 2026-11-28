@@ -17,6 +17,7 @@ export class VisualResources {
     try { for (const style of this.styles) staged.push(style.prepare(theme)); }
     catch (error) { for (const style of staged) style.discard(); throw error; }
     for (const style of staged) style.commit();
+    for (const style of staged) style.refresh?.();
   }
 
   capture(root: THREE.Object3D, ownTextures = true): void {

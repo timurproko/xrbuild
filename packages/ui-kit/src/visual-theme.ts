@@ -75,7 +75,7 @@ export function resolveUiKitTheme(selection: UiKitThemeSelection = 'default'): U
   return theme;
 }
 
-export interface PreparedStyle { commit(): void; discard(): void }
+export interface PreparedStyle { commit(): void; discard(): void; refresh?(): void }
 export interface VisualStyle { prepare(theme: UiKitTheme): PreparedStyle; dispose?(): void }
 const styles = new WeakMap<THREE.Object3D, VisualStyle[]>();
 export function registerVisualStyle(object: THREE.Object3D, style: VisualStyle): void {
