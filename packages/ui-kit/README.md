@@ -69,7 +69,7 @@ and a slider that fills inside its dark channel with a half-accent, half-white f
 | Round Button, Dial | Solid accent pucks with a quarter-round fillet into the face, without wells |
 | Switch | A rocker: a squarish housing and a rounded paddle that rocks to the chosen side |
 | Continuous/stepped Slider | Dark filleted channel filled inside with a half-accent fill, plain accent thumb with one white line the size of the dial's pointer |
-| Trackball | A sphere of evenly spread dots in place of the robot head, with a smooth ring |
+| Trackball | A sphere of evenly spread dots around the open sample head from the three.js examples (MIT, notice in `src/sample-head.ts`), with a smooth ring |
 | Dialog and GlassEdge | Unchanged frosted sheet, film and highlight |
 | Label, Icon, touch cues | Fixed text metrics; text and icons on control bodies take the `onCap` ink |
 

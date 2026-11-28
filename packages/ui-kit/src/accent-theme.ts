@@ -3,6 +3,7 @@
 // Shapes only change inside each role's authored bounds; targets, layout and interaction stay untouched.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { sampleHead, SAMPLE_HEAD_HALF } from './sample-head.ts';
 import { referenceGeometry, type GeometryInput, type UiKitTheme, type VisualRole, type VisualRecipe } from './visual-theme.ts';
 
 const ACCENT = '#4a7dff';
@@ -55,7 +56,7 @@ function dotSphere(radius: number): THREE.BufferGeometry {
   const count = 360, dot = radius * 0.052, parts: THREE.BufferGeometry[] = [], golden = Math.PI * (3 - Math.sqrt(5)), z = new THREE.Vector3(0, 0, 1);
   for (let i = 0; i < count; i++) {
     const y = 1 - (i + 0.5) * 2 / count, ring = Math.sqrt(1 - y * y), a = i * golden, normal = new THREE.Vector3(Math.cos(a) * ring, y, Math.sin(a) * ring);
-    const disc = new THREE.CircleGeometry(dot, 10);
+    const disc = new THREE.CircleGeometry(dot, 10); disc.deleteAttribute('uv');
     disc.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(z, normal)).translate(normal.x * radius, normal.y * radius, normal.z * radius);
     parts.push(disc);
   }
@@ -64,13 +65,18 @@ function dotSphere(radius: number): THREE.BufferGeometry {
 
 /** The controls stand on their own, as in the reference kit: no recessed wells under them. */
 const wellRoles = new Set<VisualRole>(['buttonWellPill', 'buttonWellRound', 'dialWell']);
-/** The trackball model is a dot sphere; the mascot's other parts are not drawn. */
+/** The trackball model is a dot sphere around the sample head; the mascot's other parts are not drawn. */
 const hiddenRobotRoles = new Set<VisualRole>(['robotSocket', 'robotEye', 'robotNose', 'robotAntenna', 'robotTip', 'robotEar']);
 const flatRoles = new Set<VisualRole>(['dialogPane', 'dialogFilm', 'glassEdge', 'label', 'icon', 'touchCursor']);
 function geometry(role: VisualRole, input: GeometryInput): THREE.BufferGeometry {
   const a = input.args;
   if (wellRoles.has(role) || hiddenRobotRoles.has(role)) return new THREE.BufferGeometry();
-  if (role === 'robotHead') return dotSphere(a[0] * 1.15);
+  if (role === 'robotHead') {
+    // The trackball model: a sphere of dots with the sample head inside it, facing the viewer.
+    const radius = a[0] * 1.15, head = sampleHead();
+    const fit = (radius * 0.72) / SAMPLE_HEAD_HALF.x;
+    return joined([dotSphere(radius), head.scale(fit, fit, fit)]);
+  }
   if (flatRoles.has(role)) return referenceGeometry(input);
   let result: THREE.BufferGeometry;
   // The switch is a rocker: a squarish housing and a paddle covering one half of it.
