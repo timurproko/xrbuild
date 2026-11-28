@@ -24,7 +24,7 @@ The maintainer integration decision accepts these scenarios:
     "A conflicting personal edit fails the refresh job, leaves state and files unchanged and is shown on the project.",
     "A running project is not refreshed under its run and is refreshed after the run ends."
   ],
-  "archiveDigest": "b4cfdf74ce8cc96763bbde81c6ef984c4ed03504cc04e904af7b35f0cc0daf47",
+  "archiveDigest": "f362503ca4df998f59f644c6b699f6465a1ecb85fc33799beba9786271af9421",
   "specDigest": "df2d6fd7c0f1de4ec4f5fdf5eafc3478c6ee8856bb84cf2e1d96002fd5f741a1",
   "tasksDigest": "8a6c76079c0c9c0910665f30c1635dd1c49049e21dcced52b5d8b6fb45e3dc2b",
   "evidenceDigest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
