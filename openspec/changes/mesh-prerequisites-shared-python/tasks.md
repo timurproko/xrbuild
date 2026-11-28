@@ -22,3 +22,11 @@
 
 - [x] 5.1 Validate a manifest `python` declaration with exact versions, hash-locked wheels and named sets.
 - [x] 5.2 Provision reusable environments and runtime-folder placements with a pinned uv, listed in the same consent plan; cover both with tests that run no network.
+
+## 6. Plugin switches lock until confirmed
+
+- [x] 6.1 Add one shared pending-switch behaviour and use it for the post-processing layer switch and the plugin enable switch; cover the layer switch, stale repaints and failure in a browser test.
+
+## 7. Blocked Start explains itself
+
+- [x] 7.1 Show a lasting corner notice with the reason and Open Setup while Start is unavailable, and the same reason on the button; cover it in a browser test.

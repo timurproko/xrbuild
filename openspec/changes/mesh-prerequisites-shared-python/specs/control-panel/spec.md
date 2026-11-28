@@ -25,3 +25,15 @@ A plugin SHALL be able to declare an exact Python version and hash-locked wheels
 #### Scenario: Invalid declaration
 - **WHEN** a manifest declares a version range, a wheel without a SHA-256, a duplicate wheel, an unknown field or a non-https index
 - **THEN** the plugin manifest is rejected and nothing is downloaded
+
+### Requirement: Plugin switches lock until confirmed
+
+Every plugin or post-processing layer on/off switch SHALL use one shared behaviour: a click moves the switch to the requested side, locks it and shows the requested state at once; repaints from older data SHALL NOT move it back; it SHALL unlock when the page confirms the requested state, or return to the confirmed side and unlock with a reported reason when the change fails.
+
+#### Scenario: Turning a layer off
+- **WHEN** the person turns a post-processing layer off
+- **THEN** the switch shows off and is locked, the badge reads Off immediately, and the switch unlocks after the saved state is off, without showing on in between
+
+#### Scenario: Change refused
+- **WHEN** saving the change fails
+- **THEN** the switch returns to its previous side, unlocks, and a notice names the reason

@@ -12,6 +12,8 @@ Rebuild failed on a hand-mesh plugin whose CMake project builds a standalone pro
 - A setup plan can name a local file (for example a licensed archive) that the Install dialog asks for with a design-system file picker. The panel copies it to a private user folder for that install only.
 - Core provisions plugin Python: a plugin declares an exact Python and hash-locked wheel sets in its manifest, and core installs them with one pinned uv, either as a reusable environment or inside the plugin's own runtime folder covered by its receipt. The downloads join the same consent plan.
 - The setup dialog keeps long messages within its width.
+- Plugin and layer on/off switches share one behaviour: they move and lock on click, show the requested state at once and unlock when it is confirmed.
+- Hands explains a disabled Start with a lasting corner notice that offers Open Setup.
 
 ## Capabilities
 
@@ -21,8 +23,9 @@ Rebuild failed on a hand-mesh plugin whose CMake project builds a standalone pro
 
 ### Modified Capabilities
 
-- `control-panel`: native rebuild scope and core-provisioned plugin Python.
+- `control-panel`: native rebuild scope, core-provisioned plugin Python and confirmed plugin switches.
 - `hand-postprocessing`: layer-card prerequisite state, stale-runtime setup and re-check, and local setup files.
+- `hands-module`: a blocked Start explains itself.
 
 ## Impact
 
