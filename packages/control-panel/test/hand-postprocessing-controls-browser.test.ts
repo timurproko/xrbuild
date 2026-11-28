@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { withPostprocessing, pictures } from './helpers/postprocessing-browser.ts';
 const skip = !process.env.XRB_TEST_BROWSER;
 
-test('post-processing declared controls, paired numeric layout and scoped accessible reset', { skip, timeout: 60000 }, async () => {
+test('post-processing declared controls, paired numeric layout and preset reset to declared defaults', { skip, timeout: 60000 }, async () => {
   await withPostprocessing(async browser => {
     const { evaluate } = browser;
     await pictures(browser, 'after');
@@ -19,14 +19,8 @@ test('post-processing declared controls, paired numeric layout and scoped access
       assert.equal(await evaluate(`(()=>{const n=root.querySelector('[data-mesh-field="detail"]').getBoundingClientRect(),r=root.querySelector('[data-mesh-range]').getBoundingClientRect();return n.right<r.left && Math.abs(n.top-r.top)<20 && root.scrollWidth<=root.clientWidth})()`), true);
     }
     await pictures(browser, 'after-controls');
-    await evaluate(`root.querySelector('[data-mesh-gear]').click()`);
-    assert.equal(await evaluate(`document.activeElement===root.querySelector('[data-mesh-reset]')`), true);
-    assert.equal(await evaluate(`root.querySelectorAll('[role="menuitem"]').length`), 1);
-    await evaluate(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
-    assert.equal(await evaluate(`root.querySelector('[role="menu"]').hidden && document.activeElement===root.querySelector('[data-mesh-gear]')`), true);
-    await evaluate(`root.querySelector('[data-mesh-gear]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));document.querySelector('#outside').click()`);
-    assert.equal(await evaluate(`root.querySelector('[role="menu"]').hidden`), true);
-    await evaluate(`root.querySelector('[data-mesh-gear]').click();root.querySelector('[data-mesh-reset]').click()`);
+    assert.equal(await evaluate(`root.querySelectorAll('[data-mesh-gear],[role="menu"]').length`), 0, 'reset lives in the shared Hands presets menu');
+    await evaluate(`component.applyPreset(component.presetDefaults())`);
     assert.equal(await evaluate(`root.querySelector('[data-mesh-field="detail"]').value`), '0.6');
     assert.equal(await evaluate(`root.querySelector('[data-mesh-selector]').value`), 'workspace:example/surface');
   });
@@ -41,17 +35,16 @@ test('arbitrary declaration defaults, any-step values, escaped metadata and pass
     assert.equal(await evaluate(`root.textContent.includes('<b>Plain hint</b>')`), true);
     await evaluate(`component.refresh({...snapshot,choice:{...snapshot.choice,selected:null}},{discard:true})`);
     assert.equal(await evaluate(`root.hidden`), false);
-    assert.equal(await evaluate(`root.querySelector('[data-mesh-reset]').disabled`), true);
+    assert.deepEqual(await evaluate(`component.presetDefaults()`), { settings: {} }, 'no layer, nothing to reset');
     await evaluate(`component.refresh({...snapshot,plugins:[]},{discard:true})`);
     assert.equal(await evaluate('root.hidden'), true);
     assert.equal(await evaluate('requests.length'), 0);
     await evaluate(`component.refresh({...snapshot,choice:{...snapshot.choice,selected:{owner:'workspace:missing',id:'gone'}}},{discard:true})`);
     assert.equal(await evaluate(`root.querySelector('[data-mesh-selector]').value`), 'workspace:missing/gone');
     assert.equal(await evaluate('root.hidden'), false);
-    assert.equal(await evaluate(`root.querySelector('[data-mesh-reset]').disabled`), true);
-    const id = await evaluate(`root.querySelector('[data-mesh-gear]').id`);
+    assert.deepEqual(await evaluate(`component.presetDefaults()`), { settings: {} }, 'a missing layer has no declared defaults to apply');
     await evaluate(`const second=document.createElement('div');document.body.append(second);window.secondComponent=mountMesh(second,options)`);
-    assert.notEqual(await evaluate(`document.querySelectorAll('[data-mesh-gear]')[1].id`), id);
+    assert.equal(await evaluate(`document.querySelectorAll('[data-mesh-gear],[data-mesh-reset]').length`), 0, 'neither mount adds a gear menu of its own');
     await evaluate('secondComponent.dispose()');
   });
 });

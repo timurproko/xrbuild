@@ -33,10 +33,10 @@ test('column headings share responsive sticky offsets and section-label alignmen
     assert.match(rule, /top: var\(--xrb-workspace-sticky-top\)/);
     assert.doesNotMatch(rule, /(?:top: calc\(var\(--top-h\) \+ 20px\)|0 -20px)/);
   }
-  assert.match(app, /class="nav-tabs xrb-section-label"><span>Plugins<\/span>/);
-  assert.match(app, /class="nav-tabs xrb-section-label settings-module-heading"><span>Module<\/span>/);
-  assert.match(app, /class="settings-owner-heading xrb-section-label"/);
-  assert.doesNotMatch(css, /\.settings-owner-heading \{[^}]*align-items: center/);
+  assert.doesNotMatch(app, /<span>Plugins<\/span><\/div>/, 'the Plugins sidebar starts with its Core and Custom sections');
+  assert.doesNotMatch(app, /<span>Module<\/span>/, 'the Settings sidebar starts with All and its Core and Custom sections');
+  assert.match(app, /class="settings-owner-heading xrb-card-heading"/);
+  assert.doesNotMatch(css, /^\.settings-owner-heading \{[^}]*align-items: center/m, 'outside a card the owner heading keeps baseline alignment');
   assert.match(css, /\.nav-tabs\.xrb-section-label \{ flex: none; \}/);
 });
 

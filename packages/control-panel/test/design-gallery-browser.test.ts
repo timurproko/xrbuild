@@ -85,7 +85,7 @@ test('registered tool navigation discovers the full Dev menu and retains links w
       window.__disposeTool=mountToolNavigation(button,menu,{origin:location.origin,tools:[],current:'projects'});
     })()`);
     await until(evaluate,`!!document.querySelector('#discovery-menu [data-navigation="design-system"]')`);
-    assert.equal(await evaluate(`document.querySelector('#discovery-menu [data-navigation="design-system"]').previousElementSibling.dataset.navigation`),'settings');
+    assert.equal(await evaluate(`document.querySelector('#discovery-menu [data-navigation="design-system"]').previousElementSibling.dataset.navigation`),'calibration');
     assert.equal(await evaluate(`document.querySelector('#discovery-menu [data-navigation="design-system"]').nextElementSibling.getAttribute('role')`),'separator');
     assert.equal(await evaluate(`document.querySelector('#discovery-menu').lastElementChild.dataset.navigation`),'update');
     await evaluate(`window.__disposeTool()`);
@@ -97,7 +97,7 @@ test('registered tool navigation discovers the full Dev menu and retains links w
       window.__disposeTool=mountToolNavigation(button,document.querySelector('#discovery-menu'),{origin:location.origin,tools:[],current:'projects'});
       window.fetch=original;
     })()`);
-    assert.deepEqual(await evaluate(`[...document.querySelectorAll('#discovery-menu [data-navigation]')].map(item=>item.dataset.navigation)`),['projects','hands','calibration','plugins','settings','restart','rebuild','update']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('#discovery-menu [data-navigation]')].map(item=>item.dataset.navigation)`),['projects','hands','plugins','settings','calibration','restart','rebuild','update']);
     await evaluate(`window.__disposeTool()`);
   });
   assert.deepEqual(f.apiRequests.filter(request=>!['GET /api/navigation','GET /api/update/available'].includes(request)),[]);
@@ -160,7 +160,7 @@ test('Design Main collects shared primitives with interactive local-only example
     await evaluate(`document.querySelector('[data-state=fields]').click()`);
     await until(evaluate,`${frameReady}&&document.querySelector('#example-select')&&document.querySelector('#design-main').dataset.state==='fields'`);
     assert.ok(await evaluate(`scrollY`)>0);
-    for(const theme of ['light','dark'])for(const width of [1280,390]){
+    for(const theme of ['light','dark'])for(const width of [1280,900]){
       await evaluate(`window.xrbTheme.set('${theme}')`);await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
       await until(evaluate,`document.documentElement.dataset.theme==='${theme}'`);
       assert.equal(await within(`return doc.documentElement.scrollWidth<=doc.defaultView.innerWidth+1`),true,`${theme}/${width}`);
@@ -178,7 +178,7 @@ test('field titles stay aligned with controls during validation and checkbox/col
   await withBrowser(async({navigate,evaluate,send})=>{
     await navigate(`${f.url}design?case=main&state=fields`,frameReady);
     const within=(body:string)=>evaluate(`(()=>{const doc=document;${body}})()`);
-    for(const theme of ['light','dark'])for(const width of [1280,390]){
+    for(const theme of ['light','dark'])for(const width of [1280,900]){
       await evaluate(`window.xrbTheme.set('${theme}')`);
       await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
       await until(evaluate,`document.documentElement.dataset.theme==='${theme}'`);
@@ -208,7 +208,7 @@ test('Design system offers dependency cases with a clean dimmed background and s
   const expectedMenu=navigationItems(f.url,navigation.tools,'design-system').map(item=>item.label??'separator');
   await withBrowser(async({navigate,evaluate,send})=>{
     await navigate(f.url,`!!document.querySelector('#panel-menu [data-navigation="design-system"]')`);
-    assert.equal(await evaluate(`document.querySelector('#design-system-open').previousElementSibling.dataset.navigation`),'settings');
+    assert.equal(await evaluate(`document.querySelector('#design-system-open').previousElementSibling.dataset.navigation`),'calibration');
     assert.equal(await evaluate(`document.querySelector('#design-system-open').nextElementSibling.getAttribute('role')`),'separator');
     assert.equal(await evaluate(`document.querySelector('#panel-menu').lastElementChild.dataset.navigation`),'update');
     await evaluate(`document.querySelector('#panel-menu-button').click();document.querySelector('#panel-menu [data-navigation="design-system"]').click()`);
@@ -266,7 +266,7 @@ test('Design system offers dependency cases with a clean dimmed background and s
     for(const theme of ['light','dark']){
       await evaluate(`window.xrbTheme.set('${theme}')`);
       await until(evaluate,`document.querySelector('#preview').contentDocument.documentElement.dataset.theme==='${theme}'`);
-      for(const width of [1280,390]){
+      for(const width of [1280,900]){
         await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
         assert.equal(await evaluate(`(()=>{const frame=document.querySelector('#preview'),doc=frame.contentDocument,dialog=doc.querySelector('[data-desktop-setup]');return document.documentElement.scrollWidth<=innerWidth+1&&dialog.scrollWidth<=dialog.clientWidth+1&&getComputedStyle(dialog,'::backdrop').backgroundColor!=='rgba(0, 0, 0, 0)';})()`),true,`${theme}/${width}`);
         if(width===1280){await sleep(200);const image=await send('Page.captureScreenshot',{format:'png'});await fs.writeFile(path.join(f.artifacts,`design-system-${theme}.png`),Buffer.from(image.data,'base64'));}
@@ -289,7 +289,7 @@ test('Design system offers dependency cases with a clean dimmed background and s
     assert.deepEqual(f.apiRequests.filter(request=>!['GET /api/navigation','GET /api/update/available'].includes(request)),[],'maintenance validation never reached the backend');
     await evaluate(`document.querySelector('#panel-menu-button').click();document.querySelector('#panel-home').click()`);
     await until(evaluate,`location.pathname==='/'&&!!document.querySelector('#design-system-open')`);
-    assert.equal(await evaluate(`document.querySelector('#design-system-open').previousElementSibling.dataset.navigation`),'settings','Apps round-trip keeps the Dev entry directly after Settings');
+    assert.equal(await evaluate(`document.querySelector('#design-system-open').previousElementSibling.dataset.navigation`),'calibration','Apps round-trip keeps the Dev entry directly after Cameras');
   });
   assert.equal(f.panel.panel.jobs.list().length,0);
   await assert.rejects(fs.stat(f.workspace),{code:'ENOENT'});

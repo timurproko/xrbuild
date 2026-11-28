@@ -43,12 +43,12 @@ test('Calibration refreshes after the shared progress dialog Retry succeeds', { 
       };` });
     await browser.navigate(`http://127.0.0.1:${port}/calibration/`, "document.getElementById('calibration-root')?.hidden === false");
     assert.equal(await browser.evaluate("document.getElementById('cal-connect').disabled"), true);
-    await browser.evaluate("document.querySelector('#calibration-availability button').click()");
+    await browser.evaluate("document.querySelector('.xrb-toast[data-toast-id=\"calibration-availability\"]:not([data-leaving])').querySelector('.xrb-toast-actions button').click()");
     await until("!!document.querySelector('[data-xrb-rebuild-retry]') && !document.querySelector('[data-xrb-rebuild-retry]').hidden");
     assert.equal(await browser.evaluate('Number(sessionStorage.views)'), 1, 'failed builds must not reload');
     await shot('retry-first-build-failed');
     await browser.evaluate("document.querySelector('[data-xrb-rebuild-retry]').click()");
-    await until("Number(sessionStorage.views)===2 && document.getElementById('cal-connect')?.disabled === false && document.getElementById('calibration-availability')?.hidden === true && document.getElementById('calibration-loading')?.hidden === true");
+    await until("Number(sessionStorage.views)===2 && document.getElementById('cal-connect')?.disabled === false && !document.querySelector('.xrb-toast[data-toast-id=\"calibration-availability\"]:not([data-leaving])') && document.getElementById('calibration-loading')?.hidden === true");
     assert.equal(await browser.evaluate('Number(sessionStorage.builds)'), 2);
     assert.equal(await browser.evaluate('sessionStorage.recovered'), 'yes');
     assert.equal(await browser.evaluate('location.pathname'), '/calibration/');

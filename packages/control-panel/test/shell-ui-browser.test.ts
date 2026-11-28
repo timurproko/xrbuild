@@ -114,12 +114,12 @@ test('Activity header and Settings remain accessible in narrow/wide and light/da
           const scroll = await evaluate(`(() => {const row=document.querySelector('[data-settings-filter="all"]'),list=row.parentElement,filler=document.createElement('div');filler.style.cssText='height:2000px;flex:none';filler.tabIndex=0;list.append(filler);filler.focus();list.scrollTop=300;const moved=list.scrollTop>0;row.focus();const restored=list.scrollTop===0;filler.remove();return {moved,restored};})()`);
           assert.deepEqual(scroll, { moved: true, restored: true }, 'keyboard focus reveals the first card after scrolling');
           const rendered = await evaluate(`(() => {
-            const row=document.querySelector('[data-settings-filter="all"]'), heading=document.querySelector('.settings-module-heading'), list=row.parentElement;
-            const r=row.getBoundingClientRect(),h=heading.getBoundingClientRect(),l=list.getBoundingClientRect();
-            return {gap:r.top-h.bottom,mask:parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--xrb-sticky-mask-gap')),inside:r.top>=l.top,offset:parseFloat(getComputedStyle(row).outlineOffset),
+            const row=document.querySelector('[data-settings-filter="all"]'), list=row.parentElement;
+            const r=row.getBoundingClientRect(),l=list.getBoundingClientRect();
+            return {heading:!!document.querySelector('#settings-nav .settings-module-heading'),inside:r.top>=l.top,offset:parseFloat(getComputedStyle(row).outlineOffset),
               filter:getComputedStyle(row.querySelector('.plugin-symbol-tinted')).filter, favicon:document.querySelector('link[rel=icon]').href,
               guidance:document.querySelector('#app-preferences').textContent};})()`);
-          assert.ok(rendered.gap >= 12); assert.ok(rendered.mask < rendered.gap, 'sticky paint cannot cover the first border'); assert.equal(rendered.inside, true); assert.ok(rendered.offset < 0);
+          assert.equal(rendered.heading, false, 'no Module heading above the rows'); assert.equal(rendered.inside, true); assert.ok(rendered.offset < 0);
           assert.notEqual(rendered.filter, 'none'); assert.match(rendered.guidance, /next run.*Mouse/s);
           if (width === 1500) {
             if (previousFavicon) assert.notEqual(rendered.favicon, previousFavicon, 'favicon tracks theme tint');

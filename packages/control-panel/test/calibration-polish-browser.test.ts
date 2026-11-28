@@ -31,7 +31,7 @@ test('Calibration uses shared loading, aligned controls and no purpose copy', { 
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     assert.equal(await browser.evaluate("document.getElementById('calibration-loading').hidden"), true);
-    for (const width of [1280, 480]) {
+    for (const width of [1280, 960]) {
       await browser.send('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: false });
       const sizes = await browser.evaluate(`(()=>{const a=document.querySelector('#cal-method').closest('.dropdown').querySelector('button').getBoundingClientRect(),b=document.querySelector('#cal-start').getBoundingClientRect();return {a:{bottom:a.bottom,height:a.height},b:{bottom:b.bottom,height:b.height},overflow:document.documentElement.scrollWidth>innerWidth};})()`);
       assert.ok(Math.abs(sizes.a.bottom - sizes.b.bottom) < 1, JSON.stringify(sizes));

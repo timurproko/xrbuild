@@ -1,5 +1,5 @@
-import { renderField, setFieldError, installNumberSteppers, iconSvg, openFloating, positionFloating } from './design-system.js';
-import { menuKeyboard, isPanelUnavailable } from './navigation.js';
+import { renderField, setFieldError, installNumberSteppers, iconSvg } from './design-system.js';
+import { isPanelUnavailable } from './navigation.js';
 import { openMeshSetup } from './hands-mesh-setup.js';
 import { handsLog } from './hands-log.js';
 import { toast, closeToast } from './toast.js';
@@ -8,7 +8,6 @@ const key = p => p ? `${p.owner}/${p.id}` : '';
 const identity = value => value ? { owner: value.slice(0, value.lastIndexOf('/')), id: value.slice(value.lastIndexOf('/') + 1) } : null;
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-let mounts = 0;
 async function request(method, body, suffix = '') {
   const res = await fetch(`/api/hands/postprocessing${suffix}`, { method, cache: 'no-store', ...(body ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
   const data = await res.json().catch(() => ({}));
@@ -17,13 +16,10 @@ async function request(method, body, suffix = '') {
 }
 /** Independent root and revision-safe editor. Preview, persistence and runtime evidence are separate. */
 export function mountHandsPostprocessing(root, { load = () => request('GET'), save = body => request('PUT', body), retry = body => request('POST', body, '/retry'), pollMs = 1000, onLayer = () => {} } = {}) {
-  const prefix = `hands-postprocessing-${++mounts}`;
   root.hidden = true;
-  root.innerHTML = `<form class="xrb-stack hands-postprocessing" aria-label="Hand post-processing"><div class="row" data-mesh-header><span class="spacer"></span>
-    <button type="button" class="xrb-icon-button" id="${prefix}-settings" data-mesh-gear aria-label="Post-processing settings" aria-haspopup="menu" aria-controls="${prefix}-menu" aria-expanded="false">${iconSvg('settings')}</button>
-    <div class="menu" id="${prefix}-menu" role="menu" aria-labelledby="${prefix}-settings" hidden><button type="button" role="menuitem" data-mesh-reset>Reset to defaults</button></div></div>
+  root.innerHTML = `<form class="xrb-stack hands-postprocessing" aria-label="Hand post-processing">
     <select data-mesh-selector aria-label="Hand mesh" hidden></select>
-    <div class="dropdown" data-multi="true" data-mesh-layers data-summary="Add layer" data-options="" data-labels="{}"><input type="hidden" data-mesh-layer-value value="[]"><button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Add post-processing layer">Add layer</button></div>
+    <div class="dropdown" data-mesh-layers data-default="Add layer" data-options="" data-labels="{}"><input type="hidden" data-mesh-layer-value value=""><button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Add post-processing layer">Add layer</button></div>
     <section class="hands-mesh-layer xrb-stack" data-mesh-layer hidden><div class="row hands-mesh-layer-header"><strong data-mesh-layer-title></strong><span class="spacer"></span><button type="button" class="xrb-setup-install" data-mesh-install hidden><span>Install</span></button><span class="state ok" data-mesh-ready hidden>Ready</span><button type="button" class="xrb-setup-install" data-mesh-delivery-retry hidden><span>Retry</span></button><label class="xrb-switch hands-mesh-layer-switch"><input type="checkbox" data-mesh-layer-enabled aria-label="Layer on"></label><button type="button" class="xrb-icon-button" data-mesh-layer-remove aria-label="Remove layer" data-no-tooltip>${iconSvg('close')}</button></div>
     <div class="xrb-stack" data-mesh-fields></div>
     <div class="xrb-field-label">Mesh color<span class="hands-number-row"><input type="number" id="hands-mesh-brightness" aria-label="Mesh brightness" min="0" max="2" step="0.01"><input class="xrb-range" type="range" id="hands-mesh-brightness-range" aria-label="Mesh brightness slider" min="0" max="2" step="0.01"><span class="xrb-inline-icons"><button type="button" id="hands-mesh-color" class="xrb-swatch" aria-label="Choose mesh color" aria-haspopup="dialog"></button></span></span></div>
@@ -33,7 +29,6 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   const form = root.querySelector('form'), select = root.querySelector('[data-mesh-selector]'), fields = root.querySelector('[data-mesh-fields]');
   const message = root.querySelector('[data-mesh-message]'), recovery = root.querySelector('[data-mesh-recovery]');
   const retryButton = root.querySelector('[data-mesh-retry]'), discard = root.querySelector('[data-mesh-discard]');
-  const gear = root.querySelector('[data-mesh-gear]'), menu = root.querySelector('[role="menu"]'), reset = root.querySelector('[data-mesh-reset]');
   const layers = root.querySelector('[data-mesh-layers]'), layerValue = root.querySelector('[data-mesh-layer-value]'), layer = root.querySelector('[data-mesh-layer]');
   const ready = root.querySelector('[data-mesh-ready]'), install = root.querySelector('[data-mesh-install]'), layerOn = root.querySelector('[data-mesh-layer-enabled]');
   let shownProblem = '';
@@ -51,9 +46,6 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     },
   });
   const events = new AbortController(), document = root.ownerDocument, edits = new Map();
-  // On the Hands page the gear sits in the tab bar beside the Post-process tab, like Transform and Display.
-  const slot = document.querySelector('[data-tab-action="post"]');
-  if (slot) { slot.append(gear, menu); root.querySelector('[data-mesh-header]').remove(); }
   let snapshot = null, selected = '', disposed = false, busy = false, reading = false, epoch = 0, version = 0, installing = false;
   let failure = null, conflict = null, rendered = '', stepperDispose = () => {};
   let delivery = null, observedRun = null, highestGeneration = -1, retrying = false, deliveryFailure = null;
@@ -65,16 +57,10 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     return stored && p && stored.version === p.declaration.settingsVersion && Object.hasOwn(stored.values, field) ? stored.values[field] : f?.default;
   };
   const editKey = (id, field) => `${id}#${field}`;
-  const closeMenu = (focus = false) => { menu.hidden = true; gear.setAttribute('aria-expanded', 'false'); if (focus) gear.focus(); };
-  const showMenu = () => { if (!gear.disabled) { gear.setAttribute('aria-expanded', 'true'); openFloating(menu, { anchor: gear, align: 'end' }); } };
   function buttons() {
     root.dataset.dirty = String(edits.size > 0); root.dataset.saving = String(busy);
     select.disabled = !snapshot || !!snapshot.problem;
     layers.querySelector('.dropdown-btn').disabled = select.disabled || !snapshot?.plugins.length;
-    gear.disabled = reset.disabled = !snapshot || !!snapshot.problem || !(plugin()?.available || plugin()?.needsSetup) || !plugin()?.declaration.settings.length;
-    // Like Setup: no layer with settings, no gear.
-    gear.hidden = !plugin()?.declaration.settings.length;
-    if (gear.hidden) closeMenu();
     message.textContent = failure ?? snapshot?.problem ?? '';
     // Problems show as a toast with Retry (and Use saved after a conflict); the inline recovery block stays hidden.
     recovery.hidden = true; retryButton.disabled = busy;
@@ -82,7 +68,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     if (key !== shownProblem) {
       shownProblem = key;
       if (!problem) closeToast('hands-postprocessing');
-      else toast({ title: plugin()?.label ?? 'Post-process', message: problem, tone: 'err', id: 'hands-postprocessing', actions: [
+      else toast({ title: plugin()?.label ?? 'Mesh', message: problem, tone: 'err', id: 'hands-postprocessing', actions: [
         { label: 'Retry', onClick: () => retryButton.click() }, ...(conflict ? [{ label: 'Use saved', onClick: () => discard.click() }] : [])] });
     }
     discard.hidden = !conflict; discard.disabled = busy;
@@ -95,7 +81,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     // Do not reconstruct controls on every status poll or write completion: retain focus and partial input.
     const rebuilt = signature !== rendered;
     if (rebuilt) {
-      closeMenu(); stepperDispose(); rendered = signature;
+      stepperDispose(); rendered = signature;
       fields.innerHTML = (p?.declaration.settings ?? []).map(f => {
         const attrs = `aria-label="${esc(f.label)}" data-mesh-field="${f.key}"`;
         if (f.type === 'boolean') return `<label class="xrb-switch"><input type="checkbox" ${attrs}><span>${esc(f.label)}</span></label>${f.hint ? `<p class="xrb-help">${esc(f.hint)}</p>` : ''}`;
@@ -118,7 +104,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     // Layers: the picker lists every post-processing plugin; one hand-mesh layer runs at a time, so adding one replaces another.
     layers.dataset.options = snapshot.plugins.map(key).join('|');
     layers.dataset.labels = JSON.stringify(Object.fromEntries(snapshot.plugins.map(p => [key(p), p.label])));
-    layerValue.value = JSON.stringify(selected ? [selected] : []);
+    layerValue.value = selected ?? '';
     layer.hidden = !selected;
     layer.querySelector('[data-mesh-layer-title]').textContent = p?.label ?? (selected ? `${selected} (missing)` : '');
     // Like Build prerequisites: a small Install while setup is missing, Ready once the plugin can run.
@@ -369,23 +355,14 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     finally { retrying = false; if (!disposed) buttons(); }
   }
   const on = (element, name, listener, options = {}) => element.addEventListener(name, listener, { ...options, signal: events.signal });
-  on(gear, 'click', () => menu.hidden ? showMenu() : closeMenu());
-  on(gear, 'keydown', event => { if (['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); showMenu(); } });
-  const outside = event => { if (!gear.contains(event.target) && !menu.contains(event.target)) closeMenu(); };
-  on(document, 'click', outside); on(document, 'focusin', outside);
-  on(document, 'scroll', () => { if (!menu.hidden) positionFloating(menu, { anchor: gear, align: 'end' }); }, { capture: true });
-  on(document.defaultView, 'resize', () => closeMenu());
   on(form, 'keydown', event => {
-    if (!menu.hidden) { menuKeyboard(event, menu, () => closeMenu(true)); return; }
     if (event.key === 'Enter' && event.target.matches('[data-mesh-field]')) { event.preventDefault(); editField(event.target, true); }
   });
   on(form, 'submit', event => event.preventDefault());
   on(select, 'change', choose);
   on(layerValue, 'change', () => {
-    let values = []; try { values = JSON.parse(layerValue.value || '[]'); } catch {}
-    // The newest choice wins: only one hand-mesh layer can run.
-    const next = values.filter(value => value !== selected).at(-1) ?? (values.includes(selected) ? selected : '');
-    select.value = next; choose();
+    // A single choice: the picked layer replaces the running one (only one hand-mesh layer can run).
+    select.value = layerValue.value || ''; choose();
   });
   on(root.querySelector('[data-mesh-layer-remove]'), 'click', () => { select.value = ''; choose(); });
   on(install, 'click', async () => {
@@ -404,19 +381,6 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     input.value = Math.min(max, Math.max(min, (Number.isFinite(input.valueAsNumber) ? input.valueAsNumber : min) + (button.dataset.numberStep === 'up' ? delta : -delta)));
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }, { capture: true });
-  on(reset, 'click', () => {
-    if (reset.disabled) return;
-    closeMenu(true);
-    for (const f of plugin().declaration.settings) {
-      const idKey = editKey(selected, f.key), previous = edits.get(idKey);
-      edits.set(idKey, { id: selected, name: f.key, base: previous?.base ?? valueAt(snapshot, selected, f.key), value: f.default,
-        schema: previous?.schema ?? schema(snapshot, selected), selectionBase: previous?.selectionBase ?? key(snapshot.choice?.selected), committed: true, reviewed: true, version: ++version });
-      // Reset is an explicit replacement of the local draft, unlike a passive poll or save completion.
-      const field = fields.querySelector(`[data-mesh-field="${f.key}"]`);
-      if (field.type === 'checkbox') field.checked = f.default; else field.value = f.default;
-    }
-    render(); if (!conflict) { failure = null; void flush(); }
-  });
   on(retryButton, 'click', retrySave);
   on(deliveryRetry, 'click', () => { void retryDelivery(); });
   on(discard, 'click', () => {
@@ -428,8 +392,34 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   on(document.defaultView, 'beforeunload', event => { if (edits.size || busy) { event.preventDefault(); event.returnValue = ''; } });
   const timer = pollMs ? setInterval(() => { void read(); }, pollMs) : null;
   void read();
-  return { refresh, reload: () => { void read(true); }, dispose() {
+  // Shared presets: the chosen layer and its settings. Defaults keep the layer and restore its declared values.
+  // Applying values is an explicit replacement of the local draft, unlike a passive poll or save completion.
+  const meshSettings = (id = selected) => plugin(snapshot, id)?.declaration.settings ?? [];
+  const meshValue = (id, name) => edits.get(editKey(id, name))?.value ?? valueAt(snapshot, id, name);
+  function applyMeshSettings(values) {
+    for (const f of meshSettings()) {
+      if (!Object.hasOwn(values, f.key)) continue;
+      const idKey = editKey(selected, f.key), previous = edits.get(idKey);
+      edits.set(idKey, { id: selected, name: f.key, base: previous?.base ?? valueAt(snapshot, selected, f.key), value: structuredClone(values[f.key]),
+        schema: previous?.schema ?? schema(snapshot, selected), selectionBase: previous?.selectionBase ?? key(snapshot.choice?.selected), committed: true, reviewed: true, version: ++version });
+      const field = fields.querySelector(`[data-mesh-field="${f.key}"]`);
+      if (field) { if (field.type === 'checkbox') field.checked = values[f.key]; else field.value = values[f.key]; }
+    }
+  }
+  const presetApi = {
+    presetValues: () => ({ layer: selected, settings: Object.fromEntries(meshSettings().map(f => [f.key, structuredClone(meshValue(selected, f.key))])) }),
+    presetDefaults: () => ({ settings: Object.fromEntries(meshSettings().map(f => [f.key, f.default])) }),
+    matchesPreset: values => (!Object.hasOwn(values, 'layer') || values.layer === selected)
+      && Object.entries(values.settings ?? {}).every(([name, value]) => !meshSettings().some(f => f.key === name) || equal(value, meshValue(selected, name))),
+    applyPreset(values) {
+      if (!snapshot || snapshot.problem || disposed) return;
+      if (Object.hasOwn(values, 'layer') && values.layer !== selected && !select.disabled) { select.value = values.layer ?? ''; choose(); }
+      if (values.settings && selected && (plugin()?.available || plugin()?.needsSetup)) applyMeshSettings(values.settings);
+      render(); if (!conflict) { failure = null; void flush(); }
+    },
+  };
+  return { ...presetApi, get presetReady() { return !!snapshot && !snapshot.problem; }, refresh, reload: () => { void read(true); }, dispose() {
     if (disposed) return;
-    disposed = true; epoch++; if (timer) clearInterval(timer); closeMenu(); events.abort(); stepperDispose(); root.replaceChildren();
+    disposed = true; epoch++; if (timer) clearInterval(timer); events.abort(); stepperDispose(); root.replaceChildren();
   } };
 }

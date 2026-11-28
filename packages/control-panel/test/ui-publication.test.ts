@@ -88,7 +88,7 @@ test('Publish and Build separate publication from package actions without a stan
   assert.match(app, /const buildSettings = !displaySurface && \(packageFields \|\| publication\) \?/);
   assert.match(app, /project-workflow-tabs xrb-tabs" role="tablist"[\s\S]*data-surface="display"[\s\S]*>Develop<[\s\S]*data-surface="build"[\s\S]*>Build</);
   assert.match(app, /const projectActions =[\s\S]*publishSurface \? ''[\s\S]*id="open-dir"[\s\S]*\$\{manifestButton\}/, 'Folder precedes JSON and Publish omits the folder');
-  assert.match(app, /const publicationLink = m \? publicationHeroLink\(p\) : ''[\s\S]*data-surface="publish"[\s\S]*data-surface="build"[\s\S]*\$\{publicationLink \? `<span class="spacer"><\/span>\$\{publicationLink\}` : ''\}/, 'the published URL is rendered once in the workflow tab row');
+  assert.match(app, /const publicationLink = m \? publicationHeroLink\(p\) : ''[\s\S]*data-surface="publish"[\s\S]*data-surface="build"[\s\S]*<span class="spacer"><\/span>\$\{publicationLink\}<div class="hero-actions">/, 'the published URL is rendered once in the workflow tab row, before the Folder/JSON actions');
   assert.doesNotMatch(app, /publication-result good/, 'the large success block is not repeated below');
   assert.match(app, /\$\{settings\}\$\{buildSettings\}\$\{actionRow\}<\/div><\/section>/, 'the primary action sits left-aligned below all surface content');
   assert.match(app, /<div class="hero-actions">\$\{projectActions\}<\/div><\/div>/, 'folder/JSON stay at the identity row\'s right edge');
@@ -191,7 +191,6 @@ test('project fields share responsive columns and stack only at the narrow break
   assert.match(css, /\.settings-toolbar \+ \.runtime-settings \{ margin-top: 12px; \}/);
   assert.match(css, /\.package-history \{/);
   assert.doesNotMatch(css, /\.publication-history/, 'the URL is not repeated in a result block');
-  assert.match(css, /@media \(max-width: 720px\) \{[\s\S]*\.runtime-settings, \.package-inline, \.package-extra-fields \{ grid-template-columns: minmax\(0, 1fr\); \}/);
-  assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.publication-config \{ grid-template-columns: 1fr; \}/);
+  assert.doesNotMatch(css, /@media \(max-width: 720px\)/, 'fields keep their columns; below the minimum width the page scrolls');
   assert.doesNotMatch(css, /\.publication-fields[^}]*border-top/);
 });

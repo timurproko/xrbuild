@@ -1,8 +1,10 @@
 /* Product-specific control-panel layout. Shared typography, chrome and components live in design-system.css. */
-body.plugins-page .run-dock, body.plugins-page .stats-dock, body.settings-page .run-dock, body.settings-page .stats-dock { display: none; }
+body.plugins-page .run-dock, body.plugins-page .stats-dock, body.settings-page .run-dock, body.settings-page .stats-dock, body.plugins-page #run-state, body.settings-page #run-state { display: none; }
 #settings-nav { align-self: start; }
 .settings-module-heading, .settings-owner-heading { position: sticky; top: var(--xrb-workspace-sticky-top); z-index: 3; background: var(--bg); box-shadow: 0 calc(-1 * var(--xrb-workspace-block-start)) 0 var(--bg), 0 var(--xrb-sticky-mask-gap) 0 var(--bg); }
 .settings-owner-heading { justify-content: space-between; width: 100%; }
+/* Inside its card the title row is the card's header: no sticky mask, a divider below like a tab row. */
+.card > .settings-owner-heading { position: static; z-index: auto; box-shadow: none; background: transparent; display: flex; align-items: center; gap: 8px; width: auto; border-bottom: 1px solid var(--line); font-size: .74rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .settings-owner-heading > h2 { margin: 0; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
 .settings-owner-section + .settings-owner-section { margin-top: 20px; }
 .settings-card-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--xrb-space-stack); }
@@ -10,6 +12,8 @@ body.plugins-page .run-dock, body.plugins-page .stats-dock, body.settings-page .
 .settings-card-fields > label { min-width: 0; }
 .settings-card-fields > .settings-boolean-field { grid-column: 1 / -1; }
 .settings-section { margin: 4px 0 0; }
+/* Every settings block starts its content the same distance below its title row, section heading or not. */
+.settings-card-fields > .settings-section:first-child, .settings-destination:first-child .settings-section { margin-top: 0; }
 /* Destination sections: the same heading and divider as other settings sections, with a switch on the right;
    the configuration opens beneath it with its own Save. */
 .settings-card-fields > .settings-destination { grid-column: 1 / -1; }
@@ -20,7 +24,6 @@ body.plugins-page .run-dock, body.plugins-page .stats-dock, body.settings-page .
 .settings-destination-body > .errors, .settings-config > .errors, .settings-destination-problem { margin: 0; }
 .settings-config-actions { display: flex; justify-content: flex-start; }
 .settings-card-disabled { opacity: .72; }
-@media (max-width: 700px) { .settings-card-fields { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---- project list */
 /* Every column starts with a label of the same height, so the first cards line up. The labels
@@ -51,6 +54,10 @@ nav h2:not(:first-child) { margin-top: 6px; }
 .run-dot.launching { background: var(--muted); }  /* grey like the Launching… button */
 .run-dot.running { background: var(--err); box-shadow: 0 0 0 3px var(--err-soft); }
 .run-dot.stopping { background: var(--muted); }  /* grey like the Stopping… button */
+/* A plugin with a badge (not compiled, invalid) carries the same corner bulb in its badge colour, steady. */
+.run-dot.plugin-issue { animation: none; }
+.run-dot.plugin-issue.rebuild { background: var(--rebuild); box-shadow: 0 0 0 3px var(--rebuild-soft); }
+.run-dot.plugin-issue.err { background: var(--err); box-shadow: 0 0 0 3px var(--err-soft); }
 .proj .name { font-weight: 600; font-size: .95rem; display: flex; gap: 6px; align-items: center; }
 .proj .meta { font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Inline rename of a project: the name's own font in a field with the focus ring (no jump). */
@@ -61,17 +68,16 @@ nav h2:not(:first-child) { margin-top: 6px; }
 /* ---- cards */
 /* Compact project hero: icon, name and run controls share one row. */
 .hero-top { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; gap: 18px; align-items: center; }
-/* One identity line: a compact icon (the sticky app-bar size), the title and the Folder/JSON actions at the right edge. */
-.project-hero-top { grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto; gap: 8px 12px; align-items: center; }
-.project-hero .icon-btn { grid-column: 1; grid-row: 1; align-self: center; width: 26px; height: 26px; border: 0; border-radius: 0; background: transparent; }  /* just the icon, as in the sidebar */
-.project-hero-main { grid-column: 2; grid-row: 1; min-width: 0; }
-.project-title-row { display: flex; min-width: 0; align-items: center; gap: 12px; flex-wrap: wrap; }
-.project-title-row h3 { flex: none; }
-.project-hero .hero-tag { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+/* The selected app's icon, name and Run live in the header; the card starts at its workflow tabs,
+   whose row also carries the Folder/JSON actions at its right edge. */
+.project-hero .hero-tag { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .project-workflow-tabs { margin-bottom: 4px; }
-/* Folder and Open JSON sit at the identity row's right edge; the surface's primary action row sits below all content. */
-.project-hero .hero-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.project-title-row .hero-actions { flex: none; }
+.project-hero .hero-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.project-workflow-tabs > .hero-actions { align-self: center; margin-inline-end: -6px; }
+/* Publish / Build while an app runs: shown, greyed and not interactive (inert). */
+.project-surface-content[data-locked-by-run] { opacity: .5; }
+.project-hero-bare { display: flex; align-items: center; min-height: 28px; }
+.project-notices { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .project-actions { display: flex; align-items: center; justify-content: flex-start; gap: 12px; flex-wrap: wrap; }
 .project-actions:has(.project-save-status) { flex-wrap: nowrap; }
 .project-save-status { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
@@ -162,9 +168,6 @@ button.publication-hero-menu.disabled .publication-status-dot { background: var(
 .platform-options button.dragging { opacity: .45; }
 .platform-options button.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
 .platform-options button.drop-after { box-shadow: inset -3px 0 0 var(--accent); }
-@media (max-width: 720px) {
-  .runtime-settings, .package-inline, .package-extra-fields { grid-template-columns: minmax(0, 1fr); }
-}
 /* ---- running */
 .log-head { margin-top: 2px; }
 .log-head .label { margin: 0; }
@@ -238,11 +241,16 @@ dialog.ask .log { max-height: 200px; }
 .plugin-sample > div { min-width: 0; flex: 1; }
 .plugin-sample h3 { margin: 0; font-size: .94rem; }
 .plugin-sample .xrb-help { margin: 4px 0 0; }
-@media (max-width: 700px) { .plugin-settings { grid-template-columns: minmax(0, 1fr); } .plugin-setting-text, .plugin-setting-boolean { grid-column: auto; } }
 /* The list scrolls on its own under the heading; section headings stick to its top. */
+/* Until the first project list arrives the Apps dashboard keeps its layout but shows nothing (no reload flash). */
+#dashboard[data-loading] { visibility: hidden; }
 .nav-tabs.xrb-section-label { flex: none; }
-#projects h2, #plugin-nav h2, #settings-nav .settings-module-heading { top: 0; }
-#projects .sec-head, #plugin-nav .sec-head { margin: 0; padding: 0 2px 8px; }
+#projects h2, #plugin-nav h2, #settings-nav h2 { top: 0; }
+#projects .sec-head, #plugin-nav .sec-head, #settings-nav .sec-head { margin: 0; padding: 0 2px 8px; }
+/* List items stand out inside the card sidebars. */
+.xrb-workspace-sidebar .proj:not(.selected) { background: var(--surface-2); }
+/* Settings: the All row sits above the Core / Custom sections with the same gap as between sections. */
+#settings-nav .proj + .sec { margin-top: 16px; }
 #projects .proj, #plugin-nav .proj, #settings-nav .proj { flex: none; }
 /* Disabled plugins remain selectable so they can be re-enabled, but their tiles look inactive. */
 #plugin-nav .proj.plugin-disabled .text, #plugin-nav .proj.plugin-disabled img, #plugin-nav .proj.plugin-disabled .plugin-symbol,
@@ -309,21 +317,19 @@ input.rename:focus-visible, .sec-input:focus-visible { outline: none; }
 .log-clear { margin-left: auto; }
 .log-clear[aria-disabled="true"] { opacity: .4; cursor: default; pointer-events: none; }
 /* The log keeps one height, empty or full, so the page does not jump as entries come and go. */
-.console { height: 460px; max-height: none; box-sizing: border-box; }
+/* The Activity card fits its content; it grows at most to the window's bottom gap (--activity-fill, measured in app.js), then scrolls inside. */
+.console { height: auto; max-height: var(--activity-fill, 460px); box-sizing: border-box; }
 /* Empty, the log and jobs show one compact note like the Running card's; they take their full height with content
    (the last card on the page, so nothing below moves). */
 #log-empty { box-sizing: border-box; justify-content: center; }
 /* The Activity card keeps its footprint when jobs replace the log, including during refresh. */
-#jobs { height: 460px; overflow-y: auto; overscroll-behavior: contain; }
+#jobs { height: auto; max-height: var(--activity-fill, 460px); overflow-y: auto; overscroll-behavior: contain; }
 #jobs:has(> .empty-note:only-child) { height: auto; }
-/* Run / Stop pinned in the top bar while the project's own button is scrolled away */
+/* Start / Stop of the selected app in the top bar on every tab */
 /* fps / Hz uses the shared design-system stats dock. */
 .run-dock { display: contents; }
 .run-dock[hidden] { display: none; }
 .run-project { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; }
-.run-dock img { width: 26px; height: 26px; border-radius: 6px; background: #000; object-fit: contain; }
-.run-dock .name { font-weight: 600; font-size: .88rem; }
-.run-dock button { width: 62px; min-width: 62px; height: 30px; padding: 0 6px; font-size: .76rem; }
 
 .publication-fields { display: flex; flex-direction: column; gap: 12px; }
 .publication-block { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
@@ -347,10 +353,6 @@ input.rename:focus-visible, .sec-input:focus-visible { outline: none; }
 .publication-result-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; color: var(--text); font-size: .78rem; font-weight: 700; }
 .publication-result > a { display: block; min-width: 0; overflow: hidden; color: var(--accent); font-family: var(--font-mono); font-size: .8rem; font-weight: 600; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 .publication-result > a:hover, .publication-result > a:focus-visible { text-decoration: underline; text-underline-offset: 3px; outline: none; }
-@media (max-width: 720px) {
-  .publication-config { grid-template-columns: 1fr; }
-  .publication-version { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-}
 
 /* Camera view in the Running card: the input provider's debug images, e.g. per camera infrared (with 2D boxes) and colour. */
 .cameras { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

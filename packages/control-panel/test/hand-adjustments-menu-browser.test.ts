@@ -9,7 +9,7 @@ import { createServer } from '../src/server.ts';
 import { freePort } from '../src/host-runner.ts';
 import { withBrowser } from './browser-fixture.ts';
 
-test('section reset gears provide accessible keyboard menus with scoped dismissal and disposal', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async () => {
+test('one presets menu saves, applies, manages and resets every Hands value, with scoped dismissal and disposal', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async () => {
   const scratch = await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'adjustment-menu-'));
   const port = await freePort(), app = createServer({ repo: path.resolve(import.meta.dirname, '../../..'), workspace: path.join(scratch, 'workspace'), port });
   app.panel.nativeProviders = async () => ({ providers: [], error: null, rejected: [] });
@@ -22,34 +22,59 @@ test('section reset gears provide accessible keyboard menus with scoped dismissa
         await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: value, ...(key === ' ' || key === 'Enter' ? { text: key === 'Enter' ? '\r' : ' ' } : {}) });
         await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: value });
       };
-      assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-reset-menu]'),button=>[button.getAttribute('aria-label'),button.className,button.getAttribute('aria-haspopup'),button.getAttribute('aria-expanded'),document.getElementById(button.getAttribute('aria-controls')).getAttribute('role')])`), [
-        ['Transform settings', 'xrb-icon-button', 'menu', 'false', 'menu'],
-        ['Display settings', 'xrb-icon-button', 'menu', 'false', 'menu'],
-      ]);
-      for (const section of ['geometry', 'appearance']) {
-        const button = `[data-reset-menu="${section}"]`, item = `[data-reset="${section}"]`;
-        await evaluate(`document.querySelector('[data-tab="${section}"]').click()`);
-        assert.equal(await evaluate(`document.querySelector('[data-tab="${section}"]').getAttribute('aria-selected')`), 'true', 'each tab shows its own reset gear');
-        await evaluate(`document.querySelector('${button}').focus()`);
-        await key('Enter', 'Enter', 13);
-        assert.equal(await evaluate(`document.activeElement.matches('${item}')`), true, 'Enter opens and focuses reset');
-        assert.equal(await evaluate(`document.querySelector('${button}').getAttribute('aria-expanded')`), 'true');
-        assert.deepEqual(await evaluate(`(()=>{const menu=document.querySelector('${item}').parentElement,rect=menu.getBoundingClientRect();return [menu.hidden,menu.querySelectorAll('[role="menuitem"]').length,menu.textContent.trim(),rect.left>=0&&rect.right<=innerWidth&&rect.top>=0&&rect.bottom<=innerHeight];})()`), [false, 1, 'Reset to defaults', true]);
-        await key('ArrowDown', 'ArrowDown', 40);
-        assert.equal(await evaluate(`document.activeElement.matches('${item}')`), true);
-        await key('Escape', 'Escape', 27);
-        assert.equal(await evaluate(`document.activeElement.matches('${button}') && document.querySelector('${item}').parentElement.hidden && document.activeElement.getAttribute('aria-expanded')==='false'`), true);
-        await key(' ', 'Space', 32);
-        assert.equal(await evaluate(`document.activeElement.matches('${item}')`), true, 'Space opens and focuses reset');
-        await evaluate('document.body.click()');
-        assert.equal(await evaluate(`document.querySelector('${item}').parentElement.hidden`), true, 'outside click dismisses');
-        await evaluate(`document.querySelector('${button}').click();document.querySelector('[role="tabpanel"]:not([hidden]) input[type="number"]').focus()`);
-        assert.equal(await evaluate(`document.querySelector('${item}').parentElement.hidden`), true, 'focus leaving dismisses');
-        await evaluate(`document.querySelector('${button}').focus()`); await key('ArrowDown', 'ArrowDown', 40);
-        assert.equal(await evaluate(`document.activeElement.matches('${item}')`), true, 'arrow opens menu');
-        await key('Tab', 'Tab', 9);
-        assert.equal(await evaluate(`document.querySelector('${item}').parentElement.hidden`), true, 'Tab leaves without trapping focus');
+      const P = '[data-presets-button]', M = '.hands-presets-menu';
+      const menuItems = `[...document.querySelector('${M}').querySelectorAll('[role^="menuitem"]')].map(item=>[item.textContent.trim(),item.getAttribute('aria-checked'),item.disabled])`;
+      assert.equal(await evaluate(`document.querySelectorAll('[data-reset-menu]').length`), 0, 'no per-tab reset gears remain');
+      assert.deepEqual(await evaluate(`[document.querySelector('${P}').getAttribute('aria-label'),document.querySelector('${P}').getAttribute('aria-haspopup'),document.querySelector('${P}').getAttribute('aria-expanded'),document.querySelector('${M}').getAttribute('role')]`), ['Presets', 'menu', 'false', 'menu']);
+      for (const [tab, shown] of [['setup', false], ['geometry', true], ['appearance', true], ['post', true]] as const) {
+        await evaluate(`document.querySelector('[data-tab="${tab}"]').click()`);
+        assert.equal(await evaluate(`!document.querySelector('.hands-presets').hidden`), shown, `presets icon on ${tab}`);
       }
+      await evaluate(`document.querySelector('[data-tab="geometry"]').click()`);
+      // Custom values: Add preset is available; the new preset is saved checked and Add becomes unavailable.
+      await evaluate(`document.querySelector('${P}').click()`);
+      assert.equal(await evaluate(`document.querySelector('${P}').getAttribute('aria-expanded')`), 'true');
+      assert.deepEqual(await evaluate(`(()=>{const r=document.querySelector('${M}').getBoundingClientRect();return [document.querySelector('${M}').hidden,r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight];})()`), [false, true]);
+      assert.deepEqual(await evaluate(menuItems), [['Add preset', null, false], ['Reset to defaults', null, false]]);
+      await evaluate(`document.querySelector('[data-preset-add]').click()`);
+      assert.equal(await evaluate(`document.activeElement.matches('[data-preset-input]')`), true, 'Add preset focuses the name field');
+      await evaluate(`document.activeElement.value='Wide'`);
+      await key('Enter', 'Enter', 13);
+      assert.deepEqual(await evaluate(menuItems), [['Wide', 'true', false], ['Add preset', null, true], ['Reset to defaults', null, false]]);
+      assert.equal(await evaluate(`JSON.parse(localStorage.getItem('xrb.hands.presets.v2'))[0].values.adjust.sizeFactor`), 1, 'the preset stores the Transform values');
+      await key('Escape', 'Escape', 27);
+      assert.equal(await evaluate(`document.activeElement.matches('${P}') && document.querySelector('${M}').hidden && document.activeElement.getAttribute('aria-expanded')==='false'`), true, 'Escape closes and returns focus');
+      // An edit that matches no preset clears the check; choosing the preset applies it again.
+      await evaluate(`{const field=document.querySelector('[data-field="sizeFactor"]');field.value='1.5';field.dispatchEvent(new Event('change',{bubbles:true}))}`);
+      await evaluate(`document.querySelector('${P}').click()`);
+      assert.deepEqual(await evaluate(menuItems), [['Wide', 'false', false], ['Add preset', null, false], ['Reset to defaults', null, false]]);
+      await evaluate(`document.querySelector('[data-preset-name="Wide"]').click()`);
+      assert.equal(await evaluate(`document.querySelector('[data-field="sizeFactor"]').value`), '1');
+      assert.equal(await evaluate(`document.querySelector('${M}').hidden`), true, 'choosing a preset closes the menu');
+      // Right-click manages a preset without changing the current values.
+      const contextOn = (name: string) => `(()=>{const item=document.querySelector('[data-preset-name="${name}"]'),r=item.getBoundingClientRect();item.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+4,clientY:r.top+4}));return !document.querySelector('.hands-presets-context').hidden;})()`;
+      const names = async () => (await evaluate(menuItems)).map((item: unknown[]) => item[0]);
+      await evaluate(`document.querySelector('${P}').click()`);
+      assert.equal(await evaluate(contextOn('Wide')), true, 'right-click opens Rename, Duplicate and Delete');
+      await evaluate(`document.querySelector('[data-preset-action="duplicate"]').click()`);
+      assert.deepEqual(await names(), ['Wide', 'Wide copy', 'Add preset', 'Reset to defaults']);
+      await evaluate(contextOn('Wide copy'));
+      await evaluate(`document.querySelector('[data-preset-action="rename"]').click()`);
+      await evaluate(`document.activeElement.value='Narrow'`); await key('Enter', 'Enter', 13);
+      assert.deepEqual(await names(), ['Wide', 'Narrow', 'Add preset', 'Reset to defaults']);
+      await evaluate(contextOn('Narrow'));
+      await evaluate(`document.querySelector('[data-preset-action="delete"]').click()`);
+      assert.deepEqual(await names(), ['Wide', 'Add preset', 'Reset to defaults']);
+      assert.equal(await evaluate(`document.querySelector('[data-field="sizeFactor"]').value`), '1', 'managing presets keeps the current values');
+      await evaluate(`document.body.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`);
+      assert.equal(await evaluate(`document.querySelector('${M}').hidden`), true, 'outside press dismisses');
+      // Reset to defaults restores every section from the same menu.
+      await evaluate(`{const field=document.querySelector('[data-field="sizeFactor"]');field.value='1.5';field.dispatchEvent(new Event('change',{bubbles:true}))}`);
+      await evaluate(`document.querySelector('${P}').click();document.querySelector('[data-preset-reset]').click()`);
+      assert.equal(await evaluate(`document.querySelector('[data-field="sizeFactor"]').value`), '1');
+      // Let the reset save finish so the reload below raises no unsaved-changes prompt.
+      for (let i = 0; i < 100 && !/"sizeFactor":1[,}]/.test(await evaluate(`fetch('/api/hands').then(r=>r.text())`)); i++) await sleep(50);
+      await sleep(300);
       // Color swatches open the shared popover under the swatch; right-click copies and pastes between swatches.
       await evaluate(`document.querySelector('[data-tab="appearance"]').click()`);
       const popover = await evaluate(`(()=>{const swatch=document.querySelector('[data-color="appearance.jointColorLinear"]');swatch.click();const pop=document.querySelector('.xrb-color-popover'),r=pop.getBoundingClientRect(),s=swatch.getBoundingClientRect();return {open:!!pop,right:Math.round(s.right-r.right),clear:r.top>=s.bottom||r.bottom<=s.top,hex:pop.querySelector('.xrb-color-hex').value,field:document.querySelector('[data-field="appearance.jointColorLinear"]').value};})()`);
@@ -85,17 +110,11 @@ test('section reset gears provide accessible keyboard menus with scoped dismissa
       assert.equal(await evaluate(`document.querySelector('[data-field="appearance.indicatorColorLinear"]').value`), popover.field, 'paste copies the color between pickers');
       assert.equal(await evaluate(`document.querySelector('#hands-view-reset').textContent.trim()`), 'Reset');
       assert.equal(await evaluate(`document.querySelector('#hands-view-reset').hasAttribute('data-reset-menu')`), false);
-      await evaluate(`(async()=>{const {mountHandAdjustments}=await import('/hands-adjustments.js'),data=await (await fetch('/api/hands')).json();window.mounts=[];for(let i=0;i<2;i++){const holder=document.createElement('section'),root=document.createElement('aside');root.id='extra-adjustments-'+i;holder.append(root);document.body.append(holder);const editor=mountHandAdjustments(root,{load:async()=>data,apply:async()=>data});editor.refresh(data);mounts.push({root:holder,editor});}})()`);
-      assert.equal(await evaluate(`(()=>{const buttons=[...document.querySelectorAll('[data-reset-menu]')];return new Set(buttons.map(b=>b.getAttribute('aria-controls'))).size===buttons.length;})()`), true, 'mount IDs do not collide');
-      await evaluate(`mounts[0].root.querySelector('[data-reset-menu]').click();mounts[1].root.querySelector('[data-reset-menu]').click()`);
-      assert.equal(await evaluate(`mounts[0].root.querySelector('[role="menu"]').hidden`), true, 'opening another mount dismisses the previous menu');
-      assert.equal(await evaluate(`mounts[1].root.querySelector('[role="menu"]').hidden`), false);
-      await evaluate(`mounts[1].editor.dispose();document.body.click();mounts[0].root.querySelector('[data-reset-menu]').click()`);
-      assert.equal(await evaluate(`mounts[1].root.querySelectorAll('[data-reset-menu],[role="menu"],[role="tablist"]').length`), 0, 'dispose removes tabs and menus with their editor');
-      assert.equal(await evaluate(`mounts[0].root.querySelector('[role="menu"]').hidden`), false, 'other mount remains usable');
-      await evaluate(`const wrapper=document.createElement('div');document.body.append(wrapper);wrapper.append(mounts[0].root);mounts[0].root.querySelector('[role="menuitem"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));`);
-      assert.equal(await evaluate(`document.activeElement===mounts[0].root.querySelector('[data-reset-menu]') && mounts[0].root.querySelector('[role="menu"]').hidden`), true, 'reparenting preserves Escape and focus');
-      await evaluate(`mounts[0].editor.dispose();mounts.forEach(({root})=>root.remove())`);
+      await evaluate(`(async()=>{const {mountHandAdjustments}=await import('/hands-adjustments.js'),data=await (await fetch('/api/hands')).json();const holder=document.createElement('section'),root=document.createElement('aside');holder.append(root);document.body.append(holder);const editor=mountHandAdjustments(root,{load:async()=>data,apply:async()=>data});editor.refresh(data);window.extra={holder,editor};})()`);
+      assert.equal(await evaluate(`extra.holder.querySelectorAll('[data-reset-menu],[data-presets-button]').length`), 0, 'an extra editor mounts without reset gears or a presets menu of its own');
+      await evaluate(`extra.editor.dispose()`);
+      assert.equal(await evaluate(`extra.holder.querySelectorAll('[role="tablist"],[role="menu"]').length`), 0, 'dispose removes the tabs and menus with their editor');
+      await evaluate(`extra.holder.remove()`);
     });
   } finally { await app.close(); await fs.rm(scratch, { recursive: true, force: true }); }
 });

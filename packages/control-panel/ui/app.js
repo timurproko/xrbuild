@@ -8,9 +8,24 @@ import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './p
 import { platformChoiceOf, platformChoices, refreshedDesktopDisplay, selectPlatform, switchRunSettings } from './platform-choice.js';
 import {requestedNavigation,menuKeyboard,renderNavigationMenu,renderRemoteUpdate,restartPanelInPlace,shouldReportNavigationError,isRestartingResponse} from './navigation.js';
 import {rebuildHostInPlace,updateInPlace,updateTooltip,followStartedJobInPlace} from './rebuild-dialog.js';
-import {enhanceHelpText,iconSvg,installDropdowns,installIcons,installNumberSteppers,installTabs,installTooltips,openFloating,renderField,resumeAnimations,setFieldError,setPageIdentity,setRevealed,stabilizePanelHeight,transitionPanelHeight,updateRebuildChip,updateRestartChip} from './design-system.js';
+import {enhanceHelpText,iconSvg,installDropdowns,installIcons,installNumberSteppers,installTabs,installTooltips,openFloating,renderField,resumeAnimations,setFieldError,setPageIdentity,setRevealed,stabilizePanelHeight,transitionPanelHeight,updateRebuildChip,updateRestartChip,mountSidebarSplitter,setRunButtonLabel} from './design-system.js';
 import {logicalInputNames} from './provider-choice.js';
 import {bumpPackageVersion, nextPublicationVersion} from './package-version.js';
+// Apps, Plugins and Settings share one resizable sidebar width (drag the gap beside it, as on Hands).
+for (const id of ['dashboard', 'plugins-manager', 'global-settings']) mountSidebarSplitter(document.getElementById(id));
+// The Activity card (Jobs / Log) fits its content; its list may grow only until the card reaches the sidebar's bottom gap.
+function fitActivity() {
+  const card = document.getElementById('log-card'), layout = document.getElementById('dashboard');
+  if (!card || !layout || layout.hidden || !card.offsetParent) return;
+  const panel = [document.getElementById('run-log'), document.getElementById('jobs')].find(el => el && el.offsetParent);
+  if (!panel) return;
+  const gap = parseFloat(getComputedStyle(layout).paddingBottom) || 0, below = card.getBoundingClientRect().bottom - panel.getBoundingClientRect().bottom;
+  const fill = Math.max(240, Math.round(innerHeight - gap - below - (panel.getBoundingClientRect().top + scrollY)));
+  layout.style.setProperty('--activity-fill', `${fill}px`);
+}
+addEventListener('resize', fitActivity);
+{ const watch = new ResizeObserver(() => requestAnimationFrame(fitActivity));
+  for (const id of ['detail', 'run-card', 'activity-log', 'activity-jobs']) { const el = document.getElementById(id); if (el) watch.observe(el); } }
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const projectUrl = (id) => `/api/projects/${id.split('/').map(encodeURIComponent).join('/')}`;
@@ -352,7 +367,8 @@ let projectsLoadSequence = 0;
 async function loadProjects() {
   const sequence = ++projectsLoadSequence;
   const previousSelection = selected()?.id ?? null;
-  const r = await api('GET', '/api/projects');
+  // A failed first load must still reveal the dashboard and its recovery messages.
+  const r = await api('GET', '/api/projects').catch((error) => { $('#dashboard').removeAttribute('data-loading'); throw error; });
   if (sequence !== projectsLoadSequence) return;
   const incomingProjects = [...r.projects, ...(r.archived ?? [])];
   const restoredProjects = new Set();
@@ -402,6 +418,7 @@ async function loadProjects() {
   renderDetail(previousSelection !== (selected()?.id ?? null));
   renderRunLog();
   syncEmptyProjectUi();
+  $('#dashboard').removeAttribute('data-loading');
 }
 
 /** Switches the list between the projects and the archive. */
@@ -414,9 +431,10 @@ function setView(view) {
 const loadPackages = async () => { state.packages = (await api('GET', '/api/packages')).packages; renderPackages(); };
 const loadPanelFreshness = async () => { state.panel = await api('GET', '/api/panel'); renderPanelFreshness(); };
 const loadRemoteUpdates = async () => { state.remoteUpdates = await api('GET', '/api/update/available'); renderUpdate(); };
-const loadMonitors = async () => { state.monitors = (await api('GET', '/api/monitors')).monitors ?? []; };
+const loadMonitors = async () => { try { state.monitors = (await api('GET', '/api/monitors')).monitors ?? []; } finally { state.monitorsLoaded = true; } };
 const loadPlugins = async () => {
   state.plugins = await api('GET', '/api/plugins').catch(() => null);
+  state.pluginsLoaded = true;
   renderDetail();
   renderHost();
   if (state.page === 'settings') renderGlobalSettings();
@@ -572,9 +590,9 @@ function renderProjects() {
   // The search button swaps the tabs for a search field; Esc or × brings the tabs back.
   const searchIcon = iconSvg('search');
   const head = emptyUserProjectWorkspace()
-    ? '<div class="nav-tabs xrb-tabs xrb-tabs-compact"><span class="xrb-tab">Projects</span></div>'
+    ? '<div class="nav-tabs xrb-tabs xrb-tabs-compact"><span class="xrb-tab">Active</span></div>'
     : state.search === null
-    ? `<div class="nav-tabs xrb-tabs xrb-tabs-compact" role="tablist" data-xrb-tabs-id="project-inventory">${tab('projects', 'Projects', state.projects.length)}${tab('archive', 'Archive', state.archived.length)}
+    ? `<div class="nav-tabs xrb-tabs xrb-tabs-compact" role="tablist" data-xrb-tabs-id="project-inventory">${tab('projects', 'Active', state.projects.length)}${tab('archive', 'Archive', state.archived.length)}
         <button type="button" class="xrb-icon-button" id="search-open" title="Search projects and the archive" aria-label="Search">${searchIcon}</button></div>`
     : `<div class="nav-tabs xrb-tabs xrb-tabs-compact xrb-search-bar" data-xrb-tabs-id="project-inventory" data-xrb-tabs-search><span class="xrb-search-icon" aria-hidden="true">${searchIcon}</span><input type="search" class="xrb-search-input" placeholder="Search projects and archive" value="${esc(state.search)}" aria-label="Search projects and archive">
         <button type="button" class="xrb-icon-button xrb-search-close" id="search-close" title="Close search (Esc)" aria-label="Close">${iconSvg('close')}</button></div>`;
@@ -1089,7 +1107,11 @@ function field(label, name, value, opts = {}) {
         <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" ${err ? 'aria-invalid="true"' : ''} ${opts.disabled ? 'disabled' : ''}>${!opts.multiple && opts.marks?.[value] ? `<span class="xrb-status-dot ${esc(opts.marks[value])}" aria-hidden="true"></span>` : ''}<span class="xrb-option-label">${esc(opts.multiple ? ((chosen) => { const off = chosen.filter((l) => /\(unavailable\)$/.test(l)); return chosen.length > 1 ? `${chosen.length} selected${off.length ? ` · ${off.join(', ')}` : ''}` : chosen[0] ?? 'None'; })(value.filter((v) => opts.options.includes(v)).map((v) => optionLabel(v, owner))) : optionLabel(value ?? '', owner))}</span>${!opts.multiple && opts.optionDetails?.[value] ? `<span class="xrb-option-detail">${esc(opts.optionDetails[value])}</span>` : ''}</button>
       </div>`
     : `<input name="${name}" value="${esc(value ?? '')}" ${err ? 'aria-invalid="true"' : ''} ${opts.disabled ? 'disabled' : ''} ${opts.readonly ? 'readonly aria-disabled="true"' : ''} ${opts.autocomplete ? `autocomplete="${esc(opts.autocomplete)}"` : ''} title="${esc(opts.title ?? '')}" placeholder="${esc(opts.placeholder ?? '')}">`;
-  return renderField(label, input, { hint: opts.hint, error: err });
+  // A list still loading keeps its real value in the hidden input but shows one neutral label and cannot open.
+  const shown = opts.busyLabel && opts.options
+    ? input.replace(/<button type="button" class="dropdown-btn"[\s\S]*?<\/button>/, `<button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-busy="true" disabled><span class="xrb-option-label">${esc(opts.busyLabel)}</span></button>`)
+    : input;
+  return renderField(label, shown, { hint: opts.hint, error: err });
 }
 
 // Shared design-system dropdown behavior is state-model agnostic; this panel only supplies values.
@@ -1134,7 +1156,7 @@ function runButtons(p, busy) {
   const stopping = running && state.run?.phase === 'stopping';
   const launching = running && state.run?.phase === 'starting';
   const button = running
-    ? `<button id="act-stop" class="action-button${launching ? ' launching' : stopping ? '' : ' danger'}" ${launching || stopping ? 'disabled' : ''}>${launching ? 'Launching…' : stopping ? 'Stopping…' : 'Stop'}</button>`
+    ? `<button id="act-stop" class="action-button${launching ? ' launching' : stopping ? '' : ' danger'}" ${launching || stopping ? 'disabled' : ''}>${launching ? 'Launching' : stopping ? 'Stopping' : 'Stop'}</button>`
     : `<button id="act-run" class="action-button primary" ${busy ? 'disabled' : ''}>Run</button>`;
   // A fresh template has no dist/ yet, so run it from source on the first click instead of
   // failing with "run Build first". Once built, use the developer's remembered app-level choice.
@@ -1166,7 +1188,7 @@ function headsetButtons(p, busy) {
   const launching = running && state.run?.phase === 'starting';
   const stopping = running && state.run?.phase === 'stopping';
   const button = running
-    ? `<button id="act-stop" class="action-button${launching ? ' launching' : stopping ? '' : ' danger'}" ${launching || stopping ? 'disabled' : ''}>${launching ? 'Launching…' : stopping ? 'Stopping…' : 'Stop'}</button>`
+    ? `<button id="act-stop" class="action-button${launching ? ' launching' : stopping ? '' : ' danger'}" ${launching || stopping ? 'disabled' : ''}>${launching ? 'Launching' : stopping ? 'Stopping' : 'Stop'}</button>`
     : `<button id="act-run" class="action-button primary" ${busy || !(available || (p.canDev && useDev)) ? 'disabled' : ''}>Run</button>`;
   const dev = p.canDev
     ? `<label class="toggle xrb-toggle-pill xrb-toggle-pill-compact dev-server-toggle" data-tooltip="Run from source with live reload instead of the last build.">
@@ -1183,6 +1205,35 @@ function headsetButtons(p, busy) {
   };
 }
 
+/**
+ * Starts an app with its Develop choices: the Develop controls when they are on screen, otherwise the same
+ * remembered choices they would show, so the header Run works from every tab.
+ */
+function startProjectRun(p) {
+  const m = p.manifest;
+  const checked = (id, fallback) => { const box = $(`#${id}`); return box ? box.checked : fallback; };
+  const mode = p.canDev && checked('act-dev', !p.entryExists || devMode(p)) ? 'dev' : 'built';
+  const flat = checked('act-flat', flatMode(p));
+  if (isHeadset(m)) {
+    const fullscreen = checked('act-fullscreen', fullscreenMode(p));
+    const monitor = Math.max(0, Number(m?.plugins?.desktop?.monitor) || 0);
+    const token = crypto.randomUUID();
+    return startManagedRun(p, mode, flat, async () => {
+      const started = await api('POST', `${projectUrl(p.id)}/preview`, { mode, flat, fullscreen, monitor, token });
+      sessionStorage.setItem(previewTokenKey(p), token);
+      return started;
+    });
+  }
+  const displayDisabled = (state.plugins?.disabled ?? []).some((plugin) => plugin.role === 'display' && plugin.name === m?.display);
+  const desktop = displayDisabled || (m?.display ?? 'desktop') === 'desktop';
+  const cameraView = cameraMode(p.id);
+  const fullscreen = checked('act-fullscreen', desktop ? fullscreenMode(p) : true);
+  const monitor = displayDisabled ? 0 : Number(m?.plugins?.desktop?.monitor ?? 0);
+  return startManagedRun(p, mode, flat, () => api('POST', `${projectUrl(p.id)}/run`, {
+    mode, flat, cameraView, fullscreen, monitor,
+  }));
+}
+
 /** Whether a project is built for a WebXR headset (manifest `target`; unset = the host). */
 const isHeadset = (m) => m?.target === 'webxr';
 /**
@@ -1195,7 +1246,8 @@ function inputField(m) {
   const context = isHeadset(m) ? 'webxr' : 'native';
   const available = (state.plugins?.handProviders ?? []).some(p => p.available && p.transport === context);
   return field('Input', 'inputs', values, { options: ['mouse', 'keyboard', ...(available || values.includes('hand') ? ['hand'] : [])],
-    optionLabels: { mouse: 'Mouse', keyboard: 'Keyboard', hand: available ? 'Hands' : 'Hands (unavailable)' }, multiple: true, raw: true });
+    optionLabels: { mouse: 'Mouse', keyboard: 'Keyboard', hand: available ? 'Hands' : 'Hands (unavailable)' }, multiple: true, raw: true,
+    busyLabel: state.pluginsLoaded ? null : 'Refreshing' });
 }
 
 /** Drag a platform tab before or after another to reorder the tabs; the order is saved for the workspace. */
@@ -1245,14 +1297,16 @@ function orderedPlatforms(options) {
 
 function platformField(m, surface) {
   const { options: choices, labels, selected, warning } = platformChoices(m, state.plugins, surface);
-  const options = orderedPlatforms(choices);
+  // An unavailable chosen platform stays in place as a disabled tab (its reason is the tooltip), never a separate message.
+  const unavailable = warning && !choices.includes(selected) ? selected : null;
+  const options = orderedPlatforms(unavailable ? [...choices, selected] : choices);
+  const tabLabel = (value) => String(labels[value] ?? value).replace(/ \(unavailable\)$/, '');
   // Titled like the fields beside it (Display, Package title): the tabs are the surface's Platform choice.
   return `<div class="platform-switch xrb-field-label">
     <span class="platform-title">Platform</span>
     <input type="hidden" name="platform-choice" value="${esc(selected)}">
     <div class="platform-options xrb-segmented" role="group" aria-label="Platform">${options.map((value) => `<button type="button" data-choice="${esc(value)}" draggable="true"
-      aria-pressed="${value === selected}" ${warning && value === selected ? 'disabled' : ''}>${esc(labels[value])}</button>`).join('')}</div>
-    ${warning ? `<span class="state none" title="${esc(warning)}">${esc(warning)}</span>` : ''}
+      aria-pressed="${value === selected}" ${warning && value === selected ? `disabled data-tooltip="${esc(warning)}"` : ''}>${esc(tabLabel(value))}</button>`).join('')}</div>
   </div>`;
 }
 
@@ -1297,7 +1351,8 @@ function displayField(m, { monitorsOnly = false } = {}) {
       : `${current} (unavailable)`;
     if (current.startsWith('desktop:')) options.push(current);
   }
-  return field('Display', 'display', current, { options, optionLabels: labels, raw: true });
+  return field('Display', 'display', current, { options, optionLabels: labels, raw: true,
+    busyLabel: state.pluginsLoaded && state.monitorsLoaded ? null : 'Refreshing' });
 }
 
 /** The identity fields the platform's packager declares (version excepted: it sits next to Build package). */
@@ -1854,7 +1909,8 @@ function renderDetail(force = false) {
   const controls = m && displaySurface ? (packagedHeadset ? null : headset ? headsetButtons(p, busy) : runButtons(p, busy)) : null;
   const packageControl = m && surface === 'build' ? packageAction(p) : { button: '', details: '' };
   const publicationControl = m && publishSurface ? publicationFields(p) : { button: '', fields: '' };
-  const heroButton = componentsSurface ? '' : displaySurface ? controls?.button ?? '' : publishSurface ? publicationControl.button : packageControl.button;
+  // Develop's Run/Stop lives only in the header (#run-dock), which mirrors the selected app on every tab.
+  const heroButton = componentsSurface || displaySurface ? '' : publishSurface ? publicationControl.button : packageControl.button;
   const displayChoices = m ? choicesForSurface(p, 'display') : [];
   const buildChoices = m ? choicesForSurface(p, 'build') : [];
   const publicationLink = m ? publicationHeroLink(p) : '';
@@ -1863,7 +1919,7 @@ function renderDetail(force = false) {
       ${hasProjectPublishers(p) ? `<button type="button" class="xrb-tab" role="tab" data-surface="publish" data-view="publish" aria-selected="${publishSurface}" ${publishSurface ? 'data-active' : ''}>Publish</button>` : ''}
       <button type="button" class="xrb-tab" role="tab" data-surface="build" data-view="build" aria-selected="${surface === 'build'}" ${surface === 'build' ? 'data-active' : ''} ${buildChoices.length ? '' : 'disabled'}>Build</button>
       ${p.componentGroups?.length ? `<button type="button" class="xrb-tab" role="tab" data-surface="components" aria-selected="${componentsSurface}" ${componentsSurface ? 'data-active' : ''}>Settings</button>` : ''}
-      ${publicationLink ? `<span class="spacer"></span>${publicationLink}` : ''}
+      <span class="spacer"></span>${publicationLink}<div class="hero-actions">__PROJECT_ACTIONS__</div>
     </div>` : '';
   const manifestButton = m && p.origin === 'bundled'
     ? `<button type="button" class="xrb-icon-button" id="open-manifest" aria-label="Open JSON">${iconSvg('code')}</button>`
@@ -1888,16 +1944,11 @@ function renderDetail(force = false) {
     localStorage.setItem(surfaceKey(), surface);
     localStorage.setItem(surfaceChoiceKey(p, surface), platformChoiceOf(m));
   }
-  const top = `${workflowTabs}<div class="hero-top project-hero-top">
-      <span class="icon-btn" id="open-studio" aria-hidden="true">
-        <img src="${iconSrc(p)}" alt="">
-      </span>
-      <div class="project-hero-main">
-        <div class="project-title-row"><h3>${esc(m?.name ?? p.id)}</h3><span class="spacer"></span><div class="hero-tag">${p.archived ? '<span class="state busy" title="Kept in the archive folder; right-click it in the list to unarchive">archived</span> ' : ''}${m && p.icon?.custom && p.icon.changedSincePackage ? '<span class="state busy" title="Changed since the last package build: the next package uses it">icon changed</span>' : ''}
-        </div><div class="hero-actions">${projectActions}</div></div>
-        ${p.errors.length ? `<ul class="errors">${p.errors.map((e) => `<li>${esc(e.field ? `${e.field}: ` : '')}${esc(e.message)}</li>`).join('')}</ul>` : ''}
-      </div>
-    </div>`;
+  // The app's icon, name and Run live in the header (#run-dock); the card starts at its workflow tabs,
+  // which also carry the Folder/JSON actions. A manifest with errors has no tabs, so its actions stand alone.
+  const tags = `${p.archived ? '<span class="state busy" title="Kept in the archive folder; right-click it in the list to unarchive">archived</span>' : ''}${m && p.icon?.custom && p.icon.changedSincePackage ? '<span class="state busy" title="Changed since the last package build: the next package uses it">icon changed</span>' : ''}`;
+  const notices = `${tags ? `<div class="hero-tag">${tags}</div>` : ''}${p.errors.length ? `<ul class="errors">${p.errors.map((e) => `<li>${esc(e.field ? `${e.field}: ` : '')}${esc(e.message)}</li>`).join('')}</ul>` : ''}`;
+  const top = `${workflowTabs.replace('__PROJECT_ACTIONS__', projectActions)}${m ? '' : `<div class="project-hero-bare"><span class="spacer"></span><div class="hero-actions">${projectActions}</div></div>`}${notices ? `<div class="project-notices">${notices}</div>` : ''}`;
   // The surface's primary action (Run/Stop, Publish/Update with Unpublish, Build) sits left-aligned below all content.
   const actionRow = heroButton ? `<div class="project-actions">${heroButton}</div>` : '';
   if (!m) {
@@ -1912,8 +1963,10 @@ function renderDetail(force = false) {
     : '';
   const live = componentsSurface ? runOverrides(p)?.componentSettings : null;
   const componentFields = componentsSurface ? p.componentGroups.map(group => `<div class="xrb-stack component-settings-group"><h2>${esc(group.label)}</h2><div class="settings-grid">${Object.entries(group.parameters).map(([name, parameter]) => field(esc(parameter.label), `componentSettings.${group.id}.${name}`, live?.[group.id]?.[name] ?? m.componentSettings?.[group.id]?.[name] ?? group.values[name], { options: parameter.options.map(option => option.value), optionLabels: Object.fromEntries(parameter.options.map(option => [option.value, option.label])), raw: true })).join('')}</div></div>`).join('') : '';
+  // Run toggles exist only on Develop; an empty toolbar slot would wrap into a blank row on narrow windows.
+  const displayOptions = displaySurface ? `${controls?.view ?? ''}${controls?.dev ?? ''}` : '';
   const settings = componentsSurface ? `<form id="settings" class="xrb-stack">${componentFields}</form>` : publishSurface ? '' : `<form id="settings">
-      <div class="row settings-toolbar">${m.kind === 'app' ? platformField(m, surface) : ''}<div class="settings-tools"><span class="display-options">${displaySurface ? `${controls?.view ?? ''}${controls?.dev ?? ''}` : ''}</span></div></div>
+      <div class="row settings-toolbar">${m.kind === 'app' ? platformField(m, surface) : ''}${displayOptions ? `<div class="settings-tools"><span class="display-options">${displayOptions}</span></div>` : ''}</div>
       ${runtimeSettings ? `<div class="settings-grid runtime-settings">${runtimeSettings}</div>` : ''}
       <span class="field-error">${esc(state.fieldErrors[''] ?? '')}</span>
     </form>`;
@@ -1930,8 +1983,12 @@ function renderDetail(force = false) {
         ${publication}
         <span class="field-error"></span>
       </form>${packageHistory}` : '';
-  renderProjectHero(el, `<section class="card hero project-hero">${top}<div class="xrb-section-divider project-surface-content">${settings}${buildSettings}${actionRow}</div></section>`, p.id);
+  // While an app runs, Publish and Build cannot be used: their content stays visible but disabled.
+  const lockedByRun = busy && (publishSurface || surface === 'build');
+  renderProjectHero(el, `<section class="card hero project-hero">${top}<div class="project-surface-content" ${lockedByRun ? 'inert data-locked-by-run title="Stop the running app to publish or build"' : ''}>${settings}${buildSettings}${actionRow}</div></section>`, p.id);
   stabilizePanelHeight(el, { stableKey: `${p.id}:${surface}:${platformChoiceOf(m)}` });
+  // The project card's height animates on tab switches: re-fit the Activity card once it settles so the page never overflows.
+  requestAnimationFrame(fitActivity); setTimeout(fitActivity, 300);
   resumeAnimations(el);
   for (const block of el.querySelectorAll('[data-publication-effect]')) {
     setRevealed(block, block.dataset.publicationEffect === 'enter', { elapsed: Number(block.dataset.publicationElapsed) || 0 });
@@ -2023,30 +2080,7 @@ function renderDetail(force = false) {
     state.releaseSelection.delete(releaseKey);
     await startPublicationJob(p, 'delete-release', { releaseId, expectedRevision: catalog?.revision ?? null, confirm: true });
   }));
-  $('#act-run')?.addEventListener('click', headset
-    ? action(() => {
-      const mode = p.canDev && $('#act-dev')?.checked ? 'dev' : 'built';
-      const flat = $('#act-flat')?.checked === true;
-      const fullscreen = $('#act-fullscreen')?.checked === true;
-      const monitor = Math.max(0, Number(p.manifest?.plugins?.desktop?.monitor) || 0);
-      const token = crypto.randomUUID();
-      return startManagedRun(p, mode, flat, async () => {
-        const started = await api('POST', `${projectUrl(p.id)}/preview`, { mode, flat, fullscreen, monitor, token });
-        sessionStorage.setItem(previewTokenKey(p), token);
-        return started;
-      });
-    })
-    : action(() => {
-      const mode = p.canDev && $('#act-dev')?.checked ? 'dev' : 'built';
-      const flat = $('#act-flat')?.checked === true;
-      const cameraView = cameraMode(p.id);
-      const fullscreen = $('#act-fullscreen')?.checked === true;
-      const monitor = (state.plugins?.disabled ?? []).some((plugin) => plugin.role === 'display' && plugin.name === p.manifest?.display)
-        ? 0 : Number(p.manifest?.plugins?.desktop?.monitor ?? 0);
-      return startManagedRun(p, mode, flat, () => api('POST', `${projectUrl(p.id)}/run`, {
-        mode, flat, cameraView, fullscreen, monitor,
-      }));
-    }));
+  $('#act-run')?.addEventListener('click', action(() => startProjectRun(p)));
 
   $('#act-dev')?.addEventListener('change', (e) => setDevMode(p, e.target.checked));
   $('#act-fullscreen')?.addEventListener('change', (e) => {
@@ -2487,14 +2521,20 @@ function renderRun() {
   warn.innerHTML = r?.warning ? esc(r.warning) + (r.foreign ?? []).map((f) => ` <button class="small" data-foreign="${f.pid}">Stop pid ${f.pid}</button>`).join('') : '';
   warn.querySelectorAll('[data-foreign]').forEach((b) => b.addEventListener('click', action(() => api('POST', '/api/run/stop-foreign', { pid: Number(b.dataset.foreign) }))));
   $('#run-metrics').innerHTML = !running
-    ? '<div class="empty-note">No app is running.</div>'
+    ? '<div class="empty-note">No data.</div>'
     : isHeadset(cameraProject?.manifest) && r.phase === 'running'
       ? '<div class="empty-note">Browser preview is running.</div>'
     : s?.pageFps != null
       ? runMetrics(s)
       : pageError
         ? `<div class="empty-note app-error" title="${esc(pageError)}">App error — see Log.</div>`
-        : '<div class="empty-note">Starting…</div>';
+        : '<div class="empty-note">No data.</div>';
+  // Not started / Starting / Running / Stopping / Stopped, worded like the Hands session chip (no ellipses).
+  const runState = $('#run-state');
+  // Hidden until the real run state has arrived, so a refresh never flashes a guessed label first.
+  if (runState) runState.hidden = !r;
+  if (runState) runState.textContent = !r || (r.phase === 'idle' && !r.startedMs) ? 'Not started'
+    : r.phase === 'starting' && s?.pageFps != null ? 'Running' : { starting: 'Starting', running: 'Running', stopping: 'Stopping' }[r.phase] ?? 'Stopped';
   renderStatsDock(running ? s : null);
   renderCameras(running && r.cameraView ? r.channelUrl : null);
   renderRunLog();
@@ -2594,8 +2634,21 @@ function renderStatsDock(s) {
   const handsOff = s.handState === 'off';
   const handsBad = ['failed', 'device-missing', 'needs-setup'].includes(s.handState);
   const handsCls = handsOff ? '' : handsBad ? 'bad' : s.handState === 'running' ? (s.handsHz >= 45 ? 'good' : 'warn') : '';
-  dock.innerHTML = `<span class="stat ${fpsCls}" title="Page frames per second">${num(s.pageFps, 1)}<small>fps</small></span>`
-    + (handsOff ? '' : `<span class="stat ${handsCls}" title="Hand tracking: ${esc(s.handState ?? '')}">${num(s.handsHz, 0)}<small>Hz</small></span>`);
+  // Values update in place; rebuilding the dock several times a second made its hover tooltip flash.
+  if (dock.dataset.shape !== String(handsOff)) {
+    dock.dataset.shape = String(handsOff);
+    dock.innerHTML = `<span class="stat" data-stat="page"><b></b><small>fps</small></span>`
+      + (handsOff ? '' : `<span class="stat" data-stat="hands"><b></b><small>Hz</small></span>`);
+  }
+  const page = dock.querySelector('[data-stat="page"]'), hands = dock.querySelector('[data-stat="hands"]');
+  page.className = `stat ${fpsCls}`; page.querySelector('b').textContent = num(s.pageFps, 1);
+  const pageTip = `App render rate\n${s.frameMs != null ? `${num(s.frameMs, 1)} ms per frame` : 'No frames yet'}`;
+  if (page.dataset.tooltip !== pageTip) page.dataset.tooltip = pageTip;
+  if (hands) {
+    hands.className = `stat ${handsCls}`; hands.querySelector('b').textContent = num(s.handsHz, 0);
+    const state = String(s.handState ?? '').replace(/-/g, ' ');
+    const tip = `Hand tracking\n${state.charAt(0).toUpperCase()}${state.slice(1)}`; if (hands.dataset.tooltip !== tip) hands.dataset.tooltip = tip;
+  }
 }
 
 /**
@@ -3185,15 +3238,29 @@ async function loadManagedPlugins() {
   else if (state.page === 'settings') renderGlobalSettings();
 }
 
+/** The badge-worthy issue of a plugin, if any: invalid metadata outranks a missing native build. */
+function pluginIssue(p) {
+  const buildProblem = !p.built && /native build/i.test(p.problem ?? '');
+  if (p.problem && !buildProblem) return { tone: 'err', label: p.selected === false ? 'source not selected' : 'invalid' };
+  if (!p.built) return { tone: 'rebuild', label: 'not compiled' };
+  return null;
+}
+
+/** Plugins grouped by where they come from, like the Apps list: Core (shipped with XR Build), then Custom. */
+function pluginSections(plugins) {
+  const groups = [{ name: 'Core', items: plugins.filter(p => p.origin === 'bundled') }, { name: 'Custom', items: plugins.filter(p => p.origin !== 'bundled') }];
+  return groups.filter(group => group.items.length);
+}
+
 function renderManagedPlugins() {
   const nav = $('#plugin-nav');
   const scroll = nav.querySelector('.nav-list')?.scrollTop ?? 0;
   const empty = !state.managedPlugins.length;
   $('#plugin-details').hidden = empty;
-  nav.innerHTML = `<div class="nav-tabs xrb-section-label"><span>Plugins</span></div>
-    <div class="nav-list xrb-workspace-sidebar-content">${empty ? '<div class="empty-note">No plugins installed yet.</div>' : state.managedPlugins.map((p) =>
+  nav.innerHTML = `    <div class="nav-list xrb-workspace-sidebar-content">${empty ? '<div class="empty-note">No plugins installed yet.</div>' : pluginSections(state.managedPlugins).map(({ name, items }) =>
+      `<section class="sec"><h2 class="sec-head">${esc(name)}</h2><div class="sec-items">${items.map((p) =>
       `<button type="button" class="proj xrb-focus-inset ${p.id === state.managedId ? 'selected' : ''} ${p.enabled ? '' : 'plugin-disabled'}" data-plugin="${esc(p.id)}" aria-current="${p.id === state.managedId}" ${p.enabled ? '' : `aria-label="${esc(`${managerName(p)}, disabled`)}"`}>
-        <span class="stripe"></span>${managerIcon(p)}<span class="text"><span class="name">${esc(managerName(p))}</span><span class="meta">${esc(managerType(p))}</span></span></button>`).join('')}</div>`;
+        <span class="stripe"></span>${managerIcon(p)}<span class="text"><span class="name">${esc(managerName(p))}</span><span class="meta">${esc(managerType(p))}</span></span>${pluginIssue(p) ? `<span class="pill"><span class="run-dot plugin-issue ${pluginIssue(p).tone}" data-tooltip="${esc(pluginIssue(p).label)}" aria-label="${esc(pluginIssue(p).label)}"></span></span>` : ''}</button>`).join('')}</div></section>`).join('')}</div>`;
   nav.querySelector('.nav-list').scrollTop = scroll;
   nav.querySelectorAll('[data-plugin]').forEach((b) => b.addEventListener('click', () => {
     state.managedId = b.dataset.plugin;
@@ -3208,23 +3275,26 @@ function renderManagedPlugins() {
   const servicesProblem = state.pluginServices?.problem;
   const description = p.description || (p.packager ? `Builds packages for ${managerName(p)} apps.` : 'No description provided.');
   const version = p.version || p.providers.find((v) => v.version)?.version;
+  // A native build failure is why the plugin needs building, not invalid metadata.
+  const buildProblem = !p.built && /native build/i.test(p.problem ?? '') ? p.problem : null;
+  const sentenceCase = text => String(text).replace(/^./, c => c.toUpperCase()).replace(/[.]*$/, '.');
   const hasSettings = (p.settings?.length ?? 0) > 0 || (p.panelSettings?.length ?? 0) > 0 || (p.config?.length ?? 0) > 0;
-  el.innerHTML = `${servicesProblem ? `<p class="errors" role="alert">${esc(servicesProblem)}</p>` : ''}<div class="card hero plugin-hero-card">
+  syncPluginServicesToast(servicesProblem);
+  el.innerHTML = `<div class="card hero plugin-hero-card">
     <div class="hero-top plugin-hero-top"><div class="plugin-hero-icon">${managerIcon(p)}</div>
       <div class="plugin-identity"><h3>${esc(managerName(p))}</h3></div>
-      <div class="plugin-hero-links">${hasSettings ? `<a href="/settings/?module=${encodeURIComponent(p.id)}" class="xrb-icon-button plugin-hero-settings" data-tooltip="Open plugin settings" aria-label="Open plugin settings">${iconSvg('settings')}</a>` : ''}
+      <div class="plugin-hero-links">
         <button type="button" class="xrb-icon-button plugin-hero-folder" id="open-plugin-folder" data-tooltip="Open plugin folder" aria-label="Open plugin folder">${iconSvg('folder')}</button></div>
       <div class="plugin-hero-actions">
         <label class="xrb-switch plugin-toggle-action" title="Disabled plugins remain installed, but cannot run or package apps. Stop running apps and jobs before changing this setting.">
           <input type="checkbox" class="plugin-enable" role="switch" aria-label="Enable ${esc(managerName(p))}" ${p.enabled ? 'checked' : ''} ${p.selected === false ? 'disabled' : ''}><span>${p.enabled ? 'Enabled' : 'Disabled'}</span>
         </label>
-        <div class="plugin-roles">${pluginOriginLabels[p.origin] ? `<span class="state neutral plugin-origin">${esc(pluginOriginLabels[p.origin])}</span>` : ''}
-          ${p.built ? '' : '<span class="state rebuild">needs build</span>'}
-          ${p.problem ? `<span class="state err">${p.selected === false ? 'source not selected' : 'invalid metadata'}</span>` : ''}
+        <div class="plugin-roles">
+          ${p.built ? '' : `<span class="state rebuild" ${buildProblem ? `data-tooltip="${esc(sentenceCase(buildProblem))}"` : ''}>not compiled</span>`}
+          ${p.problem && !buildProblem ? `<span class="state err" data-tooltip="${esc(sentenceCase(p.problem))}">${p.selected === false ? 'source not selected' : 'invalid'}</span>` : ''}
           ${version ? `<span class="state ok">${esc(version)}</span>` : ''}</div>
       </div>
     </div>
-    ${p.problem ? `<p class="xrb-help">${esc(p.problem)}</p>` : ''}
   </div>
   ${(p.availableOrigins?.length > 1 || p.selected === false) ? `<form class="card" id="plugin-source-form">
     ${field('Plugin source', 'origin', p.selectedOrigin ?? (p.selected ? p.origin : ''), { options: p.availableOrigins ?? [], optionLabels: pluginOriginLabels, defaultLabel: 'Choose a source', raw: true })}
@@ -3232,9 +3302,16 @@ function renderManagedPlugins() {
     <button type="submit" class="action-button">Use selected source</button>
   </form>` : ''}
   <div class="card"><p class="plugin-description">${esc(description)}</p></div>
+  ${hasSettings && !p.problem ? pluginSettingsCard(p).replace(/^(\s*<div class="card[^>]*>)/, '$1<div class="settings-owner-heading xrb-card-heading"><h2>Settings</h2></div>') : ''}
   ${samples.length ? `<div class="card"><h2>Sample projects</h2><div class="plugin-sample-list">${samples.map((sample) =>
     `<div class="plugin-sample"><div><h3>${esc(sample.name)}</h3>${sample.description ? `<p class="xrb-help">${esc(sample.description)}</p>` : ''}</div>
       <button type="button" class="action-button" data-import-sample="${esc(sample.id)}">Import</button></div>`).join('')}</div></div>` : ''}`;
+  el.querySelectorAll('[data-plugin-settings]').forEach((form) => form.addEventListener('change', action((event) => {
+    if (event.target.form !== form) return;
+    return savePluginSettings(form);
+  })));
+  el.querySelectorAll('[data-plugin-config]').forEach(bindPluginConfig);
+  if (!el.dataset.configDrafts) { el.dataset.configDrafts = '1'; el.addEventListener('input', rememberConfigDraft); el.addEventListener('change', rememberConfigDraft); }
   el.querySelector('#plugin-source-form')?.addEventListener('submit', action(async event => {
     event.preventDefault();
     const form = event.currentTarget, origin = new FormData(form).get('origin');
@@ -3401,7 +3478,7 @@ async function savePluginConfig(form) {
     if (status) { status.hidden = false; status.className = 'state ok'; status.textContent = 'saved'; }
     // Services refreshed: the destination's ready/not configured chip may have changed.
     await loadManagedPlugins().catch(() => {});
-    renderGlobalSettings();
+    renderSettingsViews();
     await loadProjects().catch(() => {});
   } catch (error) {
     if (!(error instanceof ApiError) || ![400, 409].includes(error.status)) throw error;
@@ -3410,7 +3487,7 @@ async function savePluginConfig(form) {
       const current = await api('GET', `/api/plugins/manage/${encodeURIComponent(plugin.id)}/config`);
       plugin.configValues = current.values; plugin.configRevision = current.revision;
       pluginConfigDrafts.delete(plugin.id);
-      renderGlobalSettings();
+      renderSettingsViews();
       showError(form.id, error.message);
       return;
     }
@@ -3421,13 +3498,19 @@ async function savePluginConfig(form) {
 }
 
 function settingsOwnerSection(id, title, card, status = '') {
-  return `<section class="settings-owner-section" data-settings-module="${esc(id)}"><div class="settings-owner-heading xrb-section-label"><h2>${esc(title)}</h2>${status}</div>${card}</section>`;
+  const heading = `<div class="settings-owner-heading xrb-card-heading"><h2>${esc(title)}</h2>${status}</div>`;
+  // The title is the card's first row; a card-less body still gets it above.
+  const titled = /^\s*<div class="card[^>]*>/.test(card) ? card.replace(/^(\s*<div class="card[^>]*>)/, `$1${heading}`) : heading + card;
+  return `<section class="settings-owner-section" data-settings-module="${esc(id)}">${titled}</section>`;
 }
 
 function pluginSettingsSection(plugin) {
   const status = `<span id="plugin-settings-status-${esc(plugin.id)}" class="state ${plugin.enabled ? 'ok' : 'none'}" ${plugin.enabled ? 'hidden' : ''}>${plugin.enabled ? '' : 'disabled'}</span>`;
   return settingsOwnerSection(plugin.id, managerName(plugin), pluginSettingsCard(plugin), status);
 }
+
+/** Plugin settings live on both Settings and Plugins: redraw whichever page is open. */
+function renderSettingsViews() { if (state.page === 'plugins') renderManagedPlugins(); else renderGlobalSettings(); }
 
 function renderGlobalSettings() {
   // Provider scans may finish before the requested settings module/preferences arrive.
@@ -3450,9 +3533,13 @@ function renderGlobalSettings() {
   const rows = [
     ...(plugins.length ? [{ id: 'all', name: 'All', meta: 'settings', icon: settingsGlyph('⚙️') }] : []),
     { id: 'control-panel', name: 'Apps', meta: 'core', icon: settingsGlyph(APPS_GLYPH, true) },
-    ...plugins.map((plugin) => ({ id: plugin.id, name: managerName(plugin), meta: managerType(plugin), icon: managerIcon(plugin), enabled: plugin.enabled })),
+    ...plugins.map((plugin) => ({ id: plugin.id, name: managerName(plugin), meta: managerType(plugin), icon: managerIcon(plugin), enabled: plugin.enabled, custom: plugin.origin !== 'bundled' })),
   ];
-  nav.innerHTML = `<div class="nav-tabs xrb-section-label settings-module-heading"><span>Module</span></div><div class="nav-list xrb-workspace-sidebar-content">${rows.map((row) => `<button type="button" class="proj xrb-focus-inset ${row.id === state.settingsFilter ? 'selected' : ''} ${row.enabled === false ? 'plugin-disabled' : ''}" data-settings-filter="${esc(row.id)}" aria-current="${row.id === state.settingsFilter}"><span class="stripe"></span>${row.icon}<span class="text"><span class="name">${esc(row.name)}</span><span class="meta">${esc(row.meta)}</span></span></button>`).join('')}</div>`;
+  const row = (row) => `<button type="button" class="proj xrb-focus-inset ${row.id === state.settingsFilter ? 'selected' : ''} ${row.enabled === false ? 'plugin-disabled' : ''}" data-settings-filter="${esc(row.id)}" aria-current="${row.id === state.settingsFilter}"><span class="stripe"></span>${row.icon}<span class="text"><span class="name">${esc(row.name)}</span><span class="meta">${esc(row.meta)}</span></span></button>`;
+  // Like the Plugins list: All on top, then Core (Apps and shipped plugins) and Custom sections.
+  const section = (name, items) => items.length ? `<section class="sec"><h2 class="sec-head">${esc(name)}</h2><div class="sec-items">${items.map(row).join('')}</div></section>` : '';
+  const all = rows.filter((item) => item.id === 'all'), rest = rows.filter((item) => item.id !== 'all');
+  nav.innerHTML = `<div class="nav-list xrb-workspace-sidebar-content">${all.map(row).join('')}${section('Core', rest.filter((item) => !item.custom))}${section('Custom', rest.filter((item) => item.custom))}</div>`;
   nav.querySelectorAll('[data-settings-filter]').forEach((button) => button.addEventListener('click', () => {
     state.settingsFilter = button.dataset.settingsFilter;
     const url = new URL(location.href);
@@ -3517,7 +3604,7 @@ async function savePluginSettings(form) {
       if (plugin.config?.some((setting) => setting.shownWhen)) {
         // A destination opened or closed: reload its ready/not configured state and redraw (drafts are kept).
         await loadManagedPlugins().catch(() => {});
-        renderGlobalSettings();
+        renderSettingsViews();
         return;
       }
     }
@@ -3909,6 +3996,19 @@ connect();
 // A View job link needs the retained job map, not merely the page frame. Keep
 // the shell visible/connected while waiting, then consume the requested job once.
 if(navigationRequest.job){await jobsReady;await openJobInActivity(navigationRequest.job);}
+/**
+ * A plugin-services problem is a notice with its recovery action, not an inline banner. It is raised once per
+ * distinct message (re-renders do not reopen a dismissed one) and closes when the problem clears.
+ */
+function syncPluginServicesToast(problem) {
+  if (!problem) { if (syncPluginServicesToast.shown) closeToast('plugin-services'); syncPluginServicesToast.shown = null; return; }
+  if (problem === syncPluginServicesToast.shown) return;
+  syncPluginServicesToast.shown = problem;
+  const restart = /restart/i.test(problem) && !/rebuild/i.test(problem);
+  toast({ id: 'plugin-services', title: restart ? 'Restart needed' : 'Rebuild needed', message: problem, tone: restart ? 'err' : 'rebuild',
+    actions: [{ label: restart ? 'Restart' : 'Rebuild', onClick: () => $(restart ? '#panel-restart' : '#host-rebuild')?.click() }] });
+}
+
 // A maintenance link is an explicit one-shot action; shared tool navigation normally handles it in place.
 if(navigationRequest.maintenance){
   if(navigationRequest.maintenance==='rebuild')$('#host-rebuild').click();
@@ -3938,38 +4038,32 @@ $('#studio-file').addEventListener('change', (e) => {
 
 function syncRunDock(p) {
   const dock = $('#run-dock');
-  const src = $('#act-stop') ?? $('#act-run');
-  syncRunDock.observer?.disconnect();
-  syncRunDock.observer = null;
-  if (!src) {
+  if (!p) {
     runDockVisible = false;
     dock.hidden = true;
     renderStatsDock(null);
     return;
   }
-  dock.querySelector('img').src = iconSrc(p);
-  dock.querySelector('.name').textContent = p.manifest?.name ?? p.id;
   const btn = dock.querySelector('button');
-  btn.className = src.className;
-  const pending = state.run?.phase === 'starting' || state.run?.phase === 'stopping';
-  btn.textContent = pending ? '...' : src.id === 'act-stop' ? 'Stop' : 'Run';
-  btn.title = src.textContent;
-  btn.disabled = src.disabled;
-  // A workflow animation can clip the action below the header without any scrolling.
-  // Only an action above the app bar belongs in the dock; below-viewport actions do not.
-  const top = getComputedStyle(document.documentElement).getPropertyValue('--top-h').trim() || '54px';
-  const update = () => {
-    const rect = src.getBoundingClientRect(), edge = $('.top').getBoundingClientRect().bottom;
-    runDockVisible = src.isConnected && rect.width > 0 && rect.height > 0 && rect.bottom <= edge;
-    dock.hidden = !runDockVisible;
-    renderStatsDock(state.run && state.run.phase !== 'idle' ? state.status : null);
-  };
-  const observer = new IntersectionObserver(() => {
-    if (syncRunDock.observer !== observer || !src.isConnected) return;
-    update();
-  }, { rootMargin: `-${top} 0px 0px 0px` });
-  syncRunDock.observer = observer;
-  update();
-  observer.observe(src);
+  const m = p.manifest, running = projectRunning(p);
+  const pending = running && (state.run?.phase === 'starting' || state.run?.phase === 'stopping');
+  const busy = !!state.run && state.run.phase !== 'idle';
+  // Packaged headset apps and non-apps have no Run; the header still names the selected app.
+  const runnable = !!m && m.kind === 'app' && !(isHeadset(m) && m.platform) && choicesForSurface(p, 'display').length > 0;
+  const available = !isHeadset(m) || p.entryExists || !!m?.scripts?.build || (p.canDev && (!p.entryExists || devMode(p)));
+  btn.hidden = !running && !runnable;
+  // Start/Stop like Hands: the label flips at once and the button is disabled while starting or stopping, never "...".
+  btn.className = '';  // a bare play / stop icon, as on Hands (setRunButtonLabel styles it)
+  setRunButtonLabel(btn, running ? 'Stop' : 'Start');
+  btn.title = running ? 'Stop' : 'Start';
+  btn.disabled = pending || (!running && (busy || !available));
+  runDockVisible = true;
+  dock.hidden = false;
+  renderStatsDock(state.run && state.run.phase !== 'idle' ? state.status : null);
 }
-$('#run-dock button').addEventListener('click', () => ($('#act-stop') ?? $('#act-run'))?.click());
+$('#run-dock button').addEventListener('click', action(async () => {
+  const p = selected();
+  if (!p) return;
+  if (projectRunning(p)) return stopManagedRun();
+  return startProjectRun(p);
+}));

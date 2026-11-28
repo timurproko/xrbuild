@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>XR Build · Calibration</title>
+  <title>XR Build · Cameras</title>
   <script src="/theme.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,12 +13,11 @@
 </head>
 <body>
   <header class="xrb-app-bar xrb-app-bar--wrap">
-    <h1 class="xrb-brand">XR Build <button id="calibration-menu-button" class="xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Calibration</button></h1>
+    <h1 class="xrb-brand">XR Build <button id="calibration-menu-button" class="xrb-product-menu" type="button" aria-haspopup="menu" aria-expanded="false">Cameras</button></h1>
   </header>
-  <main class="calibration-page xrb-stack">
-    <div id="calibration-loading" role="status" aria-label="Loading calibration"><span class="xrb-spinner xrb-spinner-accent" aria-hidden="true"></span></div>
-    <p id="calibration-availability" class="warning" role="status" hidden></p>
-    <div id="calibration-root" class="xrb-stack" hidden>
+  <main class="calibration-page xrb-workspace-layout">
+    <div id="calibration-loading" class="xrb-loading-card" role="status" aria-labelledby="calibration-loading-title"><div class="xrb-progress-status"><span class="xrb-progress-spinner" aria-hidden="true"></span><div><h3 id="calibration-loading-title">Loading</h3><p class="muted">The page will show when it is ready.</p></div></div></div>
+    <div id="calibration-root" class="xrb-card-stack" hidden>
       <section class="xrb-card xrb-stack calibration-card" aria-label="Cameras">
         <div class="xrb-button-row"><h2>Cameras</h2><span class="spacer"></span><button id="cal-connect" type="button">Connect</button><button id="cal-stop" type="button" disabled>Stop</button></div>
         <div class="calibration-columns">

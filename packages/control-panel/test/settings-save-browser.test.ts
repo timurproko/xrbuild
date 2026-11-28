@@ -23,11 +23,11 @@ test('first embedded and rapid ordinary input edits persist without a reload mod
   await withBrowser(async ({ navigate, evaluate, send }) => {
     const until = async (expr: string) => { for (let i = 0; i < 150; i++) { if (await evaluate(expr)) return; await sleep(50); } assert.fail(expr); };
     await navigate(panel.url, `!!document.querySelector('#settings [name="inputs"]')`);
-    const initialRunTop = await evaluate(`document.querySelector('#act-run').getBoundingClientRect().top`);
+    const initialRunTop = await evaluate(`document.querySelector('#run-dock .xrb-run-button').getBoundingClientRect().top`);
     await evaluate(`window.originalFetch=fetch;window.saves=0;window.fetch=async(...args)=>{if(args[1]?.method==='PUT'&&String(args[0]).endsWith('/manifest')){saves++;if(saves===1)await new Promise(r=>window.finishFirstSave=r);}return originalFetch(...args)};window.editInputs=value=>{const input=document.querySelector('#settings [name="inputs"]');input.value=JSON.stringify(value);input.dispatchEvent(new Event('change',{bubbles:true}));};editInputs(['mouse']);`);
     await until(`saves===1`);
     assert.equal(await evaluate(`!!document.querySelector('[data-settings-status]')`), false, 'pending saves have no status element');
-    assert.equal(await evaluate(`document.querySelector('#act-run').getBoundingClientRect().top`), initialRunTop, 'pending save does not move Run');
+    assert.equal(await evaluate(`document.querySelector('#run-dock .xrb-run-button').getBoundingClientRect().top`), initialRunTop, 'pending save does not move Run');
     await evaluate(`editInputs(['mouse','keyboard']);finishFirstSave()`);
     await until(`saves>=2&&!document.querySelector('[data-settings-status]')?.textContent.includes('Saving')`);
     for (let i = 0; i < 100 && (await current()).manifest.inputs.length !== 2; i++) await sleep(50);
@@ -46,14 +46,14 @@ test('first embedded and rapid ordinary input edits persist without a reload mod
     assert.equal(await evaluate(`document.querySelector('#ask').open`), false);
     manifest = JSON.parse(await fs.readFile(manifestFile, 'utf8'));
     await fs.writeFile(manifestFile, JSON.stringify({ ...manifest, inputs: ['mouse'] }));
-    const beforeFailure = await evaluate(`document.querySelector('#act-run').getBoundingClientRect().top`);
+    const beforeFailure = await evaluate(`document.querySelector('#run-dock .xrb-run-button').getBoundingClientRect().top`);
     await evaluate(`const input=document.querySelector('#settings [name="inputs"]');input.value='[]';input.dispatchEvent(new Event('change',{bubbles:true}))`);
     // A failed save is a toast with one Retry action, never an inline row beside Run.
     await until(`[...document.querySelectorAll('.xrb-toast')].some(t=>/Not saved/.test(t.textContent)&&/another editor/.test(t.textContent))`);
-    assert.equal(await evaluate(`document.querySelector('#act-run').getBoundingClientRect().top`), beforeFailure, 'failure feedback does not move Run');
+    assert.equal(await evaluate(`document.querySelector('#run-dock .xrb-run-button').getBoundingClientRect().top`), beforeFailure, 'failure feedback does not move Run');
     assert.equal(await evaluate(`!!document.querySelector('[data-settings-status]')`), false, 'no inline status beside Run');
     assert.deepEqual(await evaluate(`[...document.querySelector('.xrb-toast[data-tone="err"] .xrb-toast-actions').querySelectorAll('button')].map(b=>b.textContent)`), ['Retry']);
-    await evaluate(`window.runCalls=0;const beforeFetch=fetch;window.fetch=(input,options)=>{if(new URL(input,location.href).pathname.endsWith('/run')){runCalls++;return Promise.resolve(Response.json({error:'Fixture blocked'},{status:409}));}return beforeFetch(input,options);};document.querySelector('#act-run').click()`);
+    await evaluate(`window.runCalls=0;const beforeFetch=fetch;window.fetch=(input,options)=>{if(new URL(input,location.href).pathname.endsWith('/run')){runCalls++;return Promise.resolve(Response.json({error:'Fixture blocked'},{status:409}));}return beforeFetch(input,options);};document.querySelector('#run-dock .xrb-run-button').click()`);
     await sleep(100);assert.equal(await evaluate('runCalls'),0,'failed settings never launch stale saved choices');
     assert.deepEqual((await current()).manifest.inputs, ['mouse']);
     assert.equal(await evaluate(`document.querySelector('#ask').open`), false);

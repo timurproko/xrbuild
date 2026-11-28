@@ -62,10 +62,10 @@ export function navigationItems(origin,tools=[],current='projects',{maintenance=
   const design=tools.some(tool=>tool.id==='design-system');
   return [{id:'projects',label:'Apps',href:panelDestination(origin,'projects')},
     {id:'hands',label:'Hands',href:panelDestination(origin,'hands')},
-    {id:'calibration',label:'Calibration',href:panelDestination(origin,'calibration')},
     ...tools.filter(tool=>tool.id!=='design-system'&&tool.id!=='hands'&&tool.id!=='calibration'&&!isRetiredHandsTool(tool)).map(t=>({id:t.id,label:t.label,href:t.route?managedToolDestination(t.route,origin):toolDestination(t.url,origin,t.passPanelOrigin!==false)})),
     {id:'plugins',label:'Plugins',href:panelDestination(origin,'plugins')},
     {id:'settings',label:'Settings',href:panelDestination(origin,'settings')},
+    {id:'calibration',label:'Cameras',href:panelDestination(origin,'calibration')},
     ...(design?[{id:'design-system',label:'Design',href:panelDestination(origin,'design-system')}]:[]),
     ...(maintenance?[{separator:true}, ...MAINTENANCE_ACTIONS.map(item=>({...item,href:panelDestination(origin,item.id)}))]:[])]
     .map(item=>({...item,current:item.id===current}));

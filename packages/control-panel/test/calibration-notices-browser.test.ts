@@ -53,10 +53,10 @@ test('Calibration prerequisite notices retain result access and use shared expli
       };` });
     for (const [name, value] of Object.entries(cases)) {
       await browser.navigate(`http://127.0.0.1:${port}/calibration/?case=${name}`, "document.getElementById('calibration-loading')?.hidden === true");
-      const text = await browser.evaluate("document.getElementById('calibration-availability').innerText");
+      const text = await browser.evaluate("document.querySelector('.xrb-toast[data-toast-id=\"calibration-availability\"]:not([data-leaving])')?.innerText || ''");
       if (!value.available) assert.ok(text.includes(value.reason), text);
-      else assert.equal(await browser.evaluate("document.getElementById('calibration-availability').hidden"), true);
-      assert.equal(await browser.evaluate("document.getElementById('calibration-availability').classList.contains('warning')"), true);
+      if (!value.available) assert.equal(await browser.evaluate("document.querySelector('.xrb-toast[data-toast-id=\"calibration-availability\"]:not([data-leaving])').dataset.tone"), 'warn', 'unavailability shows as a warning toast');
+      else assert.equal(await browser.evaluate("!document.querySelector('.xrb-toast[data-toast-id=\"calibration-availability\"]:not([data-leaving])')"), true);
       assert.equal(await browser.evaluate("/Camera B → A transform|Checking calibration plugin/.test(document.body.innerText)"), false);
       if (!['plugin-missing', 'plugin-conflict', 'services-stale', 'component-unsafe'].includes(name)) {
         assert.equal(await browser.evaluate("document.getElementById('cal-import-button').disabled"), false);
@@ -71,23 +71,23 @@ test('Calibration prerequisite notices retain result access and use shared expli
     assert.equal(await browser.evaluate("document.getElementById('cal-error').className"), 'xrb-error-banner');
     await shot('runtime-failed');
     await browser.navigate(`http://127.0.0.1:${port}/calibration/?case=bridge-stale`, "document.getElementById('calibration-loading')?.hidden === true");
-    await browser.evaluate("document.querySelector('#calibration-availability button').click()");
+    await browser.evaluate("document.querySelector('.xrb-toast[data-toast-id=\"calibration-availability\"]:not([data-leaving])').querySelector('.xrb-toast-actions button').click()");
     for (let i = 0; i < 100; i++) { if (await browser.evaluate("!!document.querySelector('dialog[open]')")) break; await new Promise(resolve => setTimeout(resolve, 20)); }
     await shot('rebuild-progress');
     assert.deepEqual(await browser.evaluate('mutations'), ['/api/host/rebuild']);
     await browser.evaluate('finishRebuild=true');
-    for (let i = 0; i < 100; i++) { if (await browser.evaluate("sessionStorage.rebuilt==='done' && !document.getElementById('calibration-root').hidden && document.getElementById('calibration-availability').hidden")) break; await new Promise(resolve => setTimeout(resolve, 50)); }
+    for (let i = 0; i < 100; i++) { if (await browser.evaluate("sessionStorage.rebuilt==='done' && !document.getElementById('calibration-root').hidden && !document.querySelector('.xrb-toast[data-toast-id=\"calibration-availability\"]:not([data-leaving])')")) break; await new Promise(resolve => setTimeout(resolve, 50)); }
     assert.equal(await browser.evaluate("document.getElementById('cal-connect').disabled"), false);
     await shot('rebuild-recovered');
     await browser.evaluate(`(async()=>{
       const {mountCalibration}=await import('/calibration/tools/calibration-browser.mjs');
       const old=document.getElementById('calibration-root'),root=old.cloneNode(true);
       for(const select of root.querySelectorAll('select')){const wrapper=select.closest('.xrb-select');if(wrapper)wrapper.replaceWith(select);delete select.dataset.xrbSelect;select.classList.remove('xrb-native-select');select.removeAttribute('tabindex');}old.replaceWith(root);
-      window.disposeMock=await mountCalibration(root,{capture:{available:true},storage:{getItem:()=>null},request:async()=>({id:'fixture',cameras:[{},{}]}),notice:value=>{const notice=document.getElementById('calibration-availability');notice.textContent=value?.reason||'';notice.hidden=value?.available!==false;},createCamera:()=>({connect:async()=>{},stop:async()=>{},disconnect(){},snapshot:()=>({devices:[]})})});
+      window.disposeMock=await mountCalibration(root,{capture:{available:true},storage:{getItem:()=>null},request:async()=>({id:'fixture',cameras:[{},{}]}),notice:value=>{window.lastNotice=value?.available===false?value.reason||'':'';},createCamera:()=>({connect:async()=>{},stop:async()=>{},disconnect(){},snapshot:()=>({devices:[]})})});
       document.getElementById('cal-connect').click();
     })()`);
-    for(let i=0;i<100;i++){if(await browser.evaluate("document.getElementById('calibration-availability').textContent.includes('second supported camera')"))break;await new Promise(resolve=>setTimeout(resolve,20));}
-    assert.match(await browser.evaluate("document.getElementById('calibration-availability').textContent"), /second supported camera/);
+    for(let i=0;i<100;i++){if(await browser.evaluate("String(window.lastNotice||'').includes('second supported camera')"))break;await new Promise(resolve=>setTimeout(resolve,20));}
+    assert.match(await browser.evaluate("String(window.lastNotice||'')"), /second supported camera/);
     await shot('two-cameras-required'); await browser.evaluate('disposeMock()');
     assert.equal(app.panel.jobs.list().length, 0, 'all browser maintenance was simulated');
     await assert.rejects(fs.stat(path.join(workspace, 'config')), /ENOENT/);

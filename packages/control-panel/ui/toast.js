@@ -1,11 +1,11 @@
 // Toasts: short notices in the bottom-right corner, shared by every panel page and plugin UI.
-//   toast({ title, message?, tone?: 'info'|'ok'|'warn'|'err', actions?: [{ label, onClick? , href? }], id?, timeoutMs? }) -> { close }
+//   toast({ title, message?, tone?: 'info'|'ok'|'warn'|'err'|'rebuild', actions?: [{ label, onClick? , href? }], id?, timeoutMs? }) -> { close }
 // A toast with the same `id` replaces the previous one. Info and success fade after a few seconds (paused while hovered);
 // an error with actions stays until it is acted on or closed. Server code raises the same toast with a `toast` event.
 import { iconSvg } from './design-system.js';
 
 const open = new Map();
-const TONES = new Set(['info', 'ok', 'warn', 'err']);
+const TONES = new Set(['info', 'ok', 'warn', 'err', 'rebuild']);
 
 function host(doc) {
   let layer = doc.querySelector('.xrb-toasts');
@@ -26,8 +26,8 @@ export function toast({ title, message = '', tone = 'info', actions = [], id = n
   const layer = host(doc);
   if (id && open.has(id)) open.get(id).close(true);
   const card = doc.createElement('div');
-  card.className = 'xrb-toast'; card.dataset.tone = TONES.has(tone) ? tone : 'info';
-  card.setAttribute('role', tone === 'err' || tone === 'warn' ? 'alert' : 'status');
+  card.className = 'xrb-toast'; if (id) card.dataset.toastId = String(id); card.dataset.tone = TONES.has(tone) ? tone : 'info';
+  card.setAttribute('role', tone === 'err' || tone === 'warn' || tone === 'rebuild' ? 'alert' : 'status');
   const dot = doc.createElement('span'); dot.className = 'xrb-toast-dot'; dot.setAttribute('aria-hidden', 'true');
   const body = doc.createElement('div'); body.className = 'xrb-toast-body';
   const heading = doc.createElement('strong'); heading.textContent = String(title).slice(0, 120);
@@ -47,7 +47,7 @@ export function toast({ title, message = '', tone = 'info', actions = [], id = n
   closeButton.setAttribute('aria-label', 'Dismiss'); closeButton.dataset.noTooltip = ''; closeButton.innerHTML = iconSvg('close');
   card.append(dot, body, closeButton);
   layer.append(card);
-  const sticky = card.dataset.tone === 'err' && valid.length > 0;
+  const sticky = (card.dataset.tone === 'err' || card.dataset.tone === 'rebuild') && valid.length > 0;
   const life = Number.isFinite(timeoutMs) ? timeoutMs : sticky ? 0 : card.dataset.tone === 'err' || card.dataset.tone === 'warn' ? 8000 : 5000;
   let timer = null, closed = false;
   const arm = () => { clearTimeout(timer); if (life > 0) timer = setTimeout(() => handle.close(), life); };

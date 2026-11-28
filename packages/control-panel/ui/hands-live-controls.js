@@ -1,6 +1,7 @@
 import { handsLog, clearHandsLog } from './hands-log.js';
 import { isPanelUnavailable } from './navigation.js';
 import { toast, closeToast } from './toast.js';
+import { setRunButtonLabel } from './design-system.js';
 const key = source => source ? `${source.owner}/${source.id}` : '';
 /** Only acquisition controls: no source writes, status paragraphs, recorder or adjustment editor. */
 export function mountHandsLiveControls({ session, view, load, provider = document.getElementById('hands-provider') }) {
@@ -9,8 +10,8 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   // Adopt the page's Start and status (shown disabled before this loads) so nothing appears or disappears.
   const button = document.getElementById('hands-start-stop') ?? document.createElement('button'), state = document.getElementById('hands-live-state') ?? document.createElement('span'), diagnostic = document.getElementById('hands-log') ?? document.createElement('small');
   diagnostic.id ||= 'hands-live-diagnostic'; diagnostic.hidden = true;
-  button.type = 'button'; button.id = 'hands-start-stop'; button.className = 'primary'; state.id = 'hands-live-state'; state.className = 'chip'; state.setAttribute('role', 'status');
-  // Start/Stop leads the viewer toolbar; the status sits in the header; diagnostics stay beside the provider.
+  button.type = 'button'; button.id = 'hands-start-stop'; button.className = 'xrb-run-button'; state.id = 'hands-live-state'; state.className = 'chip'; state.setAttribute('role', 'status');
+  // Start/Stop is centred in the header and the status chip follows the maintenance chips; diagnostics stay beside the provider.
   const header = document.getElementById('hands-header-status');
   root.replaceChildren(button); if (!root.isConnected) (provider.closest('label') ?? provider).before(root);
   if (header) header.replaceChildren(state); else root.append(state);
@@ -23,9 +24,9 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   document.getElementById('hands-log-clear')?.addEventListener('click', () => clearHandsLog(diagnostic));
   // Start and Stop share one width, the size of Reset, so the toolbar never shifts between them.
   const lockWidth = () => { if (!button.isConnected || button.style.minWidth) return; const current = button.textContent; let widest = 0;
-    for (const label of ['Start', 'Stop']) { button.textContent = label; widest = Math.max(widest, button.getBoundingClientRect().width); }
+    for (const label of ['Start', 'Stop']) { setRunButtonLabel(button, label); widest = Math.max(widest, button.getBoundingClientRect().width); }
     widest = Math.max(widest, document.getElementById('hands-view-reset')?.getBoundingClientRect().width ?? 0);
-    button.textContent = current; if (widest) button.style.minWidth = `${widest}px`; };
+    setRunButtonLabel(button, current); if (widest) button.style.minWidth = `${widest}px`; };
   provider.title = 'Provider changes are saved for the next Start or app launch; the active session is not switched.';
   let status = { phase: 'not-started' }, data = null, supported = true, starting = false, stopping = false, closed = false, polling = false, generation = 0, lastDiagnostic = '', blockedReason = '';
   const rates = document.getElementById('hands-tracking-fps');
@@ -42,19 +43,22 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     const unavailable = !supported ? 'Standalone Hands currently supports Windows x64 only.' : !view?.profile ? 'Wait for the shared SDK view and valid profile.' : !source ? 'Choose an available skeleton provider.' : source.transport !== 'native' ? 'WebXR requires its explicit app XR session.' : !source.available ? source.reason : '';
     const cleanupPending = session.blocked || status.cleanupPending;
     const stoppingNow = stopping || session.stopping || phase === 'stopping';
-    button.textContent = cleanupPending && !stopping ? 'Retry cleanup' : stoppingNow ? 'Stop' : active ? 'Stop' : status.takeoverAvailable ? 'Take over' : 'Start';
+    const buttonLabel = cleanupPending && !stopping ? 'Retry cleanup' : stoppingNow ? 'Stop' : active ? 'Stop' : status.takeoverAvailable ? 'Take over' : 'Start';
+    if (button.textContent !== buttonLabel || !button.classList.contains('xrb-run-button')) setRunButtonLabel(button, buttonLabel);
     // Start stays clickable when only the provider is missing or unavailable; a click explains why instead.
     button.disabled = stopping || !cleanupPending && (stoppingNow || !active && (!data || !view?.profile || phase === 'occupied' && !status.takeoverAvailable || !!view?.replaying));
     blockedReason = !active && !cleanupPending ? unavailable : '';
     if (!blockedReason) closeToast('hands-start-blocked');
-    const labels = { 'not-started': 'Not started', starting: 'Starting…', waiting: 'Waiting', running: 'Running', 'no-hands': 'No hands', rejected: 'Observation dropped', stalled: 'Stalled', stopping: 'Stopping…', stopped: 'Stopped', failed: 'Failed', cleanup: 'Cleanup', occupied: 'Busy' };
+    const labels = { 'not-started': 'Not started', starting: 'Starting', waiting: 'Waiting', running: 'Running', 'no-hands': 'No hands', rejected: 'Observation dropped', stalled: 'Stalled', stopping: 'Stopping', stopped: 'Stopped', failed: 'Failed', cleanup: 'Cleanup', occupied: 'Busy' };
     let label = labels[phase] ?? 'Not started';
     if (active && status.source && key(status.source) !== provider.value) label += ` · ${status.source.label}`;
     if (state.textContent !== label) state.textContent = label;
     state.classList.toggle('warn', ['failed', 'occupied', 'stalled'].includes(phase));
     const fps = Number.isFinite(status.trackingFps) && ['running', 'no-hands'].includes(phase) ? status.trackingFps.toFixed(1) : '—';
     if (rates.textContent !== fps) rates.textContent = fps;
-    rates.parentElement.dataset.tooltip = fps === '—' ? 'No fresh live provider frames' : `Unique received frames/s · Capture age ${status.frameAgeMs?.toFixed(1)} ms ± ${status.uncertaintyMs?.toFixed(1)} ms · Delivery gaps ${status.dropped ?? 0} · Provider-reported ${status.reportedHz ?? '—'} Hz`;
+    globalThis.xrbRateTone?.(rates, fps, 45, 25);
+    // One short fact per line (the tooltip keeps line breaks), so it reads at a glance.
+    rates.parentElement.dataset.tooltip = fps === '—' ? 'Hand tracking\nNo live frames' : `Hand tracking\nAge ${status.frameAgeMs?.toFixed(1)} ± ${status.uncertaintyMs?.toFixed(1)} ms\nGaps ${status.dropped ?? 0}\nProvider ${status.reportedHz ?? '—'} Hz`;
   }
   // Why Start cannot run right now. Start stays clickable; a click shows the reason as a toast with Open Setup, which
   // closes by itself once Start can run.

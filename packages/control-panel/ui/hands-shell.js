@@ -28,6 +28,10 @@ export function mountHandsShell(view) {
   const viewport = document.getElementById('hands-viewport'), button = document.getElementById('hands-fullscreen');
   const sync = () => {
     const active = document.fullscreenElement === viewport;
+    const actions = document.getElementById('hands-session-actions'), slot = viewport.querySelector('.hands-view-run'), header = document.querySelector('.hands-header-run');
+    if (actions && slot && header) (active ? slot : header).append(actions);
+    const stats = document.getElementById('hands-stats'), statsSlot = viewport.querySelector('.hands-view-stats'), bar = document.querySelector('.xrb-app-bar');
+    if (stats && statsSlot && bar) { if (active) statsSlot.append(stats); else if (stats.parentElement !== bar) bar.append(stats); }
     button.innerHTML = iconSvg(active ? 'exit-fullscreen' : 'fullscreen');
     button.setAttribute('aria-label', active ? 'Exit fullscreen' : 'Enter fullscreen');
   };
@@ -36,5 +40,16 @@ export function mountHandsShell(view) {
     void work.catch(error => { const output = document.getElementById('hands-view-error'); output.textContent = error.message; output.hidden = false; });
   }, { signal });
   document.addEventListener('fullscreenchange', sync, { signal }); sync();
+  let idleTimer = 0;
+  const busy = () => viewport.querySelector('.dropdown-btn[aria-expanded="true"]') || viewport.querySelector('.hands-view-tools:hover, .hands-display-widget:hover, .hands-view-run:hover');
+  const wake = () => {
+    viewport.removeAttribute('data-idle'); clearTimeout(idleTimer);
+    if (document.fullscreenElement !== viewport) return;
+    const sleep = () => { if (busy()) { idleTimer = setTimeout(sleep, 2500); return; } viewport.setAttribute('data-idle', ''); };
+    idleTimer = setTimeout(sleep, 2500);
+  };
+  for (const type of ['pointermove', 'pointerdown', 'wheel', 'keydown']) viewport.addEventListener(type, wake, { signal, passive: true });
+  document.addEventListener('fullscreenchange', wake, { signal });
+  signal.addEventListener('abort', () => clearTimeout(idleTimer));
   return () => { events.abort(); disposers.reverse().forEach(dispose => dispose?.()); };
 }

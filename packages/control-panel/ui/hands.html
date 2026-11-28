@@ -19,31 +19,34 @@
     <span id="host-chip" class="chip" data-maintenance="rebuild" hidden>rebuild</span>
     <span id="update-chip" class="chip update" data-maintenance="update" hidden>update</span>
     <div id="hands-header-status" class="hands-header-status"><span id="hands-live-state" class="chip" role="status">Not started</span></div>
+    <!-- Present and disabled from the first paint; live controls adopt it once loaded. -->
+    <div class="hands-header-run"><div id="hands-session-actions" class="hands-session-actions"><button type="button" id="hands-start-stop" class="xrb-run-button" aria-label="Start" data-tooltip="Start" disabled><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="m5 3 7 5-7 5Z" fill="currentColor"/></svg><span class="xrb-visually-hidden">Start</span></button></div></div>
     <span class="spacer"></span>
-    <div class="row" aria-label="Hands frame rates">
-      <span class="chip" data-tooltip="Viewport render rate"><span id="hands-render-fps">—</span><small>render fps</small></span>
-      <span class="chip" data-tooltip="No live hand session"><span id="hands-tracking-fps">—</span><small>hand tracking fps</small></span>
+    <div id="hands-stats" class="stats-dock" aria-label="Hands frame rates">
+      <span class="stat" data-tooltip="View render rate&#10;No frames yet"><span id="hands-render-fps">—</span><small>fps</small></span>
+      <span class="stat" data-tooltip="Hand tracking&#10;No live session"><span id="hands-tracking-fps">—</span><small>Hz</small></span>
     </div>
   </header>
   <main id="hands-workspace" class="xrb-workspace-layout" aria-label="Hands workspace">
     <section id="hands-viewport" class="xrb-card hands-viewport" aria-label="3D hand view">
       <canvas id="hands-canvas" aria-label="Shared SDK hand view"></canvas>
       <div class="hands-view-tools xrb-controls-small">
-        <!-- Present and disabled from the first paint; live controls adopt it once loaded. -->
-        <div id="hands-session-actions" class="hands-session-actions"><button type="button" id="hands-start-stop" class="primary" disabled>Start</button></div>
-        <span class="hands-tool-separator" aria-hidden="true"></span>
         <div class="dropdown" data-multi="true" data-summary="View" data-options="grid|axes|monitor|object" data-labels='{"grid":"Grid","axes":"Axes","monitor":"Monitor","object":"Object"}'>
           <input id="hands-view-options" type="hidden" value='["grid","axes","monitor","object"]'>
           <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="View options" data-no-tooltip>View</button>
         </div>
         <button id="hands-view-reset" type="button" aria-label="Reset view" data-no-tooltip>Reset</button>
-        <span class="hands-tool-separator" aria-hidden="true"></span>
-        <div class="dropdown" data-multi="true" data-summary="Display" data-options="skeleton" data-labels='{"skeleton":"Skeleton"}' id="hands-display">
-          <input id="hands-display-options" type="hidden" value='["skeleton","mesh"]'>
-          <button type="button" class="dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Display options" data-no-tooltip>Display</button>
-        </div>
         <span class="spacer"></span>
+        <div class="hands-view-stats"></div>
         <button id="hands-fullscreen" type="button" class="xrb-icon-button" data-xrb-icon="fullscreen" aria-label="Enter fullscreen" data-no-tooltip></button>
+      </div>
+      <div class="hands-view-run" aria-label="Hand session"></div>
+      <div id="hands-display" class="hands-display-widget" role="group" aria-labelledby="hands-display-title">
+        <button type="button" class="hands-display-head" aria-expanded="true" aria-controls="hands-display-choices" data-no-tooltip>
+          <span id="hands-display-title" class="label">Display</span><span id="hands-display-count" class="hands-display-count"></span><span class="hands-display-chevron" aria-hidden="true"></span>
+        </button>
+        <input id="hands-display-options" type="hidden" value='["skeleton","mesh"]'>
+        <div id="hands-display-choices" class="hands-display-choices"></div>
       </div>
       <p id="hands-view-error" class="field-error hands-view-error" role="alert" hidden></p>
     </section>
@@ -54,9 +57,8 @@
         <button type="button" class="xrb-tab" role="tab" data-tab="setup" aria-selected="true" tabindex="0">Setup</button>
         <button type="button" class="xrb-tab" role="tab" data-tab="geometry" aria-selected="false" tabindex="-1">Transform</button>
         <button type="button" class="xrb-tab" role="tab" data-tab="appearance" aria-selected="false" tabindex="-1">Display</button>
-        <button type="button" class="xrb-tab" role="tab" data-tab="post" aria-selected="false" tabindex="-1">Post-process</button>
+        <button type="button" class="xrb-tab" role="tab" data-tab="post" aria-selected="false" tabindex="-1">Mesh</button>
         <button type="button" class="xrb-tab" role="tab" data-tab="log" aria-selected="false" tabindex="-1">Log</button>
-        <span class="hands-tab-action" data-tab-action="post" hidden></span>
         <span class="hands-tab-action" data-tab-action="log" hidden><button type="button" class="xrb-icon-button" id="hands-log-clear" aria-label="Clear log" data-xrb-icon="close" data-no-tooltip></button></span>
       </div>
       <div id="hands-setup" class="xrb-sidebar-content xrb-stack hands-source">

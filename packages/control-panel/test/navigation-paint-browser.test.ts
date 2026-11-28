@@ -29,7 +29,7 @@ test('every module paints its correct shell before slow APIs and remote fonts', 
   await new Promise<void>(resolve => panel.server.listen(port, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${(panel.server.address() as {port:number}).port}`;
   try {
-    for (const [route, title, frame] of [['/', 'Apps', 'dashboard'], ['/plugins/', 'Plugins', 'plugins-manager'], ['/settings/', 'Settings', 'global-settings'], ['/hands/', 'Hands', ''], ['/calibration/', 'Calibration', ''], ['/design', 'Design', '']]) await withBrowser(async ({ send, evaluate }) => {
+    for (const [route, title, frame] of [['/', 'Apps', 'dashboard'], ['/plugins/', 'Plugins', 'plugins-manager'], ['/settings/', 'Settings', 'global-settings'], ['/hands/', 'Hands', ''], ['/calibration/', 'Cameras', ''], ['/design', 'Design', '']]) await withBrowser(async ({ send, evaluate }) => {
       await send('Network.enable');
       await send('Network.setBlockedURLs', { urls: ['*fonts.googleapis.com*', '*fonts.gstatic.com*'] });
       await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.shellPaint=null;requestAnimationFrame(function check(){const h=document.querySelector('.xrb-app-bar'),m=document.querySelector('main:not([hidden])');if(h&&m&&getComputedStyle(h).visibility==='visible'&&m.getBoundingClientRect().height){window.shellPaint={at:performance.now(),title:h.innerText,frame:m.id};}else requestAnimationFrame(check);});` });
