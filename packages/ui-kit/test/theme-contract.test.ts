@@ -52,14 +52,14 @@ for (const [i, make] of controls.entries()) test(`Default ${i}: theme resolution
   object.dispose();
 });
 
-for (const [i, make] of controls.entries()) test(`Chamfer ${i}: meshes differ while interaction targets and fixed hosts survive`, () => {
+for (const [i, make] of controls.entries()) test(`Accent ${i}: meshes differ while interaction targets and fixed hosts survive`, () => {
   const object = make(); object.update(1/60);
   const before = graphics(object), bounds = targets(object), children = object.children.slice();
   const envelope = new THREE.Box3().setFromObject(object);
   const oldGeometries = new Set<THREE.BufferGeometry>(); object.traverse(node => { if ((node as THREE.Mesh).geometry) oldGeometries.add((node as THREE.Mesh).geometry); });
   let disposed = 0; for (const geometry of oldGeometries) geometry.addEventListener('dispose', () => disposed++);
-  object.setTheme('chamfer');
-  assert.equal(object.themeId, 'chamfer');
+  object.setTheme('accent');
+  assert.equal(object.themeId, 'accent');
   assert.notDeepEqual(graphics(object), before);
   const styled = new THREE.Box3().setFromObject(object);
   for (const axis of ['x','y','z'] as const) {
@@ -75,15 +75,15 @@ for (const [i, make] of controls.entries()) test(`Chamfer ${i}: meshes differ wh
 });
 
 test('both built-ins are complete and custom geometry failure leaves the old style live', () => {
-  assert.equal(Kit.resolveUiKitTheme('chamfer'), Kit.chamferTheme);
-  for (const theme of [Kit.defaultTheme, Kit.chamferTheme]) for (const role of Kit.visualRoles) assert.ok(theme.visuals[role]);
+  assert.equal(Kit.resolveUiKitTheme('accent'), Kit.accentTheme);
+  for (const theme of [Kit.defaultTheme, Kit.accentTheme]) for (const role of Kit.visualRoles) assert.ok(theme.visuals[role]);
   const object = new Kit.Button({title:'button',shape:'pill',text:'Press'}), before = graphics(object);
   let stagedDisposed = 0;
-  const visuals = { ...Kit.chamferTheme.visuals,
-    buttonWellPill: { ...Kit.chamferTheme.visuals.buttonWellPill, geometry: () => { throw new Error('staged failure'); } },
-    label: { ...Kit.chamferTheme.visuals.label, geometry: (input: Kit.GeometryInput) => { const g=referenceGeometry(input); g.addEventListener('dispose',()=>stagedDisposed++); return g; } },
+  const visuals = { ...Kit.accentTheme.visuals,
+    buttonWellPill: { ...Kit.accentTheme.visuals.buttonWellPill, geometry: () => { throw new Error('staged failure'); } },
+    label: { ...Kit.accentTheme.visuals.label, geometry: (input: Kit.GeometryInput) => { const g=referenceGeometry(input); g.addEventListener('dispose',()=>stagedDisposed++); return g; } },
   };
-  assert.throws(() => object.setTheme({...Kit.chamferTheme, id:'broken', visuals}), /staged failure/);
+  assert.throws(() => object.setTheme({...Kit.accentTheme, id:'broken', visuals}), /staged failure/);
   assert.ok(stagedDisposed > 0); assert.equal(object.themeId,'default'); assert.deepEqual(graphics(object),before); object.dispose();
 });
 

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { COLORS, roundedBox, roundedDisc, disc } from './theme.ts';
-import { createChamferTheme } from './chamfer-theme.ts';
+import { createAccentTheme } from './accent-theme.ts';
 
 /** Visual roles are deliberately independent of target bounds and interaction tuning. */
 export const visualRoles = [
@@ -24,7 +24,8 @@ export interface VisualRecipe {
 }
 export interface UiKitTheme {
   readonly id: string;
-  readonly colors: { readonly [K in keyof typeof COLORS]: string };
+  /** `onCap`: ink for text and icons on control bodies; optional, so existing custom themes stay complete. */
+  readonly colors: { readonly [K in keyof typeof COLORS]: string } & { readonly onCap?: string };
   readonly typography: { readonly family: string; readonly weight: number; readonly color: string };
   readonly icon: { readonly stroke: number; readonly lineCap: CanvasLineCap; readonly lineJoin: CanvasLineJoin };
   readonly visuals: Readonly<Record<VisualRole, VisualRecipe>>;
@@ -62,11 +63,16 @@ export const defaultTheme: UiKitTheme = Object.freeze({
   visuals: Object.freeze(Object.fromEntries(visualRoles.map(role => [role, referenceRecipe])) as Record<VisualRole, VisualRecipe>),
 });
 
-export const chamferTheme: UiKitTheme = createChamferTheme(defaultTheme, visualRoles);
+export const accentTheme: UiKitTheme = createAccentTheme(defaultTheme, visualRoles);
 // Immutable definitions, not a global mutable style installation registry.
-const builtins: Readonly<Record<UiKitThemeId, UiKitTheme>> = Object.freeze({ default: defaultTheme, chamfer: chamferTheme });
+const builtins: Readonly<Record<UiKitThemeId, UiKitTheme>> = Object.freeze({ default: defaultTheme, accent: accentTheme });
+/** Accent replaced the earlier Chamfer style; a saved 'chamfer' choice resolves to it. */
+const retired: Readonly<Record<string, UiKitThemeId>> = Object.freeze({ chamfer: 'accent' });
+/** Ink on control bodies when a theme names none. */
+export const ON_CAP = '#30363f';
+export const onCapColor = (theme: UiKitTheme) => theme.colors.onCap ?? ON_CAP;
 export function resolveUiKitTheme(selection: UiKitThemeSelection = 'default'): UiKitTheme {
-  const theme = typeof selection === 'string' ? builtins[selection] : selection;
+  const theme = typeof selection === 'string' ? builtins[(retired[selection] ?? selection) as UiKitThemeId] : selection;
   if (!theme || typeof theme.id !== 'string' || !theme.colors || !theme.typography || !theme.icon ||
     Object.keys(COLORS).some(key => typeof theme.colors[key as keyof typeof COLORS] !== 'string') ||
     typeof theme.typography.family !== 'string' || !Number.isFinite(theme.typography.weight) || typeof theme.typography.color !== 'string' ||

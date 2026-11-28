@@ -54,7 +54,7 @@ function replay(control:Kit.Control,ix:Interactor,input:'mouse'|'hand') {
  if(control instanceof Kit.Trackball)for(const axis of ['x','y','z','free'] as const){control.axis=axis;ix.pointerDown(ray());ix.pointerMove(ray(0.02,0.02));ix.pointerUp();frame();}
  const result={events,state:snapshot(control)};off.forEach(f=>f());return result;
 }
-for(const theme of ['default','chamfer'] as const)for(const projection of ['perspective','orthographic','stereo'] as const)for(const input of ['mouse','hand'] as const)for(const definition of definitions)test(`${theme} ${definition.name}: ${projection} ${input} matches imperative behavior`,async()=>{
+for(const theme of ['default','accent'] as const)for(const projection of ['perspective','orthographic','stereo'] as const)for(const input of ['mouse','hand'] as const)for(const definition of definitions)test(`${theme} ${definition.name}: ${projection} ${input} matches imperative behavior`,async()=>{
  const f=fixture();f.app.setProjection(projection==='orthographic'?'orthographic':'perspective');if(projection==='stereo')f.app.xrb.setStereo(true);
  const ref=createRef<Kit.Control>();const C=definition.C as React.ComponentType<any>;
  const mount=mountXrbApp(f.container,<C {...definition.props} theme={theme} ref={ref}/>,{app:f.app});await mount.ready;
@@ -68,7 +68,7 @@ for(const theme of ['default','chamfer'] as const)for(const projection of ['pers
 });
 
 const handTraces = new Map<string, unknown>();
-for(const theme of ['default','chamfer'] as const)for(const projection of ['perspective','orthographic','stereo'] as const)for(const mouse of [false,true])for(const definition of definitions)test(`${theme} ${definition.name}: SDK sampled hands, ${projection}, Mouse=${mouse}`,async()=>{
+for(const theme of ['default','accent'] as const)for(const projection of ['perspective','orthographic','stereo'] as const)for(const mouse of [false,true])for(const definition of definitions)test(`${theme} ${definition.name}: SDK sampled hands, ${projection}, Mouse=${mouse}`,async()=>{
  const restore=installPointerEvents();const f=fixture();f.app.dispose();
  Object.assign(document,{elementFromPoint:()=>f.canvas});
  const app=createXrbApp(f.renderer,{autoStart:false,camera:{position:[0,0,0.6]},xrb:{mouse,mapping:{mode:'world',center:new THREE.Vector3(),scale:1},xr:{button:false}}});

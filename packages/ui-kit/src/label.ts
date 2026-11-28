@@ -3,12 +3,14 @@
 import * as THREE from 'three';
 import { COLORS } from './theme.ts';
 import { VisualResources } from './resources.ts';
-import { defaultTheme, registerVisualStyle, resolveUiKitTheme, setVisualComposition, styleMesh, type ThemeOptions, type UiKitThemeSelection } from './visual-theme.ts';
+import { defaultTheme, onCapColor, registerVisualStyle, resolveUiKitTheme, setVisualComposition, styleMesh, type ThemeOptions, type UiKitThemeSelection } from './visual-theme.ts';
 
 export interface LabelOptions extends ThemeOptions {
   /** font size in metres */
   size?: number;
   color?: string;
+  /** `onCap`: drawn on a control body, in the theme's ink for it (ignored with an explicit `color`). */
+  tone?: 'onCap';
   weight?: number;
   align?: 'left' | 'center' | 'right';
 }
@@ -19,7 +21,7 @@ export class Label extends THREE.Object3D {
   private readonly canvas = document.createElement('canvas');
   private readonly texture = new THREE.CanvasTexture(this.canvas);
   private readonly mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
-  private readonly o: Required<Omit<LabelOptions, 'theme'>>;
+  private readonly o: Required<Omit<LabelOptions, 'theme' | 'tone'>>;
   private theme = defaultTheme;
   get themeId(): string { return this.theme.id; }
   private text = '';
@@ -31,7 +33,7 @@ export class Label extends THREE.Object3D {
   constructor(text: string, options: LabelOptions = {}) {
     super();
     this.options = options;
-    this.o = { size: 0.011, color: COLORS.text, weight: 600, align: 'center', ...options };
+    this.o = { size: 0.011, weight: 600, align: 'center', ...options, color: options.color ?? (options.tone === 'onCap' ? onCapColor(defaultTheme) : COLORS.text) };
     this.color = this.o.color;
     this.explicitColor = options.color;
     this.texture.colorSpace = THREE.SRGBColorSpace;
@@ -39,7 +41,7 @@ export class Label extends THREE.Object3D {
     this.mesh = styleMesh(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, depthWrite: false })), 'label', { shape: 'plane', args: [1, 1] });
     registerVisualStyle(this, { prepare: theme => ({ commit: () => {
       const weight = this.options.weight ?? theme.typography.weight;
-      const color = this.explicitColor ?? theme.typography.color;
+      const color = this.explicitColor ?? (this.options.tone === 'onCap' ? onCapColor(theme) : theme.typography.color);
       const redraw = this.theme.typography.family !== theme.typography.family || this.o.weight !== weight || this.color !== color;
       this.theme = theme; this.o.weight = weight;
       if (redraw) this.draw(this.text, color, true);

@@ -34,7 +34,7 @@ test('Launcher declares transparent composition without freezing theme-owned opa
  }finally{await state.dispose();}
 });
 
-for(const theme of ['default','chamfer'])for(const mode of ['perspective','orthographic','stereo'])for(const input of ['mouse','hand'])test(`Launcher ${theme} paging/release/cancellation: ${mode}, ${input}`,async()=>{
+for(const theme of ['default','accent'])for(const mode of ['perspective','orthographic','stereo'])for(const input of ['mouse','hand'])test(`Launcher ${theme} paging/release/cancellation: ${mode}, ${input}`,async()=>{
  const state=await componentApp(root,{href,fetch:fetchCatalog,input:{mouse:input==='mouse'}});state.canvas.clientWidth=800;
  try{
   const {LauncherScene}=await state.importEntry();state.handle.update(React.createElement(LauncherScene,{theme}));await new Promise(r=>setTimeout(r,35));
@@ -74,7 +74,7 @@ test('native swipe, right-button tilt/reset and explicit XR entry retain authore
  }finally{await state.dispose();}
 });
 
-for(const theme of ['default','chamfer'])for(const refresh of ['description','icon revision','error','removal'])for(const finish of ['navigate','teardown'])test(`${theme} accepted navigation survives catalog ${refresh}; ${finish}`,async()=>{
+for(const theme of ['default','accent'])for(const refresh of ['description','icon revision','error','removal'])for(const finish of ['navigate','teardown'])test(`${theme} accepted navigation survives catalog ${refresh}; ${finish}`,async()=>{
  let description='original',revision=1,available=true,present=true;
  const state=await componentApp(root,{href,fetch:async()=>available?Response.json({projects:present?[{id:'scene-1',entryExists:true,icon:{mtimeMs:revision},manifest:{kind:'app',name:'Scene 1',description}}]:[]}):new Response('',{status:503})});
  try{
@@ -83,7 +83,7 @@ for(const theme of ['default','chamfer'])for(const refresh of ['description','ic
   const original=cards(state)[0],button=controls(state).find(c=>c.title.text==='Open Scene 1');
   mousePress(state,button);await state.fire(60);
   const accepted=[...state.pending].find(([,timer])=>timer.delay===1150);assert.ok(accepted,'release accepts one navigation');
-  state.handle.update(React.createElement(LauncherScene,{theme:theme==='default'?'chamfer':'default'}));await new Promise(r=>setTimeout(r,35));
+  state.handle.update(React.createElement(LauncherScene,{theme:theme==='default'?'accent':'default'}));await new Promise(r=>setTimeout(r,35));
   assert.ok(cards(state).includes(original),'theme replacement retains the launching card');assert.equal(state.pending.get(accepted[0]),accepted[1],'theme replacement keeps the accepted deadline');
   if(refresh==='description')description='changed during navigation';
   if(refresh==='icon revision')revision++;
@@ -122,8 +122,8 @@ for(const mode of ['perspective','orthographic','stereo'])for(const input of ['m
    sampled(.06);state.tick(1100);sampled(-target.travel*.8);state.tick(1116);
   }
   const held=state.app.xrb.interaction.captured(input==='mouse'?-1:7);assert.ok(held);
-  state.handle.update(React.createElement(LauncherScene,{theme:'chamfer'}));await new Promise(r=>setTimeout(r,35));
-  assert.equal(controls(state).find(c=>c.title.text==='Next page'),next);assert.equal(next.themeId,'chamfer');assert.equal(state.app.xrb.interaction.captured(input==='mouse'?-1:7),held);
+  state.handle.update(React.createElement(LauncherScene,{theme:'accent'}));await new Promise(r=>setTimeout(r,35));
+  assert.equal(controls(state).find(c=>c.title.text==='Next page'),next);assert.equal(next.themeId,'accent');assert.equal(state.app.xrb.interaction.captured(input==='mouse'?-1:7),held);
   if(input==='mouse'){const[x,y]=point(state,next);native(state,'pointerup',x,y);}else{sampled(.06);state.tick(1132);}
   await state.fire(60);assert.deepEqual(cards(state).map(c=>c.userData.launcherCard.entry.title),['Scene 4','Scene 5']);
  }finally{await state.dispose();}

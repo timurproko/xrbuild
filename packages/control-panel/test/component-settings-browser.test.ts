@@ -18,10 +18,10 @@ test('Settings uses normal dropdowns, comes last, autosaves and never changes pl
     assert.equal(await evaluate(`!!document.querySelector('#act-run,#act-package,#act-publish,#settings .xrb-help')`), false);
     await evaluate(`document.querySelector('#settings .dropdown-btn').click()`);
     await until(`!!document.querySelector('[role="option"]')`);
-    await evaluate(`Array.from(document.querySelectorAll('[role="option"]')).find(x=>x.textContent.trim()==='Chamfer').click()`);
-    await until(`document.querySelector('#settings input')?.value==='chamfer'`);
-    for (let i = 0; i < 100 && (await f.get()).manifest.componentSettings?.['bundled:ui-kit']?.theme !== 'chamfer'; i++) await sleep(50);
-    assert.equal((await f.get()).manifest.componentSettings['bundled:ui-kit'].theme, 'chamfer');
+    await evaluate(`Array.from(document.querySelectorAll('[role="option"]')).find(x=>x.textContent.trim()==='Accent').click()`);
+    await until(`document.querySelector('#settings input')?.value==='accent'`);
+    for (let i = 0; i < 100 && (await f.get()).manifest.componentSettings?.['bundled:ui-kit']?.theme !== 'accent'; i++) await sleep(50);
+    assert.equal((await f.get()).manifest.componentSettings['bundled:ui-kit'].theme, 'accent');
     // A second quick edit uses the existing serialized settings writer.
     await evaluate(`document.querySelector('#settings .dropdown-btn').click()`);
     await until(`!!document.querySelector('[role="option"]')`);

@@ -38,3 +38,7 @@
 ## 9. App Settings tab
 
 - [x] 9.1 Rename the library parameters tab to Settings, place it last and use a plain card title per library; let UI Kit consume its own theme parameter so its Settings tab chooses the theme it runs with; cover both in panel and embedded tests.
+
+## 10. Accent theme replaces Chamfer
+
+- [x] 10.1 Replace the Chamfer style with Accent: solid accent bodies with filleted edges and a satin finish, an optional on-body ink for text and icons, a pale slider bar with a half-accent fill and a ribbed grip; resolve a saved Chamfer choice to Accent; cover it in UI Kit, panel and embedded tests.

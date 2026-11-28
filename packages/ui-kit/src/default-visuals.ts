@@ -18,7 +18,7 @@ export function buttonVisual(options: ButtonOptions, w: number, h: number, depth
   const base = pill ? boxVisual('buttonWellPill', w + 0.008, h + 0.008, 0.004, (h + 0.008) / 2, material(COLORS.well)) : roundVisual('buttonWellRound', w / 2 + 0.004, 0.004, material(COLORS.well));
   const cap = new THREE.Group(), capMaterial = material(COLORS.cap, { roughness: 0.35 });
   const capMesh = pill ? boxVisual('buttonPill', w, h, depth, h / 2, capMaterial) : roundVisual('buttonRound', w / 2, depth, capMaterial);
-  const glyph = !pill && options.icon ? new Icon(options.icon, { size: 0.022, stroke: options.iconStroke }) : new Label(options.text, { size: pill ? 0.0085 : 0.019, color: '#30363f', weight: pill ? 600 : 900 });
+  const glyph = !pill && options.icon ? new Icon(options.icon, { size: 0.022, stroke: options.iconStroke }) : new Label(options.text, { size: pill ? 0.0085 : 0.019, tone: 'onCap', weight: pill ? 600 : 900 });
   glyph.position.z = depth + 0.0003; cap.add(capMesh, glyph); cap.position.z = rest;
   return { base, cap, capMaterial };
 }

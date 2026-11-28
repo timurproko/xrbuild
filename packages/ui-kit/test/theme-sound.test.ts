@@ -27,10 +27,10 @@ test('both mesh styles retain feedback scheduling; a held theme swap emits no so
   const frame=()=>{clock+=100;object.update(1/60);object.updateMatrixWorld(true);ix.update([],1);};
   const centre=(object as any).targets[0].centre?.x??0;
   const ray=(x=0)=>new THREE.Ray(new THREE.Vector3(x+centre,0,1),new THREE.Vector3(0,0,-1));
-  frame();assert.ok(ix.pointerDown(ray()),`mouse capture for ${object.constructor.name}`);frame();const count=voices.length;object.setTheme(theme==='default'?'chamfer':'default');assert.equal(voices.length,count);
+  frame();assert.ok(ix.pointerDown(ray()),`mouse capture for ${object.constructor.name}`);frame();const count=voices.length;object.setTheme(theme==='default'?'accent':'default');assert.equal(voices.length,count);
   ix.pointerMove(ray(.045));frame();ix.pointerUp();frame();if(object instanceof K.Dialog)object.close('mouse');
   const result=structuredClone(voices);object.dispose();return result;
  });
- try{const expected=replay('default'),actual=replay('chamfer');assert.deepEqual(actual,expected);assert.ok(expected.every(trace=>trace.length>0),`positive scheduled feedback for every sound-producing control: ${JSON.stringify(expected)}`);}
+ try{const expected=replay('default'),actual=replay('accent');assert.deepEqual(actual,expected);assert.ok(expected.every(trace=>trace.length>0),`positive scheduled feedback for every sound-producing control: ${JSON.stringify(expected)}`);}
  finally{K.setMuted(true);globalThis.AudioContext=Audio;if(now)Object.defineProperty(performance,'now',now);else delete (performance as any).now;}
 });

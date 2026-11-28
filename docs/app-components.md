@@ -63,7 +63,7 @@ Constructor options are stable for an instance; use a React key for intentional 
 
 ## Mesh themes and app defaults
 
-UI Kit supplies `default` (the unchanged rounded reference) and `chamfer` (clipped, bevelled/inset satin meshes), covering every control, variant and primitive. Their layouts, target/contact bounds, timing, sounds and interaction traces are identical. Only visuals differ. See the [theme contract and selection guide](../packages/ui-kit/README.md#visual-theme-contract).
+UI Kit supplies `default` (the unchanged rounded reference) and `accent` (solid accent bodies with soft fillets and a satin finish), covering every control, variant and primitive. Their layouts, target/contact bounds, timing, sounds and interaction traces are identical. Only visuals differ. See the [theme contract and selection guide](../packages/ui-kit/README.md#visual-theme-contract).
 
 Each UI Kit-consuming app exports a plain, side-effect-free `uiKitTheme` declaration with `defaultTheme: 'default'` from its public entry. This remains a default ID; the separate manifest declaration below identifies exposed parameters and consumers. The app's run entry uses the same scene boundary as composition:
 
@@ -74,9 +74,9 @@ import { LauncherScene, uiKitTheme } from '@scene/launcher';
 // Use the app-declared default when there is no surrounding selection.
 <LauncherScene />;
 // A controlled prop selects a style for this app only.
-<LauncherScene theme="chamfer" />;
+<LauncherScene theme="accent" />;
 // A surrounding consumer can select all inheriting UI Kit components.
-<UiKitThemeProvider theme="chamfer"><LauncherScene /></UiKitThemeProvider>;
+<UiKitThemeProvider theme="accent"><LauncherScene /></UiKitThemeProvider>;
 ```
 
 `UiKitSceneProps` and `LauncherSceneProps` accept an optional theme ID or complete immutable definition. Resolution is explicit control override, nearest explicit scene/provider choice, inherited choice, app-declared fallback, then library Default. A scene's fallback never masks a surrounding explicit provider. Runtime updates use the existing mount's `update` with the same component type, not a new key or SDK runtime. They retain values, capture, modal/axis state and Launcher's catalog/page/accepted navigation deadline while replacing only owned visuals. The optional Settings tab drives this existing prop/provider without changing rendering ownership.

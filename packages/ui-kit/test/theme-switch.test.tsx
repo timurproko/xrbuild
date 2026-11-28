@@ -33,8 +33,8 @@ for(const [i,def]of defs.entries())test(`provider switch ${i}: held identity, ca
  const p=target.object.localToWorld(new THREE.Vector3(centre.x??0,centre.y??0,target.top??centre.z??0));
  assert.ok(f.app.xrb.interaction.pointerDown(ray(p.x,p.y)),'held target exists');
  const captured=f.app.xrb.interaction.captured(-1),before=state(object),eventCount=calls.length;
- mount.update(tree('chamfer','new'));await settle();
- assert.equal(ref.current,object);assert.equal(object.themeId,'chamfer');assert.equal(f.app.xrb.interaction.captured(-1),captured);assert.deepEqual(state(object),before);assert.equal(calls.length,eventCount);
+ mount.update(tree('accent','new'));await settle();
+ assert.equal(ref.current,object);assert.equal(object.themeId,'accent');assert.equal(f.app.xrb.interaction.captured(-1),captured);assert.deepEqual(state(object),before);assert.equal(calls.length,eventCount);
  f.app.xrb.interaction.pointerMove(ray(p.x+.02,p.y+.02));f.app.xrb.interaction.pointerUp();
  assert.ok(!calls.includes('old'),'release uses current callback');
  await mount.dispose();assert.equal(f.app.xrb.interaction.captured(-1),null);f.app.dispose();
@@ -45,12 +45,12 @@ test('nested fallback/override removal and independent providers never reset ins
  const tree=(outer?:K.UiKitThemeSelection,override?:K.UiKitThemeSelection)=><>
   <UI.UiKitThemeProvider theme={outer}><UI.UiKitThemeProvider defaultTheme="default"><UI.Button ref={a} title="a" shape="pill" text="a"/><UI.Button ref={b} theme={override} title="b" shape="pill" text="b"/></UI.UiKitThemeProvider></UI.UiKitThemeProvider>
   <UI.UiKitThemeProvider theme="default"><UI.Button ref={c} title="c" shape="pill" text="c"/></UI.UiKitThemeProvider>
-  <UI.UiKitThemeProvider defaultTheme="chamfer"><UI.Button ref={d} title="d" shape="pill" text="d"/></UI.UiKitThemeProvider>
+  <UI.UiKitThemeProvider defaultTheme="accent"><UI.Button ref={d} title="d" shape="pill" text="d"/></UI.UiKitThemeProvider>
  </>;
- const mount=mountXrbApp(f.container,tree('chamfer','default'),{app:f.app});await mount.ready;
- const objects=[a.current,b.current,c.current,d.current];assert.deepEqual(objects.map(o=>o!.themeId),['chamfer','default','default','chamfer']);
- mount.update(tree('chamfer'));await settle();assert.equal(b.current!.themeId,'chamfer');
- mount.update(tree());await settle();assert.deepEqual([a.current,b.current,c.current,d.current],objects);assert.deepEqual(objects.map(o=>o!.themeId),['default','default','default','chamfer']);
+ const mount=mountXrbApp(f.container,tree('accent','default'),{app:f.app});await mount.ready;
+ const objects=[a.current,b.current,c.current,d.current];assert.deepEqual(objects.map(o=>o!.themeId),['accent','default','default','accent']);
+ mount.update(tree('accent'));await settle();assert.equal(b.current!.themeId,'accent');
+ mount.update(tree());await settle();assert.deepEqual([a.current,b.current,c.current,d.current],objects);assert.deepEqual(objects.map(o=>o!.themeId),['default','default','default','accent']);
  await mount.dispose();f.app.dispose();
 });
 
@@ -61,7 +61,7 @@ for(const [i,def]of defs.entries())test(`repeated theme retirement ${i}: resourc
  const counts=new Map<THREE.BufferGeometry|THREE.Material,number>();const watch=()=>object.traverse(node=>{const m=node as THREE.Mesh;for(const r of [m.geometry,...(Array.isArray(m.material)?m.material:[m.material])])if(r&&!counts.has(r)){counts.set(r,0);r.addEventListener('dispose',()=>counts.set(r,counts.get(r)!+1));}});
  object.setEnabled(false);object.visible=false;watch();
  for(let n=0;n<20;n++){
-  const before=state(object);object.setTheme(n%2?'default':'chamfer');assert.deepEqual(state(object),before);
+  const before=state(object);object.setTheme(n%2?'default':'accent');assert.deepEqual(state(object),before);
   assert.equal(object.title.visible,false);assert.equal(object.status.visible,false);watch();object.update(1/60);
  }
  assert.equal(borrowedDisposals,0);borrowed.removeFromParent();counts.delete(borrowed.geometry);counts.delete(borrowed.material as THREE.Material);
@@ -82,21 +82,21 @@ for (const def of [defs[0],defs[4],defs[6],defs[7]]) test(`provider switch: phys
  const z=object instanceof K.Button ? .011 : .026;
  sample(.08);sample(z);sample(z,true);sample(z,true,.005);object.update(1/60);
  const captured=f.app.xrb.interaction.captured(7);assert.ok(captured,'physical capture is positive');const before=state(object);
- mount.update(tree('chamfer'));await settle();assert.equal(ref.current,object);assert.equal(f.app.xrb.interaction.captured(7),captured);assert.deepEqual(state(object),before);
+ mount.update(tree('accent'));await settle();assert.equal(ref.current,object);assert.equal(f.app.xrb.interaction.captured(7),captured);assert.deepEqual(state(object),before);
  sample(z,true,.015);sample(.2);f.app.xrb.interaction.update([],1);
  await mount.dispose();assert.equal(f.app.xrb.interaction.captured(7),null);f.app.dispose();
 });
 
 test('unchanged theme typography retains its texture allocation until final disposal',()=>{
  const label=new K.Label('Caption'),texture=(label.children[0] as THREE.Mesh<THREE.BufferGeometry,THREE.MeshBasicMaterial>).material.map!;let retired=0;texture.addEventListener('dispose',()=>retired++);
- for(let n=0;n<20;n++)label.setTheme(n%2?'default':'chamfer');assert.equal(retired,0);label.dispose();label.dispose();assert.equal(retired,1);
+ for(let n=0;n<20;n++)label.setTheme(n%2?'default':'accent');assert.equal(retired,0);label.dispose();label.dispose();assert.equal(retired,1);
 });
 
 test('Board keeps explicit material overrides and borrowed maps across switches',async()=>{
  const f=fixture(),ref=createRef<K.Board>(),texture=new THREE.Texture();let retired=0;texture.addEventListener('dispose',()=>retired++);
  const mount=mountXrbApp(f.container,<UI.Board ref={ref} width={.5} height={.3} color="#ff0000" material={{map:texture,roughness:.17}}/>,{app:f.app});await mount.ready;
  const mesh=ref.current!.children[0] as THREE.Mesh<THREE.BufferGeometry,THREE.MeshStandardMaterial>;
- for(const theme of ['chamfer','default','chamfer'] as const){ref.current!.setTheme(theme);assert.equal(mesh.material.roughness,.17);assert.equal(mesh.material.color.getHexString(),'ff0000');assert.equal(mesh.material.map,texture);}
+ for(const theme of ['accent','default','accent'] as const){ref.current!.setTheme(theme);assert.equal(mesh.material.roughness,.17);assert.equal(mesh.material.color.getHexString(),'ff0000');assert.equal(mesh.material.map,texture);}
  await mount.dispose();assert.equal(retired,0);texture.dispose();assert.equal(retired,1);f.app.dispose();
 });
 
@@ -104,7 +104,7 @@ test('visual-only Dialog stays unregistered and Close is themed without replacem
  const f=fixture(),ref=createRef<K.Dialog>();let closeUpdates=0;
  const tree=(theme:K.UiKitThemeId)=><UI.UiKitThemeProvider theme={theme}><UI.Dialog ref={ref} title="d" text="body" open interactive={false} closeButtonVisible={false} configure={d=>{const update=d.closeButton.update.bind(d.closeButton);d.closeButton.update=dt=>{closeUpdates++;update(dt);};}}/></UI.UiKitThemeProvider>;
  const mount=mountXrbApp(f.container,tree('default'),{app:f.app});await mount.ready;const close=ref.current!.closeButton;
- mount.update(tree('chamfer'));await settle();assert.equal(ref.current!.closeButton,close);assert.equal(close.themeId,'chamfer');assert.equal(close.visible,false);
+ mount.update(tree('accent'));await settle();assert.equal(ref.current!.closeButton,close);assert.equal(close.themeId,'accent');assert.equal(close.visible,false);
  f.app.xrb.setStereo(true);f.tick(1000);assert.equal(closeUpdates,1);for(const t of [...(ref.current as any).targets,...(close as any).targets])assert.equal(f.app.xrb.interaction.has(t),false);
  await mount.dispose();f.app.dispose();
 });

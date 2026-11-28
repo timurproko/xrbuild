@@ -22,10 +22,10 @@ test('relocated public entry resolves core metadata without checkout-relative tr
  await fs.cp(path.join(root,'src'),path.join(relocated,'src'),{recursive:true});
  const state=await componentApp(relocated,{entry:'index.ts'});
  assert.equal(typeof state.exports.UiKitScene,'function');
- assert.deepEqual(Array.from(state.exports.componentLibrary.parameters.theme.options,option=>option.value),['default','chamfer']);
+ assert.deepEqual(Array.from(state.exports.componentLibrary.parameters.theme.options,option=>option.value),['default','accent']);
  assert.equal(state.app,undefined);assert.equal(state.pending.size,0);assert.deepEqual(state.calls,[]);
 });
-for(const theme of ['default','chamfer'])test(`${theme} component composition retains authored layout, axes, dialog and Interactable policy`,async()=>{
+for(const theme of ['default','accent'])test(`${theme} component composition retains authored layout, axes, dialog and Interactable policy`,async()=>{
  const state=await componentApp(root);try{
  const {UiKitScene}=await state.importEntry();state.handle.update(React.createElement(UiKitScene,{theme}));await new Promise(r=>setTimeout(r,35));
  const controls=all(state),find=title=>controls.find(c=>c.title.text===title);
@@ -36,7 +36,7 @@ for(const theme of ['default','chamfer'])test(`${theme} component composition re
  mode.select(2,'hand');assert.equal(find('Trackball').axis,'y');mode.select(2,'hand');assert.equal(find('Trackball').axis,'y');mode.select(0,'mouse');assert.equal(find('Trackball').axis,'free');
  find('Dialog').emit('click',{source:'hand'});assert.equal(find('Glass dialog').isOpen,true);
  find('Interactable').set(false,'hand');assert.equal(find('Slider').enabled,false);assert.equal(find('Glass dialog').enabled,true);assert.equal(find('Interactable').status.text,'Off: other controls ignore input');
- const identities=all(state);state.handle.update(React.createElement(UiKitScene,{theme:theme==='default'?'chamfer':'default'}));await new Promise(r=>setTimeout(r,35));
+ const identities=all(state);state.handle.update(React.createElement(UiKitScene,{theme:theme==='default'?'accent':'default'}));await new Promise(r=>setTimeout(r,35));
  assert.deepEqual(all(state),identities);assert.equal(find('Slider').enabled,false);assert.equal(find('Glass dialog').isOpen,true);assert.equal(find('Trackball').axis,'free');
  find('Interactable').set(true,'mouse');assert.equal(find('Slider').enabled,true);assert.equal(find('Interactable').status.text,'On');
  state.tick(1000);state.tick(1016);state.tick(1032);assert.ok(state.classes.has('ready'));assert.equal(state.app.camera.near,0.01);assert.equal(state.app.camera.far,5);
