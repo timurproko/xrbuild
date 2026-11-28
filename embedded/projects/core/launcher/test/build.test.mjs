@@ -25,7 +25,7 @@ test('production app keeps relative assets/icon entry and import-only consumer b
   assert.equal(icon.default().isObject3D, true);
 
   const entry = path.join(root, 'consumer.ts');
-  await fs.writeFile(entry, "export { LauncherScene, LauncherCard } from '@fixture/hello-components';");
+  await fs.writeFile(entry, "export { LauncherScene, LauncherCard, uiKitTheme } from '@fixture/hello-components';");
   const consumer = path.join(root, 'consumer');
   await build({ configFile: false, root: sampleRoot, logLevel: 'silent', plugins: config.plugins,
     define: { ...config.define, 'process.env.NODE_ENV': '"production"' },
@@ -34,9 +34,10 @@ test('production app keeps relative assets/icon entry and import-only consumer b
   // No document, canvas or XR system exists in this Node process. Importing the
   // actual bundled public entry must succeed without running app bootstrap.
   const library = await import(pathToFileURL(path.join(consumer, 'components.mjs')).href);
-  assert.deepEqual(Object.keys(library).sort(), ['LauncherCard', 'LauncherScene']);
+  assert.deepEqual(Object.keys(library).sort(), ['LauncherCard', 'LauncherScene', 'uiKitTheme']);
   assert.equal(typeof library.LauncherScene, 'function');
   assert.equal(typeof library.LauncherCard, 'function');
+  assert.equal(library.uiKitTheme.defaultTheme, 'default');
 });
 
 test('source-aliased UI Kit builds without an installed producer app', async (t) => {

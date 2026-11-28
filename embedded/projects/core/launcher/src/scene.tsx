@@ -3,10 +3,11 @@ import * as THREE from 'three';
 import { ChevronLeft, ChevronRight, Glasses } from 'lucide';
 import { useXrb, useXrbFrame } from '@xr-build/react';
 import { appLaunchUrl, fitIcon, loadAppIcon, updateIcon } from '@xr-build/sdk';
-import { Board, Button, Dialog, Label } from '@xr-build/ui-kit-app';
+import { UiKitThemeProvider, type UiKitThemeSelection, Board, Button, Dialog, Label } from '@xr-build/ui-kit-app';
 import { COLORS, type Button as ButtonObject, type Label as LabelObject } from '@xr-build/ui-kit';
 import { catalogBaseHref, excludeCurrentPublication, isLoopbackDevelopment, isPanelPreview, isPublishedHosting, loadRuntimeCatalog, workspaceCatalogBase } from './catalog.js';
 import { loadIconModel } from './icon-loader.js';
+import { uiKitTheme } from './theme.ts';
 import { brandVisual, dotsVisual, iconWellVisual, spinnerVisual, disposeObject, transparent, wrapLines } from './visuals.js';
 
 const PANEL = { width:0.597, height:0.336 };
@@ -116,7 +117,11 @@ function EmptyState({error}:{error:boolean}) {
 }
 
 /** Pure exported scene. Polling/input ownership begins on mount, never on import. */
-export function LauncherScene() {
+export interface LauncherSceneProps { theme?: UiKitThemeSelection }
+export function LauncherScene({ theme }: LauncherSceneProps = {}) {
+  return <UiKitThemeProvider theme={theme} defaultTheme={uiKitTheme.defaultTheme}><LauncherContent /></UiKitThemeProvider>;
+}
+function LauncherContent() {
   const app=useXrb(),{xrb,renderer,camera}=app;
   const root=useRef<THREE.Group>(null),cards=useRef<THREE.Group>(null),dots=useRef<THREE.Group>(null);
   const previous=useRef<ButtonObject>(null),next=useRef<ButtonObject>(null),enter=useRef<ButtonObject>(null);

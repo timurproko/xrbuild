@@ -87,6 +87,11 @@ for (const def of [defs[0],defs[4],defs[6],defs[7]]) test(`provider switch: phys
  await mount.dispose();assert.equal(f.app.xrb.interaction.captured(7),null);f.app.dispose();
 });
 
+test('unchanged theme typography retains its texture allocation until final disposal',()=>{
+ const label=new K.Label('Caption'),texture=(label.children[0] as THREE.Mesh<THREE.BufferGeometry,THREE.MeshBasicMaterial>).material.map!;let retired=0;texture.addEventListener('dispose',()=>retired++);
+ for(let n=0;n<20;n++)label.setTheme(n%2?'default':'chamfer');assert.equal(retired,0);label.dispose();label.dispose();assert.equal(retired,1);
+});
+
 test('Board keeps explicit material overrides and borrowed maps across switches',async()=>{
  const f=fixture(),ref=createRef<K.Board>(),texture=new THREE.Texture();let retired=0;texture.addEventListener('dispose',()=>retired++);
  const mount=mountXrbApp(f.container,<UI.Board ref={ref} width={.5} height={.3} color="#ff0000" material={{map:texture,roughness:.17}}/>,{app:f.app});await mount.ready;

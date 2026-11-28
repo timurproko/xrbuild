@@ -1,12 +1,17 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useXrb } from '@xr-build/react';
-import { Button, Dialog, Switch, Slider, Trackball, Segmented, Dial } from '@xr-build/ui-kit/react';
+import { UiKitThemeProvider, type UiKitThemeSelection, Button, Dialog, Switch, Slider, Trackball, Segmented, Dial } from '@xr-build/ui-kit/react';
 import { COLORS, type Control, type Dialog as DialogObject, type Trackball as TrackballObject } from '@xr-build/ui-kit';
 import { ArrowRight } from 'lucide';
+import { uiKitTheme } from './theme.ts';
 
 /** Scene content only: importing this module never starts an app or changes the page. */
-export function UiKitScene() {
+export interface UiKitSceneProps { theme?: UiKitThemeSelection }
+export function UiKitScene({ theme }: UiKitSceneProps = {}) {
+  return <UiKitThemeProvider theme={theme} defaultTheme={uiKitTheme.defaultTheme}><UiKitContent /></UiKitThemeProvider>;
+}
+function UiKitContent() {
   const app = useXrb();
   const controls = useRef(new Map<string, Control>());
   const dialog = useRef<DialogObject>(null), trackball = useRef<TrackballObject>(null);

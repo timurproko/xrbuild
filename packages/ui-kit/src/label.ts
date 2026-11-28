@@ -38,9 +38,11 @@ export class Label extends THREE.Object3D {
     this.texture.anisotropy = 4;
     this.mesh = styleMesh(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, depthWrite: false })), 'label', { shape: 'plane', args: [1, 1] });
     registerVisualStyle(this, { prepare: theme => ({ commit: () => {
-      this.theme = theme;
-      this.o.weight = this.options.weight ?? theme.typography.weight;
-      this.draw(this.text, this.explicitColor ?? theme.typography.color, true);
+      const weight = this.options.weight ?? theme.typography.weight;
+      const color = this.explicitColor ?? theme.typography.color;
+      const redraw = this.theme.typography.family !== theme.typography.family || this.o.weight !== weight || this.color !== color;
+      this.theme = theme; this.o.weight = weight;
+      if (redraw) this.draw(this.text, color, true);
     }, discard() {} }) });
     this.mesh.raycast = () => {};  // text never takes the mouse from the control under it
     this.add(this.mesh);

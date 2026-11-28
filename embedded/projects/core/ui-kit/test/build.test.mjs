@@ -33,7 +33,7 @@ test('production app keeps relative assets/icon entry and import-only consumer b
   assert.ok(!modules.some(id => /\/(?:react|react-dom|@react-three\/fiber)\//.test(id) || id.includes('/packages/react/')), 'imperative imports must not enroll React');
 
   const entry = path.join(root, 'consumer.ts');
-  await fs.writeFile(entry, "export { UiKitScene, Board, Button, Slider } from '@fixture/hello-components';");
+  await fs.writeFile(entry, "export { UiKitScene, Board, Button, Slider, UiKitThemeProvider, uiKitTheme } from '@fixture/hello-components';");
   const consumer = path.join(root, 'consumer');
   await build({ configFile: false, root: sampleRoot, logLevel: 'silent', plugins: config.plugins,
     define: { 'process.env.NODE_ENV': '"production"' },
@@ -42,7 +42,9 @@ test('production app keeps relative assets/icon entry and import-only consumer b
   // No document, canvas or XR system exists in this Node process. Importing the
   // actual bundled public entry must succeed without running app bootstrap.
   const library = await import(pathToFileURL(path.join(consumer, 'components.mjs')).href);
-  assert.deepEqual(Object.keys(library).sort(), ['Board', 'Button', 'Slider', 'UiKitScene']);
+  assert.deepEqual(Object.keys(library).sort(), ['Board', 'Button', 'Slider', 'UiKitScene', 'UiKitThemeProvider', 'uiKitTheme']);
   assert.equal(typeof library.UiKitScene, 'function');
   assert.equal(typeof library.Button, 'function');
+  assert.equal(library.uiKitTheme.defaultTheme, 'default');
+  assert.equal(typeof library.UiKitThemeProvider, 'function');
 });
