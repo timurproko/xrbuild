@@ -66,10 +66,10 @@ and a slider that fills inside its dark channel with a half-accent, half-white f
 | Elements | Accent mesh treatment |
 | --- | --- |
 | Board, pill Button, Segmented | Filleted slabs; pill Buttons as solid accent capsules without wells |
-| Round Button, Dial | Solid accent pucks with a quarter-round fillet into the face, without wells |
-| Switch | A rocker: a squarish housing and a rounded paddle that rocks to the chosen side |
+| Round Button, Dial | Solid accent pucks with a quarter-round fillet into the face, without wells; the dial knob matches the round Button's size and its value dots sit further out |
+| Switch | A capsule track like the pill Button with an accent puck thumb that fills it |
 | Continuous/stepped Slider | Dark filleted channel filled inside with a half-accent fill, plain accent thumb with one white line the size of the dial's pointer |
-| Trackball | A sphere of evenly spread dots around the open sample head from the three.js examples (MIT, notice in `src/sample-head.ts`), with a smooth ring |
+| Trackball | The faceted open sample head from the three.js examples (MIT, notice in `src/sample-head.ts`) as its model; its own dot shell shows while it turns |
 | Dialog and GlassEdge | Unchanged frosted sheet, film and highlight |
 | Label, Icon, touch cues | Fixed text metrics; text and icons on control bodies take the `onCap` ink |
 

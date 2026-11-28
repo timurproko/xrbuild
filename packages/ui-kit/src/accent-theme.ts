@@ -2,7 +2,6 @@
 // pucks, pill buttons capsules, slider thumbs plain blocks with one white line; the slider fills inside a dark channel.
 // Shapes only change inside each role's authored bounds; targets, layout and interaction stay untouched.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { sampleHead, SAMPLE_HEAD_HALF } from './sample-head.ts';
 import { referenceGeometry, type GeometryInput, type UiKitTheme, type VisualRole, type VisualRecipe } from './visual-theme.ts';
 
@@ -41,56 +40,47 @@ function puck(radius: number, depth: number): THREE.BufferGeometry {
   // Lathe turns about y; the controls' depth axis is z.
   return new THREE.LatheGeometry(points, 64).rotateX(Math.PI / 2);
 }
-function joined(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  const result = mergeGeometries(parts.map(part => part.index ? part.toNonIndexed() : part), false);
-  for (const geometry of parts) geometry.dispose();
-  if (!result) throw new Error('Incompatible Accent geometry');
-  return result;
-}
 /** The one white line on a slider thumb: the dial pointer's exact size and round ends (dial R 0.022, pointer R/2 long). */
 // Its height stays within the reference ridge's envelope (0.0012 centred on the thumb face), as every recipe must.
+/**
+ * The standard dial knob (radius 0.022) grows to about the round Button's radius (0.025): 0.024, the most its
+ * rotating square bounds allow inside the dial's footprint. Smaller dials scale with it.
+ */
+const DIAL_TO_ROUND = 0.024 / 0.022;
+/** The switch thumb (radius 0.0115) fills its capsule track (radius 0.015) with an even 1.5 mm rim. */
+const SWITCH_FILL = 0.0135 / 0.0115;
 const MARK_W = 0.00205, MARK_L = 0.011, MARK_D = 0.0006;
-
-/** A sphere drawn as evenly spread accent dots, facing outward (a Fibonacci lattice). */
-function dotSphere(radius: number): THREE.BufferGeometry {
-  const count = 360, dot = radius * 0.052, parts: THREE.BufferGeometry[] = [], golden = Math.PI * (3 - Math.sqrt(5)), z = new THREE.Vector3(0, 0, 1);
-  for (let i = 0; i < count; i++) {
-    const y = 1 - (i + 0.5) * 2 / count, ring = Math.sqrt(1 - y * y), a = i * golden, normal = new THREE.Vector3(Math.cos(a) * ring, y, Math.sin(a) * ring);
-    const disc = new THREE.CircleGeometry(dot, 10); disc.deleteAttribute('uv');
-    disc.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(z, normal)).translate(normal.x * radius, normal.y * radius, normal.z * radius);
-    parts.push(disc);
-  }
-  return joined(parts);
-}
 
 /** The controls stand on their own, as in the reference kit: no recessed wells under them. */
 const wellRoles = new Set<VisualRole>(['buttonWellPill', 'buttonWellRound', 'dialWell']);
-/** The trackball model is a dot sphere around the sample head; the mascot's other parts are not drawn. */
+/** The trackball model is the sample head alone (the trackball's own dot shell shows while it turns); the mascot's other parts are not drawn. */
 const hiddenRobotRoles = new Set<VisualRole>(['robotSocket', 'robotEye', 'robotNose', 'robotAntenna', 'robotTip', 'robotEar']);
 const flatRoles = new Set<VisualRole>(['dialogPane', 'dialogFilm', 'glassEdge', 'label', 'icon', 'touchCursor']);
 function geometry(role: VisualRole, input: GeometryInput): THREE.BufferGeometry {
   const a = input.args;
   if (wellRoles.has(role) || hiddenRobotRoles.has(role)) return new THREE.BufferGeometry();
   if (role === 'robotHead') {
-    // The trackball model: a sphere of dots with the sample head inside it, facing the viewer.
-    const radius = a[0] * 1.15, head = sampleHead();
-    const fit = (radius * 0.72) / SAMPLE_HEAD_HALF.x;
-    return joined([dotSphere(radius), head.scale(fit, fit, fit)]);
+    // The trackball model: the sample head facing the viewer, about as wide as the mascot it replaces with its ears.
+    const fit = (a[0] * 1.45) / SAMPLE_HEAD_HALF.x;
+    return sampleHead().scale(fit, fit, fit);
   }
   if (flatRoles.has(role)) return referenceGeometry(input);
   let result: THREE.BufferGeometry;
-  // The switch is a rocker: a squarish housing and a paddle covering one half of it.
-  if (role === 'switchTrack' && input.shape === 'box') result = slab(a[0], a[1], a[2], Math.min(a[1] * 0.22, 0.006));
-  else if (role === 'switchKnob' && input.shape === 'roundedDisc') result = slab(a[0] * 2.5, a[0] * 2.25, a[1], a[0] * 0.45);
-  else switch (input.shape) {
+  // The switch belongs to the button family: a capsule track like the pill Button and a puck knob like the round one.
+  switch (input.shape) {
     case 'box': {
       const [w, h, d, r = Math.min(w, h) / 2] = a;
       // The slider thumb is a plain filleted block like the other bodies; its one mark is the grip line below.
       result = slab(w, h, d, role === 'sliderHandle' ? Math.min(r, 0.0035) : r);
       break;
     }
-    case 'roundedDisc': result = puck(a[0], a[1]); break;
-    case 'disc': result = puck(a[0], a[1]); break;
+    case 'roundedDisc': result = puck(a[0] * (role === 'dialKnob' ? DIAL_TO_ROUND : role === 'switchKnob' ? SWITCH_FILL : 1), a[1]); break;
+    case 'disc': {
+      result = puck(a[0], a[1]);
+      // A dot on the dial's ring moves out to the edge of the dial's footprint, clear of the larger knob.
+      if (role === 'dialTick' && a.length >= 6) { const [r, , , angle, ring, outer] = a, out = outer - r - 0.0001 - ring; result.translate(Math.cos(angle) * out, Math.sin(angle) * out, 0); }
+      break;
+    }
     // Of the three grip ridges only the middle one stays: one white line, the size of the dial's pointer.
     case 'plainBox': result = a[3] === 0 ? slab(MARK_W, MARK_L, MARK_D, MARK_W / 2) : new THREE.BufferGeometry(); break;
     case 'torus': result = new THREE.TorusGeometry(a[0], a[1], 12, 128); break;
@@ -110,8 +100,7 @@ function material(role: VisualRole, authored: THREE.Material): THREE.Material {
     // Marks drawn on a body (the dial's pointer) use the same white ink as button text.
     if (role === 'dialPointer') { authored.color.set(COLORS.onCap); authored.roughness = 0.4; authored.metalness = 0; }
   }
-  // The dots keep the trackball's own shell colour, so its enabled/disabled fade stays exact across theme switches.
-  if (role === 'robotHead' && authored instanceof THREE.MeshStandardMaterial) { authored.flatShading = false; authored.side = THREE.DoubleSide; }
+  // The head keeps the trackball's own faceted shell material (flat shading, its colour and enabled/disabled fade).
   return authored;
 }
 

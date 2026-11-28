@@ -10,8 +10,9 @@ export const boxVisual = (role: VisualRole, w: number, h: number, d: number, r: 
   styleMesh(new THREE.Mesh(roundedBox(w, h, d, r, bevel), m), role, { shape: 'box', args: [w, h, d, r, ...(bevel === undefined ? [] : [bevel])] });
 const roundVisual = (role: VisualRole, r: number, d: number, m: THREE.MeshStandardMaterial) =>
   styleMesh(new THREE.Mesh(roundedDisc(r, d), m), role, { shape: 'roundedDisc', args: [r, d] });
-const dotVisual = (role: VisualRole, r: number, d: number, segments: number, m: THREE.MeshStandardMaterial) =>
-  styleMesh(new THREE.Mesh(disc(r, d, segments), m), role, { shape: 'disc', args: [r, d, segments] });
+/** `ring`: a dot placed on a ring (angle, ring radius, outer footprint radius), so a theme may move it along its radius. */
+const dotVisual = (role: VisualRole, r: number, d: number, segments: number, m: THREE.MeshStandardMaterial, ring: number[] = []) =>
+  styleMesh(new THREE.Mesh(disc(r, d, segments), m), role, { shape: 'disc', args: [r, d, segments, ...ring] });
 
 export function buttonVisual(options: ButtonOptions, w: number, h: number, depth: number, rest: number) {
   const pill = options.shape === 'pill';
@@ -57,7 +58,7 @@ export function dialVisual(radius: number, depth: number, z: number, tickCount: 
   root.add(roundVisual('dialWell', radius + 0.012, 0.004, material(COLORS.well)));
   for (let i = 0; i < tickCount; i++) {
     const a = start - (i / (tickCount - 1)) * sweep;
-    const dot = dotVisual('dialTick', 0.0013, 0.0008, 12, material(COLORS.track)); dot.position.set(Math.cos(a) * (radius + 0.0065), Math.sin(a) * (radius + 0.0065), 0.004); ticks.push(dot); root.add(dot);
+    const dot = dotVisual('dialTick', 0.0013, 0.0008, 12, material(COLORS.track), [a, radius + 0.0065, radius + 0.012]); dot.position.set(Math.cos(a) * (radius + 0.0065), Math.sin(a) * (radius + 0.0065), 0.004); ticks.push(dot); root.add(dot);
   }
   const body = roundVisual('dialKnob', radius, depth, knobMaterial), notchWidth = 0.00205;
   const notch = boxVisual('dialPointer', notchWidth, radius * 0.5, 0.0008, notchWidth / 2, material('#30363f', { roughness: 0.6 })); notch.position.set(0, radius * 0.6, depth - 0.0001);
