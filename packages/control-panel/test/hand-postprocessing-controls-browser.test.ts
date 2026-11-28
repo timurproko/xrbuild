@@ -55,3 +55,22 @@ test('arbitrary declaration defaults, any-step values, escaped metadata and pass
     await evaluate('secondComponent.dispose()');
   });
 });
+
+test('a missing prerequisite shows Prerequisite and leaves only Install and the setting that asks for it', { skip, timeout: 30000 }, async () => {
+  await withPostprocessing(async browser => {
+    const { evaluate } = browser;
+    const remount = async (patch: string) => {
+      await evaluate(`component.dispose();snapshot.plugins=[{...plugin,setup:true,${patch}}];component=mountMesh(root,options)`);
+      await evaluate('new Promise(resolve=>setTimeout(resolve,0))');
+    };
+    const state = () => evaluate(`({badge:root.querySelector('[data-mesh-ready]').textContent,install:root.querySelector('[data-mesh-install]').hidden?null:root.querySelector('[data-mesh-install]').textContent.trim(),
+      installEnabled:!root.querySelector('[data-mesh-install]').disabled,enabled:[...root.querySelectorAll('[data-mesh-field],[data-mesh-range],#hands-mesh-brightness,#hands-mesh-color,[data-mesh-layer-enabled]')].filter(e=>!e.disabled).map(e=>e.dataset.meshField??e.dataset.meshRange??e.id??'switch')})`);
+    await remount(`setupNeeded:{kind:'gpu',label:'GPU runtime',setting:'mode'}`);
+    assert.deepEqual(await state(), { badge: 'Prerequisite', install: 'Install', installEnabled: true, enabled: ['mode'] }, 'the device-like setting can still switch back');
+    await remount(`available:false,needsSetup:true,setupNeeded:null`);
+    assert.deepEqual(await state(), { badge: 'Prerequisite', install: 'Install', installEnabled: true, enabled: [] });
+    await remount(`setupNeeded:null`);
+    const ready = await state() as { badge: string; install: string | null };
+    assert.deepEqual([ready.badge, ready.install], ['Ready', null]);
+  });
+});

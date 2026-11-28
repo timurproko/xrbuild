@@ -55,7 +55,9 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
         output.textContent = [`Destination: ${plan.destination}`, '', ...plan.items.map(i => `${i.publisher} · ${i.name} ${i.version} · ${size(i.bytes)} · ${i.licence}`),
           '', 'Files come from their publishers under the licences listed above.'].join('\n');
         install.disabled = false;
-        if (plan.installed) { message.textContent = `${label} is already installed.`; install.textContent = 'Reinstall'; }
+        // Installed but bound to an older plugin version: Install re-checks it without downloading.
+        if (plan.refresh) { message.textContent = `${label} is installed. Install checks it again for this plugin version; nothing is downloaded.`; output.textContent = `Destination: ${plan.destination}`; }
+        else if (plan.installed) { message.textContent = `${label} is already installed.`; install.textContent = 'Reinstall'; }
       } catch (error) { state('failed'); message.textContent = 'Could not read the setup plan.'; output.textContent = error.message; }
     })();
     install.addEventListener('click', async () => {

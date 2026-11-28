@@ -7,6 +7,8 @@ import { meshSetupOwners, meshSetupPlan, installMeshSetup, MeshSetupUnavailable,
 import { handMeshRegistry } from '../src/hand-mesh-plugins.ts';
 import { resolvePluginCatalog } from '../src/extension-catalog.ts';
 import { restartBlocker } from '../src/launch-blockers.ts';
+import { handMeshDeclaration } from '../src/hand-mesh-contract.ts';
+import { meshRuntimeReceipt, resolveMeshRuntime, MeshRuntimeStale, MESH_RUNTIME_RECEIPT } from '../src/hand-mesh-runtime.ts';
 
 const core = path.resolve(import.meta.dirname, '../../..');
 const handMesh = { version: 2, id: 'surface', label: 'Fixture mesh', program: 'python/python.exe', args: [], runtime: { id: 'fixture-mesh', generation: 'g1' },
@@ -66,4 +68,35 @@ test('a setup with install kinds needs the kind its saved settings call for', as
   assert.equal((await neededKind(module(['cpu']), { device: 'gpu' }))?.id, 'gpu', 'the GPU device needs the GPU runtime');
   assert.equal(await neededKind(module(['cpu', 'gpu']), { device: 'gpu' }), null);
   assert.equal(await neededKind({ plan: () => ({}) as any, install: async () => {} }, {}), null, 'no declared kinds: the single setup');
+});
+
+test('a runtime prepared for an older plugin version needs setup, and Install re-checks it without downloading', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'xrb-mesh-stale-')), plugin = path.join(workspace, 'plugins', 'fixture-mesh'), userRoot = path.join(workspace, 'user');
+  const runtime = path.join(userRoot, 'plugins', 'fixture-mesh', 'g1');
+  try {
+    await fs.mkdir(path.join(plugin, 'setup'), { recursive: true }); await fs.mkdir(path.join(runtime, 'python'), { recursive: true });
+    await fs.writeFile(path.join(plugin, 'xrb-plugin.json'), JSON.stringify({ title: 'Fixture mesh', type: 'plugin', version: '1.0.0', exports: { 'mesh-runtime-setup': './setup/runtime-setup.mjs' }, handMesh }));
+    await fs.writeFile(path.join(plugin, 'setup', 'runtime-setup.mjs'), setupModule.replace(`installed: false`, `installed: true`)
+      + `\nexport async function refresh(options) { globalThis.fixtureRefresh = options; }`);
+    await fs.writeFile(path.join(runtime, 'python', 'python.exe'), 'fake-not-executed');
+    const declaration = handMeshDeclaration(handMesh), owner = { owner: 'workspace:fixture-mesh', sourceRoot: plugin, declaration };
+    await fs.writeFile(path.join(runtime, MESH_RUNTIME_RECEIPT), JSON.stringify(await meshRuntimeReceipt(owner, runtime)));
+    const entry = async () => (await handMeshRegistry(await resolvePluginCatalog(workspace, core, true), { userRoot })).plugins[0];
+    assert.equal((await entry()).available, true, 'a current receipt is usable');
+    await fs.writeFile(path.join(plugin, 'setup', 'runtime-setup.mjs'), `${await fs.readFile(path.join(plugin, 'setup', 'runtime-setup.mjs'), 'utf8')}\n// plugin update`);
+    await assert.rejects(resolveMeshRuntime(owner, { userRoot, inputs: true }), MeshRuntimeStale);
+    const stale = await entry();
+    assert.deepEqual([stale.available, stale.needsSetup], [false, true], 'a plugin update shows as a setup step, never as Ready');
+    assert.match(stale.reason, /another plugin version/);
+    const plan = await meshSetupPlan(core, workspace, 'workspace:fixture-mesh');
+    assert.deepEqual([plan.installed, plan.refresh], [true, true]);
+    const lines: string[] = [];
+    await installMeshSetup(core, workspace, 'workspace:fixture-mesh', plan.consent, { line: text => lines.push(text), run: async () => {} }, undefined, plan.kind, plan.refresh);
+    assert.equal((globalThis as any).fixtureRefresh.owner, 'workspace:fixture-mesh');
+    assert.equal((globalThis as any).fixtureInstall, undefined, 'nothing is downloaded or reinstalled');
+    assert.match(lines.at(-1) ?? '', /ready/);
+  } finally {
+    delete (globalThis as any).fixtureRefresh; delete (globalThis as any).fixtureInstall;
+    await fs.rm(workspace, { recursive: true, force: true });
+  }
 });

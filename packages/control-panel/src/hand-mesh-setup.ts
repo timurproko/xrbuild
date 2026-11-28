@@ -16,12 +16,16 @@ export interface MeshSetupItem { name: string; version: string; publisher: strin
  */
 export interface MeshSetupKind { id: string; label: string; requires?: { setting: string; value: unknown } }
 export interface MeshSetupPlan {
-  owner: string; kind: string | null; label: string | null; consent: string; installed: boolean; destination: string;
+  owner: string; kind: string | null; label: string | null; consent: string; installed: boolean;
+  /** Installed, and the setup can re-check it for the current plugin version without downloading. */
+  refresh: boolean; destination: string;
   downloadBytes: number; installedBytes: number; licences: string[]; items: MeshSetupItem[];
 }
 interface SetupModule {
   plan(options?: object): { consent: string; destination: string; downloadBytes: number; installedBytes: number; licences: string[]; items: MeshSetupItem[] };
   install(options: object): Promise<unknown>;
+  /** Re-binds an installed runtime to the current plugin source after an update; downloads nothing. */
+  refresh?(options: object): Promise<unknown>;
   status?(options?: object): Promise<Record<string, { installed?: boolean } | null | unknown>>;
   setupKinds?: MeshSetupKind[];
 }
@@ -67,9 +71,9 @@ export async function neededKind(module: SetupModule, settings: Record<string, u
   return kinds.find(k => (!k.requires || settings[k.requires.setting] === k.requires.value) && !installedKind(status, k.id)) ?? null;
 }
 
-/** Which declared runtime the plugin's saved settings still need, for the layer card's Install. */
-export async function meshSetupNeeded(core: string, workspace: string, owner: string): Promise<{ kind: string; label: string } | null> {
-  try { const { module } = await setupModule(core, workspace, owner); const kind = await neededKind(module, await savedSettings(core, workspace, owner)); return kind && { kind: kind.id, label: kind.label }; }
+/** Which declared runtime the plugin's saved settings still need, and the setting that asks for it, for the layer card's Install. */
+export async function meshSetupNeeded(core: string, workspace: string, owner: string): Promise<{ kind: string; label: string; setting: string | null } | null> {
+  try { const { module } = await setupModule(core, workspace, owner); const kind = await neededKind(module, await savedSettings(core, workspace, owner)); return kind && { kind: kind.id, label: kind.label, setting: kind.requires?.setting ?? null }; }
   catch { return null; }
 }
 
@@ -80,7 +84,8 @@ export async function meshSetupPlan(core: string, workspace: string, owner: stri
   const kind = needed ?? kinds[0] ?? null;
   const plan = module.plan(kind ? { kind: kind.id } : {});
   const status = await module.status?.({}).catch(() => null) as Record<string, unknown> | null;
-  return { owner: plugin.key, kind: kind?.id ?? null, label: kind?.label ?? null, consent: plan.consent, installed: kind ? !needed && installedKind(status, kind.id) : installedKind(status, 'cpu'), destination: plan.destination,
+  const installed = kind ? !needed && installedKind(status, kind.id) : installedKind(status, 'cpu');
+  return { owner: plugin.key, kind: kind?.id ?? null, label: kind?.label ?? null, consent: plan.consent, installed, refresh: installed && typeof module.refresh === 'function', destination: plan.destination,
     downloadBytes: plan.downloadBytes, installedBytes: plan.installedBytes, licences: plan.licences,
     items: plan.items.map(({ name, version, publisher, licence, bytes }) => ({ name, version, publisher, licence, bytes })) };
 }
@@ -121,8 +126,15 @@ export function formatSetupProgress(event: SetupProgress & { percent: number | n
 }
 
 /** Runs the plugin's installer for the exact plan the person agreed to, reporting progress as job lines. */
-export async function installMeshSetup(core: string, workspace: string, owner: string, consent: string, ctx: JobContext, signal?: AbortSignal, kind: string | null = null): Promise<void> {
+export async function installMeshSetup(core: string, workspace: string, owner: string, consent: string, ctx: JobContext, signal?: AbortSignal, kind: string | null = null, refresh = false): Promise<void> {
   const { module, plugin } = await setupModule(core, workspace, owner);
+  if (refresh && module.refresh) {
+    // Already installed: re-check its files and bind them to the current plugin version instead of downloading again.
+    ctx.line(`Checking the installed ${plugin.meta.title ?? plugin.id} runtime for this plugin version.`);
+    await module.refresh({ core, workspace, owner: plugin.key, signal });
+    ctx.line(`${plugin.meta.title ?? plugin.id} is ready.`);
+    return;
+  }
   let last = '';
   ctx.line(`Installing ${plugin.meta.title ?? plugin.id}.`);
   await module.install({ ...(kind ? { kind } : {}), consent, core, workspace, owner: plugin.key, signal, onProgress: (raw: unknown) => {

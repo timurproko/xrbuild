@@ -109,13 +109,16 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     layer.querySelector('[data-mesh-layer-title]').textContent = p?.label ?? (selected ? `${selected} (missing)` : '');
     // Like Build prerequisites: a small Install while setup is missing, Ready once the plugin can run.
     // Install shows while the runtime is missing, or while the current settings need another declared runtime (GPU).
-    install.hidden = !(p?.setup && (p.needsSetup || p.setupNeeded));
-    install.querySelector('span').textContent = p?.setupNeeded && !p.needsSetup ? `Install ${p.setupNeeded.label}` : 'Install';
+    // While a prerequisite is missing only Install acts; the setting that asks for it stays editable, so it can be switched back.
+    const prerequisite = !!(p?.setup && (p.needsSetup || p.setupNeeded));
+    install.hidden = !prerequisite;
+    layer.classList.toggle('is-prerequisite', prerequisite);
     onLayer(p && snapshot.choice?.enabled !== false ? p.label : null);
     // The switch shows the saved state; off keeps the layer and its settings but runs nothing.
     if (!switching) layerOn.checked = snapshot.choice?.enabled !== false;
     layer.classList.toggle('is-off', !layerOn.checked);
-    layerOn.disabled = busy || switching || !selected || key(snapshot.choice?.selected) !== selected || !!snapshot.problem;
+    layerOn.disabled = busy || switching || prerequisite || !selected || key(snapshot.choice?.selected) !== selected || !!snapshot.problem;
+    for (const control of layer.querySelectorAll('#hands-mesh-brightness, #hands-mesh-brightness-range, #hands-mesh-color')) control.disabled = prerequisite;
     install.disabled = installing;
     for (const field of fields.querySelectorAll('[data-mesh-field]')) {
       const f = p.declaration.settings.find(f => f.key === field.dataset.meshField), edit = edits.get(editKey(selected, f.key));
@@ -123,7 +126,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
       if (field.type === 'checkbox') field.checked = value;
       // Chrome keeps partial numbers (for example '-') outside .value. Reassigning even '' destroys that text.
       else if (field.type !== 'number' || !edit || rebuilt) field.value = edit?.raw ?? value;
-      field.disabled = !(p.available || p.needsSetup) || !!snapshot.problem;
+      field.disabled = !(p.available || p.needsSetup) || !!snapshot.problem || prerequisite && f.key !== p.setupNeeded?.setting;
       const range = fields.querySelector(`[data-mesh-range="${f.key}"]`);
       if (range) { if (Number.isFinite(value)) range.value = value; range.disabled = field.disabled; }
       setFieldError(field, edit?.invalid ? field.validationMessage : '');
@@ -176,7 +179,8 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     // The layer badge carries the live state; the line below only explains a failure or an unsupported change.
     const p = plugin(), badge = root.querySelector('[data-mesh-ready]');
     const percent = /(\d+)%/.exec(text)?.[1];
-    const [label, tone] = !p?.available ? ['', ''] : snapshot?.choice?.enabled === false ? ['Off', 'neutral'] : state === 'preparing' ? [percent ? `Preparing ${percent}%` : 'Preparing', 'busy']
+    const prerequisite = !!(p?.setup && (p.needsSetup || p.setupNeeded)) && state !== 'saving';
+    const [label, tone] = prerequisite ? ['Prerequisite', 'busy'] : !p?.available ? ['', ''] : snapshot?.choice?.enabled === false ? ['Off', 'neutral'] : state === 'preparing' ? [percent ? `Preparing ${percent}%` : 'Preparing', 'busy']
       : state === 'applying' ? ['Starting', 'busy'] : state === 'applied' ? ['Running', 'ok'] : state === 'failed' ? ['Failed', 'err']
       : state === 'saving' ? ['Saving', 'neutral'] : ['Ready', 'ok'];
     badge.textContent = label; badge.className = `state ${tone}`; badge.hidden = !label || root.querySelector('[data-mesh-layer]').hidden;
@@ -184,7 +188,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     const logged = state === 'preparing' ? 'Preparing' : state === 'applied' ? 'Running' : state === 'applying' ? 'Starting' : ['failed', 'unsupported'].includes(state) ? text : '';
     if (p && logged && !root.querySelector('[data-mesh-layer]').hidden) handsLog(logged, { source: p.label.split(/\s+/)[0], level: state === 'failed' ? 'err' : state === 'unsupported' ? 'warn' : '' });
     status.textContent = text; status.hidden = true; root.dataset.meshState = state;
-    deliveryRetry.hidden = !d || state !== 'failed' || !!plugin()?.setupNeeded; // Install, not Retry, while a runtime is missing
+    deliveryRetry.hidden = !d || state !== 'failed' || prerequisite; // Install, not Retry, while a runtime is missing
     deliveryRetry.disabled = busy || retrying || pending || !!snapshot?.problem;
   }
   function incorporate(data) {

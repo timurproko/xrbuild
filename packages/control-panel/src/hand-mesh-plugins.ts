@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { containedModule, pluginEnabled, resolvePluginCatalog, type PluginCatalog } from './extension-catalog.ts';
-import { resolveMeshRuntime, type MeshRuntimeOptions } from './hand-mesh-runtime.ts';
+import { resolveMeshRuntime, MeshRuntimeStale, type MeshRuntimeOptions } from './hand-mesh-runtime.ts';
 import type { HandMeshDeclaration } from './hand-mesh-contract.ts';
 
 export interface HandMeshPlugin {
@@ -10,7 +10,7 @@ export interface HandMeshPlugin {
   label: string;
   available: boolean;
   reason: string;
-  /** Enabled and selected, but its declared runtime is not installed yet. */
+  /** Enabled and selected, but its declared runtime is not installed yet, or was prepared for another plugin version. */
   needsSetup: boolean;
   declaration: HandMeshDeclaration;
   /** Private launch path, not portable output or a browser-facing metadata field. */
@@ -28,13 +28,15 @@ export async function handMeshRegistry(catalog: PluginCatalog, options: Pick<Mes
     if (!declaration) continue;
     let program: string | null = null, stamp = '', problem: string | null = null;
     try {
-      program = (await resolveMeshRuntime({ owner: plugin.key, sourceRoot: plugin.sourceRoot, declaration }, options)).program;
+      // Compares the receipt with the current source so a plugin update shows as needing setup, not as Ready.
+      program = (await resolveMeshRuntime({ owner: plugin.key, sourceRoot: plugin.sourceRoot, declaration }, { ...options, inputs: true })).program;
       const stat = await fs.stat(program);
       stamp = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}`;
     } catch (error) {
       // Bind unavailable-state changes too, without exposing private paths in the reason.
       stamp = error instanceof Error ? error.message : 'Invalid program';
-      problem = declaration.runtime ? 'Mesh runtime is missing, unsafe or needs explicit preparation' : 'Mesh sidecar program is missing or not a regular contained file';
+      problem = error instanceof MeshRuntimeStale ? 'Mesh runtime was prepared for another plugin version; Install checks it again'
+        : declaration.runtime ? 'Mesh runtime is missing, unsafe or needs explicit preparation' : 'Mesh sidecar program is missing or not a regular contained file';
     }
     const enabled = pluginEnabled(plugin, catalog.prefs), selected = catalog.selected.some(p => p.key === plugin.key);
     const reason = !enabled ? 'Plugin is disabled' : !selected ? 'Plugin origin is ambiguous or not selected'
