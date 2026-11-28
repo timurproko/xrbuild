@@ -17,6 +17,8 @@ export interface ComponentProps<T> extends Kit.ThemeOptions {
   enabled?: boolean;
   interactive?: boolean;
   compact?: boolean;
+  /** Distance (metres) from the control's centre down to its title, so controls in a row can share one title line. */
+  titleOffset?: number;
   /** Construction-time customization; use a key to construct a different instance. */
   configure?: (object: T) => void;
   onClick?: Handler;
@@ -49,6 +51,7 @@ function useObject<T extends Owned>(create: () => T, props: ComponentProps<T>, u
     if (props.visible !== undefined) owned.visible = props.visible;
     if (owned instanceof Kit.Control) {
       if (props.compact) owned.title.visible = owned.status.visible = false;
+      if (props.titleOffset !== undefined) owned.setTitleOffset(props.titleOffset);
       owned.setEnabled(props.enabled ?? true);
     }
     updateRef.current?.(owned);
@@ -75,6 +78,7 @@ function useObject<T extends Owned>(create: () => T, props: ComponentProps<T>, u
       if (props.interactive === false) owned.detach();
       else owned.attach(app.xrb.interaction);
       if (props.compact !== undefined) owned.title.visible = owned.status.visible = !props.compact;
+      if (props.titleOffset !== undefined) owned.setTitleOffset(props.titleOffset);
     }
     updateRef.current?.(owned);
   });
