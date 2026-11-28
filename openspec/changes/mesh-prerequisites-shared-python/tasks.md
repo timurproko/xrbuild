@@ -50,3 +50,7 @@
 ## 12. Temporary settings while an app runs
 
 - [x] 12.1 Hold settings changed during a run in one panel store keyed by the run, deliver them to the running app without saving, drop them when the run ends, and lock next-start settings while running; cover it in a panel test.
+
+## 13. Stale project locks recover
+
+- [x] 13.1 Clear an embedded project's operation lock when its owning panel process no longer exists, so a restart during a run cannot block later saves; keep refusing while a live owner holds it; cover both in the lock workflow test.

@@ -396,6 +396,17 @@ test('working state and cooperating operation locks reject malformed, interrupte
     const child = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script], { cwd: REPO });
     assert.equal(child.stdout.trim(), 'blocked', 'independent processes share the operation lock');
   } finally { release(); await holder; }
+  // A lock left by a panel process that is gone (a restart during a run) is cleared; a live owner still blocks.
+  const lockFile = path.join(f.projects, '.xrb', 'embedded-locks', `${path.basename(embeddedProjectRoot(f.core, f.workspace, f.projects, p))}.lock`);
+  const gone = await promisify(execFile)(process.execPath, ['-e', 'console.log(process.pid)']);
+  await fs.writeFile(lockFile, JSON.stringify({ version: 1, pid: Number(gone.stdout.trim()), started: new Date().toISOString() }));
+  assert.equal(await withEmbeddedProjectLock(f.core, f.projects, p, async () => 'ran'), 'ran', 'a dead owner no longer blocks the project');
+  await assert.rejects(fs.access(lockFile), 'and the stale lock is gone');
+  const live = (await import('node:child_process')).spawn(process.execPath, ['-e', 'setTimeout(()=>{},30000)']);
+  try {
+    await fs.writeFile(lockFile, JSON.stringify({ version: 1, pid: live.pid, started: new Date().toISOString() }));
+    await assert.rejects(withEmbeddedProjectLock(f.core, f.projects, p, async () => 'ran'), (error: any) => error.status === 409, 'a live owner still blocks');
+  } finally { live.kill(); await fs.rm(lockFile, { force: true }); }
   const root = embeddedProjectRoot(f.core, f.workspace, f.projects, p);
   const state = path.join(root, 'state.json'); await fs.writeFile(state, '{bad');
   assert.ok((await f.bundled()).stateProblem);
