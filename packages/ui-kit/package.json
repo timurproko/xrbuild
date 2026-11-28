@@ -5,19 +5,32 @@
   "description": "3D controls for XR Build apps (button, switch, segmented, slider, dial, trackball, label) on the shared hand interaction core",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./react": "./src/react/index.ts"
   },
   "scripts": {
-    "test": "node --test \"test/**/*.test.ts\""
+    "test": "node --test \"test/**/*.test.ts\" && tsx --test test/*.test.tsx",
+    "test:react": "tsx --test test/*.test.tsx"
   },
   "dependencies": {
     "@xr-build/sdk": "workspace:*",
     "lucide": "^1.54.0"
   },
   "peerDependencies": {
-    "three": ">=0.160.0"
+    "three": ">=0.160.0",
+    "react": "19.3.1",
+    "@react-three/fiber": "9.8.2"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true },
+    "@react-three/fiber": { "optional": true }
   },
   "devDependencies": {
-    "three": "0.170.0"
+    "three": "0.170.0",
+    "@xr-build/react": "workspace:*",
+    "react": "19.3.1",
+    "@react-three/fiber": "9.8.2",
+    "@types/react": "19.2.14",
+    "tsx": "4.20.6"
   }
 }

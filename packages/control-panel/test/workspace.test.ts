@@ -10,7 +10,7 @@ import { discoverProjectCatalog } from '../src/extension-catalog.ts';
 import { embeddedWorkspacePlan } from '../src/embedded-workspace.ts';
 import { createProject, createProjectWorkspace, createWorkspace, importPluginSample, isWorkspace, PLUGIN_PROJECTS_SECTION, ProjectRefused, STARTER_APP, writeEditorConfig } from '../src/workspace.ts';
 
-const tmp = () => fs.mkdtemp(path.join(os.tmpdir(), 'xrb-ws-'));
+const tmp = () => fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'xrb-ws-'));
 
 test('a new workspace gets the standard layout and a starter app the panel lists', async () => {
   const ws = await tmp();
@@ -27,9 +27,12 @@ test('a new workspace gets the standard layout and a starter app the panel lists
   const pkg = JSON.parse(await fs.readFile(path.join(ws, 'projects', 'unsorted', STARTER_APP, 'package.json'), 'utf8'));
   assert.equal(pkg.name, STARTER_APP);
   assert.equal(pkg.dependencies['@xr-build/sdk'], undefined, 'the SDK comes from the core, not a dependency');
-  const main = await fs.readFile(path.join(ws, 'projects', 'unsorted', STARTER_APP, 'src', 'main.js'), 'utf8');
-  assert.match(main, /createXrbApp/);
-  assert.match(main, /iconTheme\.(?:main|ring|rim)/);
+  const main = await fs.readFile(path.join(ws, 'projects', 'unsorted', STARTER_APP, 'src', 'main.tsx'), 'utf8');
+  const scene = await fs.readFile(path.join(ws, 'projects', 'unsorted', STARTER_APP, 'src', 'scene.tsx'), 'utf8');
+  assert.match(main, /mountXrbApp/);
+  assert.match(scene, /iconTheme\.(?:main|ring|rim)/);
+  assert.equal(pkg.dependencies.react, '19.3.1');
+  assert.equal(pkg.exports['.'], './src/index.ts');
   assert.doesNotMatch(main, /new THREE\.(?:PerspectiveCamera|OrthographicCamera)|addEventListener\('resize'|setAnimationLoop|xrb\.render/);
   const theme = await fs.readFile(path.join(ws, 'projects', 'unsorted', STARTER_APP, 'src', 'icon-theme.js'), 'utf8');
   assert.match(theme, /import manifest from '\.\.\/xrb-project\.json'/);
@@ -70,15 +73,16 @@ test('a new project takes its name, and an existing folder or a bad name is refu
 });
 
 test('New project retains the canonical template after embedded starter retirement and never cleans personal state', async t => {
-  await fs.mkdir(path.join(REPO, '.artifacts'), { recursive: true });
-  const ws = await fs.mkdtemp(path.join(REPO, '.artifacts/new-template-'));
+  const scratch = process.env.XRB_TEST_ROOT ?? path.join(REPO, '.artifacts');
+  await fs.mkdir(scratch, { recursive: true });
+  const ws = await fs.mkdtemp(path.join(scratch, 'new-template-'));
   t.after(() => fs.rm(ws, { recursive: true, force: true }));
   const preserved = path.join(ws, '.xrb/embedded-projects/retired/recording.txt');
   await fs.mkdir(path.dirname(preserved), { recursive: true }); await fs.writeFile(preserved, 'preserve personal state');
   await createProject(REPO, ws, 'test', 'Test', 'combined');
   const [project] = await discoverProjects(ws);
   assert.equal(project.id, 'test'); assert.equal(project.manifest!.name, 'Test');
-  for (const relative of ['src/main.js', 'src/icon.js', 'src/icon-theme.js', 'public/font-LICENSE.txt']) {
+  for (const relative of ['src/main.tsx', 'src/index.ts', 'src/scene.tsx', 'src/icon.js', 'src/icon-theme.js', 'public/font-LICENSE.txt']) {
     const expected = (await fs.readFile(path.join(REPO, 'templates/app', relative), 'utf8')).replaceAll('__NAME__', 'Test').replaceAll('\r\n', '\n');
     const actual = (await fs.readFile(path.join(project.dir, relative), 'utf8')).replaceAll('\r\n', '\n');
     assert.equal(actual, expected, relative);

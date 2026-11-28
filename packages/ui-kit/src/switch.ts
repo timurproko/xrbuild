@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { PokeTarget } from '@xr-build/sdk';
 import { Control, placeCursor, sourceOf, touchCursor } from './control.ts';
 import { play } from './sound.ts';
+import { switchVisual } from './default-visuals.ts';
 import { COLORS, approach, material, roundedBox, roundedDisc } from './theme.ts';
 
 const W = 0.064, H = 0.03;
@@ -14,9 +15,9 @@ const SLIDE = W / 2 - H / 2;
 export class Switch extends Control {
   isOn = false;
   toggles = 0;
-  private readonly knob = new THREE.Group();
-  private readonly trackMaterial = material(COLORS.track);
-  private readonly knobMaterial = material(COLORS.cap, { roughness: 0.35 });
+  private readonly knob: THREE.Group;
+  private readonly trackMaterial: THREE.MeshStandardMaterial;
+  private readonly knobMaterial: THREE.MeshStandardMaterial;
   private readonly poke: PokeTarget;
   private readonly cursor = touchCursor();
   private readonly top = KNOB_REST + KNOB_DEPTH;
@@ -28,13 +29,15 @@ export class Switch extends Control {
     super(title, -H / 2 - 0.016);
     this.isOn = on;
     this.x = on ? SLIDE : -SLIDE;
-    const track = new THREE.Mesh(roundedBox(W, H, 0.006, H / 2), this.trackMaterial);
-    this.knob.add(new THREE.Mesh(roundedDisc(KNOB_R, KNOB_DEPTH), this.knobMaterial));  // bevelled like the button cap
-    this.knob.position.z = KNOB_REST;
-    this.add(track, this.knob, this.cursor);
+    const visual = switchVisual(W, H, KNOB_R, KNOB_DEPTH, KNOB_REST);
+    this.knob = visual.knob;
+    this.trackMaterial = visual.trackMaterial;
+    this.knobMaterial = visual.knobMaterial;
+    this.add(visual.track, this.knob, this.cursor);
     this.poke = this.target(new PokeTarget(this, { inside: (x, y) => Math.abs(x) < W / 2 && Math.abs(y) < H / 2, top: this.top, travel: TRAVEL }));
-    this.poke.on((e) => { if (e.type === 'start') this.set(!this.isOn, sourceOf(e.source)); });
+    this.listen(this.poke, (e) => { if (e.type === 'start') this.set(!this.isOn, sourceOf(e.source)); });
     this.showStatus();
+    this.visuals.capture(this);
   }
 
   set(on: boolean, source: 'hand' | 'mouse' | 'code' = 'code'): void {

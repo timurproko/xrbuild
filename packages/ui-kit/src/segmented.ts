@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { PokeTarget } from '@xr-build/sdk';
 import { Control, placeCursor, sourceOf, touchCursor } from './control.ts';
 import { Label } from './label.ts';
+import { segmentVisual } from './default-visuals.ts';
 import { play } from './sound.ts';
 import { COLORS, approach, material, roundedBox } from './theme.ts';
 
@@ -40,12 +41,7 @@ export class Segmented extends Control {
     this.add(new THREE.Mesh(roundedBox(width + 0.008, SEG_H + 0.008, 0.004, 0.006), material(COLORS.well)));
     this.segments = options.map((text, i) => {
       const x = -width / 2 + SEG_W / 2 + i * (SEG_W + GAP);
-      const m = material(COLORS.capDark, { roughness: 0.4 });
-      const cap = new THREE.Group();
-      const label = new Label(text, { size: 0.008, color: COLORS.text });
-      label.position.z = DEPTH + 0.0003;
-      cap.add(new THREE.Mesh(roundedBox(SEG_W, SEG_H, DEPTH, 0.004), m), label);
-      cap.position.set(x, 0, REST);
+      const { cap, material: m, label } = segmentVisual(text, x, SEG_W, SEG_H, DEPTH, REST);
       const cursor = touchCursor();
       this.add(cap, cursor);
       // Each segment is its own poke target; the core picks the one nearest the fingertip (centre tie-break).
@@ -53,10 +49,11 @@ export class Segmented extends Control {
         inside: (px, py) => Math.abs(px - x) < SEG_W / 2 + GAP / 2 && Math.abs(py) < SEG_H / 2,
         centre: new THREE.Vector2(x, 0), top: REST + DEPTH, travel: TRAVEL,
       }));
-      poke.on((e) => { if (e.type === 'start') this.select(i, sourceOf(e.source)); });
+      this.listen(poke, (e) => { if (e.type === 'start') this.select(i, sourceOf(e.source)); });
       return { cap, material: m, label, poke, cursor, x, shown: 0, hover: 0 };
     });
     this.showStatus();
+    this.visuals.capture(this);
   }
 
   select(i: number, source: 'hand' | 'mouse' | 'code' = 'code'): void {

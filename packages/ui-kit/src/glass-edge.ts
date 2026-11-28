@@ -4,6 +4,7 @@
 // shifts with the eye looking at it, so the highlight slides along the edge as the viewer moves
 // (each eye of a 3D display sees it slightly differently, like a real glass edge).
 import * as THREE from 'three';
+import { VisualResources } from './resources.ts';
 
 export interface GlassEdgeOptions {
   width: number;
@@ -55,6 +56,7 @@ void main() {
 
 export class GlassEdge extends THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial> {
   private readonly eye = new THREE.Vector3();
+  private readonly resources = new VisualResources();
   /** eased tilt per eye camera: head tracking jitters, and a jittering highlight strobes */
   private readonly tilts = new Map<string, { v: THREE.Vector2; at: number }>();
 
@@ -82,7 +84,10 @@ export class GlassEdge extends THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMater
     this.userData.keepLook = true;
     this.raycast = () => {};
     this.renderOrder = 2;
+    this.resources.capture(this);
   }
+
+  dispose(): void { this.resources.dispose(); this.tilts.clear(); this.removeFromParent(); }
 
   set opacity(v: number) {
     this.material.uniforms.opacity.value = v;

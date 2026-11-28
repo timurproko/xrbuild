@@ -32,8 +32,8 @@ test('a newly created Unsorted project resolves Hand and shows SDK hands from fa
     let project = (await readProject(dir, 'fresh-hand', 'unsorted'))!;
     assert.deepEqual(project.manifest!.inputs, ['mouse']);
     assert.equal(project.manifest!.plugins, undefined); assert.equal(project.manifest!.platformSettings, undefined);
-    const source = await fs.readFile(path.join(dir, 'src/main.js'), 'utf8');
-    assert.match(source, /createXrbApp\(renderer/); assert.doesNotMatch(source, /handsObject|runtimeName|nativePinch|handCapabilities/);
+    const source = await fs.readFile(path.join(dir, 'src/main.tsx'), 'utf8');
+    assert.match(source, /mountXrbApp\(document\.body/); assert.doesNotMatch(source, /handsObject|runtimeName|nativePinch|handCapabilities/);
     await saveManifest(dir, { ...project.manifest!, inputs: ['mouse', 'hand'] }, project.manifestMtimeMs);
     project = (await readProject(dir, 'fresh-hand', 'unsorted'))!;
     const plugin = path.join(root, 'plugins/input-fixture'); await fs.mkdir(path.join(plugin, 'bin'), { recursive: true });
@@ -94,9 +94,9 @@ test('a newly created Unsorted project resolves Hand and shows SDK hands from fa
 });
 
 test('Launcher, UI Kit and the template use the same managed API without hand-provider assumptions', async () => {
-  for (const relative of ['templates/app/src/main.js', 'embedded/projects/core/launcher/src/main.js', 'embedded/projects/core/ui-kit/src/main.ts']) {
+  for (const relative of ['templates/app/src/main.tsx', 'embedded/projects/core/launcher/src/main.tsx', 'embedded/projects/core/ui-kit/src/main.tsx']) {
     const source = await fs.readFile(path.join(core, relative), 'utf8');
-    assert.match(source, /createXrbApp\(renderer/);
+    assert.match(source, /mountXrbApp\(document\.body/);
     assert.doesNotMatch(source, /runtimeName|handCapabilities|nativePinch|nativeGrab|getHostInfo|__XRB_HOST__/);
     assert.doesNotMatch(source, /scene\.add\(xrb\.handsObject/);
   }

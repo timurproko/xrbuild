@@ -25,42 +25,25 @@ export class Dialog extends Control {
   isOpen = false;
   readonly closeButton: Button;
   readonly lift: number;
-  private readonly sheet = new THREE.Group();
+  private readonly sheet: THREE.Group;
   private readonly pane: THREE.Mesh<THREE.BufferGeometry, THREE.MeshPhysicalMaterial>;
   private shown = 0;
   private readonly edge: GlassEdge;
   /** the glass itself as a target: it takes the mouse and fingers, so nothing behind the sheet reacts through it */
   private readonly blocker: PokeTarget;
+  private readonly offClose: () => void;
 
   constructor(options: DialogOptions) {
     super(options.title, 0);
     this.title.visible = this.status.visible = false;  // the dialog shows its own heading
     const w = options.width ?? 0.2, h = options.height ?? 0.12;
     this.lift = options.lift ?? 0.07;
-    this.pane = new THREE.Mesh(roundedBox(w, h, 0.006, 0.014, 0.0005), glass());  // a crisp 0.5 mm bevel: a glass sheet, not a pillow
-    // A milky film on the glass gives it a surface.
-    const film = new THREE.Mesh(roundedBox(w - 0.002, h - 0.002, 0.0005, 0.013), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.14, depthWrite: false }));
-    film.position.z = 0.0062;
-    film.userData.keepLook = true;
-    // The lit edge: a soft line of light along the outline that slides with the viewer's eye.
-    this.edge = new GlassEdge({ width: w, height: h, radius: 0.014 });
-    this.edge.position.z = 0.0065;
-    const heading = new Label(options.title, { size: 0.011, weight: 700 });
-    heading.position.set(0, h / 2 - 0.022, 0.0075);
-    const body = new Label(options.text, { size: 0.0072, weight: 500, color: COLORS.text });
-    body.position.set(0, 0.006, 0.0075);
-    this.closeButton = new Button({ title: '', shape: 'pill', text: options.closeText ?? 'Close' });
-    this.closeButton.title.visible = this.closeButton.status.visible = false;
-    this.closeButton.position.set(0, -h / 2 + 0.028, 0.0075);
-    this.closeButton.on('click', (e) => this.close(e.source as 'hand' | 'mouse'));
-    this.sheet.add(this.pane, film, this.edge, heading, body, this.closeButton);
-    // Everything on the sheet stays in the transparent pass: three.js copies opaque objects into the
-    // glass's blurred backdrop, so an opaque Close button would show a blurred, refracted ghost of
-    // itself through the glass. (Fading only tints colours, so this setting is kept.)
-    this.closeButton.traverse((o) => {
-      const m = (o as THREE.Mesh).material as THREE.Material | undefined;
-      if (m) m.transparent = true;
-    });
+    const visual = dialogVisual(options, w, h);
+    this.sheet = visual.sheet;
+    this.pane = visual.pane;
+    this.edge = visual.edge;
+    this.closeButton = visual.closeButton;
+    this.offClose = this.closeButton.subscribe('click', (e) => this.close(e.source as 'hand' | 'mouse'));
     this.sheet.position.z = this.lift;
     this.add(this.sheet);
     // Its front face is the surface (z 6 mm in the sheet); the Close button stands in front of it and wins.
@@ -69,6 +52,13 @@ export class Dialog extends Control {
     this.visible = false;
     this.blocker.enabled = false;
     this.closeButton.setEnabled(false);
+    this.visuals.capture(this);
+  }
+
+  override dispose(): void {
+    this.offClose();
+    super.dispose();
+    this.closeButton.dispose();
   }
 
   attach(object: THREE.Object3D): this;
@@ -120,4 +110,20 @@ export class Dialog extends Control {
     this.closeButton.update(dt);
     this.fade(dt);
   }
+}
+
+/** Default meshes are independent of modal state, input targets and sounds. */
+function dialogVisual(options: DialogOptions, width: number, height: number) {
+  const sheet = new THREE.Group();
+  const pane = new THREE.Mesh(roundedBox(width, height, 0.006, 0.014, 0.0005), glass());
+  const film = new THREE.Mesh(roundedBox(width - 0.002, height - 0.002, 0.0005, 0.013), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.14, depthWrite: false }));
+  film.position.z = 0.0062; film.userData.keepLook = true;
+  const edge = new GlassEdge({ width, height, radius: 0.014 }); edge.position.z = 0.0065;
+  const heading = new Label(options.title, { size: 0.011, weight: 700 });heading.position.set(0, height / 2 - 0.022, 0.0075);
+  const body = new Label(options.text, { size: 0.0072, weight: 500, color: COLORS.text });body.position.set(0, 0.006, 0.0075);
+  const closeButton = new Button({ title: '', shape: 'pill', text: options.closeText ?? 'Close' });
+  closeButton.title.visible = closeButton.status.visible = false;closeButton.position.set(0, -height / 2 + 0.028, 0.0075);
+  closeButton.traverse(object => { const material = (object as THREE.Mesh).material as THREE.Material | undefined; if (material) material.transparent = true; });
+  sheet.add(pane, film, edge, heading, body, closeButton);
+  return { sheet, pane, edge, closeButton };
 }

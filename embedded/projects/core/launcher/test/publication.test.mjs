@@ -3,76 +3,14 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const inProject = (file) => path.join(root, file);
-
-test('the production build contains website and headset launch assets', async () => {
-  const [index, manifestText, sourceManifest, icon, sourceIcon, projectText, main, viteConfig] = await Promise.all([
-    readFile(inProject('dist/index.html'), 'utf8'),
-    readFile(inProject('dist/manifest.webmanifest'), 'utf8'),
-    readFile(inProject('public/manifest.webmanifest'), 'utf8'),
-    readFile(inProject('dist/icon.png')),
-    readFile(inProject('icon.png')),
-    readFile(inProject('xrb-project.json'), 'utf8'),
-    readFile(inProject('src/main.js'), 'utf8'),
-    readFile(inProject('vite.config.js'), 'utf8'),
-  ]);
-  const manifest = JSON.parse(manifestText);
-  const project = JSON.parse(projectText);
-  assert.match(index, /<link\s+rel="manifest"\s+href="\.\/manifest\.webmanifest">/);
-  assert.equal(manifestText, sourceManifest);
-  assert.equal(manifest.name, project.name);
-  assert.equal(manifest.start_url, './?xrb-xr=enter');
-  assert.equal(manifest.scope, './');
-  assert.equal(manifest.icons[0].src, 'icon.png');
-  assert.deepEqual(icon, sourceIcon);
-  assert.ok(project.target === undefined || project.target === 'webxr');
-  assert.equal(project.publication, undefined);
-  assert.equal(project.plugins, undefined);
-  assert.match(main, /from '@xr-build\/sdk'/);
-  assert.match(main, /fitIcon/);
-  assert.match(main, /from '@xr-build\/ui-kit'/);
-  assert.match(main, /createXrbApp/);
-  assert.match(main, /app\.setFrame/);
-  assert.match(main, /app\.start/);
-  assert.match(main, /xrb\.enterXR/);
-  assert.match(main, /appLaunchUrl\(this\.app\.launchUrl, \{ returnUrl: location\.href, projection: app\.projection \}\)/,
-    'navigation carries the managed projection, including loopback preview updates without a host');
-  assert.doesNotMatch(main, /scene\.add\(xrb\.handsObject/, 'managed apps receive standard hands and cursor without app attachment boilerplate');
-  assert.doesNotMatch(main, /runtimeName|handCapabilities|nativePinch|nativeGrab/, 'hand-provider differences belong to the common SDK, not the launcher');
-  assert.match(main, /title\.position\.set\(0, 0\.001,[\s\S]*description\.position\.set\(0, -0\.018,[\s\S]*this\.launch\.position\.set\(0, -0\.055,/,
-    'card descriptions stay grouped with their titles instead of the Open button');
-  assert.match(main, /app\.defaultIcon3d[\s\S]*fitIcon\(new THREE\.Mesh[\s\S]*SphereGeometry[\s\S]*MeshStandardMaterial/,
-    'the generated default sphere is rendered as 3D geometry rather than a flat PNG');
-  assert.match(main, /app\.defaultSphere \? 0\.819315 : 1/,
-    'the generated sphere uses the agreed compact scale while authored icons keep their size');
-  assert.match(main, /material\?\.color\?\.set\(DEFAULT_ICON_COLORS\[app\.iconColor\]/,
-    'the 3D default sphere follows the app manifest icon colour');
-  assert.match(main, /setInterval\(\(\) => void updateCatalog\(\), 1000\)/,
-    'bounded local launchers refresh workspace icon metadata while they remain open');
-  assert.match(main, /fixedControls\.forEach\(\(control\) => control\.attach\(xrb\.interaction\)\)/);
-  assert.match(main, /this\.launch\.attach\(xrb\.interaction\)/);
-  assert.match(main, /xrb\.bindMouse\(\)/);
-  assert.match(main, /catalogBaseHref\(location\.href, import\.meta\.env\.VITE_CATALOG_ORIGIN\)/,
-    'packaged native hosting resolves the canonical published catalog instead of its local app origin');
-  assert.match(main, /const publishedBase = panelPreview \|\| workspaceBase \? location\.href : catalogBase\(\)/);
-  assert.match(main, /loadRuntimeCatalog\(\{ runtimeHref: location\.href, publishedBase,/,
-    'a panel-launched Launcher uses authoritative bounded panel context in dev and built modes');
-  assert.doesNotMatch(main, /local workspace unavailable; using published library/,
-    'an unavailable selected panel never substitutes an unrelated published library');
-  assert.match(main, /const development = isLoopbackDevelopment\(location\.href\)/);
-  assert.match(main, /if \(development && !panelPreview && !workspaceBase\) nextApps = nextApps\.map\(localizePublishedApp\)/,
-    'local route substitution remains loopback-only outside a panel workspace preview');
-  assert.doesNotMatch(main, /previewSlots|Empty slot/,
-    'workspace previews show real active projects instead of synthetic empty cards');
-  assert.match(main, /catalogError = error;[\s\S]*apps = \[\]/,
-    'catalog failure never creates fake cards');
-  assert.match(main, /excludeCurrentPublication\(catalog, location\.href, \{[\s\S]*VITE_XRB_PUBLICATION_ID[\s\S]*VITE_XRB_PUBLICATION_SLUG[\s\S]*\}\)/,
-    'native root hosting filters the compiled launcher identity');
-  assert.match(viteConfig, /VITE_XRB_PUBLICATION_ID/);
-  assert.match(viteConfig, /PUBLICATION_ID/);
-  assert.match(viteConfig, /VITE_XRB_PUBLICATION_SLUG/);
-  assert.match(viteConfig, /PUBLICATION_SLUG/);
-  assert.doesNotMatch(viteConfig, /return-overlay/);
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const read=(file,encoding='utf8')=>readFile(path.join(root,file),encoding);
+test('production preserves website/headset assets and neutral publication defaults',async()=>{
+ const [index,manifestText,sourceManifest,icon,sourceIcon,projectText,scene,main,config]=await Promise.all([
+  read('dist/index.html'),read('dist/manifest.webmanifest'),read('public/manifest.webmanifest'),readFile(path.join(root,'dist/icon.png')),readFile(path.join(root,'icon.png')),read('xrb-project.json'),read('src/scene.tsx'),read('src/main.tsx'),read('vite.config.js')]);
+ const manifest=JSON.parse(manifestText),project=JSON.parse(projectText);
+ assert.match(index,/<link\s+rel="manifest"\s+href="\.\/manifest\.webmanifest">/);assert.equal(manifestText,sourceManifest);assert.equal(manifest.name,project.name);assert.equal(manifest.start_url,'./?xrb-xr=enter');assert.equal(manifest.scope,'./');assert.equal(manifest.icons[0].src,'icon.png');assert.deepEqual(icon,sourceIcon);
+ assert.ok(project.target===undefined||project.target==='webxr');assert.equal(project.publication,undefined);assert.equal(project.plugins,undefined);
+ assert.match(main,/mountXrbApp/);assert.doesNotMatch(scene,/runtimeName|handCapabilities|nativePinch|nativeGrab|scene\.add\(xrb\.handsObject/);
+ for(const field of ['VITE_XRB_PUBLICATION_ID','PUBLICATION_ID','VITE_XRB_PUBLICATION_SLUG','PUBLICATION_SLUG'])assert.ok(config.includes(field));assert.doesNotMatch(config,/return-overlay/);
 });

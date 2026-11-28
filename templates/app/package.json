@@ -3,14 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": { ".": "./src/index.ts" },
   "scripts": {
     "dev": "vite",
     "build": "vite build"
   },
   "dependencies": {
-    "three": "0.170.0"
+    "three": "0.170.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "@react-three/fiber": "9.8.2"
   },
   "devDependencies": {
-    "vite": "6.4.3"
+    "vite": "6.4.3",
+    "@vitejs/plugin-react": "4.7.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/three": "0.170.0"
   }
 }

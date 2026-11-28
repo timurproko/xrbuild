@@ -1,7 +1,7 @@
 # @xr-build/react (new, opt-in)
 
 React 19.3.1 and React Three Fiber 9.8.2 components **through the SDK**. This package is optional:
-vanilla SDK apps, UI Kit and the template do not import React or need migration.
+existing vanilla SDK apps and imperative UI Kit imports do not need React. UI Kit, Launcher and new template apps use this bridge and expose side-effect-free component entries; see [app-to-app composition](../../docs/app-components.md).
 
 ## New mount API
 

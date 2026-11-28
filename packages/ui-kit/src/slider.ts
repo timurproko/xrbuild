@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { PinchTarget, PokeTarget, type TargetEvent } from '@xr-build/sdk';
 import { Control, sourceOf } from './control.ts';
 import { pitchOf, play } from './sound.ts';
+import { sliderVisual } from './default-visuals.ts';
 import { COLORS, approach, disc, material, roundedBox } from './theme.ts';
 
 export interface SliderOptions {
@@ -33,8 +34,8 @@ export class Slider extends Control {
   value: number;
   readonly steps: number | null;
   readonly length: number;
-  private readonly handle = new THREE.Group();
-  private readonly handleMaterial = material(COLORS.cap, { roughness: 0.4 });
+  private readonly handle: THREE.Group;
+  private readonly handleMaterial: THREE.MeshStandardMaterial;
   private readonly fill: THREE.Mesh;
   /** length the fill geometry was built for (rebuilt, not stretched: stretching flattens its round ends) */
   private fillBuiltW = 0;
@@ -52,27 +53,11 @@ export class Slider extends Control {
     this.steps = options.steps && options.steps >= 2 ? options.steps : null;
     this.value = this.snap(options.value ?? 0);
     const L = this.length;
-    const trackMesh = new THREE.Mesh(roundedBox(L + TRACK_H, TRACK_H, TRACK_D, TRACK_H / 2), material(COLORS.track));
-    // Fill: the accented part of the track up to the handle (continuous slider only).
-    this.fill = new THREE.Mesh(new THREE.BufferGeometry(), material(COLORS.accent));
-    this.fill.visible = !this.steps;
-    this.add(trackMesh, this.fill);
-    if (this.steps) {
-      for (let i = 0; i < this.steps; i++) {
-        const dot = new THREE.Mesh(disc(0.0016, 0.0008, 16), material(COLORS.muted));
-        dot.position.set(-L / 2 + (i / (this.steps - 1)) * L, 0, TRACK_D);
-        this.add(dot);
-      }
-    }
-    // Handle with grip ridges, like the UIKit slider thumb.
-    this.handle.add(new THREE.Mesh(roundedBox(HANDLE_W, HANDLE_H, HANDLE_D, 0.004), this.handleMaterial));
-    for (const x of [-0.005, 0, 0.005]) {
-      const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.0012, HANDLE_H * 0.7, 0.0012), material(x === 0 ? COLORS.accent : '#8d96a6'));
-      ridge.position.set(x, 0, HANDLE_D);
-      this.handle.add(ridge);
-    }
-    this.handle.position.z = HANDLE_Z;
-    this.add(this.handle);
+    const visual = sliderVisual(L, this.steps, TRACK_H, TRACK_D, HANDLE_W, HANDLE_H, HANDLE_D, HANDLE_Z);
+    this.handle = visual.handle;
+    this.handleMaterial = visual.handleMaterial;
+    this.fill = visual.fill;
+    this.add(...visual.root.children.slice());
     this.shownX = this.xOf(this.value);
 
     // Targets in the slider's frame; the handle ones follow the value.
@@ -86,10 +71,11 @@ export class Slider extends Control {
       inside: (x, y) => Math.abs(x) < L / 2 + TRACK_H / 2 && Math.abs(y) < TRACK_H / 2 && Math.abs(x - hx()) >= HANDLE_W / 2,
       top: TRACK_D, travel: 0.005,
     }));
-    this.pinch.on((e) => this.onTarget(e, 'pinch', true));
-    this.touch.on((e) => this.onTarget(e, 'touch', true));
-    this.track.on((e) => this.onTarget(e, 'touch', false));
+    this.listen(this.pinch, (e) => this.onTarget(e, 'pinch', true));
+    this.listen(this.touch, (e) => this.onTarget(e, 'touch', true));
+    this.listen(this.track, (e) => this.onTarget(e, 'touch', false));
     this.showStatus();
+    this.visuals.capture(this);
   }
 
   private onTarget(e: TargetEvent, handMode: SliderMode, fromHandle: boolean): void {
@@ -157,8 +143,9 @@ export class Slider extends Control {
       const fh = FILL_H, left = -this.length / 2 - fh / 2;
       const w = Math.max(fh, this.shownX + fh / 2 - left);
       if (Math.abs(w - this.fillBuiltW) > 0.0005) {
-        this.fill.geometry.dispose();
-        this.fill.geometry = roundedBox(w, fh, TRACK_D + 0.0006, fh / 2);
+        const next = roundedBox(w, fh, TRACK_D + 0.0006, fh / 2);
+        this.visuals.replace(this.fill.geometry, next);
+        this.fill.geometry = next;
         this.fillBuiltW = w;
       }
       this.fill.position.x = left + this.fillBuiltW / 2;

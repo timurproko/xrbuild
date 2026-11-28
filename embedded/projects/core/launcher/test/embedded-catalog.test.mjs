@@ -18,7 +18,7 @@ test('all seven product projects retain sections/archives and portable inactive 
 });
 test('the duplicate embedded starter is absent while canonical template icon and notices remain',async()=>{
  await assert.rejects(fs.access(path.join(core,'embedded/projects/unsorted/test')));
- for(const relative of ['src/main.js','src/icon.js','src/icon-theme.js','public/font-LICENSE.txt'])assert.ok((await fs.readFile(path.join(core,'templates/app',relative),'utf8')).length,relative);
+ for(const relative of ['src/main.tsx','src/index.ts','src/scene.tsx','src/icon.js','src/icon-theme.js','public/font-LICENSE.txt'])assert.ok((await fs.readFile(path.join(core,'templates/app',relative),'utf8')).length,relative);
 });
 test('archived diagnostics parse and render without a host, device, capture or inference',async()=>{
  for(const group of groups.filter(g=>g.startsWith('archive/')&&g!=='archive/hello-cube')){

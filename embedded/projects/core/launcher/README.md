@@ -1,6 +1,8 @@
 # Launcher
 
-Spatial app catalog using the core SDK and UI kit. The authored icon is rendered by `src/icon.js`.
+Spatial app catalog using the core SDK and the UI Kit app's exported React components. The authored icon is rendered by `src/icon.js`.
+
+`src/main.tsx` owns bootstrap, pagehide and HMR; `src/index.ts` exports `LauncherScene` and `LauncherCard` without starting a runtime or catalog request. Board, Button, Dialog and Label are imported from `@xr-build/ui-kit-app`, aliased to `embedded/projects/core/ui-kit/src/index.ts`; Vite bundles them into Launcher's single SDK-hosted runtime. The card sheets use visual-only Dialogs, preserving the original input policy. Another app can alias this Launcher's `src/index.ts` and render its scene under its own `mountXrbApp` tree. Keep source aliases for the React bridge/UI Kit entry and deduplicate Three, React, React DOM and Fiber as in `vite.config.js`; never import the run entry.
 
 In a panel preview or a Browser/Desktop development run carrying explicit loopback panel context, the launcher lists eligible active embedded and user apps in sidebar order, excluding itself by logical project identity. An unavailable bound panel shows a library error and is retried without substituting a published library. A published launcher reads its own publisher's inventory and canonical app routes. An external inventory requires explicit `VITE_CATALOG_ORIGIN` (clean HTTPS, or loopback HTTP for development). No production site, user deployment identity or private workspace is built in; a plain dev server does not silently contact a production service.
 

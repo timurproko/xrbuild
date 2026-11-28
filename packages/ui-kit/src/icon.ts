@@ -3,6 +3,7 @@
 // stroke weight of our choosing (Lucide's own is 2; the kit draws bolder on a 3D display).
 import * as THREE from 'three';
 import type { IconNode } from 'lucide';
+import { VisualResources } from './resources.ts';
 
 export type { IconNode } from 'lucide';
 
@@ -21,6 +22,7 @@ export class Icon extends THREE.Object3D {
   private readonly texture = new THREE.CanvasTexture(this.canvas);
   private readonly mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private readonly o: Required<IconOptions>;
+  private readonly resources = new VisualResources();
 
   constructor(icon: IconNode, options: IconOptions = {}) {
     super();
@@ -35,7 +37,10 @@ export class Icon extends THREE.Object3D {
     this.mesh.raycast = () => {};
     this.add(this.mesh);
     this.set(icon);
+    this.resources.capture(this);
   }
+
+  dispose(): void { this.resources.dispose(); this.removeFromParent(); }
 
   set(icon: IconNode, color = this.o.color): void {
     const c = this.canvas;

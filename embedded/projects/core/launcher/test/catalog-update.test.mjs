@@ -1,43 +1,21 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { test } from 'node:test';
-import { runInNewContext } from 'node:vm';
-import { excludeCurrentPublication, isLoopbackDevelopment, isPanelPreview, loadRuntimeCatalog, workspaceCatalogBase } from '../src/catalog.js';
-
-test('catalog refresh redraws an unchanged local library after an intervening failure', async () => {
-  const source = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
-  const update = source.slice(source.indexOf('async function updateCatalog()'), source.indexOf('activateOnRelease(previous'))
-    .replaceAll('import.meta.env.', 'env.');
-  const href = 'http://127.0.0.1:54321/?xrb-panel=http%3A%2F%2F127.0.0.1%3A5191%2F&xrb-project=bundled%3Alauncher';
-  let available = true;
-  const frames = [], requests = [];
-  const context = {
-    AbortController, location: { href }, env: {}, console: { warn() {} },
-    loading: false, controller: null, apps: [], page: 0, PAGE_SIZE: 8,
-    catalogLoaded: false, catalogError: null, catalogSignature: '',
-    isPanelPreview, workspaceCatalogBase, isLoopbackDevelopment, excludeCurrentPublication,
-    catalogBase: () => assert.fail('local previews must not evaluate publication origin configuration'),
-    localizePublishedApp: () => assert.fail('bound panel routes must not be replaced'),
-    loadRuntimeCatalog: options => loadRuntimeCatalog({ ...options, fetchImpl: async input => {
-      requests.push(String(input));
-      return available ? Response.json({ projects: [
-        { id: 'bundled:launcher', entryExists: true, manifest: { kind: 'app', name: 'Launcher' } },
-        { id: 'custom', entryExists: true, manifest: { kind: 'app', name: 'Custom' } },
-      ] }) : new Response('', { status: 503 });
-    } }),
-    renderPage: () => frames.push(context.apps.map(app => app.projectId)),
-  };
-  runInNewContext(update, context);
-  await runInNewContext('updateCatalog()', context);
-  assert.deepEqual(Array.from(context.apps, app => app.projectId), ['custom']);
-  available = false;
-  await runInNewContext('updateCatalog()', context);
-  assert.ok(context.catalogError);
-  assert.equal(context.apps.length, 0);
-  available = true;
-  await runInNewContext('updateCatalog()', context);
-  assert.equal(context.catalogError, null);
-  assert.deepEqual(Array.from(context.apps, app => app.projectId), ['custom']);
-  assert.deepEqual(frames.map(frame => Array.from(frame)), [['custom'], [], ['custom']], 'recovery restores cards even with an identical signature');
-  assert.ok(requests.every(url => url === 'http://127.0.0.1:5191/api/projects'));
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const {componentApp}=await import(pathToFileURL(path.join(process.env.XRB_CORE,'packages/react/test/component-app.fixture.mjs')));
+const cards=state=>{const result=[];state.app.scene.traverse(object=>{if(object.userData.launcherCard)result.push(object);});return result;};
+export const href='http://127.0.0.1:5398/?xrb-panel=http%3A%2F%2F127.0.0.1%3A5191%2F&xrb-project=bundled%3Alauncher';
+test('mounted catalog recovers identical local inventory after failure without a published fallback',async()=>{
+ let available=true;const requests=[];
+ const state=await componentApp(root,{href,fetch:async input=>{requests.push(String(input));return available?Response.json({projects:[{id:'bundled:launcher',entryExists:true,manifest:{kind:'app',name:'Launcher'}},{id:'custom',entryExists:true,manifest:{kind:'app',name:'Custom'}}]}):new Response('',{status:503});}});
+ try{
+  assert.deepEqual(cards(state).map(c=>c.userData.launcherCard.entry.projectId),['custom']);
+  const original=cards(state)[0];await state.fire(1000);assert.equal(cards(state)[0],original,'unchanged successful polling retains the card and capture');
+  available=false;await state.fire(1000);assert.equal(cards(state).length,0);
+  const labels=[];state.app.scene.traverse(o=>{if(o.text)labels.push(o.text);});assert.ok(labels.includes('The app library could not be loaded. Reload to try again.'));
+  available=true;await state.fire(1000);assert.deepEqual(cards(state).map(c=>c.userData.launcherCard.entry.projectId),['custom']);
+  assert.ok(requests.every(url=>url==='http://127.0.0.1:5191/api/projects'));
+  await state.exports.dispose();assert.equal(state.pending.size,0);await state.fire(1000);assert.equal(requests.length,4);
+ }finally{await state.dispose();}
 });
