@@ -21,11 +21,13 @@ const appIcon = { name: 'app-icon', generateBundle() {
 } };
 export default defineConfig(() => {
   const publication = launcherPublicationIdentity();
+  const { componentLibraries, componentSettings } = JSON.parse(fs.readFileSync('xrb-project.json', 'utf8'));
   return {
     base: './', plugins: [react(), appIcon],
     server: { fs: { allow: [searchForWorkspaceRoot(process.cwd()), core] } },
     // No sibling-project traversal, private workspace lookup or implicit deployment origin.
     define: {
+      'import.meta.env.VITE_XRB_COMPONENTS': JSON.stringify({ componentLibraries, componentSettings }),
       'import.meta.env.VITE_XRB_LOCAL_PUBLICATIONS': JSON.stringify({}),
       'import.meta.env.VITE_XRB_PUBLICATION_ID': JSON.stringify(publication.id),
       'import.meta.env.VITE_XRB_PUBLICATION_SLUG': JSON.stringify(publication.slug),

@@ -17,8 +17,8 @@
 
 ## 3. Managed runtime settings drive Launcher theme props without restart
 
-- [ ] 3.1 Add generic initial-value/subscription delivery scoped to existing managed preview/native launch identities; verify startup values, active-project isolation, foreign/retired scope rejection and standalone default behavior with focused transport tests.
-- [ ] 3.2 Bind declared values to Launcher's existing scene theme prop through the same mount; verify live Default/Chamfer updates and retained catalog, paging, interaction and accepted-navigation state using targeted component fixtures.
-- [ ] 3.3 Release settings subscriptions during disposal/pagehide/HMR and retain the last valid value during connection loss; verify repeated updates, replacement mounts and retired-session tests without changing SDK render ownership.
-- [ ] 3.4 Exercise the supported managed built/dev live paths and next-start fallback; record exact tested paths and commands, and document their behavior in the component/app guides without adding UI notices.
-- [ ] 3.5 Save after screenshots of Develop, Components and Launcher in both themes selected through persisted settings, alongside matched before pictures and capture metadata in the crew task folder; verify only the allowed tab/selection differences and stop every disposable instance/server.
+- [x] 3.1 Add generic initial-value/subscription delivery scoped to existing managed preview/native launch identities; verify startup values, active-project isolation, foreign/retired scope rejection and standalone default behavior with focused transport tests.
+- [x] 3.2 Bind declared values to Launcher's existing scene theme prop through the same mount; verify live Default/Chamfer updates and retained catalog, paging, interaction and accepted-navigation state using targeted component fixtures.
+- [x] 3.3 Release settings subscriptions during disposal/pagehide/HMR and retain the last valid value during connection loss; verify repeated updates, replacement mounts and retired-session tests without changing SDK render ownership.
+- [x] 3.4 Exercise the supported managed built/dev live paths and next-start fallback; record exact tested paths and commands, and document their behavior in the component/app guides without adding UI notices.
+- [x] 3.5 Save after screenshots of Develop, Components and Launcher in both themes selected through persisted settings, alongside matched before pictures and capture metadata in the crew task folder; verify only the allowed tab/selection differences and stop every disposable instance/server.

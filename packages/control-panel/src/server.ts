@@ -525,6 +525,15 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       hub.send('run', panel.runner.state());
       return;
     }
+    if (is('GET', 'component-settings')) {
+      if (!panel.componentSettingsScope(url.searchParams)) throw new HttpError(404, 'Component settings scope is not active');
+      const p = await findProject(url.searchParams.get('project')!);
+      const groups = p.manifest ? await projectComponentGroups(core, workspace, projects, p.manifest) : [];
+      // Discovery yields: recheck the run before exposing its values.
+      if (!panel.componentSettingsScope(url.searchParams)) throw new HttpError(404, 'Component settings scope is not active');
+      res.setHeader('cache-control', 'no-store');
+      return sendJson(res, 200, Object.fromEntries(groups.map(group => [group.id, group.values])));
+    }
     if (is('GET', 'projects')) {
       const catalog = await discoverProjectCatalog(core, workspace, projects);
       const liveProjects = catalog.projects.map(record => record.project).filter(p => !isArchivedId(p.id));
@@ -726,7 +735,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
   server = http.createServer((req, res) => {
     const mutation = !['GET', 'HEAD', 'OPTIONS'].includes(req.method ?? 'GET') && !/^\/api\/(?:restart|quit)\/?(?:\?|$)/.test(req.url ?? '');
     if (mutation) activeMutations++;
-    const localRead = req.url === '/api/projects' || /^\/api\/projects\/(?:[^/?]+\/){1,2}icon(?:\?|$)/.test(req.url ?? '')
+    const localRead = req.url === '/api/projects' || /^\/api\/component-settings(?:\?|$)/.test(req.url ?? '') || /^\/api\/projects\/(?:[^/?]+\/){1,2}icon(?:\?|$)/.test(req.url ?? '')
       || /^\/preview\//.test(req.url ?? '');
     const previewProjectionRead = /^\/api\/preview\/(?:projection|hands)(?:\?|$)/.test(req.url ?? '');
     let loopbackOrigin = '';

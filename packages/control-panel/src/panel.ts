@@ -1600,6 +1600,14 @@ export class Panel {
     finally { this.preparingPreview = false; }
   }
 
+  /** Reuse existing managed launch identity; never authorize a bare project ID. */
+  componentSettingsScope(query: URLSearchParams): boolean {
+    if (!this.runner.busy || query.get('project') !== this.runner.projectId) return false;
+    const preview = this.previewProjection;
+    if (preview) return query.get('token') === preview.token && query.get('session') === preview.session && query.get('route') === preview.route;
+    return this.nativeHandPolicy !== null && !!this.liveHands && query.get('run') === this.liveHands.envelope.runId;
+  }
+
   private async preparePreview(p: Project, mode: RunMode, flat: boolean | undefined, token: string, options: { fullscreen?: boolean; monitor?: number; clientPort: number }): Promise<string> {
     const settings = p.readOnly ? await readProjectRunSettings(this.repo, this.workspace, p) : null;
     if (settings) p = withRunSettings(p, settings);

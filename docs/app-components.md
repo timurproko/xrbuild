@@ -103,6 +103,10 @@ The per-app **Components** tab appears directly after **Develop** only for consu
 
 Discovery reads data only: no app entry executes, and a `workspace:` library never silently resolves to a `bundled:` library. Another library or choice parameter needs only declarations, not library-specific panel code. Existing source aliases still determine which components are bundled.
 
+A runnable consumer can use `connectComponentSettings(metadata)` from the SDK and pass `settings.props` to its existing scene, subscribe with `mount.update`, then dispose the connection with its mount. The metadata contains the declaration and optional saved build snapshot; it is not another render owner. Launcher compiles these fields from its manifest in Vite rather than importing the writable JSON into its module graph, so an ordinary settings save does not trigger a development reload.
+
+Managed native built/dev runs and browser built/dev previews read current values using their existing project/run or preview token/session/route identity. A small serial read polls once per second, only while subscribed, retains the last good values during a transient disconnect and stops on retired scope or teardown. A saved Theme edit updates the same Launcher mount and scene prop. Existing bundled-project idle/lease restrictions are unchanged: if normal settings cannot save while that project runs, stop, save and start again. Unmanaged standalone/published/packages have no live panel connection and use the saved snapshot compiled by their next build/package, or their declared defaults when no snapshot exists. No query theme selector or automatic device/service startup is added.
+
 ## Checking a migration
 
 Preserve camera/frustum, lighting, geometry/material flags, animation timestamps/deltas, input policy, relative output and icon behavior. Check both native Mouse and replayed hands, including Mouse disabled and off-centre stereo operation. Physical capture must not also fire an emulated component click. Use the SDK's frame/input hooks, never a second Canvas event manager or animation loop.
