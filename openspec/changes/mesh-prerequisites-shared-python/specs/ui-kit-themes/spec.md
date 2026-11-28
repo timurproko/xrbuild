@@ -4,7 +4,7 @@
 
 ### Requirement: Themes supply complete visual styles
 
-A UI Kit theme SHALL supply geometry, material, state-colour and applicable typography styling for every public control and visual primitive. The built-in Default and Accent themes SHALL cover every supported variant. Accent SHALL visibly differ in mesh profiles and material treatment, not only colours: solid accent bodies with soft filleted edges and a satin finish, text and icons on those bodies in the theme's ink for them, and a pale slider bar with a half-accent fill. A saved earlier Accent selection SHALL resolve to Accent.
+A UI Kit theme SHALL supply geometry, material, state-colour and applicable typography styling for every public control and visual primitive. The built-in Default and Accent themes SHALL cover every supported variant. Accent SHALL visibly differ in mesh profiles and material treatment, not only colours: solid accent bodies with soft filleted edges and a satin finish, text and icons on those bodies in the theme's ink for them, and a slider that fills inside its dark channel with a half-accent fill. A saved earlier Accent selection SHALL resolve to Accent.
 
 #### Scenario: Complete themed control collection
 - **WHEN** an app uses Board, pill and round text/icon Buttons, Switch, Segmented, continuous and stepped Sliders, Dial, Trackball, Dialog, Label, Icon and GlassEdge with either built-in theme
@@ -12,7 +12,7 @@ A UI Kit theme SHALL supply geometry, material, state-colour and applicable typo
 
 #### Scenario: Geometry-style difference
 - **WHEN** corresponding Default and Accent controls are shown in matching rest and active states
-- **THEN** Accent presents solid accent capsules and pucks with soft fillets, a ribbed slider grip with a marker line and a pale slider bar, with consistent satin materials and legible feedback
+- **THEN** Accent presents solid accent capsules and pucks with soft fillets, a rocker switch, a dot-sphere trackball, controls without wells, a ribbed slider grip with a marker line and a slider that fills inside its dark channel, with consistent satin materials and legible feedback
 
 #### Scenario: Invalid style selection
 - **WHEN** a consumer supplies an unknown theme identifier or an incomplete theme definition

@@ -15,7 +15,7 @@ Rebuild failed on a hand-mesh plugin whose CMake project builds a standalone pro
 - Plugin and layer on/off switches share one behaviour: they move and lock on click, show the requested state at once and unlock when it is confirmed.
 - The SDK mesh client holds each hand's latest valid mesh, compensated to the current pose until it ages out, so processors that skip repeated samples no longer flicker.
 - The app library parameters tab is named Settings and comes last; UI Kit gets its own Settings tab to choose the theme it runs with.
-- UI Kit's Chamfer style is replaced by Accent: solid accent controls with soft fillets and a satin finish, white ink on control bodies and a pale slider bar with a half-accent fill.
+- UI Kit's Chamfer style is replaced by Accent: solid accent controls with soft fillets and a satin finish, white ink on control bodies and a slider that fills inside its dark channel with a half-accent fill.
 - Hands keeps Start clickable when only the provider choice blocks it and explains the reason in a toast with Open Setup.
 
 ## Capabilities

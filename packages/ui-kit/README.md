@@ -61,14 +61,14 @@ Visuals must fit the original footprint, text allocation and contact plane. Targ
 
 `default` retains the original rounded controls. `accent` builds every control around one accent colour: solid accent
 bodies with soft filleted edges and a satin finish, white text and icons on them (the theme's optional `onCap` ink),
-and a pale slider bar whose fill is half accent, half white:
+and a slider that fills inside its dark channel with a half-accent, half-white fill:
 
 | Elements | Accent mesh treatment |
 | --- | --- |
 | Board, pill Button, Segmented | Filleted slabs; pill Buttons as solid accent capsules without wells |
 | Round Button, Dial | Solid accent pucks with a quarter-round fillet into the face, without wells |
 | Switch | A rocker: a squarish housing and a rounded paddle that rocks to the chosen side |
-| Continuous/stepped Slider | Pale filleted bar, half-accent fill, ribbed accent grip with a white marker line |
+| Continuous/stepped Slider | Dark filleted channel filled inside with a half-accent fill, ribbed accent grip with a white marker line |
 | Trackball | A sphere of evenly spread dots in place of the robot head, with a smooth ring |
 | Dialog and GlassEdge | Unchanged frosted sheet, film and highlight |
 | Label, Icon, touch cues | Fixed text metrics; text and icons on control bodies take the `onCap` ink |

@@ -1,5 +1,5 @@
 // Accent: solid controls in one accent colour with soft, filleted edges and a satin finish. Round buttons are
-// pucks, pill buttons capsules, slider handles ribbed grips with a marker line, and the slider track a pale bar.
+// pucks, pill buttons capsules, slider handles ribbed grips with a marker line; the slider fills inside a dark channel.
 // Shapes only change inside each role's authored bounds; targets, layout and interaction stay untouched.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -14,7 +14,6 @@ const COLORS = {
 } as const;
 /** The slider fill: half accent, half white, so it is never a flat, harsh accent. */
 const FILL = new THREE.Color(ACCENT).lerp(new THREE.Color('#ffffff'), 0.5).getStyle();
-const TRACK = '#d3dcef';
 
 /** A rounded rectangle extruded along +z (0..depth) with a smooth fillet on its front and back edges. */
 function slab(w: number, h: number, depth: number, radius: number): THREE.BufferGeometry {
@@ -104,9 +103,10 @@ function material(role: VisualRole, authored: THREE.Material): THREE.Material {
     // Satin: a soft highlight that reads as a finished surface without an environment map.
     authored.roughness = solidRoles.has(role) ? 0.3 : 0.55;
     authored.metalness = solidRoles.has(role) ? 0.22 : 0.08;
-    if (role === 'sliderTrack') authored.color.set(TRACK);
     if (role === 'sliderFill') authored.color.set(FILL);
     if (role === 'sliderGrip') { authored.color.set(COLORS.onCap); authored.roughness = 0.4; authored.metalness = 0; }
+    // Marks drawn on a body (the dial's pointer) use the same white ink as button text.
+    if (role === 'dialPointer') { authored.color.set(COLORS.onCap); authored.roughness = 0.4; authored.metalness = 0; }
   }
   // The dots keep the trackball's own shell colour, so its enabled/disabled fade stays exact across theme switches.
   if (role === 'robotHead' && authored instanceof THREE.MeshStandardMaterial) { authored.flatShading = false; authored.side = THREE.DoubleSide; }
