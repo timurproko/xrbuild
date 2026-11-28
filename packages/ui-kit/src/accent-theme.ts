@@ -1,5 +1,5 @@
 // Accent: solid controls in one accent colour with soft, filleted edges and a satin finish. Round buttons are
-// pucks, pill buttons capsules, slider thumbs plain blocks with one white line; the slider fills inside a dark channel.
+// pucks, pill buttons capsules, slider thumbs upright capsules with one white line; the slider fills inside a dark channel.
 // Shapes only change inside each role's authored bounds; targets, layout and interaction stay untouched.
 import * as THREE from 'three';
 import { sampleHead, SAMPLE_HEAD_HALF } from './sample-head.ts';
@@ -70,8 +70,8 @@ function geometry(role: VisualRole, input: GeometryInput): THREE.BufferGeometry 
   switch (input.shape) {
     case 'box': {
       const [w, h, d, r = Math.min(w, h) / 2] = a;
-      // The slider thumb is a plain filleted block like the other bodies; its one mark is the grip line below.
-      result = slab(w, h, d, role === 'sliderHandle' ? Math.min(r, 0.0035) : r);
+      // The slider thumb is an upright capsule, the pill Button's shape turned on end; its one mark is the grip line below.
+      result = slab(w, h, d, role === 'sliderHandle' ? Math.min(w, h) / 2 : r);
       break;
     }
     case 'roundedDisc': result = puck(a[0] * (role === 'dialKnob' ? DIAL_TO_ROUND : role === 'switchKnob' ? SWITCH_FILL : 1), a[1]); break;

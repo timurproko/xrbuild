@@ -41,4 +41,4 @@
 
 ## 10. Accent theme replaces Chamfer
 
-- [x] 10.1 Replace the Chamfer style with Accent: solid accent bodies with filleted edges and a satin finish, an optional on-body ink for text and icons, a slider that fills inside its dark channel with a half-accent fill and a plain slider thumb with one white line; resolve a saved Chamfer choice to Accent; cover it in UI Kit, panel and embedded tests.
+- [x] 10.1 Replace the Chamfer style with Accent: solid accent bodies with filleted edges and a satin finish, an optional on-body ink for text and icons, a slider that fills inside its dark channel with a half-accent fill and an upright capsule slider thumb with one white line; resolve a saved Chamfer choice to Accent; cover it in UI Kit, panel and embedded tests.
