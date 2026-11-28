@@ -88,7 +88,8 @@ for (const origin of ['workspace', 'bundled']) for (const action of ['rebuild', 
   assert.equal(response.status, 202, JSON.stringify(response.body));
   const done = await f.server.panel.jobs.wait(f.server.panel.jobs.get(response.body.id)!);
   assert.equal(done.state, 'done', done.lines.join('\n'));
-  assert.equal(f.server.panel.jobs.list().length, 1);
+  // Rebuild's only follow-up is the visible embedded working-copy refresh; preparation is never a separate job.
+  assert.equal(f.server.panel.jobs.list().filter(job => job.kind !== 'project-refresh').length, 1);
   assert.ok(done.lines.some(line => line.includes('preparing application components')));
   assert.equal(f.server.panel.publishers.found[0]!.publisher.label, 'after');
   assert.equal(f.server.panel.pluginServiceStatus().pending, false);

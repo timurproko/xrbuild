@@ -176,6 +176,11 @@ selected project repository and product identity. This is not another project in
 these editable files; installed defaults remain unchanged. Mutable manifests, source edits, icons and deployment identity
 survive restart/rebuild and live outside disposable build generations. Normal mutations reject linked/hard-linked paths.
 The first materialization imports existing personal run choices once; subsequent normal manifest edits take precedence.
+Existing working trees follow installed source updates automatically: after the panel starts, and when Rebuild or Update
+finishes, one visible "update embedded projects" job applies the same locked merge as Run/Build to every working tree
+whose installed source changed, so the list shows the new manifest at once. It never creates a working tree for a project
+that has none. A conflict with a personal edit, or invalid state, leaves the files unchanged, fails the job and is shown on
+the project until it is resolved and Run/Build retries; a project that is running or has a job is updated once it is idle.
 
 Valid packaged output can still run/preview without installation, scripts or finalization before working state is needed.
 Missing compiled output can be built through the normal explicit Run/Build path, never in installed sources. Managed
