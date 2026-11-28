@@ -389,3 +389,15 @@ test('disabling a slider mid-drag releases it, keeps the value and ignores furth
   frame([hand(1, { pinch: [0.04, 0, z], pinching: true })]);
   assert.equal(got.filter((e) => e.type === 'change').length, 1, 'no change while disabled');
 });
+
+test('a disabled trackball hides its axis guide and shows it again when enabled', () => {
+  const ball = new Trackball('Trackball', 0.05); ball.axis = 'x';
+  const guide = () => (ball as any).rings.x as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  for (let i = 0; i < 60; i++) ball.update(1 / 60);
+  assert.equal(guide().visible, true, 'a locked axis shows its guide');
+  ball.setEnabled(false); for (let i = 0; i < 60; i++) ball.update(1 / 60);
+  assert.equal(guide().visible, false, 'no axis guide while input is off');
+  ball.setEnabled(true); for (let i = 0; i < 60; i++) ball.update(1 / 60);
+  assert.equal(guide().visible, true);
+  ball.dispose();
+});

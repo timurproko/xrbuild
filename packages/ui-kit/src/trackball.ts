@@ -79,7 +79,8 @@ export class Trackball extends Control {
     }
     if (this.ball.touching || this.mouse) this.count(this.last);
     for (const [k, ring] of Object.entries(this.rings)) {
-      const target = this.axis === k ? (this.ball.touching || this.mouse ? 0.9 : 0.45) : 0;
+      // The axis guide is a cue for input: a disabled trackball hides it (it fades out and back in).
+      const target = this.enabled && this.axis === k ? (this.ball.touching || this.mouse ? 0.9 : 0.45) : 0;
       ring.material.opacity = approach(ring.material.opacity, target, dt, 10);
       ring.visible = ring.material.opacity > 0.01;
     }
