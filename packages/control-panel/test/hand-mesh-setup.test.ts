@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { meshSetupOwners, meshSetupPlan, installMeshSetup, MeshSetupUnavailable, setupProgress, formatSetupProgress, neededKind } from '../src/hand-mesh-setup.ts';
+import { Readable } from 'node:stream';
+import { meshSetupOwners, meshSetupPlan, installMeshSetup, MeshSetupUnavailable, setupProgress, formatSetupProgress, neededKind, receiveMeshSetupInput, meshSetupInputRoot } from '../src/hand-mesh-setup.ts';
 import { handMeshRegistry } from '../src/hand-mesh-plugins.ts';
 import { resolvePluginCatalog } from '../src/extension-catalog.ts';
 import { restartBlocker } from '../src/launch-blockers.ts';
@@ -97,6 +98,29 @@ test('a runtime prepared for an older plugin version needs setup, and Install re
     assert.match(lines.at(-1) ?? '', /ready/);
   } finally {
     delete (globalThis as any).fixtureRefresh; delete (globalThis as any).fixtureInstall;
+    await fs.rm(workspace, { recursive: true, force: true });
+  }
+});
+
+test('a setup can ask for a local file: the plan names it, the copy stays private and reaches install as from', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'xrb-mesh-input-')), plugin = path.join(workspace, 'plugins', 'fixture-mesh'), userRoot = path.join(workspace, 'user');
+  try {
+    await fs.mkdir(path.join(plugin, 'setup'), { recursive: true });
+    await fs.writeFile(path.join(plugin, 'xrb-plugin.json'), JSON.stringify({ title: 'Fixture mesh', type: 'plugin', version: '1.0.0', exports: { 'mesh-runtime-setup': './setup/runtime-setup.mjs' }, handMesh }));
+    await fs.writeFile(path.join(plugin, 'setup', 'runtime-setup.mjs'), setupModule.replace(`licences: ['MIT'],`, `licences: ['MIT'], input: { label: 'Licensed archive (model.zip)', accept: '.ZIP' },`)
+      .replace('globalThis.fixtureInstall = options;', 'globalThis.fixtureInstall = { ...options, content: (await import("node:fs/promises")).readFile(options.from, "utf8") };'));
+    const plan = await meshSetupPlan(core, workspace, 'workspace:fixture-mesh');
+    assert.deepEqual(plan.input, { label: 'Licensed archive (model.zip)', accept: '.zip' });
+    const received = await receiveMeshSetupInput(Readable.from([Buffer.from('licensed bytes')]), '.zip', userRoot);
+    assert.equal(path.dirname(received.file), meshSetupInputRoot(userRoot), 'copies live in the private user folder, never in a workspace or repository');
+    await installMeshSetup(core, workspace, 'workspace:fixture-mesh', plan.consent, { line: () => {}, run: async () => {} }, undefined, plan.kind, false, received.file);
+    assert.equal((globalThis as any).fixtureInstall.from, received.file);
+    assert.equal(await (globalThis as any).fixtureInstall.content, 'licensed bytes');
+    await assert.rejects(receiveMeshSetupInput(Readable.from([]), '.zip', userRoot), /empty/);
+    await assert.rejects(receiveMeshSetupInput(Readable.from([Buffer.from('x')]), '.exe/..', userRoot), /Unsupported/);
+    assert.deepEqual(await fs.readdir(meshSetupInputRoot(userRoot)), [path.basename(received.file)], 'a rejected copy leaves nothing behind');
+  } finally {
+    delete (globalThis as any).fixtureInstall;
     await fs.rm(workspace, { recursive: true, force: true });
   }
 });

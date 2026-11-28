@@ -1,5 +1,11 @@
 import fs from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { pipeline } from 'node:stream/promises';
+import type { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
+import { meshUserRoot } from './hand-mesh-runtime.ts';
 import { resolvePluginCatalog } from './extension-catalog.ts';
 import { resolvePluginModule } from './component-resolver.ts';
 import type { JobContext } from './jobs.ts';
@@ -11,6 +17,12 @@ export const MESH_SETUP_EXPORT = 'mesh-runtime-setup';
 
 export interface MeshSetupItem { name: string; version: string; publisher: string; licence: string; bytes: number }
 /**
+ * A local file the person must choose for this install, for example a licensed archive that cannot be downloaded.
+ * The setup declares it in `plan().input`; the panel copies the chosen file to a private folder and passes its path
+ * to `install({ from })`, then deletes the copy.
+ */
+export interface MeshSetupInput { label: string; accept: string }
+/**
  * Optional install kinds a setup declares (`export const setupKinds`): each kind is a separate runtime, needed always or
  * only while one of the plugin's settings has a given value. Without it the setup has one kind, installed by `plan()`.
  */
@@ -19,10 +31,12 @@ export interface MeshSetupPlan {
   owner: string; kind: string | null; label: string | null; consent: string; installed: boolean;
   /** Installed, and the setup can re-check it for the current plugin version without downloading. */
   refresh: boolean; destination: string;
+  /** The local file this install needs the person to choose, or null. */
+  input: MeshSetupInput | null;
   downloadBytes: number; installedBytes: number; licences: string[]; items: MeshSetupItem[];
 }
 interface SetupModule {
-  plan(options?: object): { consent: string; destination: string; downloadBytes: number; installedBytes: number; licences: string[]; items: MeshSetupItem[] };
+  plan(options?: object): { consent: string; destination: string; downloadBytes: number; installedBytes: number; licences: string[]; items: MeshSetupItem[]; input?: unknown };
   install(options: object): Promise<unknown>;
   /** Re-binds an installed runtime to the current plugin source after an update; downloads nothing. */
   refresh?(options: object): Promise<unknown>;
@@ -77,6 +91,36 @@ export async function meshSetupNeeded(core: string, workspace: string, owner: st
   catch { return null; }
 }
 
+const setupInput = (value: unknown): MeshSetupInput | null => {
+  if (!value || typeof value !== 'object') return null;
+  const { label, accept } = value as Record<string, unknown>;
+  return typeof label === 'string' && label.trim() && label.length <= 80 && !/[\x00-\x1f\x7f]/.test(label)
+    && typeof accept === 'string' && /^\.[a-z0-9]{1,8}(,\.[a-z0-9]{1,8}){0,3}$/i.test(accept) ? { label: label.trim(), accept: accept.toLowerCase() } : null;
+};
+
+/** Private copies of chosen setup files, outside every repository and workspace, removed after their install. */
+export const meshSetupInputRoot = (userRoot = meshUserRoot()) => path.join(userRoot, 'setup-inputs');
+const SETUP_INPUT_LIMIT = 4 * 2 ** 30;
+const SETUP_INPUT_MAX_AGE_MS = 24 * 3600 * 1000;
+/** Streams one chosen file into the private folder and returns its id; abandoned copies older than a day are removed. */
+export async function receiveMeshSetupInput(body: Readable, extension: string, userRoot?: string): Promise<{ id: string; file: string }> {
+  if (!/^\.[a-z0-9]{1,8}$/i.test(extension)) throw new Error('Unsupported setup file type');
+  const root = meshSetupInputRoot(userRoot); await fs.mkdir(root, { recursive: true });
+  for (const entry of await fs.readdir(root, { withFileTypes: true })) {
+    const old = path.join(root, entry.name);
+    if (entry.isFile() && Date.now() - (await fs.stat(old)).mtimeMs > SETUP_INPUT_MAX_AGE_MS) await fs.rm(old, { force: true });
+  }
+  const id = randomUUID(), file = path.join(root, `${id}${extension.toLowerCase()}`);
+  let bytes = 0;
+  try {
+    await pipeline(body, async function* (source) {
+      for await (const chunk of source) { bytes += (chunk as Buffer).length; if (bytes > SETUP_INPUT_LIMIT) throw new Error('The chosen file is larger than 4 GB'); yield chunk; }
+    }, createWriteStream(file, { flags: 'wx' }));
+    if (!bytes) throw new Error('The chosen file is empty');
+  } catch (error) { await fs.rm(file, { force: true }); throw error; }
+  return { id, file };
+}
+
 /** What the setup would download, from where and under which licences. Downloads nothing. */
 export async function meshSetupPlan(core: string, workspace: string, owner: string): Promise<MeshSetupPlan> {
   const { module, plugin } = await setupModule(core, workspace, owner);
@@ -86,6 +130,7 @@ export async function meshSetupPlan(core: string, workspace: string, owner: stri
   const status = await module.status?.({}).catch(() => null) as Record<string, unknown> | null;
   const installed = kind ? !needed && installedKind(status, kind.id) : installedKind(status, 'cpu');
   return { owner: plugin.key, kind: kind?.id ?? null, label: kind?.label ?? null, consent: plan.consent, installed, refresh: installed && typeof module.refresh === 'function', destination: plan.destination,
+    input: installed ? null : setupInput(plan.input),
     downloadBytes: plan.downloadBytes, installedBytes: plan.installedBytes, licences: plan.licences,
     items: plan.items.map(({ name, version, publisher, licence, bytes }) => ({ name, version, publisher, licence, bytes })) };
 }
@@ -126,7 +171,7 @@ export function formatSetupProgress(event: SetupProgress & { percent: number | n
 }
 
 /** Runs the plugin's installer for the exact plan the person agreed to, reporting progress as job lines. */
-export async function installMeshSetup(core: string, workspace: string, owner: string, consent: string, ctx: JobContext, signal?: AbortSignal, kind: string | null = null, refresh = false): Promise<void> {
+export async function installMeshSetup(core: string, workspace: string, owner: string, consent: string, ctx: JobContext, signal?: AbortSignal, kind: string | null = null, refresh = false, from: string | null = null): Promise<void> {
   const { module, plugin } = await setupModule(core, workspace, owner);
   if (refresh && module.refresh) {
     // Already installed: re-check its files and bind them to the current plugin version instead of downloading again.
@@ -137,7 +182,7 @@ export async function installMeshSetup(core: string, workspace: string, owner: s
   }
   let last = '';
   ctx.line(`Installing ${plugin.meta.title ?? plugin.id}.`);
-  await module.install({ ...(kind ? { kind } : {}), consent, core, workspace, owner: plugin.key, signal, onProgress: (raw: unknown) => {
+  await module.install({ ...(kind ? { kind } : {}), ...(from ? { from } : {}), consent, core, workspace, owner: plugin.key, signal, onProgress: (raw: unknown) => {
     const event = setupProgress(raw); if (!event) return;
     // Byte counters fire per chunk: log a new line only when the visible text changes.
     const line = formatSetupProgress(event.unit === 'bytes' ? { ...event, detail: undefined } : event);
