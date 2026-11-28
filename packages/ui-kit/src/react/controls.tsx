@@ -1,3 +1,5 @@
+/** @jsxRuntime automatic */
+// Automatic JSX runtime here, so consumers compile this source the same without the repository's tsconfig.
 import { useLayoutEffect, useRef, useImperativeHandle, type Ref, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { useXrb, useXrbFrame } from '../../../react/src/index.ts';

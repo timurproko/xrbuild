@@ -1,3 +1,5 @@
+/** @jsxRuntime automatic */
+// Automatic JSX runtime here, so consumers compile this source the same without the repository's tsconfig.
 import { createContext, useContext, type ReactNode } from 'react';
 import { resolveUiKitTheme, type UiKitTheme, type UiKitThemeSelection } from '../visual-theme.ts';
 
