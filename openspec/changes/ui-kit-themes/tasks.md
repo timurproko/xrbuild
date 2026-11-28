@@ -11,12 +11,12 @@
 
 ## 2. Complete Chamfer mesh style
 
-- [ ] 2.1 Implement Chamfer Board, pill/round text/icon Button, Switch and every Segmented behavior variant with the profiles in design.md; verify changed mesh signatures, unchanged bounds/contact anchors and applicable state pictures.
-- [ ] 2.2 Implement continuous/stepped Slider including dynamic fill/grip/detents, Dial and Trackball model/shell/axis-ring styles; verify geometry/material differences, value/axis states and fixed footprints in focused fixtures.
-- [ ] 2.3 Implement Chamfer Dialog/Close, Label/title/status, Icon, GlassEdge and touch cues; verify complete role coverage, explicit overrides, text bounds and unchanged blocking/Close behavior.
-- [ ] 2.4 Extend control/component replay fixtures across both themes, actual perspective/orthographic/stereo paths and mouse/Mouse-disabled hands, including overlap and off-centre stereo; require equal ordered semantic traces and positive activations for all interactive controls/variants.
-- [ ] 2.5 Save isolated Chamfer pictures of every primitive/control/variant and applicable rest, hover, pressed/held, selected/changed, disabled and dialog states in all three views; completion is an indexed coverage/hash matrix outside the checkout, without extra product UI.
-- [ ] 2.6 Document Chamfer's per-control style and unchanged interaction/layout constraints in the UI Kit guide; verify the documented built-in ID and coverage against contract tests.
+- [x] 2.1 Implement Chamfer Board, pill/round text/icon Button, Switch and every Segmented behavior variant with the profiles in design.md; verify changed mesh signatures, unchanged bounds/contact anchors and applicable state pictures.
+- [x] 2.2 Implement continuous/stepped Slider including dynamic fill/grip/detents, Dial and Trackball model/shell/axis-ring styles; verify geometry/material differences, value/axis states and fixed footprints in focused fixtures.
+- [x] 2.3 Implement Chamfer Dialog/Close, Label/title/status, Icon, GlassEdge and touch cues; verify complete role coverage, explicit overrides, text bounds and unchanged blocking/Close behavior.
+- [x] 2.4 Extend control/component replay fixtures across both themes, actual perspective/orthographic/stereo paths and mouse/Mouse-disabled hands, including overlap and off-centre stereo; require equal ordered semantic traces and positive activations for all interactive controls/variants.
+- [x] 2.5 Save isolated Chamfer pictures of every primitive/control/variant and applicable rest, hover, pressed/held, selected/changed, disabled and dialog states in all three views; completion is an indexed coverage/hash matrix outside the checkout, without extra product UI.
+- [x] 2.6 Document Chamfer's per-control style and unchanged interaction/layout constraints in the UI Kit guide; verify the documented built-in ID and coverage against contract tests.
 
 ## 3. Scoped selection and leak-free live switching
 

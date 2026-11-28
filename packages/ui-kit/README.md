@@ -57,6 +57,21 @@ A theme supplies every `visualRoles` entry through geometry/material recipes, pl
 
 Visuals must fit the original footprint, text allocation and contact plane. Target bounds, poke depth/travel, pinch positions, volume radius, state, animation timing, sounds and layout are not theme options. Explicit consumer options remain authoritative. Board is also available imperatively, with the same options and owned/borrowed-map rules as its React adapter.
 
+### Built-in styles
+
+`default` retains the original rounded controls. `chamfer` keeps their graphite/ivory/blue vocabulary but uses crisp single bevels, clipped corners, inset satin faces and faceted profiles:
+
+| Elements | Chamfer mesh treatment |
+| --- | --- |
+| Board, pill Button, Segmented | Clipped slabs/wells and stepped inset key faces |
+| Round Button, Switch, Dial | Faceted caps/puck/rotor and collars; rectangular dial ticks |
+| Continuous/stepped Slider | Straight clipped channel/fill, inset handle, single horizontal grip and squared detents |
+| Trackball | Chamfered robot head, faceted sockets/eyes/hoops and square shell dots |
+| Dialog and GlassEdge | Clipped frosted sheet/film, stepped rim and matching per-eye highlight profile |
+| Label, Icon, touch cues | Fixed text metrics, squared icon strokes and a faceted touch ring |
+
+Both styles cover every variant and state, including Dialog's Close button. They have identical targets, contact depths, animation timing, sounds and event semantics. Typography keeps the same allocation so apps never reflow; explicit text/icon/material options override theme defaults.
+
 ## Controls and events
 
 | control | hands | events (`detail`) |

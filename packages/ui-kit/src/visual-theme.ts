@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { COLORS, roundedBox, roundedDisc, disc } from './theme.ts';
+import { createChamferTheme } from './chamfer-theme.ts';
 
 /** Visual roles are deliberately independent of target bounds and interaction tuning. */
 export const visualRoles = [
@@ -60,8 +61,9 @@ export const defaultTheme: UiKitTheme = Object.freeze({
   visuals: Object.freeze(Object.fromEntries(visualRoles.map(role => [role, referenceRecipe])) as Record<VisualRole, VisualRecipe>),
 });
 
-// Definitions, not a mutable installation registry. Alternate built-ins are supplied below.
-const builtins: Partial<Record<UiKitThemeId, UiKitTheme>> = { default: defaultTheme };
+export const chamferTheme: UiKitTheme = createChamferTheme(defaultTheme, visualRoles);
+// Immutable definitions, not a global mutable style installation registry.
+const builtins: Readonly<Record<UiKitThemeId, UiKitTheme>> = Object.freeze({ default: defaultTheme, chamfer: chamferTheme });
 export function resolveUiKitTheme(selection: UiKitThemeSelection = 'default'): UiKitTheme {
   const theme = typeof selection === 'string' ? builtins[selection] : selection;
   if (!theme || typeof theme.id !== 'string' || !theme.colors || !theme.typography || !theme.icon ||
@@ -90,7 +92,7 @@ function retire(resource: { dispose(): void }): void {
   if (!retiredVisuals.has(resource)) { retiredVisuals.add(resource); resource.dispose(); }
 }
 
-export function styleMesh<T extends THREE.Mesh>(mesh: T, role: VisualRole, input: GeometryInput): T {
+export function styleMesh<T extends THREE.Mesh>(mesh: T, role: VisualRole, input: GeometryInput, overrides: THREE.MaterialParameters = {}): T {
   let spec = input;
   const authored = (mesh.material as THREE.Material).clone();
   let disposed = false;
@@ -99,9 +101,13 @@ export function styleMesh<T extends THREE.Mesh>(mesh: T, role: VisualRole, input
       const geometry = theme.visuals[role].geometry(spec);
       let material: THREE.Material;
       const copy = authored.clone();
+      if (copy instanceof THREE.MeshStandardMaterial || copy instanceof THREE.MeshBasicMaterial) {
+        for (const key of Object.keys(COLORS) as (keyof typeof COLORS)[]) if (copy.color.equals(new THREE.Color(COLORS[key]))) { copy.color.set(theme.colors[key]); break; }
+      }
       try { material = theme.visuals[role].material(copy); }
       catch (error) { geometry.dispose(); copy.dispose(); throw error; }
       if (material !== copy) copy.dispose();
+      material.setValues(overrides);
       const current = mesh.material as THREE.Material;
       if (material.constructor !== current.constructor) { geometry.dispose(); material.dispose(); throw new TypeError(`Theme material type mismatch: ${role}`); }
       // These are application composition flags, not theme choices (e.g. glass-card content).

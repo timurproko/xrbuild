@@ -5,8 +5,8 @@ import * as Kit from '../index.ts';
 
 type Detail = Record<string, unknown>;
 type Handler = (detail: Detail) => void;
-type Owned = THREE.Object3D & { dispose(): void };
-export interface ComponentProps<T> {
+type Owned = THREE.Object3D & { dispose(): void; setTheme(theme: Kit.UiKitThemeSelection): void };
+export interface ComponentProps<T> extends Kit.ThemeOptions {
   ref?: Ref<T>;
   children?: ReactNode;
   position?: [number, number, number];
@@ -40,6 +40,7 @@ function useObject<T extends Owned>(create: () => T, props: ComponentProps<T>, u
   useLayoutEffect(() => {
     if (app.xrb.icon) return;
     const owned = create();
+    owned.setTheme(props.theme ?? 'default');
     object.current = owned;
     host.current!.add(owned);
     props.configure?.(owned);

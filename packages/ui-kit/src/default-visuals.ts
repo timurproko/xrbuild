@@ -44,7 +44,7 @@ export function sliderVisual(length: number, steps: number | null, trackH: numbe
   }
   handle.add(boxVisual('sliderHandle', handleW, handleH, handleD, 0.004, handleMaterial));
   for (const x of [-0.005, 0, 0.005]) {
-    const ridge = styleMesh(new THREE.Mesh(new THREE.BoxGeometry(0.0012, handleH * 0.7, 0.0012), material(x === 0 ? COLORS.accent : '#8d96a6')), 'sliderGrip', { shape: 'plainBox', args: [0.0012, handleH * 0.7, 0.0012] });
+    const ridge = styleMesh(new THREE.Mesh(new THREE.BoxGeometry(0.0012, handleH * 0.7, 0.0012), material(x === 0 ? COLORS.accent : '#8d96a6')), 'sliderGrip', { shape: 'plainBox', args: [0.0012, handleH * 0.7, 0.0012, x] });
     // The reference grip is a plain BoxGeometry, not roundedBox.
     ridge.position.set(x, 0, handleD); handle.add(ridge);
   }
