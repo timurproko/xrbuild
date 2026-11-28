@@ -38,3 +38,19 @@ test('production app keeps relative assets/icon entry and import-only consumer b
   assert.equal(typeof library.LauncherScene, 'function');
   assert.equal(typeof library.LauncherCard, 'function');
 });
+
+test('source-aliased UI Kit builds without an installed producer app', async (t) => {
+  const scratch = process.env.XRB_TEST_ROOT ?? path.join(process.env.XRB_CORE, '.artifacts');
+  await fs.mkdir(scratch, { recursive: true });
+  const root = await fs.mkdtemp(path.join(scratch, 'launcher-cold-producer-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const producer = path.join(root, 'producer/src');
+  await fs.cp(path.join(process.env.XRB_CORE, 'embedded/projects/core/ui-kit/src'), producer, { recursive: true });
+  const modules = [];
+  await build({ ...config, configFile: false, root: sampleRoot, logLevel: 'silent',
+    plugins: [...config.plugins, { name: 'consumer-dependency-proof', moduleParsed(module) { modules.push(module.id.replaceAll('\\', '/')); } }],
+    resolve: { ...config.resolve, alias: { ...config.resolve.alias, '@xr-build/ui-kit-app': path.join(producer, 'index.ts') } },
+    build: { ...config.build, outDir: path.join(root, 'output') } });
+  assert.ok(modules.some(id => id.endsWith('/producer/src/scene.tsx')), 'resolve the real public barrel, not a control-only stub');
+  assert.ok(modules.some(id => id.includes('/node_modules/lucide/')), 'bundle the consumer-owned icon dependency');
+});

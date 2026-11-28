@@ -42,11 +42,11 @@ resolve: {
     '@xr-build/ui-kit': source('ui-kit'),
     '@scene/text-app': path.join(selectedApp, 'src/index.ts'),
   },
-  dedupe: ['three', 'react', 'react-dom', '@react-three/fiber'],
+  dedupe: ['three', 'react', 'react-dom', '@react-three/fiber', 'lucide'],
 }
 ```
 
-`core` is selected by `XRB_CORE`; `selectedApp` is an explicitly selected source path in the consuming project. Add external source roots to Vite's development filesystem allowlist when necessary. Apps install the owning pinned React/Fiber/JSX dependencies; they do not enroll another workspace into the core package graph. Use frozen locks for reproducible installed workspaces.
+`core` is selected by `XRB_CORE`; `selectedApp` is an explicitly selected source path in the consuming project. Add external source roots to Vite's development filesystem allowlist when necessary. Apps install the owning pinned React/Fiber/JSX dependencies; they do not enroll another workspace into the core package graph. When importing UI Kit's app entry, also declare `lucide` (`1.54.0`) in the consumer and dedupe it as above: source-aliasing an app does not install the producer's dependencies, and its public barrel resolves the showcase's icon imports even when only controls are selected. Use frozen locks for reproducible installed workspaces.
 
 Vite bundles those sources into the consumer. There are no remote React components, runtime import maps, shared module servers or extra renderers. The existing runtime loading of standalone app icons remains unchanged; it is not component-module sharing. Importing a library must succeed without a DOM or device. App-specific assets and icon/theme JSON stay relative to their source modules and retain required notices.
 
