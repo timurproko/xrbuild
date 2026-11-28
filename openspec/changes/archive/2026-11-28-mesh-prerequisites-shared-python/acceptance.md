@@ -32,7 +32,7 @@ The maintainer integration decision accepts these scenarios:
     "Changing Settings while an app runs updates it in place without saving, and Stop restores the saved values.",
     "Settings save failures and Hands start blockers appear as toasts with one action instead of inline status text."
   ],
-  "archiveDigest": "c9b1f280647d0b28a9d0d86e6bc66e5297bca5f47753d0c650aae84706843158",
+  "archiveDigest": "4d577dfb71538a7fdf93e054434b181bc41d9ea61811032f6107241cfce9db3d",
   "specDigest": "a803d7379a311898b9d43af7b8ab5ee9ff554a40e7308a60294a1bb2456d2272",
   "tasksDigest": "53163ff51602eee577479bc3a0fef2dc6a1d62dea81a19fbbe486ea81026bdb4",
   "evidenceDigest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
