@@ -55,13 +55,34 @@ function ribbed(w: number, h: number, depth: number, radius: number): THREE.Buff
   return joined(parts);
 }
 
+/** A sphere drawn as evenly spread accent dots, facing outward (a Fibonacci lattice). */
+function dotSphere(radius: number): THREE.BufferGeometry {
+  const count = 360, dot = radius * 0.052, parts: THREE.BufferGeometry[] = [], golden = Math.PI * (3 - Math.sqrt(5)), z = new THREE.Vector3(0, 0, 1);
+  for (let i = 0; i < count; i++) {
+    const y = 1 - (i + 0.5) * 2 / count, ring = Math.sqrt(1 - y * y), a = i * golden, normal = new THREE.Vector3(Math.cos(a) * ring, y, Math.sin(a) * ring);
+    const disc = new THREE.CircleGeometry(dot, 10);
+    disc.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(z, normal)).translate(normal.x * radius, normal.y * radius, normal.z * radius);
+    parts.push(disc);
+  }
+  return joined(parts);
+}
+
 const ribbedRoles = new Set<VisualRole>(['sliderHandle']);
+/** The controls stand on their own, as in the reference kit: no recessed wells under them. */
+const wellRoles = new Set<VisualRole>(['buttonWellPill', 'buttonWellRound', 'dialWell']);
+/** The trackball model is a dot sphere; the mascot's other parts are not drawn. */
+const hiddenRobotRoles = new Set<VisualRole>(['robotSocket', 'robotEye', 'robotNose', 'robotAntenna', 'robotTip', 'robotEar']);
 const flatRoles = new Set<VisualRole>(['dialogPane', 'dialogFilm', 'glassEdge', 'label', 'icon', 'touchCursor']);
 function geometry(role: VisualRole, input: GeometryInput): THREE.BufferGeometry {
   const a = input.args;
-  if (flatRoles.has(role) || role.startsWith('robot')) return referenceGeometry(input);
+  if (wellRoles.has(role) || hiddenRobotRoles.has(role)) return new THREE.BufferGeometry();
+  if (role === 'robotHead') return dotSphere(a[0] * 1.15);
+  if (flatRoles.has(role)) return referenceGeometry(input);
   let result: THREE.BufferGeometry;
-  switch (input.shape) {
+  // The switch is a rocker: a squarish housing and a paddle covering one half of it.
+  if (role === 'switchTrack' && input.shape === 'box') result = slab(a[0], a[1], a[2], Math.min(a[1] * 0.22, 0.006));
+  else if (role === 'switchKnob' && input.shape === 'roundedDisc') result = slab(a[0] * 2.5, a[0] * 2.25, a[1], a[0] * 0.45);
+  else switch (input.shape) {
     case 'box': {
       const [w, h, d, r = Math.min(w, h) / 2] = a;
       result = ribbedRoles.has(role) ? ribbed(w, h, d, Math.min(r, 0.0035)) : slab(w, h, d, r);
@@ -87,6 +108,8 @@ function material(role: VisualRole, authored: THREE.Material): THREE.Material {
     if (role === 'sliderFill') authored.color.set(FILL);
     if (role === 'sliderGrip') { authored.color.set(COLORS.onCap); authored.roughness = 0.4; authored.metalness = 0; }
   }
+  // The dots keep the trackball's own shell colour, so its enabled/disabled fade stays exact across theme switches.
+  if (role === 'robotHead' && authored instanceof THREE.MeshStandardMaterial) { authored.flatShading = false; authored.side = THREE.DoubleSide; }
   return authored;
 }
 

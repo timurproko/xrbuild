@@ -65,10 +65,11 @@ and a pale slider bar whose fill is half accent, half white:
 
 | Elements | Accent mesh treatment |
 | --- | --- |
-| Board, pill Button, Segmented | Filleted slabs; pill Buttons as solid accent capsules |
-| Round Button, Switch, Dial | Solid accent pucks with a quarter-round fillet into the face |
+| Board, pill Button, Segmented | Filleted slabs; pill Buttons as solid accent capsules without wells |
+| Round Button, Dial | Solid accent pucks with a quarter-round fillet into the face, without wells |
+| Switch | A rocker: a squarish housing and a rounded paddle that rocks to the chosen side |
 | Continuous/stepped Slider | Pale filleted bar, half-accent fill, ribbed accent grip with a white marker line |
-| Trackball | Unchanged robot head and dot shell, with a smooth ring |
+| Trackball | A sphere of evenly spread dots in place of the robot head, with a smooth ring |
 | Dialog and GlassEdge | Unchanged frosted sheet, film and highlight |
 | Label, Icon, touch cues | Fixed text metrics; text and icons on control bodies take the `onCap` ink |
 
