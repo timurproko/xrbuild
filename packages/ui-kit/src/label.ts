@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { COLORS } from './theme.ts';
 import { VisualResources } from './resources.ts';
-import { defaultTheme, registerVisualStyle, resolveUiKitTheme, styleMesh, type ThemeOptions, type UiKitThemeSelection } from './visual-theme.ts';
+import { defaultTheme, registerVisualStyle, resolveUiKitTheme, setVisualComposition, styleMesh, type ThemeOptions, type UiKitThemeSelection } from './visual-theme.ts';
 
 export interface LabelOptions extends ThemeOptions {
   /** font size in metres */
@@ -86,6 +86,6 @@ export class Label extends THREE.Object3D {
   }
 
   set opacity(v: number) {
-    this.mesh.material.opacity = v;
+    setVisualComposition(this, { opacity: v });
   }
 }

@@ -87,7 +87,7 @@ export class GlassEdge extends THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMater
     this.userData.keepLook = true;
     this.raycast = () => {};
     this.renderOrder = 2;
-    styleMesh(this, 'glassEdge', { shape: 'plane', args: [o.width, o.height] });
+    styleMesh(this, 'glassEdge', { shape: 'plane', args: [o.width, o.height] }, {}, { uniforms: ['opacity', 'tilt'] });
     registerVisualStyle(this, { prepare: theme => ({ commit: () => { this.theme = theme; this.tilts.clear(); }, discard() {} }) });
     this.resources.capture(this);
     if (o.theme) this.setTheme(o.theme);

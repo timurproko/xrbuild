@@ -17,6 +17,23 @@ function handPress(state,control,time){const target=control.targets[0];const p=t
  state.app.xrb.hands.sample=()=>{const keypoints=Array.from({length:21},()=>position.toArray());return [{id:7,handedness:'right',keypoints,rawKeypoints:keypoints,pinching:false,grabbing:false,tip:position.toArray(),pinchPoint:position.toArray(),coasting:false,lastSeen:0}];};
  for(const [index,z]of [0.06,-target.travel*0.8,0.06].entries()){position=target.object.localToWorld(p.clone().add(control.position.clone().set(0,0,z)));state.tick(time+index*16);}
 }
+test('Launcher declares transparent composition without freezing theme-owned opacity',async()=>{
+ const {defaultTheme}=await import(pathToFileURL(path.join(process.env.XRB_CORE,'packages/ui-kit/src/index.ts')));
+ const theme={...defaultTheme,id:'custom-composition',visuals:Object.fromEntries(Object.entries(defaultTheme.visuals).map(([role,recipe])=>[role,{...recipe,material(material){material.transparent=false;material.opacity=0.5;return material;}}]))};
+ const state=await componentApp(root,{href,fetch:fetchCatalog});
+ try{
+  const {LauncherScene}=await state.importEntry();for(let n=0;n<60;n++)state.tick(n*16);
+  const button=controls(state).find(c=>c.title.text==='Open Scene 1');assert.ok(button);
+  for(const selected of [theme,defaultTheme,theme]){
+   state.handle.update(React.createElement(LauncherScene,{theme:selected}));await new Promise(r=>setTimeout(r,35));
+   assert.equal(controls(state).find(c=>c.title.text==='Open Scene 1'),button);
+   const meshes=objects(state,o=>o.geometry&&o.material&&!o.userData.keepLook&&button.getObjectById(o.id));
+   assert.ok(meshes.length>=3,'cap, well and label are included');
+   for(const mesh of meshes){assert.equal(mesh.material.transparent,true,'explicit Launcher composition wins, including already-transparent labels');assert.equal(mesh.material.opacity,selected===theme?0.5:1,'the theme still owns unoverridden opacity');}
+  }
+ }finally{await state.dispose();}
+});
+
 for(const theme of ['default','chamfer'])for(const mode of ['perspective','orthographic','stereo'])for(const input of ['mouse','hand'])test(`Launcher ${theme} paging/release/cancellation: ${mode}, ${input}`,async()=>{
  const state=await componentApp(root,{href,fetch:fetchCatalog,input:{mouse:input==='mouse'}});state.canvas.clientWidth=800;
  try{

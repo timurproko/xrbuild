@@ -135,13 +135,13 @@ function trackballVisual(radius: number) {
   object.add(robotHead(radius * 0.62));
   const rings: Record<string, THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>> = {};
   for (const [key, axis] of Object.entries(AXES)) {
-    const ring = styleMesh(new THREE.Mesh(new THREE.TorusGeometry(radius * 0.8, radius * 0.012, 8, 96), new THREE.MeshBasicMaterial({ color: COLORS.accent, transparent: true, opacity: 0 })), 'trackballRing', { shape: 'torus', args: [radius * 0.8, radius * 0.012, 8, 96] });
+    const ring = styleMesh(new THREE.Mesh(new THREE.TorusGeometry(radius * 0.8, radius * 0.012, 8, 96), new THREE.MeshBasicMaterial({ color: COLORS.accent, transparent: true, opacity: 0 })), 'trackballRing', { shape: 'torus', args: [radius * 0.8, radius * 0.012, 8, 96] }, {}, { opacity: true });
     ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
     ring.visible = false; ring.userData.keepLook = true; ring.raycast = () => {};
     rings[key] = ring; object.add(ring);
   }
   const shell = new DotShell({ radius, color: COLORS.accent, dotRadius: 0.02 });
-  styleMesh(shell, 'trackballShell', { shape: 'circle', args: [radius * 0.02, 12] });
+  styleMesh(shell, 'trackballShell', { shape: 'circle', args: [radius * 0.02, 12] }, {}, { opacity: true });
   shell.userData.keepLook = true; shell.raycast = () => {}; object.add(shell);
   return { object, rings, shell };
 }

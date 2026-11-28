@@ -92,9 +92,30 @@ function retire(resource: { dispose(): void }): void {
   if (!retiredVisuals.has(resource)) { retiredVisuals.add(resource); resource.dispose(); }
 }
 
-export function styleMesh<T extends THREE.Mesh>(mesh: T, role: VisualRole, input: GeometryInput, overrides: THREE.MaterialParameters = {}): T {
+export type VisualComposition = Pick<THREE.MaterialParameters, 'transparent' | 'opacity'>;
+const composition = new WeakMap<THREE.Material, VisualComposition>();
+/** Declare composition intent, including assignments equal to a material's current value. */
+export function setVisualComposition(root: THREE.Object3D, overrides: VisualComposition): void {
+  root.traverse(object => {
+    const value = (object as THREE.Mesh).material;
+    for (const material of Array.isArray(value) ? value : value ? [value] : []) {
+      composition.set(material, { ...composition.get(material), ...overrides });
+      material.setValues(overrides); material.needsUpdate = true;
+    }
+  });
+}
+interface VisualAnimation { opacity?: boolean; uniforms?: readonly string[] }
+const materialRoles = new WeakMap<THREE.Material, VisualRole>();
+
+export function styleMesh<T extends THREE.Mesh>(mesh: T, role: VisualRole, input: GeometryInput, overrides: THREE.MaterialParameters = {}, animated: VisualAnimation = {}): T {
   let spec = input;
+  const shared = mesh.material as THREE.Material, previousRole = materialRoles.get(shared);
+  // A stable handle may be shared within a role, never between independent recipes.
+  if (previousRole !== undefined && previousRole !== role) mesh.material = shared.clone();
+  materialRoles.set(mesh.material as THREE.Material, role);
   const authored = (mesh.material as THREE.Material).clone();
+  let writtenTransparent = authored.transparent, writtenOpacity = authored.opacity;
+  let consumerEdits: VisualComposition = {};
   let disposed = false;
   const binding: VisualStyle = {
     prepare(theme) {
@@ -107,14 +128,17 @@ export function styleMesh<T extends THREE.Mesh>(mesh: T, role: VisualRole, input
       try { material = theme.visuals[role].material(copy); }
       catch (error) { geometry.dispose(); copy.dispose(); throw error; }
       if (material !== copy) copy.dispose();
-      material.setValues(overrides);
       const current = mesh.material as THREE.Material;
       if (material.constructor !== current.constructor) { geometry.dispose(); material.dispose(); throw new TypeError(`Theme material type mismatch: ${role}`); }
-      // These are application composition flags, not theme choices (e.g. glass-card content).
-      material.transparent = current.transparent;
-      material.opacity = current.opacity;
+      // Constructor defaults are not overrides. Preserve declared composition and actual
+      // later edits, comparing against our last commit rather than a prior theme's values.
+      const edits = { ...consumerEdits };
+      if (current.transparent !== writtenTransparent) edits.transparent = current.transparent;
+      if (!animated.opacity && current.opacity !== writtenOpacity) edits.opacity = current.opacity;
+      material.setValues({ ...overrides, ...composition.get(current), ...edits });
+      if (animated.opacity) material.opacity = current.opacity;
       if (material instanceof THREE.ShaderMaterial && current instanceof THREE.ShaderMaterial) {
-        for (const key of ['opacity', 'tilt']) if (current.uniforms[key] && material.uniforms[key])
+        for (const key of animated.uniforms ?? []) if (current.uniforms[key] && material.uniforms[key])
           material.uniforms[key].value = current.uniforms[key].value?.clone?.() ?? current.uniforms[key].value;
       }
       let used = false;
@@ -122,6 +146,7 @@ export function styleMesh<T extends THREE.Mesh>(mesh: T, role: VisualRole, input
         commit() {
           if (used) return; used = true;
           retire(mesh.geometry); mesh.geometry = geometry;
+          consumerEdits = edits; writtenTransparent = material.transparent; writtenOpacity = material.opacity;
           current.copy(material); material.dispose(); current.needsUpdate = true;
         },
         discard() { if (!used) { used = true; geometry.dispose(); material.dispose(); } },

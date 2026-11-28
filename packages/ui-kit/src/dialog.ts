@@ -9,7 +9,7 @@ import { GlassEdge } from './glass-edge.ts';
 import { Label } from './label.ts';
 import { play } from './sound.ts';
 import { COLORS, approach, glass, roundedBox } from './theme.ts';
-import { styleMesh, type ThemeOptions } from './visual-theme.ts';
+import { setVisualComposition, styleMesh, type ThemeOptions } from './visual-theme.ts';
 
 export interface DialogOptions extends ThemeOptions {
   title: string;
@@ -125,7 +125,7 @@ function dialogVisual(options: DialogOptions, width: number, height: number) {
   const body = new Label(options.text, { size: 0.0072, weight: 500, color: COLORS.text });body.position.set(0, 0.006, 0.0075);
   const closeButton = new Button({ title: '', shape: 'pill', text: options.closeText ?? 'Close' });
   closeButton.title.visible = closeButton.status.visible = false;closeButton.position.set(0, -height / 2 + 0.028, 0.0075);
-  closeButton.traverse(object => { const material = (object as THREE.Mesh).material as THREE.Material | undefined; if (material) material.transparent = true; });
+  setVisualComposition(closeButton, { transparent: true });
   sheet.add(pane, film, edge, heading, body, closeButton);
   return { sheet, pane, edge, closeButton };
 }

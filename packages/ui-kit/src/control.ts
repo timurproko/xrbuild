@@ -26,7 +26,7 @@ export abstract class Control extends THREE.Group {
     if (resolveUiKitTheme(selection) === this.theme) return;
     this.visuals.setTheme(selection);
   }
-  protected refreshTheme(): void {}
+  protected refreshTheme(): void { this.fade(0); }
   readonly title: Label;
   readonly status: Label;
   protected readonly targets: AnyTarget[] = [];
@@ -161,7 +161,7 @@ export function touchCursor(): THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicM
   const m = styleMesh(new THREE.Mesh(
     new THREE.RingGeometry(0.0042, 0.0056, 32),
     new THREE.MeshBasicMaterial({ color: COLORS.accent, transparent: true, opacity: 0, depthWrite: false }),
-  ), 'touchCursor', { shape: 'ring', args: [0.0042, 0.0056, 32] });
+  ), 'touchCursor', { shape: 'ring', args: [0.0042, 0.0056, 32] }, {}, { opacity: true });
   m.userData.keepLook = true;
   m.raycast = () => {};
   m.renderOrder = 5;
