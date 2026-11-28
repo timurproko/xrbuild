@@ -2142,7 +2142,7 @@ export class Panel {
         const kind = plan.kind;
         const abort = new AbortController(); this.meshSetupAbort = abort;
         const job = this.startJob('mesh-setup', null, 'install post-processing prerequisites', async ctx => {
-          try { await installMeshSetup(this.repo, this.workspace, owner, consent, ctx, abort.signal, kind, plan.refresh, input?.file ?? null); }
+          try { await installMeshSetup(this.repo, this.workspace, owner, consent, ctx, abort.signal, kind, plan.refresh, input?.file ?? null, plan.python); }
           catch (error) {
             if (abort.signal.aborted) { ctx.line('Install cancelled. Downloaded files are kept, so Install continues where it stopped.'); throw new Error('Install cancelled'); }
             throw error;
