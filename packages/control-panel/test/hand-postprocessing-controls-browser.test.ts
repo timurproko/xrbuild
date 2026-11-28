@@ -69,6 +69,9 @@ test('a missing prerequisite shows Prerequisite and leaves only Install and the 
     assert.deepEqual(await state(), { badge: 'Prerequisite', install: 'Install', installEnabled: true, enabled: ['mode'] }, 'the device-like setting can still switch back');
     await remount(`available:false,needsSetup:true,setupNeeded:null`);
     assert.deepEqual(await state(), { badge: 'Prerequisite', install: 'Install', installEnabled: true, enabled: [] });
+    await evaluate(`window.saveGate=()=>new Promise(r=>window.openSave=r);root.querySelector('[data-mesh-selector]').value='';root.querySelector('[data-mesh-selector]').dispatchEvent(new Event('change',{bubbles:true}));root.querySelector('[data-mesh-selector]').value=plugin.owner+'/'+plugin.id;root.querySelector('[data-mesh-selector]').dispatchEvent(new Event('change',{bubbles:true}))`);
+    assert.equal((await state() as { badge: string }).badge, 'Prerequisite', 'the badge shows with Install while the layer choice saves');
+    await evaluate(`window.saveGate=null;window.openSave?.()`);
     await remount(`setupNeeded:null`);
     const ready = await state() as { badge: string; install: string | null };
     assert.deepEqual([ready.badge, ready.install], ['Ready', null]);

@@ -179,7 +179,8 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     // The layer badge carries the live state; the line below only explains a failure or an unsupported change.
     const p = plugin(), badge = root.querySelector('[data-mesh-ready]');
     const percent = /(\d+)%/.exec(text)?.[1];
-    const prerequisite = !!(p?.setup && (p.needsSetup || p.setupNeeded)) && state !== 'saving';
+    // Shown from the first render, also while a layer choice saves, so Install never appears before its badge.
+    const prerequisite = !!(p?.setup && (p.needsSetup || p.setupNeeded));
     const [label, tone] = prerequisite ? ['Prerequisite', 'busy'] : !p?.available ? ['', ''] : snapshot?.choice?.enabled === false ? ['Off', 'neutral'] : state === 'preparing' ? [percent ? `Preparing ${percent}%` : 'Preparing', 'busy']
       : state === 'applying' ? ['Starting', 'busy'] : state === 'applied' ? ['Running', 'ok'] : state === 'failed' ? ['Failed', 'err']
       : state === 'saving' ? ['Saving', 'neutral'] : ['Ready', 'ok'];
