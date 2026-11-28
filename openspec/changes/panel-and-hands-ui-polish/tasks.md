@@ -14,11 +14,14 @@
 - [x] 3.1 Plugins: toasts, badge tooltips, issue dots, settings below the description.
 - [x] 3.2 Settings: titles inside blocks, consistent spacing; Cameras: rename, loading card, toast, spacing.
 
-## 4. Hands page controls and unified presets
+## 4. Hands page controls
 
 - [x] 4.1 Header run icon and status, shared meters and tooltips, Display widget, Mesh tab single choice, fullscreen auto-hide.
-- [x] 4.2 One presets menu for Transform, Display and Mesh with Add preset, Reset to defaults, Rename, Duplicate and Delete.
 
-## 5. Tests
+## 5. Unified Hands presets
 
-- [x] 5.1 UI tests updated to the new layout, labels and controls.
+- [x] 5.1 One presets menu for Transform, Display and Mesh with Add preset, Reset to defaults, Rename, Duplicate and Delete; the Mesh gear and per-tab reset gears are removed.
+
+## 6. Tests
+
+- [x] 6.1 UI and browser tests updated to the new layout, labels, presets menu and header Start control.
