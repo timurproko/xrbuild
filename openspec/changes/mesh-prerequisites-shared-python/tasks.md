@@ -27,6 +27,6 @@
 
 - [x] 6.1 Add one shared pending-switch behaviour and use it for the post-processing layer switch and the plugin enable switch; cover the layer switch, stale repaints and failure in a browser test.
 
-## 7. Blocked Start explains itself
+## 7. Start explains why it cannot run
 
-- [x] 7.1 Show a lasting corner notice with the reason and Open Setup while Start is unavailable, and the same reason on the button; cover it in a browser test.
+- [x] 7.1 Keep Start clickable when only the provider choice blocks it, and show the reason with Open Setup as a toast on click; align the toast close button with its title; cover both in a browser test.

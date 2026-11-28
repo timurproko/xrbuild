@@ -569,6 +569,7 @@ dialog.xrb-rebuild-dialog, dialog.xrb-job-progress-dialog { width: min(660px, ca
 .xrb-toast-body > strong { font-size: .88rem; color: var(--fg); }
 .xrb-toast-body > span { font-size: .82rem; color: var(--muted); }
 .xrb-toast-actions { display: flex; gap: 8px; margin-top: 8px; }
-.xrb-toast-close { align-self: start; margin: -4px -2px 0 0; }
+/* Beats the general icon-button centring: the close button sits in the top-right corner, level with the title. */
+.xrb-toast > button.xrb-toast-close { align-self: start; margin: -5px -4px 0 0; }
 @keyframes xrb-toast-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) { .xrb-toast { animation: none; } .xrb-toast[data-leaving] { transition: none; } }
