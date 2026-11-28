@@ -2,10 +2,10 @@
 
 ## 1. Typed library declarations expose UI Kit themes and identify consumers
 
-- [ ] 1.1 Before changing product code, capture the baseline panel Develop/tab strip and Launcher in Default and controlled Chamfer with matched fixtures; save pictures and capture metadata in the crew task folder.
-- [ ] 1.2 Add shared graphics-free choice declaration types/validation and optional library/consumer manifest metadata; verify focused tests for defaults, malformed declarations, explicit origin resolution, unavailable libraries and a synthetic second library/parameter.
-- [ ] 1.3 Declare UI Kit's Theme parameter from shared registered-theme metadata and Launcher's explicit consumption/default; verify parity with runtime registered theme IDs and side-effect-free discovery/imports without changing theme definitions or controls.
-- [ ] 1.4 Document the minimal author declarations in `docs/app-components.md` and affected app guides; verify examples against declaration fixtures and existing public component exports.
+- [x] 1.1 Before changing product code, capture the baseline panel Develop/tab strip and Launcher in Default and controlled Chamfer with matched fixtures; save pictures and capture metadata in the crew task folder.
+- [x] 1.2 Add shared graphics-free choice declaration types/validation and optional library/consumer manifest metadata; verify focused tests for defaults, malformed declarations, explicit origin resolution, unavailable libraries and a synthetic second library/parameter.
+- [x] 1.3 Declare UI Kit's Theme parameter from shared registered-theme metadata and Launcher's explicit consumption/default; verify parity with runtime registered theme IDs and side-effect-free discovery/imports without changing theme definitions or controls.
+- [x] 1.4 Document the minimal author declarations in `docs/app-components.md` and affected app guides; verify examples against declaration fixtures and existing public component exports.
 
 ## 2. Conditional Components settings save choices in the consuming project
 

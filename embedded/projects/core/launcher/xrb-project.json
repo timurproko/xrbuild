@@ -1,6 +1,12 @@
 {
   "name": "Launcher",
   "kind": "app",
+  "componentLibraries": {
+    "bundled:ui-kit": {
+      "props": { "theme": "theme" },
+      "defaults": { "theme": "default" }
+    }
+  },
   "catalog": true,
   "entry": "dist",
   "scripts": {

@@ -29,7 +29,8 @@ export interface UiKitTheme {
   readonly icon: { readonly stroke: number; readonly lineCap: CanvasLineCap; readonly lineJoin: CanvasLineJoin };
   readonly visuals: Readonly<Record<VisualRole, VisualRecipe>>;
 }
-export type UiKitThemeId = 'default' | 'chamfer';
+import type { UiKitThemeId } from './theme-choices.ts';
+export type { UiKitThemeId } from './theme-choices.ts';
 export type UiKitThemeSelection = UiKitThemeId | UiKitTheme;
 export interface ThemeOptions { theme?: UiKitThemeSelection }
 

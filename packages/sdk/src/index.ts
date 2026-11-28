@@ -54,6 +54,7 @@ export * from './interaction/core/index.ts';
 export { DEFAULT_DISPLAY, getHostInfo, type DisplayInfo, type HostInfo } from './host.ts';
 export { iconRender, iconReady, iconServing, serveIconCapture, type IconRequest, type IconStudioMessage } from './icon.ts';
 export { fitIcon, iconControls, IconStage, loadAppIcon, updateIcon, type IconFactory } from './icon-object.ts';
+export { componentSceneProps, type ComponentChoice, type ComponentLibrary, type ComponentConsumer, type ComponentMetadata, type ComponentValues } from './component-settings.ts';
 export { appLaunchContext, appLaunchContextFromLocation, appLaunchUrl, appResumeProjectionFromLocation, appResumeUrl, type AppLaunchContext, type CameraProjection, type LaunchLocationLike } from './launch-context.ts';
 export { loadReturnOverlay, returnTargetFromLaunch } from './return-overlay.ts';
 export { OneEuro, DEFAULT_ONE_EURO } from './one-euro.ts';

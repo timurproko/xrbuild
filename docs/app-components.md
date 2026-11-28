@@ -82,6 +82,25 @@ import { LauncherScene, uiKitTheme } from '@scene/launcher';
 
 Theme-owned geometry can change, so construction-time mesh mutations are not a persistent theme override. Stable control hosts, explicit supported visual options and borrowed maps/children retain their ownership. Standalone app icons and app-specific branding/environment remain unchanged.
 
+## Exposed component parameters
+
+Libraries declare optional `componentLibrary.parameters` in `xrb-project.json`. Each choice has `type: 'choice'`, `label`, `options: [{ value, label }]` and `default`. The graphics-free `ComponentLibrary` / `ComponentMetadata` SDK types let authors check the same plain declaration in public code. UI Kit exports its typed `componentLibrary`; its manifest declaration is checked against registered theme metadata.
+
+Consumers explicitly declare origin-qualified library identities and parameter-to-scene-prop bindings:
+
+```json
+{
+  "componentLibraries": {
+    "bundled:ui-kit": {
+      "props": { "theme": "theme" },
+      "defaults": { "theme": "default" }
+    }
+  }
+}
+```
+
+Discovery reads data only: no app entry executes, and a `workspace:` library never silently resolves to a `bundled:` library. Another library or choice parameter needs only declarations, not library-specific panel code. Existing source aliases still determine which components are bundled.
+
 ## Checking a migration
 
 Preserve camera/frustum, lighting, geometry/material flags, animation timestamps/deltas, input policy, relative output and icon behavior. Check both native Mouse and replayed hands, including Mouse disabled and off-centre stereo operation. Physical capture must not also fire an emulated component click. Use the SDK's frame/input hooks, never a second Canvas event manager or animation loop.

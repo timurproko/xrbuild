@@ -7,11 +7,12 @@ import path from 'node:path';
 import { ICON_COLORS, ICON_SHAPES, isIconColor, isIconShape, type IconColor, type IconShape } from '../../app-icon/src/icon.ts';
 import { BUILD_TARGETS, type BuildTarget, type RoleSelection } from './packagers.ts';
 import { publicationProblems, type PublicationConfig } from './publication.ts';
+import { componentMetadataErrors, type ComponentMetadata } from '../../sdk/src/component-settings.ts';
 
 export const MANIFEST = 'xrb-project.json';
 export type ProjectKind = 'app' | 'test';
 
-export interface Manifest {
+export interface Manifest extends ComponentMetadata {
   name: string;
   /** Optional launcher card copy; empty omits the description. */
   description?: string;
@@ -167,6 +168,7 @@ export function validateManifest(m: unknown, projectDir: string): FieldError[] {
         err('host.args', 'args must be a list of --name=value options');
     }
   }
+  errors.push(...componentMetadataErrors(o as ComponentMetadata));
   return errors;
 }
 
