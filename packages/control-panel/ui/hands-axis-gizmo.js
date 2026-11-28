@@ -23,8 +23,9 @@ function labelSprite(label, color) {
  * Orientation widget drawn in the view's bottom-left corner, like 3D tools: the X, Y and Z axes turn with the
  * camera so the viewer always sees which way the scene faces. It renders into its own small viewport.
  */
-export function createAxisGizmo({ size = 88, margin = 12 } = {}) {
-  const scene = new THREE.Scene(), camera = new THREE.OrthographicCamera(-1.35, 1.35, 1.35, -1.35, .1, 10);
+// The frame just fits the labels (reach 0.98 + 0.21), so the widget hugs the corner instead of floating inside it.
+export function createAxisGizmo({ size = 72, margin = 4 } = {}) {
+  const scene = new THREE.Scene(), camera = new THREE.OrthographicCamera(-1.22, 1.22, 1.22, -1.22, .1, 10);
   const up = new THREE.Vector3(0, 1, 0);
   for (const axis of AXES) {
     const shaft = new THREE.Mesh(new THREE.CylinderGeometry(.035, .035, .78, 12), new THREE.MeshBasicMaterial({ color: axis.color }));

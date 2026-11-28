@@ -1,24 +1,19 @@
 import { mountToolNavigation, rebuildHostInPlace } from './navigation.js';
 import { enhanceSelects, installDropdowns, installTooltips, installOverlayScrollbars } from './design-system.js';
+import { toast, closeToast } from './toast.js';
 const disposers = [mountToolNavigation(document.getElementById('calibration-menu-button'), document.getElementById('calibration-menu'), { origin: location.origin, current: 'calibration' }), installDropdowns(), installTooltips(), installOverlayScrollbars(document)];
-const status = document.getElementById('calibration-availability');
 let disposed = false;
+/** Why calibration cannot run, as a toast that stays until it is resolved or dismissed, with its recovery action. */
 function notice(value) {
-  status.replaceChildren(); status.hidden = value?.available !== false;
-  if (status.hidden) return;
-  const reason = document.createElement('span'); reason.textContent = value.reason;
-  status.title = value.detail || ''; status.append(reason);
-  if (['rebuild', 'plugins'].includes(value.recovery)) {
-    const action = document.createElement('button'); action.type = 'button';
-    action.textContent = value.recovery === 'rebuild' ? 'Rebuild' : 'Plugins';
-    action.addEventListener('click', async () => {
+  if (value?.available !== false) { closeToast('calibration-availability'); return; }
+  const actions = ['rebuild', 'plugins'].includes(value.recovery) ? [{
+    label: value.recovery === 'rebuild' ? 'Rebuild' : 'Plugins',
+    onClick: () => {
       if (value.recovery === 'plugins') { location.assign('/plugins/'); return; }
-      action.disabled = true;
-      try { await rebuildHostInPlace(location.origin, { onComplete(job) { if (job?.state === 'done' && !disposed) location.reload(); } }); }
-      finally { action.disabled = false; }
-    });
-    status.append(' ', action);
-  }
+      void rebuildHostInPlace(location.origin, { onComplete(job) { if (job?.state === 'done' && !disposed) location.reload(); } });
+    },
+  }] : [];
+  toast({ id: 'calibration-availability', title: 'Cameras unavailable', message: value.reason, tone: 'warn', actions, timeoutMs: 0 });
 }
 addEventListener('pagehide', () => { disposed = true; disposers.reverse().forEach(dispose => dispose?.()); }, { once: true });
 try {

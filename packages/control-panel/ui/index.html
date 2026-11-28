@@ -19,14 +19,15 @@
     <span id="panel-chip" class="chip warn" data-maintenance="restart" hidden>restart</span>
     <span id="host-chip" class="chip" data-maintenance="rebuild" hidden></span>
     <span id="update-chip" class="chip update" data-maintenance="update" hidden></span>
+    <span id="run-state" class="chip" role="status" hidden></span>
     <span class="spacer"></span>
     <!-- Page fps and hands Hz of the running app, shown here once the Running card scrolled out of view -->
     <div id="stats-dock" class="stats-dock" hidden></div>
-    <!-- Run / Stop of the selected project, shown here once its own button scrolled out of view -->
-    <div id="run-dock" class="run-dock" hidden><div class="run-project"><img alt=""><span class="name"></span><button type="button" class="action-button"></button></div></div>
+    <!-- Start / Stop of the selected app, shown whenever an app is selected -->
+    <div id="run-dock" class="run-dock" hidden><div class="run-project"><button type="button" class="xrb-run-button"></button></div></div>
   </header>
 
-  <main id="dashboard" class="xrb-workspace-layout xrb-workspace-grid xrb-workspace-grid--activity">
+  <main id="dashboard" class="xrb-workspace-layout xrb-workspace-grid xrb-workspace-grid--activity" data-loading>
     <nav id="projects" class="xrb-workspace-sidebar" aria-label="Projects"></nav>
 
     <div id="workspace-content" class="xrb-workspace-flow">
@@ -83,7 +84,7 @@
 
   <main id="plugins-manager" class="plugins-manager xrb-workspace-layout xrb-workspace-grid xrb-workspace-grid--sidebar" hidden>
     <nav id="plugin-nav" class="xrb-workspace-sidebar" aria-label="Installed plugins"></nav>
-    <section id="plugin-details"><h2 class="col-label xrb-section-label">Details</h2><div id="plugin-detail"></div></section>
+    <section id="plugin-details"><div id="plugin-detail"></div></section>
   </main>
 
   <main id="global-settings" class="global-settings xrb-workspace-layout xrb-workspace-grid xrb-workspace-grid--sidebar" hidden>

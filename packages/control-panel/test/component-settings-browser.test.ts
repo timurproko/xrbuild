@@ -10,6 +10,7 @@ test('Settings uses normal dropdowns, comes last, autosaves and never changes pl
     await navigate(`${f.server.url}?project=launcher`, `!!document.querySelector('[data-surface="components"]')`);
     await evaluate(`document.querySelector('[data-id="launcher"]')?.click()`);
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-surface]')).map(x=>x.textContent.trim())`), ['Develop', 'Build', 'Settings']);
+    await until(`!document.querySelector('#settings [aria-busy="true"]')`);
     const develop = await evaluate(`document.querySelector('#settings').innerHTML`);
     await evaluate(`document.querySelector('[data-surface="components"]').click()`);
     await until(`!!document.querySelector('[name="componentSettings.bundled:ui-kit.theme"]')`);
@@ -31,7 +32,7 @@ test('Settings uses normal dropdowns, comes last, autosaves and never changes pl
     await navigate(f.server.url, `!!document.querySelector('[name="componentSettings.bundled:ui-kit.theme"]')`);
     assert.equal(await evaluate(`document.querySelector('#settings input').value`), 'default');
     await evaluate(`document.querySelector('[data-surface="display"]').click()`);
-    await until(`!!document.querySelector('[data-surface="display"][aria-selected="true"]')`);
+    await until(`!!document.querySelector('[data-surface="display"][aria-selected="true"]') && !document.querySelector('#settings [aria-busy="true"]')`);
     assert.equal(await evaluate(`document.querySelector('#settings').innerHTML`), develop);
     const saved = (await f.get()).manifest;
     assert.equal(saved.description, 'Keep me');
@@ -42,7 +43,7 @@ test('Settings uses normal dropdowns, comes last, autosaves and never changes pl
     await navigate(`${f.server.url}?project=plain`, `!!document.querySelector('[data-surface="display"]')`);
     // Select by rendered name rather than relying on persisted preference keys.
     await evaluate(`Array.from(document.querySelectorAll('#projects .proj')).find(x=>x.textContent.trim()==='plain')?.click()`);
-    await until(`document.querySelector('.project-title-row h3')?.textContent==='plain'`);
+    await until(`document.querySelector('#projects .proj.selected')?.textContent.trim()==='plain'`);
     assert.equal(await evaluate(`!!document.querySelector('[data-surface="components"]')`), false);
   });
 });

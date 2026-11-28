@@ -19,7 +19,7 @@ test('finished edits save once, previews and invalid drafts stay local, reset sa
     await evaluate(change('detail', '5')); await evaluate(settle);
     assert.equal(await evaluate('requests.length'), 2);
     assert.equal(await evaluate(`root.querySelector('[data-mesh-field="detail"]').getAttribute('aria-invalid')`), 'true');
-    await evaluate(`root.querySelector('[data-mesh-gear]').click();root.querySelector('[data-mesh-reset]').click()`); await evaluate(settle);
+    await evaluate(`component.applyPreset(component.presetDefaults())`); await evaluate(settle);
     assert.equal(await evaluate('requests.length'), 3);
     assert.deepEqual(await evaluate('requests[2].values'), { detail: .6, mode: 'full', smooth: true });
     await evaluate(`const range=root.querySelector('[data-mesh-range]');range.value='.4';range.dispatchEvent(new Event('input',{bubbles:true}))`);
@@ -130,7 +130,7 @@ test('continuous number stepper, stale reads, invalid saved state and disposal r
 test('bounded revision races retry, transport failures do not loop, and incomplete defaults are persisted', { skip, timeout: 30000 }, async () => {
   await withPostprocessing(async ({ evaluate }) => {
     // A retained selection without a settings record must not turn Reset into a no-op.
-    await evaluate(`root.querySelector('[data-mesh-gear]').click();root.querySelector('[data-mesh-reset]').click()`); await evaluate(settle);
+    await evaluate(`component.applyPreset(component.presetDefaults())`); await evaluate(settle);
     assert.equal(await evaluate('requests.length'), 1);
     assert.deepEqual(await evaluate(`snapshot.choice.settings['workspace:example/surface'].values`), { detail: .6, mode: 'full', smooth: true });
     await evaluate(`window.saveError=Object.assign(new Error('Hands profile changed; reload before saving'),{status:409})`);

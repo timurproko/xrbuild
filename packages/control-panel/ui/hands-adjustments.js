@@ -34,7 +34,6 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   const resetMenu = (section, label) => `<button type="button" class="xrb-icon-button" id="${prefix}-${section}-settings" data-reset-menu="${section}" aria-label="${label} settings" data-no-tooltip aria-haspopup="menu" aria-controls="${prefix}-${section}-menu" aria-expanded="false">${iconSvg('settings')}</button><div class="menu" id="${prefix}-${section}-menu" role="menu" aria-labelledby="${prefix}-${section}-settings" hidden><button type="button" role="menuitem" data-reset="${section}">Reset to defaults</button></div>`;
   // Transform and Display are tabs in the card's tab bar; each tab's reset menu sits at the bar's end.
   const tab = (section, label, selected) => `<button type="button" class="xrb-tab" role="tab" id="${prefix}-tab-${section}" data-tab="${section}" aria-controls="${prefix}-panel-${section}" aria-selected="${selected}" tabindex="${selected ? 0 : -1}">${label}</button>`;
-  const tabAction = (section, label, selected) => `<span class="hands-tab-action" data-tab-action="${section}"${selected ? '' : ' hidden'}>${resetMenu(section, label)}</span>`;
   // The page may already hold the tab bar (shown before this editor loads); adopt it instead of rebuilding.
   const adopted = setup?.parentElement?.querySelector(':scope > .hands-adjustment-tabs') ?? null;
   const tabs = adopted ?? root.ownerDocument.createElement('div');
@@ -42,19 +41,16 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
     tabs.className = 'xrb-tabs hands-adjustment-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Hand adjustments'); tabs.dataset.xrbTabsId = 'hands-adjustments';
     tabs.innerHTML = `${setup ? tab('setup', 'Setup', true) : ''}${tab('geometry', 'Transform', !setup)}${tab('appearance', 'Display', false)}`;
   } else for (const item of tabs.querySelectorAll('[data-tab]')) { item.id = `${prefix}-tab-${item.dataset.tab}`; item.setAttribute('aria-controls', `${prefix}-panel-${item.dataset.tab}`); }
-  tabs.insertAdjacentHTML('beforeend', `${tabAction('geometry', 'Transform', !setup)}${tabAction('appearance', 'Display', false)}`);
   if (setup) { setup.id ||= `${prefix}-panel-setup`; setup.setAttribute('role', 'tabpanel'); setup.setAttribute('aria-labelledby', `${prefix}-tab-setup`); tabs.querySelector('[data-tab="setup"]').setAttribute('aria-controls', setup.id); root.hidden = true; }
   if (!adopted) (setup ?? root).before(tabs);
   // Further page panels (such as Log) live beside Setup and switch with their tab.
   const pagePanels = adopted ? [...tabs.parentElement.querySelectorAll(':scope > [data-tab-panel]')] : [];
   root.innerHTML = `<form class="xrb-stack hands-adjustment-sections" aria-label="Hand adjustments">
     <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-geometry" aria-labelledby="${prefix}-tab-geometry"${setup ? ' hidden' : ''}>
-      ${presetRow('geometry')}
       ${number('offsetMm.x', 'X (mm)', -150, 150, 1)}${number('offsetMm.y', 'Y (mm)', -150, 150, 1)}${number('offsetMm.z', 'Z (mm)', -150, 150, 1)}
       ${number('sizeFactor', 'Size', .5, 1.5, .01)}
     </section>
     <section class="xrb-sidebar-section" role="tabpanel" id="${prefix}-panel-appearance" aria-labelledby="${prefix}-tab-appearance" hidden>
-      ${presetRow('appearance')}
       ${displayField()}
       ${number('appearance.jointDiameterMm', 'Joint diameter (mm)', 1, 40, 1, '', color('jointColorLinear', 'Joint color'))}
       ${number('appearance.boneDiameterMm', 'Bone diameter (mm)', 1, 30, 1, '', color('boneColorLinear', 'Bone color'))}
@@ -365,7 +361,15 @@ export function mountHandAdjustments(root, { load, apply, serialize = operation 
   if (adopted) { const saved = rememberedTab(); if (tabs.querySelector(`[data-tab="${saved}"]`)) selectTab(saved, false, false); }
   form.addEventListener('input', input); form.addEventListener('change', change); form.addEventListener('keydown', keydown); form.addEventListener('submit', submit); root.addEventListener('click', click); tabs.addEventListener('click', click); tabs.addEventListener('keydown', tabKeydown);
   render();
-  return { refresh, markStale() { void load().then(refresh).catch(error => { failure = error.message; buttons(); }); }, reviewToken: () => undefined,
+  // The shared presets menu (hands-presets.js) captures, compares and applies every Transform and Display value.
+  const presetKeys = () => fields.map(field => field.dataset.field);
+  const presetApi = {
+    presetValues: () => Object.fromEntries(presetKeys().map(key => [key, structuredClone(currentValue(key))])),
+    presetDefaults: () => Object.fromEntries(presetKeys().map(key => [key, defaultValue(key)])),
+    matchesPreset: values => Object.entries(values).every(([key, value]) => !presetKeys().includes(key) || equal(value, currentValue(key))),
+    applyPreset: values => { if (!state) return; for (const section of ['geometry', 'appearance']) applySection(section, key => values[key]); },
+  };
+  return { ...presetApi, get presetReady() { return !!state; }, refresh, markStale() { void load().then(refresh).catch(error => { failure = error.message; buttons(); }); }, reviewToken: () => undefined,
     get dirty() { return edits.size > 0; }, get revision() { return state?.revision; }, get deliveryEpoch() { return deliveryEpoch; },
     updateDelivery(_text, deliveryState, revision, epoch) {
       if (epoch === deliveryEpoch && revision === state?.revision && !edits.size && !busy) { retryDelivery = deliveryState === 'failed'; buttons(); }

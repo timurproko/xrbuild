@@ -1,7 +1,7 @@
 import { handsLog } from './hands-log.js';
 import { toast, closeToast, listenForToasts } from './toast.js';
 import { mountToolNavigation, isPanelUnavailable } from './navigation.js';
-import { openColorPopover, installNumberSteppers, refreshDropdown } from './design-system.js';
+import { openColorPopover, installNumberSteppers } from './design-system.js';
 import { mountHandsShell } from './hands-shell.js';
 import { mountProviderRecorder } from './hands-recorder.js';
 import { mountHandsPostprocessing } from './hands-postprocessing.js';
@@ -206,16 +206,41 @@ const disposeShell = mountHandsShell({ resetView: () => view?.resetView(), setVi
 const displayValue = () => { try { return JSON.parse($('hands-display-options').value); } catch { return ['skeleton', 'mesh']; } };
 try { const saved = JSON.parse(stored('xrb.hands.display') || 'null'); if (Array.isArray(saved)) $('hands-display-options').value = JSON.stringify(saved); } catch {}
 const applyDisplay = () => { const value = displayValue(); view?.setDisplay?.({ skeleton: value.includes('skeleton'), mesh: value.includes('mesh') }); };
-$('hands-display-options').addEventListener('change', () => { store('xrb.hands.display', $('hands-display-options').value); applyDisplay(); });
+$('hands-display-options').addEventListener('change', () => { store('xrb.hands.display', $('hands-display-options').value); applyDisplay(); renderDisplayChoices(); });
 let displayLayer;
+/** The Display widget's checkboxes: Skeleton, plus the active mesh layer once a post-processing plugin offers one. */
+const renderDisplayChoices = () => {
+  const value = displayValue(), choices = [['skeleton', 'Skeleton'], ...(displayLayer ? [['mesh', displayLayer]] : [])];
+  const root = $('hands-display-choices'); root.replaceChildren();
+  for (const [key, label] of choices) {
+    const pill = document.createElement('label'); pill.className = 'hands-display-check';
+    const box = document.createElement('input'); box.type = 'checkbox'; box.checked = value.includes(key);
+    box.addEventListener('change', () => {
+      const next = displayValue().filter(item => item !== key); if (box.checked) next.push(key);
+      $('hands-display-options').value = JSON.stringify(next); $('hands-display-options').dispatchEvent(new Event('change'));
+    });
+    pill.append(box, label); root.append(pill);
+  }
+  $('hands-display-count').textContent = `${choices.filter(([key]) => value.includes(key)).length} of ${choices.length}`;
+};
+// Collapsing the Display card is remembered per browser.
+{ const widget = $('hands-display'), head = widget.querySelector('.hands-display-head');
+  const setCollapsed = collapsed => { widget.toggleAttribute('data-collapsed', collapsed); head.setAttribute('aria-expanded', String(!collapsed)); };
+  setCollapsed(stored('xrb.hands.displayCollapsed') === '1');
+  head.addEventListener('click', () => { const collapsed = !widget.hasAttribute('data-collapsed'); setCollapsed(collapsed); store('xrb.hands.displayCollapsed', collapsed ? '1' : '0'); }); }
 const showLayer = label => {
   if (label === displayLayer) return; displayLayer = label;
-  const owner = $('hands-display');
-  owner.dataset.options = label ? 'skeleton|mesh' : 'skeleton';
-  owner.dataset.labels = JSON.stringify(label ? { skeleton: 'Skeleton', mesh: label } : { skeleton: 'Skeleton' });
-  refreshDropdown(owner);
+  renderDisplayChoices();
 };
+renderDisplayChoices();
 const postprocessing = mountHandsPostprocessing($('hands-postprocessing-root'), { onLayer: showLayer });
+// One presets menu for Transform, Display and Mesh, at the end of the side panel's tab bar.
+{ const { mountHandsPresets } = await import('./hands-presets.js');
+  const tabBar = document.querySelector('.hands-adjustment-tabs');
+  if (tabBar) mountHandsPresets(tabBar, [
+    { id: 'adjust', get: () => adjustments?.presetReady ? adjustments : null },
+    { id: 'mesh', get: () => postprocessing?.presetReady ? postprocessing : null },
+  ]); }
 // The viewer's own side of the mesh stream: whether it got the stream address and whether its connection works.
 { let lastMesh = '';
   setInterval(() => {
@@ -227,11 +252,20 @@ const postprocessing = mountHandsPostprocessing($('hands-postprocessing-root'), 
 // The Post-process tab stays in place; with no post-processing plugin it shows a short empty note.
 const showPostEmpty = () => { $('hands-post-empty').hidden = !$('hands-postprocessing-root').hidden; };
 new MutationObserver(showPostEmpty).observe($('hands-postprocessing-root'), { attributes: true, attributeFilter: ['hidden'] }); showPostEmpty();
+/** good / warn / bad colouring shared with the Apps stats dock; a dash is neutral. */
+function rateTone(value, text, good, warn) {
+  const n = Number(text), stat = value.parentElement;
+  stat.classList.toggle('good', Number.isFinite(n) && n >= good);
+  stat.classList.toggle('warn', Number.isFinite(n) && n < good && n >= warn);
+  stat.classList.toggle('bad', Number.isFinite(n) && n < warn);
+}
+window.xrbRateTone = rateTone;
 try {
   const { createHandsView } = await import('./hands-view.js');
   view = createHandsView({ canvas: $('hands-canvas'), viewport: $('hands-viewport'),
     // The view is ready once it renders; its rate is shown only while a hand session runs.
-    onMetrics: metrics => { document.body.dataset.handsView = 'ready'; const render = document.body.dataset.handsSession === 'live' ? metrics.renderFps.toFixed(1) : '—'; if ($('hands-render-fps').textContent !== render) $('hands-render-fps').textContent = render; },
+    onMetrics: metrics => { document.body.dataset.handsView = 'ready'; const render = document.body.dataset.handsSession === 'live' ? metrics.renderFps.toFixed(1) : '—'; if ($('hands-render-fps').textContent !== render) $('hands-render-fps').textContent = render; rateTone($('hands-render-fps'), render, 55, 40);
+      const tip = `View render rate\n${render === '—' ? 'No frames yet' : `${(1000 / metrics.renderFps).toFixed(1)} ms per frame`}`; const stat = $('hands-render-fps').parentElement; if (stat.dataset.tooltip !== tip) stat.dataset.tooltip = tip; },
     onStatus: status => {
       if (status.phase === 'idle') { profileKey = ''; $('hands-tracking-fps').textContent = '—'; }
     },

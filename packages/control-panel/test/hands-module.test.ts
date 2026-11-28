@@ -24,7 +24,7 @@ test('core Hands opens without optional plugins or state creation; retired route
   try {
     const address = app.server.address() as { port: number }, base = `http://127.0.0.1:${address.port}`;
     const html = await fetch(base + '/hands/').then(r => r.text());
-    assert.match(html, /Skeleton provider/); assert.match(html, /No live hand session/);
+    assert.match(html, /Skeleton provider/); assert.match(html, /Hand tracking&#10;No live session/);
     for (const route of ['/hand-tracking', '/hand-tracking/', '/hands-diagnostics', '/hands-diagnostics/', '/hands-diagnostics/assets/view.js']) {
       for (const method of ['GET', 'HEAD']) {
         const old = await fetch(base + route + '?x=1', { method, redirect: 'manual' });

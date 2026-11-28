@@ -22,7 +22,6 @@ test('saved settings are not Applied before the matching generation ACK, includi
     assert.notEqual(await evaluate('root.dataset.meshState'), 'applied');
     await evaluate(`snapshot.delivery=meshState({requestedGeneration:2,appliedGeneration:2});component.refresh(snapshot)`);
     assert.equal(await evaluate('root.dataset.meshState'), 'applied');
-    await evaluate(`root.querySelector('[data-mesh-gear]').click()`);
     await pictures(browser, 'after-applied-menu');
     assert.equal(await evaluate('requests.length'), 1);
   });

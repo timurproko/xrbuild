@@ -14,7 +14,7 @@ async function until(evaluate: (s: string) => Promise<any>, expression: string) 
   for (let i = 0; i < 200; i++) { if (await evaluate(expression)) return; await sleep(25); }
   assert.fail(expression);
 }
-test('finished edits autosave, retain exact colors, reset independently, survive reparenting and review conflicts', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async () => {
+test('finished edits autosave, retain exact colors, reset together from the presets menu, survive reparenting and review conflicts', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async () => {
   const root = await fs.mkdtemp(path.join(process.env.XRB_TEST_ROOT ?? os.tmpdir(), 'adjustment-ui-'));
   const core = path.resolve(import.meta.dirname, '../../..'), workspace = path.join(root, 'workspace');
   let state = await saveHandsState(core, workspace, { owner: 'core', id: 'simulated' }, (await readHandsState(core, workspace)).revision);
@@ -61,14 +61,10 @@ test('finished edits autosave, retain exact colors, reset independently, survive
       await set('appearance.jointColorLinear', '#ff0000');
       for (const key of ['boneColorLinear', 'indicatorColorLinear']) await set('appearance.' + key, '#ff0000');
       assert.deepEqual((await readHandsState(core, workspace)).profile.appearance.indicatorColorLinear, [1, 0, 0]);
-      await evaluate(`document.querySelector('[data-reset-menu="appearance"]').click();document.querySelector('[data-reset="appearance"]').click()`); await settled();
-      state = await readHandsState(core, workspace); assert.deepEqual(state.profile.appearance, HAND_APPEARANCE_DEFAULTS); assert.equal(state.profile.sizeFactor, .8);
-      await set('appearance.showBones', false); await input('appearance.opacity', .42);
-      await evaluate(`document.querySelector('[data-reset-menu="geometry"]').click();document.querySelector('[data-reset="geometry"]').click()`);
+      await evaluate(`document.querySelector('[data-presets-button]').click();document.querySelector('[data-preset-reset]').click()`); await settled();
       await until(evaluate, `document.querySelector('#hands-adjustments-root').dataset.saving==='false'`);
-      state = await readHandsState(core, workspace); assert.equal(state.profile.sizeFactor, 1); assert.equal(state.profile.offsetMm.x, 0); assert.equal(state.profile.appearance.showBones, false);
-      assert.equal(state.profile.appearance.opacity, .333, 'geometry reset never commits the other section unfinished input');
-      assert.equal(await evaluate(`document.querySelector('[data-field="appearance.opacity"]').value`), '0.42');
+      state = await readHandsState(core, workspace); assert.deepEqual(state.profile.appearance, HAND_APPEARANCE_DEFAULTS);
+      assert.equal(state.profile.sizeFactor, 1, 'one reset restores Transform and Display together'); assert.equal(state.profile.offsetMm.x, 0);
       await set('appearance.opacity', .42);
       await evaluate(`const aside=document.createElement('aside');aside.style.width='340px';document.querySelector('main').append(aside);aside.append(document.querySelector('#hands-adjustments-root'));`);
       await set('sizeFactor', .9); assert.equal((await readHandsState(core, workspace)).profile.sizeFactor, .9);

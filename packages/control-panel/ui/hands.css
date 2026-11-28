@@ -1,6 +1,8 @@
 /* Hands owns only the viewer topology. Surfaces, fields, tabs and colors are shared. */
 .hands-page { min-height: 100dvh; display: flex; flex-direction: column; }
 #hands-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(var(--sidebar-w), 340px); flex: 1; min-height: 0; }
+/* The frame-rate dock shows only while a hand session runs, like the Apps dock while an app runs. */
+body:not([data-hands-session="live"]) #hands-stats { display: none; }
 .hands-panel { min-width: 0; min-height: 0; margin: 0; display: flex; flex-direction: column; }
 .hands-source { overflow: auto; }
 .hands-adjustment-sections { gap: var(--xrb-space-section); }
@@ -18,6 +20,13 @@
 .hands-adjustment-tabs { gap: 18px; }
 .hands-adjustment-tabs > .hands-tab-action { display: flex; align-items: center; margin-left: auto; }
 .hands-adjustment-tabs > .hands-tab-action[hidden] { display: none; }
+/* Presets menu: a check column, the saved presets, then Add preset and Reset to defaults below their own lines. */
+.hands-presets-menu { min-width: 220px; }
+.hands-presets-menu [data-preset-name] { display: flex; align-items: center; gap: 8px; }
+.hands-preset-check { display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none; color: var(--accent); }
+.hands-preset-edit { padding: 4px 6px; }
+.hands-preset-edit input { width: 100%; box-sizing: border-box; }
+.hands-presets-empty { margin: 0; padding: 6px 10px; color: var(--muted); font-size: .82rem; }
 .hands-postprocessing .hands-mesh-delivery { display: flex; align-items: center; flex-wrap: wrap; gap: var(--xrb-space-field); }
 .hands-postprocessing .hands-mesh-delivery > p { min-width: 0; overflow-wrap: anywhere; }
 .hands-postprocessing [data-mesh-message] { overflow-wrap: anywhere; }
@@ -35,8 +44,32 @@
 .hands-tool-separator { align-self: stretch; width: 1px; margin-block: 4px; background: var(--line); }
 .hands-session-actions[hidden] + .hands-tool-separator { display: none; }
 /* The session status sits in the middle of the header. */
-.hands-header-status { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; pointer-events: none; }
-.hands-header-status > * { pointer-events: auto; }
+/* The session status follows the maintenance chips; Start/Stop is centred in the header, as on Apps. */
+.hands-header-status { display: flex; }
+/* Fullscreen idle: toolbar, Display card and cursor fade away; any mouse or key input brings them back. */
+/* Start/Stop sits at the viewer's top centre while fullscreen (it lives in the header otherwise). */
+.hands-view-run { position: absolute; z-index: 2; top: calc(var(--xrb-space-stack) - 3px); left: 50%; transform: translateX(-50%); display: flex; }
+.hands-view-run:empty { display: none; }
+.hands-view-stats { display: flex; pointer-events: auto; }
+.hands-view-stats:empty { display: none; }
+.hands-view-tools, .hands-display-widget, .hands-view-run { transition: opacity .3s; }
+.hands-viewport[data-idle] .hands-view-tools, .hands-viewport[data-idle] .hands-display-widget, .hands-viewport[data-idle] .hands-view-run { opacity: 0; pointer-events: none; }
+.hands-viewport[data-idle] .hands-view-tools * { pointer-events: none !important; }
+.hands-viewport[data-idle], .hands-viewport[data-idle] canvas { cursor: none; }
+/* Display: a small always-open card in the viewer's bottom-right corner, its checkboxes showing what is drawn. */
+.hands-display-widget { position: absolute; right: var(--xrb-space-stack); bottom: var(--xrb-space-stack); z-index: 1; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--line); border-radius: 8px; }
+.hands-display-choices { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+/* Plain checkboxes, left-aligned under the title. */
+.hands-display-check { display: flex; align-items: center; gap: 8px; font-size: .82rem; font-weight: 500; cursor: pointer; white-space: nowrap; }
+/* The title row collapses the card; collapsed it shows how many layers are on, the chevron points the way it opens. */
+button.hands-display-head, button.hands-display-head:hover:not(:disabled) { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 0; padding: 0; border: 0; background: transparent; box-shadow: none; color: inherit; cursor: pointer; }
+.hands-display-count { font-size: .78rem; font-weight: 600; color: var(--fg); }
+.hands-display-widget:not([data-collapsed]) .hands-display-count { display: none; }
+.hands-display-chevron { margin-left: auto; padding-left: 12px; }
+.hands-display-chevron::after { content: ""; display: block; width: 5px; height: 5px; border: solid var(--muted); border-width: 0 2px 2px 0; transform: translateY(-2px) rotate(45deg); transition: transform .15s; }
+.hands-display-widget[data-collapsed] .hands-display-chevron::after { transform: translateY(1px) rotate(-135deg); }
+.hands-display-widget[data-collapsed] .hands-display-choices { display: none; }
+.hands-header-run { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; }
 .hands-view-tools > .dropdown { width: auto; }
 .hands-viewport .xrb-media-empty { pointer-events: none; }
 .hands-view-error { position: absolute; bottom: var(--xrb-space-stack); left: var(--xrb-space-stack); right: var(--xrb-space-stack); }

@@ -101,7 +101,7 @@ test('release-capable publishers get Update, a confirmed secondary Unpublish, Ne
   assert.match(sharedCss, /\.xrb-status-dot\.warn \{[^}]*background: var\(--warn\)/, 'deployed but unreachable destinations use the warning tone');
   assert.match(css, /#act-unpublish\.publication-secondary, #act-delete-release\.publication-secondary \{ width: auto; color: var\(--err\); \}/);
   assert.match(css, /\.publication-version \{ display: grid; grid-template-columns: minmax\(145px, \.85fr\) minmax\(145px, \.85fr\);/, 'Next version and Live version share one row');
-  assert.match(css, /@media \(max-width: 720px\)[\s\S]*\.publication-version \{ grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\); \}/, 'narrow layouts keep both version fields reachable');
+  assert.doesNotMatch(css, /@media \(max-width: 720px\)/, 'below the two-column minimum the page scrolls instead of restacking fields');
   assert.doesNotMatch(css, /release-row|release-history/, 'the old history block styles are gone');
   assert.match(sharedCss, /\.xrb-option-detail \{ color: var\(--muted\); font-size: \.76rem; font-weight: 400;/, 'release creation time is smaller, lighter detail text');
   assert.match(shared, /if\(option\.detail\)\{const detail=document\.createElement\('span'\);detail\.className='xrb-option-detail'/, 'the shared dropdown renders option details');

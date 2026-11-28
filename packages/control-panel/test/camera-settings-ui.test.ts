@@ -33,25 +33,24 @@ test('project 2D mode replaces global camera settings and keeps the remaining co
   assert.doesNotMatch(html, /id="project-heading"|>Activity<\/h2>/);
   assert.match(app, /const workflowTabs = m \? `<div class="project-workflow-tabs xrb-tabs"[\s\S]*data-surface="display"[\s\S]*>Develop<[\s\S]*data-surface="build"[\s\S]*>Build</);
   assert.match(app, /platformField\(m, surface\)/);
-  assert.match(app, /const controls = m && displaySurface[\s\S]*const settings =[\s\S]*controls\?\.view[\s\S]*controls\?\.dev/);
+  assert.match(app, /const controls = m && displaySurface[\s\S]*const displayOptions = displaySurface \? `\$\{controls\?\.view[\s\S]*controls\?\.dev[\s\S]*const settings =/);
   assert.match(app, /const buildSettings = !displaySurface[\s\S]*id="build-settings" class="xrb-stack/);
   assert.match(app, /const surfaceKey = \(\) => 'panel\.surface'/);
   assert.match(app, /surfaceChoiceKey[\s\S]*selectProjectSurface[\s\S]*options\.includes\(current\) \? current[\s\S]*savePlatformChoice[\s\S]*animateDetailHeights\(\(\) => renderDetail\(true\)\)/);
   assert.match(style, /\.project-workflow-tabs \{ margin-bottom: 4px; \}/);
-  assert.match(style, /\.project-hero-top \{ grid-template-columns: auto minmax\(0, 1fr\); grid-template-rows: auto;[^}]*align-items: center; \}/, 'icon, title and actions share one identity line');
-  assert.match(style, /\.project-hero \.icon-btn \{ grid-column: 1; grid-row: 1; align-self: center; width: 26px; height: 26px;/, 'the hero icon matches the sticky app-bar icon size');
+  assert.doesNotMatch(style, /\.project-hero-top \{/, 'the app icon and name live in the header, not a title row in the card');
   assert.match(design, /\.xrb-tabs\.xrb-tabs-compact/);
   assert.match(app, /const setDevMode = \(p, on\) => setAppRunOption\('dev', p, on\)/);
   assert.match(app, /setAppRunOption\('fullscreen', p, e\.target\.checked\)/);
   assert.match(app, /setAppRunOption\('flat', p, e\.target\.checked\)/);
   assert.doesNotMatch(app, /removeItem\(legacyRunOptionKey\('flat'/);
-  assert.match(app, /class="settings-tools"[\s\S]*controls\?\.view[\s\S]*controls\?\.dev/);
+  assert.match(app, /displayOptions \? `<div class="settings-tools"><span class="display-options">\$\{displayOptions\}/);
   assert.match(app, /const manifestButton = m[\s\S]*id="open-manifest"[\s\S]*aria-label="Open JSON"/);
   assert.match(app, /<div class="hero-actions">\$\{projectActions\}<\/div><\/div>/, 'Folder and Open JSON sit at the identity row\'s right edge');
   assert.match(app, /const actionRow = heroButton \? `<div class="project-actions">\$\{heroButton\}<\/div>` : '';/, 'the primary action row sits below the surface content');
-  assert.match(app, /data-surface="build"[\s\S]*\$\{publicationLink \? `<span class="spacer"><\/span>\$\{publicationLink\}` : ''\}/);
+  assert.match(app, /data-surface="build"[\s\S]*<span class="spacer"><\/span>\$\{publicationLink\}<div class="hero-actions">/);
   assert.match(app, /const projectActions =[\s\S]*id="out-path"[\s\S]*id="open-dir"[\s\S]*\$\{manifestButton\}/);
-  assert.match(app, /renderProjectHero\(el, `<section class="card hero project-hero">\$\{top\}<div class="xrb-section-divider project-surface-content">\$\{settings\}\$\{buildSettings\}\$\{actionRow\}<\/div><\/section>`, p\.id\)/);
+  assert.match(app, /renderProjectHero\(el, `<section class="card hero project-hero">\$\{top\}<div class="project-surface-content" \$\{lockedByRun[\s\S]*?\}>\$\{settings\}\$\{buildSettings\}\$\{actionRow\}<\/div><\/section>`, p\.id\)/);
   assert.match(app, /view: `\$\{fullBox\}\$\{viewBox\}`/);
   assert.match(app, /3D displays always run fullscreen\.[\s\S]*checked disabled> Fullscreen/);
   assert.match(html, /id="display-menu"[\s\S]*data-act="refresh-displays"[^>]*>Refresh displays/);
@@ -69,7 +68,7 @@ test('project 2D mode replaces global camera settings and keeps the remaining co
   assert.doesNotMatch(app, /openPreviewTarget|window\.open/);
   assert.match(app, /function startManagedRun\(p, mode, flat, request\)[\s\S]*phase: 'starting'[\s\S]*await request\(\)[\s\S]*await loadRun\(\)/);
   assert.match(app, /function stopManagedRun\(\)[\s\S]*phase: 'stopping'[\s\S]*api\('POST', '\/api\/run\/stop'\)[\s\S]*await loadRun\(\)/);
-  assert.match(app, /function runButtons\(p, busy\)[\s\S]*phase === 'starting'[\s\S]*launching \|\| stopping \? 'disabled'[\s\S]*Launching…[\s\S]*Stopping…/);
+  assert.match(app, /function runButtons\(p, busy\)[\s\S]*phase === 'starting'[\s\S]*launching \|\| stopping \? 'disabled'[\s\S]*'Launching'[\s\S]*'Stopping'/);
   assert.match(app, /startManagedRun\(p, mode, flat[\s\S]*projectUrl\(p\.id\)\}\/preview`[\s\S]*startManagedRun\(p, mode, flat[\s\S]*projectUrl\(p\.id\)\}\/run`/);
   assert.doesNotMatch(app, /Enter fullscreen|requestFullscreen/);
   assert.match(app, /const monitor = Math\.max[\s\S]*projectUrl\(p\.id\)\}\/preview`[\s\S]*mode, flat, fullscreen, monitor/);
@@ -89,9 +88,8 @@ test('project 2D mode replaces global camera settings and keeps the remaining co
   assert.doesNotMatch(style, /\.display-field|\.refresh-displays/);
   assert.doesNotMatch(style, /settings-camera-field/);
   assert.match(design, /\.xrb-app-bar, \.top[^}]*z-index: 4/);
-  assert.match(html, /id="run-dock"[\s\S]*class="run-project"[\s\S]*class="name"[\s\S]*<button type="button" class="action-button"/,
-    'the sticky project action follows the selected app name');
-  assert.match(style, /\.run-dock button \{ width: 62px; min-width: 62px; height: 30px;/, 'the sticky Run action keeps a compact fixed width');
-  assert.match(app, /const pending = state\.run\?\.phase === 'starting' \|\| state\.run\?\.phase === 'stopping';[\s\S]*btn\.textContent = pending \? '\.\.\.' : src\.id === 'act-stop' \? 'Stop' : 'Run'/,
-    'the sticky action uses Run, ..., and Stop without resizing');
+  assert.match(html, /id="run-dock"[\s\S]*class="run-project"><button type="button" class="xrb-run-button"><\/button>/,
+    'the header holds only the selected app\'s Start / Stop icon');
+  assert.match(app, /setRunButtonLabel\(btn, running \? 'Stop' : 'Start'\);[\s\S]*btn\.disabled = pending \|\|/,
+    'the header icon flips at once and stays disabled while starting or stopping, never showing "..."');
 });

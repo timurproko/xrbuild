@@ -12,6 +12,7 @@ const icons=Object.freeze({
  stop:'<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1" fill="currentColor"/></svg>',
  search:'<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.4 10.4 14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
  close:'<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+ presets:'<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2.5 4h4M9.5 4h4M2.5 8h7M12.5 8h1M2.5 12h2M7.5 12h6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="4" r="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11" cy="8" r="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="12" r="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
  check:'<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
  more:'<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.25" fill="currentColor"/><circle cx="8" cy="8" r="1.25" fill="currentColor"/><circle cx="12.5" cy="8" r="1.25" fill="currentColor"/></svg>',plus:'<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
  code:'<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 2.5h-.75c-1 0-1.5.5-1.5 1.5v2.25c0 1-.5 1.5-1.5 1.5 1 0 1.5.5 1.5 1.5V12c0 1 .5 1.5 1.5 1.5H6M10 2.5h.75c1 0 1.5.5 1.5 1.5v2.25c0 1 .5 1.5 1.5 1.5-1 0-1.5.5-1.5 1.5V12c0 1-.5 1.5-1.5 1.5H10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -204,4 +205,26 @@ export function installDropdowns(root=document){
  const pointer=e=>{const scrollbar=e.target.closest?.('.xrb-scrollbar');const scrollingList=scrollbar&&open?.list.id===scrollbar.getAttribute('aria-controls');if(open?.a.multiple&&!open.owner.contains(e.target)&&!e.target.closest?.('.dropdown-list')&&!scrollingList)closeDropdown();};
  const key=e=>{const button=e.target.closest?.('.dropdown-btn');if(button&&!open&&['ArrowDown','ArrowUp','Enter',' '].includes(e.key)){e.preventDefault();openDropdown(button.closest('.dropdown'));return;}if(!open)return;const enabled=[...open.list.querySelectorAll('[role="option"]:not(:disabled)')];if(e.key==='ArrowDown'){e.preventDefault();open.index=(open.index+1)%enabled.length;focusOption(open);}else if(e.key==='ArrowUp'){e.preventDefault();open.index=(open.index-1+enabled.length)%enabled.length;focusOption(open);}else if(e.key==='Home'){e.preventDefault();open.index=0;focusOption(open);}else if(e.key==='End'){e.preventDefault();open.index=enabled.length-1;focusOption(open);}else if(['Enter',' '].includes(e.key)){e.preventDefault();choose(open,document.activeElement);}else if(['Escape','Tab'].includes(e.key)){if(e.key==='Escape')e.preventDefault();const owner=open.owner;closeDropdown(e.key!=='Escape');if(e.key==='Escape')owner.querySelector('.dropdown-btn').focus();}};
  const scroll=e=>{if(open&&!open.list.contains(e.target))closeDropdown();},resize=()=>closeDropdown();root.addEventListener('click',click);root.addEventListener('pointerdown',pointer,true);root.addEventListener('keydown',key);addEventListener('scroll',scroll,true);addEventListener('resize',resize);return()=>{closeDropdown();root.removeEventListener('click',click);root.removeEventListener('pointerdown',pointer,true);root.removeEventListener('keydown',key);removeEventListener('scroll',scroll,true);removeEventListener('resize',resize);};
+}
+
+/** Lets the person drag the gap beside a workspace grid's sidebar to resize it (Apps, Plugins, Settings share one width). */
+/** Start/Stop style buttons: a play or stop icon before the label; textContent stays the label. */
+export function setRunButtonLabel(button,label){const icon=/^stop/i.test(label)?'stop':/^(start|take over)/i.test(label)?'play':'reset';const text=String(label).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));button.innerHTML=`${iconSvg(icon)}<span class="xrb-visually-hidden">${text}</span>`;button.classList.add('xrb-run-button');button.setAttribute('aria-label',String(label));button.dataset.tooltip=String(label);}
+export function mountSidebarSplitter(grid,{key='xrb.sidebar.width',min=220}={}){
+  if(!grid||grid.querySelector(':scope > .xrb-sidebar-splitter'))return;
+  const splitter=document.createElement('div');splitter.className='xrb-sidebar-splitter';splitter.setAttribute('role','separator');splitter.setAttribute('aria-orientation','vertical');splitter.setAttribute('aria-label','Resize sidebar');splitter.tabIndex=0;
+  const sidebar=()=>grid.querySelector(':scope > .xrb-workspace-sidebar');
+  const max=()=>Math.max(min,Math.round(grid.clientWidth*.4));
+  const apply=(width,save=false)=>{const next=Math.round(Math.min(max(),Math.max(min,width)));grid.style.setProperty('--xrb-sidebar-col',`${next}px`);if(save)try{localStorage.setItem(key,String(next));}catch{}return next;};
+  try{const saved=Number(localStorage.getItem(key));if(Number.isFinite(saved)&&saved>0)apply(saved);}catch{}
+  splitter.addEventListener('pointerdown',event=>{
+    if(event.button!==0)return;event.preventDefault();splitter.setPointerCapture(event.pointerId);
+    const startX=event.clientX,startWidth=sidebar()?.getBoundingClientRect().width??min;document.body.classList.add('xrb-sidebar-resizing');
+    const move=e=>apply(startWidth+(e.clientX-startX));
+    const end=e=>{splitter.removeEventListener('pointermove',move);splitter.removeEventListener('pointerup',end);splitter.removeEventListener('pointercancel',end);document.body.classList.remove('xrb-sidebar-resizing');apply(startWidth+(e.clientX-startX),true);};
+    splitter.addEventListener('pointermove',move);splitter.addEventListener('pointerup',end);splitter.addEventListener('pointercancel',end);
+  });
+  splitter.addEventListener('keydown',event=>{const step=event.shiftKey?64:16,width=sidebar()?.getBoundingClientRect().width??min;if(event.key==='ArrowLeft'){event.preventDefault();apply(width-step,true);}else if(event.key==='ArrowRight'){event.preventDefault();apply(width+step,true);}});
+  splitter.addEventListener('dblclick',()=>{grid.style.removeProperty('--xrb-sidebar-col');try{localStorage.removeItem(key);}catch{}});
+  grid.append(splitter);
 }
