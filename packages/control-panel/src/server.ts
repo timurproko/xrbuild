@@ -36,6 +36,7 @@ import { refreshManifest } from './embedded-source-refresh.ts';
 import { projectWritableRoot, withEmbeddedProjectLock, embeddedProjectRoot, embeddedManifestRevision } from './embedded-project-state.ts';
 import { effectiveProjectOutput, effectiveOutputRoot } from './embedded-project-output.ts';
 import { discoverProjectCatalog } from './extension-catalog.ts';
+import { projectComponentGroups, projectComponentErrors } from './component-settings.ts';
 import { bundledBuildPlan, resolveProjectOutput, requireProjectOutput, projectPreviewRoute, projectBuildRoot } from './project-build.ts';
 import { copyBundledProject, projectFile, projectPath } from './embedded-projects.ts';
 import { projectIconSource } from './project-icons.ts';
@@ -249,6 +250,7 @@ export async function describeProject(projects: string, p: Project, panel: Panel
     section: p.section,
     dir: path.relative(await fs.realpath(p.readOnly ? panel.repo : projects), p.dir).split(path.sep).join('/'),
     manifest: m,
+    componentGroups: m ? await projectComponentGroups(panel.repo, panel.workspace, projects, m) : [],
     errors: [...p.errors, ...(p.stateProblem ? [{ field: '', message: p.stateProblem }] : []), ...(runSettings?.problem ? [{ field: '', message: `${runSettings.problem} (${projectRunSettingsFile(panel.repo, panel.workspace, p)})` }] : [])],
     manifestMtimeMs: p.manifestMtimeMs,
     manifestRevision: p.origin === 'bundled' ? embeddedManifestRevision(p, runSettings?.value?.revision) : undefined,
@@ -624,6 +626,8 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       if (method === 'PUT' && rest[0] === 'manifest' && rest.length === 1) {
         const body = await readJson<{ manifest?: Manifest; mtimeMs?: number; revision?: string; confirm?: string[] }>(req);
         if (!body.manifest) throw new HttpError(400, 'manifest missing');
+        const componentErrors = await projectComponentErrors(core, workspace, projects, body.manifest);
+        if (componentErrors.length) return sendJson(res, 400, { error: 'invalid component settings', fields: componentErrors });
         const publicationErrors = panel.publicationErrors(body.manifest);
         if (publicationErrors.length) return sendJson(res, 400, { error: 'invalid publication settings', fields: publicationErrors });
         const editTime = p.manifestMtimeMs;

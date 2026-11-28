@@ -1672,6 +1672,7 @@ const choicesForSurface = (p, surface) => platformChoices(p.manifest, state.plug
 function projectSurface(p) {
   const current = platformChoiceOf(p.manifest);
   const stored = localStorage.getItem(surfaceKey()) ?? localStorage.getItem(`panel.surface.${p.id}`);
+  if (stored === 'components' && p.componentGroups?.length) return 'components';
   if (stored === 'publish' && p.manifest?.kind === 'app' && hasProjectPublishers(p)) return 'publish';
   const saved = stored;
   if ((saved === 'display' || saved === 'build') && choicesForSurface(p, saved).includes(current)) return saved;
@@ -1680,6 +1681,12 @@ function projectSurface(p) {
   return 'display';
 }
 async function selectProjectSurface(p, surface) {
+  if (surface === 'components') {
+    if (!p.componentGroups?.length) return;
+    localStorage.setItem(surfaceKey(), surface);
+    animateDetailHeights(() => renderDetail(true));
+    return;
+  }
   if (surface === 'publish') {
     if (!hasProjectPublishers(p)) return;
     localStorage.setItem(surfaceKey(), surface);
@@ -1822,17 +1829,19 @@ function renderDetail(force = false) {
   const surface = m ? projectSurface(p) : 'display';
   const displaySurface = surface === 'display';
   const publishSurface = surface === 'publish';
+  const componentsSurface = surface === 'components';
   const headset = isHeadset(m);
   const packagedHeadset = headset && !!m?.platform;
   const controls = m && displaySurface ? (packagedHeadset ? null : headset ? headsetButtons(p, busy) : runButtons(p, busy)) : null;
   const packageControl = m && surface === 'build' ? packageAction(p) : { button: '', details: '' };
   const publicationControl = m && publishSurface ? publicationFields(p) : { button: '', fields: '' };
-  const heroButton = displaySurface ? controls?.button ?? '' : publishSurface ? publicationControl.button : packageControl.button;
+  const heroButton = componentsSurface ? '' : displaySurface ? controls?.button ?? '' : publishSurface ? publicationControl.button : packageControl.button;
   const displayChoices = m ? choicesForSurface(p, 'display') : [];
   const buildChoices = m ? choicesForSurface(p, 'build') : [];
   const publicationLink = m ? publicationHeroLink(p) : '';
   const workflowTabs = m ? `<div class="project-workflow-tabs xrb-tabs" role="tablist" aria-label="Project workflow" data-xrb-tabs-id="project-workflow-${p.id}">
       <button type="button" class="xrb-tab" role="tab" data-surface="display" data-view="display" aria-selected="${displaySurface}" ${displaySurface ? 'data-active' : ''} ${displayChoices.length ? '' : 'disabled'}>Develop</button>
+      ${p.componentGroups?.length ? `<button type="button" class="xrb-tab" role="tab" data-surface="components" aria-selected="${componentsSurface}" ${componentsSurface ? 'data-active' : ''}>Components</button>` : ''}
       ${hasProjectPublishers(p) ? `<button type="button" class="xrb-tab" role="tab" data-surface="publish" data-view="publish" aria-selected="${publishSurface}" ${publishSurface ? 'data-active' : ''}>Publish</button>` : ''}
       <button type="button" class="xrb-tab" role="tab" data-surface="build" data-view="build" aria-selected="${surface === 'build'}" ${surface === 'build' ? 'data-active' : ''} ${buildChoices.length ? '' : 'disabled'}>Build</button>
       ${publicationLink ? `<span class="spacer"></span>${publicationLink}` : ''}
@@ -1882,7 +1891,8 @@ function renderDetail(force = false) {
   const runtimeSettings = displaySurface
     ? `${displayField(m, { monitorsOnly: headset })}${inputField(m)}`
     : '';
-  const settings = publishSurface ? '' : `<form id="settings">
+  const componentFields = componentsSurface ? p.componentGroups.map(group => `<div class="xrb-stack"><h2 class="xrb-section-label">${esc(group.label)}</h2><div class="settings-grid">${Object.entries(group.parameters).map(([name, parameter]) => field(esc(parameter.label), `componentSettings.${group.id}.${name}`, m.componentSettings?.[group.id]?.[name] ?? group.values[name], { options: parameter.options.map(option => option.value), optionLabels: Object.fromEntries(parameter.options.map(option => [option.value, option.label])), raw: true })).join('')}</div></div>`).join('') : '';
+  const settings = componentsSurface ? `<form id="settings" class="xrb-stack">${componentFields}</form>` : publishSurface ? '' : `<form id="settings">
       <div class="row settings-toolbar">${m.kind === 'app' ? platformField(m, surface) : ''}<div class="settings-tools"><span class="display-options">${displaySurface ? `${controls?.view ?? ''}${controls?.dev ?? ''}` : ''}</span></div></div>
       ${runtimeSettings ? `<div class="settings-grid runtime-settings">${runtimeSettings}</div>` : ''}
       <span class="field-error">${esc(state.fieldErrors[''] ?? '')}</span>
@@ -2214,6 +2224,12 @@ async function saveSettings(p, form, changedName) {
   const previousPublication = p.publication;
   // Each form saves only its own fields. The other card, project name, scripts and versions stay intact.
   let m = structuredClone(p.manifest);
+  if (changedName?.startsWith('componentSettings.')) {
+    const group = p.componentGroups?.find(group => Object.keys(group.parameters).some(name => changedName === `componentSettings.${group.id}.${name}`));
+    if (!group) return;
+    const name = Object.keys(group.parameters).find(name => changedName === `componentSettings.${group.id}.${name}`);
+    m.componentSettings = { ...m.componentSettings, [group.id]: { ...m.componentSettings?.[group.id], [name]: get(changedName) } };
+  }
   if (changedName === 'platform-choice') m = selectPlatform(m, get('platform-choice'));
   if (changedName === 'display') {
     const display = get('display');

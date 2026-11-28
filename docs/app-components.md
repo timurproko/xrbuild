@@ -8,7 +8,7 @@ New projects, UI Kit, Launcher and Hello Cube have two entries:
 | `src/index.ts` | Export components and props, with no bootstrap, timer, network or device side effects |
 | `src/icon.js` or `src/icon.ts` | Preserve the existing independent 3D icon export |
 
-A public entry must not import the run entry, global CSS/bootstrap or code that mounts on import. Construct disposable objects in committed effects or declarative scene elements, not module scope or abandoned render initializers. Each mounted instance owns its values and resources. Use ordinary props and providers for composition; this change adds no app-settings registry, persistence or control-panel tab.
+A public entry must not import the run entry, global CSS/bootstrap or code that mounts on import. Construct disposable objects in committed effects or declarative scene elements, not module scope or abandoned render initializers. Each mounted instance owns its values and resources. Use ordinary props and providers for composition. Apps can optionally declare exposed library parameters for per-project control-panel settings as described below.
 
 ## Importing another app
 
@@ -64,7 +64,7 @@ Constructor options are stable for an instance; use a React key for intentional 
 
 UI Kit supplies `default` (the unchanged rounded reference) and `chamfer` (clipped, bevelled/inset satin meshes), covering every control, variant and primitive. Their layouts, target/contact bounds, timing, sounds and interaction traces are identical. Only visuals differ. See the [theme contract and selection guide](../packages/ui-kit/README.md#visual-theme-contract).
 
-Each UI Kit-consuming app exports a plain, side-effect-free `uiKitTheme` declaration with `defaultTheme: 'default'` from its public entry. This is only a default ID, not an exposed-settings declaration, storage policy or registry. The app's run entry uses the same scene boundary as composition:
+Each UI Kit-consuming app exports a plain, side-effect-free `uiKitTheme` declaration with `defaultTheme: 'default'` from its public entry. This remains a default ID; the separate manifest declaration below identifies exposed parameters and consumers. The app's run entry uses the same scene boundary as composition:
 
 ```tsx
 import { UiKitThemeProvider } from '@xr-build/ui-kit-app';
@@ -78,7 +78,7 @@ import { LauncherScene, uiKitTheme } from '@scene/launcher';
 <UiKitThemeProvider theme="chamfer"><LauncherScene /></UiKitThemeProvider>;
 ```
 
-`UiKitSceneProps` and `LauncherSceneProps` accept an optional theme ID or complete immutable definition. Resolution is explicit control override, nearest explicit scene/provider choice, inherited choice, app-declared fallback, then library Default. A scene's fallback never masks a surrounding explicit provider. Runtime updates use the existing mount's `update` with the same component type, not a new key or SDK runtime. They retain values, capture, modal/axis state and Launcher's catalog/page/accepted navigation deadline while replacing only owned visuals. The future settings tab can read the plain default ID and drive this existing prop/provider; this task adds no panel UI, persistence, query switch or settings-discovery mechanism.
+`UiKitSceneProps` and `LauncherSceneProps` accept an optional theme ID or complete immutable definition. Resolution is explicit control override, nearest explicit scene/provider choice, inherited choice, app-declared fallback, then library Default. A scene's fallback never masks a surrounding explicit provider. Runtime updates use the existing mount's `update` with the same component type, not a new key or SDK runtime. They retain values, capture, modal/axis state and Launcher's catalog/page/accepted navigation deadline while replacing only owned visuals. The optional Components settings surface drives this existing prop/provider without changing rendering ownership.
 
 Theme-owned geometry can change, so construction-time mesh mutations are not a persistent theme override. Stable control hosts, explicit supported visual options and borrowed maps/children retain their ownership. Standalone app icons and app-specific branding/environment remain unchanged.
 
@@ -98,6 +98,8 @@ Consumers explicitly declare origin-qualified library identities and parameter-t
   }
 }
 ```
+
+The per-app **Components** tab appears directly after **Develop** only for consumers of exposed parameters. Fields are grouped by library and autosave through the normal project settings writer/API. Choices live in the consuming manifest's `componentSettings`, keyed by library identity and parameter, including user-owned effective settings for bundled apps. Saved values override consumer defaults, which override library defaults; other consumers and installed library sources are unchanged.
 
 Discovery reads data only: no app entry executes, and a `workspace:` library never silently resolves to a `bundled:` library. Another library or choice parameter needs only declarations, not library-specific panel code. Existing source aliases still determine which components are bundled.
 

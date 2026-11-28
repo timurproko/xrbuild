@@ -37,7 +37,7 @@ export function componentMetadataErrors(value: ComponentMetadata): { field: stri
     if (!object(library) || !object(library.parameters)) fail('componentLibrary');
     else for (const [name, p] of Object.entries(library.parameters)) {
       if (!key(name) || !object(p) || p.type !== 'choice' || !text(p.label) || !Array.isArray(p.options) || !p.options.length
-        || p.options.some(o => !object(o) || !text(o.value) || !text(o.label))
+        || p.options.some(o => !object(o) || !text(o.value) || o.value.includes('|') || !text(o.label))
         || new Set(p.options.map(o => o.value)).size !== p.options.length || !p.options.some(o => o.value === p.default)) fail(`componentLibrary.parameters.${name}`);
     }
   }

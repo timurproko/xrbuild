@@ -23,7 +23,9 @@ test('Publish visibility uses installed publishers, not configured/stale destina
 });
 
 test('empty capability UI hides Publish/All and workflow switches retain the title without flicker', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
-  const workspace = await fs.mkdtemp(path.join(REPO, '.artifacts/workflow-ui-'));
+  const artifacts = process.env.XRB_TEST_ROOT ?? path.join(REPO, '.artifacts');
+  await fs.mkdir(artifacts, { recursive: true });
+  const workspace = await fs.mkdtemp(path.join(artifacts, 'workflow-ui-'));
   const project = path.join(workspace, 'projects/unsorted/sample'); await fs.mkdir(project, { recursive: true });
   await fs.writeFile(path.join(project, 'xrb-project.json'), JSON.stringify({ name: 'Stable Sample', kind: 'app', entry: 'dist' }));
   const core = path.join(workspace, 'core'); await fs.mkdir(core);

@@ -9,11 +9,11 @@
 
 ## 2. Conditional Components settings save choices in the consuming project
 
-- [ ] 2.1 Add the Components surface directly after Develop using existing tab/row/label/select helpers and library grouping; verify browser assertions for tab order, one UI Kit Theme row and absence on non-consumers or empty libraries.
-- [ ] 2.2 Add project-scoped `componentSettings` persistence through the current writer/API and declaration-aware validation; verify targeted roundtrip, independent-consumer, unrelated-field preservation, rapid-save and stale-revision tests.
-- [ ] 2.3 Carry declarations and choices through bundled effective settings, copy/refresh portability and existing locks without product writes; verify focused bundled-project settings tests.
-- [ ] 2.4 Keep platform selection and existing workflow actions unchanged when switching Components; verify existing-surface browser assertions, unchanged-view screenshots and no new messages, buttons, hints or confirmations.
-- [ ] 2.5 Document the tab/save/default behavior and confirm the text matches the implemented panel labels and persistence tests.
+- [x] 2.1 Add the Components surface directly after Develop using existing tab/row/label/select helpers and library grouping; verify browser assertions for tab order, one UI Kit Theme row and absence on non-consumers or empty libraries.
+- [x] 2.2 Add project-scoped `componentSettings` persistence through the current writer/API and declaration-aware validation; verify targeted roundtrip, independent-consumer, unrelated-field preservation, rapid-save and stale-revision tests.
+- [x] 2.3 Carry declarations and choices through bundled effective settings, copy/refresh portability and existing locks without product writes; verify focused bundled-project settings tests.
+- [x] 2.4 Keep platform selection and existing workflow actions unchanged when switching Components; verify existing-surface browser assertions, unchanged-view screenshots and no new messages, buttons, hints or confirmations.
+- [x] 2.5 Document the tab/save/default behavior and confirm the text matches the implemented panel labels and persistence tests.
 
 ## 3. Managed runtime settings drive Launcher theme props without restart
 
