@@ -86,9 +86,14 @@ test('top-level Start/Stop and SDK pinch/drag use actual native frames, preserve
       await wait('livePage.view.profile.offsetMm.x===15');
       assert.ok((await evaluate('ends')).includes('lost')); assert.equal((await evaluate('ends')).includes('release'), false);
       await wait('livePage.view.testState.pinch.held && livePage.view.testState.drag.held');
-      await evaluate(`(()=>{const s=document.querySelector('#hands-provider');s.value='core/webxr';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      assert.equal(await evaluate(`Array.from(document.querySelector('#hands-provider').options).some(o=>o.value==='core/webxr')`), false, 'unsaved built-ins are intentionally absent from the picker');
+      await evaluate(`(()=>{const s=document.querySelector('#hands-provider');s.value='';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await wait('livePage.snapshot.selected===null');
+      assert.equal(await evaluate('livePage.session.recordingSource().source.id'), 'fixture', 'autosaving no source never replaces active acquisition');
+      // A saved app-only source is supported, but must not be selected through a nonexistent option.
+      state = await readHandsState(REPO, workspace); await saveHandsState(REPO, workspace, { owner: 'core', id: 'webxr' }, state.revision);
       await wait(`livePage.snapshot.selected?.id==='webxr'`);
-      assert.equal(await evaluate('livePage.session.recordingSource().source.id'), 'fixture', 'autosaving another source never replaces active acquisition');
+      assert.equal(await evaluate('livePage.session.recordingSource().source.id'), 'fixture', 'an externally saved app-only source also leaves active acquisition unchanged');
       assert.match(await evaluate(`document.querySelector('#hands-live-state').textContent`), /Fixture input/);
       await evaluate(`document.querySelector('#hands-start-stop').click()`);
       await wait(`document.querySelector('#hands-start-stop').textContent==='Start'`);
