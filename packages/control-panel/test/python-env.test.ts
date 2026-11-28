@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { ensurePythonEnv, pythonDeclaration, pythonEnvPlan, pythonRoot, UV } from '../src/python-env.ts';
+import { ensurePythonEnv, installPythonRuntime, pythonDeclaration, pythonEnvPlan, pythonRuntimePlan, pythonRoot, UV } from '../src/python-env.ts';
 import { meshSetupPlan, installMeshSetup } from '../src/hand-mesh-setup.ts';
 
 const wheel = { name: 'numeric', version: '1.0.0', sha256: 'a'.repeat(64), bytes: 1000, publisher: 'Example (PyPI)', licence: 'BSD-3-Clause' };
@@ -11,9 +11,13 @@ const declaration = { version: '3.12.12', wheels: [wheel] };
 
 test('a python declaration is an exact version and hash-locked wheels, nothing else', () => {
   assert.deepEqual(pythonDeclaration(declaration), declaration);
+  const withSet = { ...declaration, sets: { accelerated: { index: 'https://packages.example/whl/accel', wheels: [{ ...wheel, version: '1.0.0+accel' }] } } };
+  assert.deepEqual(pythonDeclaration(withSet), withSet, 'named sets may use their own https index and local version tags');
   for (const bad of [null, [], {}, { ...declaration, version: '3.12' }, { ...declaration, version: '>=3.12' }, { ...declaration, wheels: [] },
     { ...declaration, extra: 1 }, { ...declaration, wheels: [{ ...wheel, sha256: 'abc' }] }, { ...declaration, wheels: [{ ...wheel, url: 'https://example.invalid' }] },
-    { ...declaration, wheels: [wheel, { ...wheel, name: 'NUMERIC' }] }, { ...declaration, wheels: [{ ...wheel, bytes: 0 }] }])
+    { ...declaration, wheels: [wheel, { ...wheel, name: 'NUMERIC' }] }, { ...declaration, wheels: [{ ...wheel, bytes: 0 }] },
+    { ...declaration, sets: { default: { wheels: [wheel] } } }, { ...declaration, sets: { gpu: { index: 'http://insecure.example', wheels: [wheel] } } },
+    { ...declaration, sets: { gpu: { wheels: [] } } }, { ...declaration, sets: { GPU: { wheels: [wheel] } } }])
     assert.throws(() => pythonDeclaration(bad), /Invalid python declaration/, JSON.stringify(bad));
 });
 
@@ -61,7 +65,7 @@ export async function status() { return { cpu: { installed: false } }; }
 export async function install(options) { globalThis.pythonInstall = options; }`);
     const core = path.resolve(import.meta.dirname, '../../..');
     const plan = await meshSetupPlan(core, workspace, 'workspace:surface');
-    assert.equal(plan.python, true);
+    assert.deepEqual(plan.python, { placement: 'env' });
     assert.match(plan.consent, /^c0ffee\+[a-f0-9]{16}$/, 'consent covers the plugin plan and its Python lock');
     assert.deepEqual(plan.items.map(i => i.name), ['uv', 'CPython', 'numeric']);
     assert.deepEqual(await fs.readdir(path.join(home, '.xrbuild')).catch(() => []), [], 'planning creates nothing');
@@ -81,4 +85,35 @@ export async function install(options) { globalThis.pythonInstall = options; }`)
     delete (globalThis as any).pythonInstall;
     await fs.rm(home, { recursive: true, force: true });
   }
+});
+
+test('runtime placement copies the exact CPython into the plugin folder and installs one wheel set there', async () => {
+  const userRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'xrb-python-runtime-')), dest = path.join(userRoot, 'runtime');
+  try {
+    const d = pythonDeclaration({ ...declaration, sets: { accelerated: { index: 'https://packages.example/whl/accel', wheels: [{ ...wheel, name: 'fastmath' }] } } });
+    const uv = path.join(pythonRoot(userRoot), `uv-${UV.version}`, 'uv.exe');
+    await fs.mkdir(path.dirname(uv), { recursive: true }); await fs.writeFile(uv, 'fake-not-executed');
+    const managed = path.join(pythonRoot(userRoot), 'cpython', 'cpython-3.12.12-windows-x86_64-none');
+    assert.deepEqual((await pythonRuntimePlan(d, { set: 'accelerated', interpreter: true, userRoot })).items.map(i => i.name), ['CPython', 'fastmath']);
+    const calls: string[][] = [];
+    const run = async (_program: string, args: string[]) => {
+      calls.push(args);
+      if (args[0] === 'python' && args[1] === 'install') { await fs.mkdir(path.join(managed, 'Lib'), { recursive: true }); await fs.writeFile(path.join(managed, 'python.exe'), 'fake'); }
+      if (args[0] === 'python' && args[1] === 'find') return path.join(managed, 'python.exe');
+    };
+    const result = await installPythonRuntime(d, dest, { set: 'accelerated', interpreter: true, userRoot, run });
+    assert.equal(result.python, path.join(dest, 'python', 'python.exe'));
+    assert.equal(await fs.readFile(path.join(dest, 'python', 'python312._pth'), 'utf8'), '.\nLib\nDLLs\n..\\site-packages\n', 'the copy finds only its own library and the runtime site-packages');
+    const pip = calls.find(args => args[0] === 'pip')!;
+    assert.deepEqual(pip.slice(pip.indexOf('--index-url'), pip.indexOf('--index-url') + 2), ['--index-url', 'https://packages.example/whl/accel']);
+    assert.equal(pip.at(-1), path.join(dest, 'site-packages')); assert.equal(pip.at(-2), '--target');
+    assert.equal(pip[pip.indexOf('--python') + 1], path.join(managed, 'python.exe'));
+    await assert.rejects(installPythonRuntime(d, dest, { set: 'missing', userRoot, run }), /no wheel set "missing"/);
+    // A local folder replaces the index for the same hash-locked wheels; no interpreter copy without asking for one.
+    calls.length = 0;
+    const offline = await installPythonRuntime(d, path.join(userRoot, 'overlay'), { userRoot, run, findLinks: 'D:/offline' });
+    assert.equal(offline.python, null);
+    const local = calls.find(args => args[0] === 'pip')!;
+    assert.ok(local.includes('--no-index') && local[local.indexOf('--find-links') + 1] === 'D:/offline' && !local.includes('--index-url'));
+  } finally { await fs.rm(userRoot, { recursive: true, force: true }); }
 });
