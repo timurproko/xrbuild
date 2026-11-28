@@ -1842,9 +1842,9 @@ function renderDetail(force = false) {
   const publicationLink = m ? publicationHeroLink(p) : '';
   const workflowTabs = m ? `<div class="project-workflow-tabs xrb-tabs" role="tablist" aria-label="Project workflow" data-xrb-tabs-id="project-workflow-${p.id}">
       <button type="button" class="xrb-tab" role="tab" data-surface="display" data-view="display" aria-selected="${displaySurface}" ${displaySurface ? 'data-active' : ''} ${displayChoices.length ? '' : 'disabled'}>Develop</button>
-      ${p.componentGroups?.length ? `<button type="button" class="xrb-tab" role="tab" data-surface="components" aria-selected="${componentsSurface}" ${componentsSurface ? 'data-active' : ''}>Components</button>` : ''}
       ${hasProjectPublishers(p) ? `<button type="button" class="xrb-tab" role="tab" data-surface="publish" data-view="publish" aria-selected="${publishSurface}" ${publishSurface ? 'data-active' : ''}>Publish</button>` : ''}
       <button type="button" class="xrb-tab" role="tab" data-surface="build" data-view="build" aria-selected="${surface === 'build'}" ${surface === 'build' ? 'data-active' : ''} ${buildChoices.length ? '' : 'disabled'}>Build</button>
+      ${p.componentGroups?.length ? `<button type="button" class="xrb-tab" role="tab" data-surface="components" aria-selected="${componentsSurface}" ${componentsSurface ? 'data-active' : ''}>Settings</button>` : ''}
       ${publicationLink ? `<span class="spacer"></span>${publicationLink}` : ''}
     </div>` : '';
   const manifestButton = m && p.origin === 'bundled'
@@ -1892,7 +1892,7 @@ function renderDetail(force = false) {
   const runtimeSettings = displaySurface
     ? `${displayField(m, { monitorsOnly: headset })}${inputField(m)}`
     : '';
-  const componentFields = componentsSurface ? p.componentGroups.map(group => `<div class="xrb-stack"><h2 class="xrb-section-label">${esc(group.label)}</h2><div class="settings-grid">${Object.entries(group.parameters).map(([name, parameter]) => field(esc(parameter.label), `componentSettings.${group.id}.${name}`, m.componentSettings?.[group.id]?.[name] ?? group.values[name], { options: parameter.options.map(option => option.value), optionLabels: Object.fromEntries(parameter.options.map(option => [option.value, option.label])), raw: true })).join('')}</div></div>`).join('') : '';
+  const componentFields = componentsSurface ? p.componentGroups.map(group => `<div class="xrb-stack component-settings-group"><h2>${esc(group.label)}</h2><div class="settings-grid">${Object.entries(group.parameters).map(([name, parameter]) => field(esc(parameter.label), `componentSettings.${group.id}.${name}`, m.componentSettings?.[group.id]?.[name] ?? group.values[name], { options: parameter.options.map(option => option.value), optionLabels: Object.fromEntries(parameter.options.map(option => [option.value, option.label])), raw: true })).join('')}</div></div>`).join('') : '';
   const settings = componentsSurface ? `<form id="settings" class="xrb-stack">${componentFields}</form>` : publishSurface ? '' : `<form id="settings">
       <div class="row settings-toolbar">${m.kind === 'app' ? platformField(m, surface) : ''}<div class="settings-tools"><span class="display-options">${displaySurface ? `${controls?.view ?? ''}${controls?.dev ?? ''}` : ''}</span></div></div>
       ${runtimeSettings ? `<div class="settings-grid runtime-settings">${runtimeSettings}</div>` : ''}

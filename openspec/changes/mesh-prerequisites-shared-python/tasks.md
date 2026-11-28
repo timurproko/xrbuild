@@ -34,3 +34,7 @@
 ## 8. Steady mesh when a processor skips frames
 
 - [x] 8.1 Hold each hand's latest valid surface in the SDK mesh client, compensated every render until its source age expires, keep topology per hand, and clear on failures; cover it in an SDK test.
+
+## 9. App Settings tab
+
+- [x] 9.1 Rename the library parameters tab to Settings, place it last and use a plain card title per library; let UI Kit consume its own theme parameter so its Settings tab chooses the theme it runs with; cover both in panel and embedded tests.

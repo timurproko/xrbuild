@@ -14,8 +14,11 @@ const sdk = (pkg) => path.join(core, 'packages', pkg, 'src', 'index.ts');
 const appIcon = { name: 'app-icon', generateBundle() { if (fs.existsSync('icon.png')) this.emitFile({ type: 'asset', fileName: 'icon.png', source: fs.readFileSync('icon.png') }); } };
 
 // base './': the build is served from https://app.local/ by xrb-host (and later from a package).
+// Settings chosen in the panel's Settings tab reach the running app through the same compiled metadata as Launcher.
+const { componentLibraries, componentSettings } = JSON.parse(fs.readFileSync('xrb-project.json', 'utf8'));
 export default defineConfig({
   plugins: [react(), appIcon],
+  define: { 'import.meta.env.VITE_XRB_COMPONENTS': JSON.stringify({ componentLibraries, componentSettings }) },
   server: { fs: { allow: [searchForWorkspaceRoot(process.cwd()), core] } }, base: './', resolve: { alias: { '@xr-build/ui-kit/theme-choices': path.join(core, 'packages/ui-kit/src/theme-choices.ts'), '@xr-build/ui-kit/react': path.join(core, 'packages/ui-kit/src/react/index.ts'), '@xr-build/react': sdk('react'), '@xr-build/sdk': sdk('sdk'), '@xr-build/ui-kit': sdk('ui-kit') }, dedupe: ['three', 'react', 'react-dom', '@react-three/fiber'] },
   build: {
     target: 'es2022',

@@ -18,6 +18,8 @@ test('typed declarations match UI Kit registration and consumer defaults without
   assert.deepEqual(kit.componentLibrary, library);
   assert.equal(kit.componentLibrary.parameters.theme.default, kitTheme.defaultTheme);
   assert.equal(launcher.componentLibraries['bundled:ui-kit'].defaults.theme, launcherTheme.defaultTheme);
+  // UI Kit consumes its own library, so its Settings tab chooses the theme it shows when run.
+  assert.deepEqual(kit.componentLibraries, { 'bundled:ui-kit': { props: { theme: 'theme' }, defaults: { theme: kitTheme.defaultTheme } } });
   assert.deepEqual(launcher.componentLibraries, consumer.componentLibraries);
   assert.deepEqual(validateManifest(kit, root), []);
   assert.deepEqual(validateManifest(launcher, root), []);

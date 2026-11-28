@@ -3,13 +3,13 @@ import { test } from 'node:test';
 import { componentSettingsFixture } from './component-settings.fixture.ts';
 import { withBrowser, sleep } from './browser-fixture.ts';
 
-test('Components uses normal dropdowns, follows Develop, autosaves and never changes platform settings', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
+test('Settings uses normal dropdowns, comes last, autosaves and never changes platform settings', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
   const f = await componentSettingsFixture(t);
   await withBrowser(async ({ evaluate, navigate }) => {
     const until = async (expr: string) => { for (let i = 0; i < 100; i++) { if (await evaluate(expr)) return; await sleep(50); } assert.fail(expr); };
     await navigate(`${f.server.url}?project=launcher`, `!!document.querySelector('[data-surface="components"]')`);
     await evaluate(`document.querySelector('[data-id="launcher"]')?.click()`);
-    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-surface]')).map(x=>x.textContent.trim())`), ['Develop', 'Components', 'Build']);
+    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-surface]')).map(x=>x.textContent.trim())`), ['Develop', 'Build', 'Settings']);
     const develop = await evaluate(`document.querySelector('#settings').innerHTML`);
     await evaluate(`document.querySelector('[data-surface="components"]').click()`);
     await until(`!!document.querySelector('[name="componentSettings.bundled:ui-kit.theme"]')`);
