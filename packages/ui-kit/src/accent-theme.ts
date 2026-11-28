@@ -1,5 +1,5 @@
 // Accent: solid controls in one accent colour with soft, filleted edges and a satin finish. Round buttons are
-// pucks, pill buttons capsules, slider handles ribbed grips with a marker line; the slider fills inside a dark channel.
+// pucks, pill buttons capsules, slider thumbs plain blocks with one white line; the slider fills inside a dark channel.
 // Shapes only change inside each role's authored bounds; targets, layout and interaction stay untouched.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -46,13 +46,9 @@ function joined(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   if (!result) throw new Error('Incompatible Accent geometry');
   return result;
 }
-/** The slider grip: a filleted block with raised ribs across its face, like a knurled knob. */
-function ribbed(w: number, h: number, depth: number, radius: number): THREE.BufferGeometry {
-  const ribs = 5, pitch = w / (ribs + 1), ribW = Math.min(0.0009, pitch * 0.35), ribD = Math.min(0.0005, depth * 0.12);
-  const parts = [slab(w, h, depth, radius)];
-  for (let i = 1; i <= ribs; i++) if (i !== (ribs + 1) / 2) parts.push(slab(ribW, h * 0.78, ribD, ribW / 2).translate(-w / 2 + i * pitch, 0, depth - ribD * 0.4));
-  return joined(parts);
-}
+/** The one white line on a slider thumb: the dial pointer's exact size and round ends (dial R 0.022, pointer R/2 long). */
+// Its height stays within the reference ridge's envelope (0.0012 centred on the thumb face), as every recipe must.
+const MARK_W = 0.00205, MARK_L = 0.011, MARK_D = 0.0006;
 
 /** A sphere drawn as evenly spread accent dots, facing outward (a Fibonacci lattice). */
 function dotSphere(radius: number): THREE.BufferGeometry {
@@ -66,7 +62,6 @@ function dotSphere(radius: number): THREE.BufferGeometry {
   return joined(parts);
 }
 
-const ribbedRoles = new Set<VisualRole>(['sliderHandle']);
 /** The controls stand on their own, as in the reference kit: no recessed wells under them. */
 const wellRoles = new Set<VisualRole>(['buttonWellPill', 'buttonWellRound', 'dialWell']);
 /** The trackball model is a dot sphere; the mascot's other parts are not drawn. */
@@ -84,13 +79,14 @@ function geometry(role: VisualRole, input: GeometryInput): THREE.BufferGeometry 
   else switch (input.shape) {
     case 'box': {
       const [w, h, d, r = Math.min(w, h) / 2] = a;
-      result = ribbedRoles.has(role) ? ribbed(w, h, d, Math.min(r, 0.0035)) : slab(w, h, d, r);
+      // The slider thumb is a plain filleted block like the other bodies; its one mark is the grip line below.
+      result = slab(w, h, d, role === 'sliderHandle' ? Math.min(r, 0.0035) : r);
       break;
     }
     case 'roundedDisc': result = puck(a[0], a[1]); break;
     case 'disc': result = puck(a[0], a[1]); break;
-    // Of the three grip ridges only the middle one stays, as the handle's marker line.
-    case 'plainBox': result = a[3] === 0 ? slab(0.0011, a[1], 0.0006, 0.00055) : new THREE.BufferGeometry(); break;
+    // Of the three grip ridges only the middle one stays: one white line, the size of the dial's pointer.
+    case 'plainBox': result = a[3] === 0 ? slab(MARK_W, MARK_L, MARK_D, MARK_W / 2) : new THREE.BufferGeometry(); break;
     case 'torus': result = new THREE.TorusGeometry(a[0], a[1], 12, 128); break;
     default: return referenceGeometry(input);
   }

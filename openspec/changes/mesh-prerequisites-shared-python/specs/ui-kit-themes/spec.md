@@ -12,7 +12,7 @@ A UI Kit theme SHALL supply geometry, material, state-colour and applicable typo
 
 #### Scenario: Geometry-style difference
 - **WHEN** corresponding Default and Accent controls are shown in matching rest and active states
-- **THEN** Accent presents solid accent capsules and pucks with soft fillets, a rocker switch, a dot-sphere trackball, controls without wells, a ribbed slider grip with a marker line and a slider that fills inside its dark channel, with consistent satin materials and legible feedback
+- **THEN** Accent presents solid accent capsules and pucks with soft fillets, a rocker switch, a dot-sphere trackball, controls without wells, a plain slider thumb with one white line and a slider that fills inside its dark channel, with consistent satin materials and legible feedback
 
 #### Scenario: Invalid style selection
 - **WHEN** a consumer supplies an unknown theme identifier or an incomplete theme definition
