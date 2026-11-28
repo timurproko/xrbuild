@@ -11,7 +11,7 @@ const COLORS = {
   // Bodies are the accent; hover and press tint them toward a lighter accent.
   // capDark: unselected segments, neutral like the switch's off track, so only the selected one carries the accent.
   cap: ACCENT, capDark: '#38404d', track: '#39414f', accent: '#8fb0ff',
-  text: '#e8ecf2', muted: '#8a94a6', done: '#5bd18b', onCap: '#ffffff',
+  text: '#e8ecf2', muted: '#8a94a6', done: '#5bd18b', onCap: '#ffffff', selected: ACCENT,
 } as const;
 /** The slider fill: half accent, half white, so it is never a flat, harsh accent. */
 /** The dialog panel: a dark satin surface between the scene background and the control bodies. */

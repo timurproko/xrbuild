@@ -25,7 +25,8 @@ export interface VisualRecipe {
 export interface UiKitTheme {
   readonly id: string;
   /** `onCap`: ink for text and icons on control bodies; optional, so existing custom themes stay complete. */
-  readonly colors: { readonly [K in keyof typeof COLORS]: string } & { readonly onCap?: string };
+  /** `selected`: the exact colour of a selected Segmented key; optional, absent blends toward `accent`. */
+  readonly colors: { readonly [K in keyof typeof COLORS]: string } & { readonly onCap?: string; readonly selected?: string };
   readonly typography: { readonly family: string; readonly weight: number; readonly color: string };
   readonly icon: { readonly stroke: number; readonly lineCap: CanvasLineCap; readonly lineJoin: CanvasLineJoin };
   readonly visuals: Readonly<Record<VisualRole, VisualRecipe>>;

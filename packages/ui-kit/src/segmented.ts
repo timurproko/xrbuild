@@ -89,6 +89,8 @@ export class Segmented extends Control {
 
   private paintSegment(s: Segment, i: number): void {
     const colors = this.theme.colors, selected = i === this.index;
+    // A theme may name the selected colour exactly; without one the selected key blends toward the accent highlight.
+    if (selected && colors.selected) { s.material.color.set(colors.selected); s.material.emissive.set(0x000000); return; }
     s.material.color.set(colors.capDark).lerp(new THREE.Color(colors.accent), selected ? 0.85 : s.hover * 0.3);
     s.material.emissive.set(colors.accent).multiplyScalar(selected ? 0.15 : s.hover * 0.08);
   }
