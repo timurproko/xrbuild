@@ -4,9 +4,10 @@ import * as THREE from 'three';
 import { PokeTarget } from '@xr-build/sdk';
 import { Control, placeCursor, sourceOf, touchCursor } from './control.ts';
 import { Label } from './label.ts';
-import { segmentVisual } from './default-visuals.ts';
+import { boxVisual, segmentVisual } from './default-visuals.ts';
 import { play } from './sound.ts';
-import { COLORS, approach, material, roundedBox } from './theme.ts';
+import { COLORS, approach, material } from './theme.ts';
+import type { ThemeOptions } from './visual-theme.ts';
 
 const SEG_W = 0.034, SEG_H = 0.024, GAP = 0.003, DEPTH = 0.007, REST = 0.006, TRAVEL = 0.006;
 const LATCHED = 0.003;  // the selected segment sits this far in
@@ -29,7 +30,7 @@ export class Segmented extends Control {
   private readonly reselectIndex?: number;
   private readonly latchSelected: boolean;
 
-  constructor(title: string, options: string[], index = 0, behavior: { reselectIndex?: number; latchSelected?: boolean } = {}) {
+  constructor(title: string, options: string[], index = 0, behavior: ThemeOptions & { reselectIndex?: number; latchSelected?: boolean } = {}) {
     const width = options.length * SEG_W + (options.length - 1) * GAP;
     super(title, -SEG_H / 2 - 0.016);
     this.options = options;
@@ -38,7 +39,7 @@ export class Segmented extends Control {
     this.reselectIndex = behavior.reselectIndex;
     this.latchSelected = behavior.latchSelected !== false;
     this.index = index;
-    this.add(new THREE.Mesh(roundedBox(width + 0.008, SEG_H + 0.008, 0.004, 0.006), material(COLORS.well)));
+    this.add(boxVisual('segmentWell', width + 0.008, SEG_H + 0.008, 0.004, 0.006, material(COLORS.well)));
     this.segments = options.map((text, i) => {
       const x = -width / 2 + SEG_W / 2 + i * (SEG_W + GAP);
       const { cap, material: m, label } = segmentVisual(text, x, SEG_W, SEG_H, DEPTH, REST);
@@ -54,6 +55,7 @@ export class Segmented extends Control {
     });
     this.showStatus();
     this.visuals.capture(this);
+    if (behavior.theme) this.setTheme(behavior.theme);
   }
 
   select(i: number, source: 'hand' | 'mouse' | 'code' = 'code'): void {
@@ -78,11 +80,16 @@ export class Segmented extends Control {
       s.shown = pushed > s.shown ? pushed : approach(s.shown, pushed, dt);
       s.cap.position.z = REST - s.shown;
       s.hover = approach(s.hover, this.enabled ? Math.max(st.proximity, st.mouseOver ? 0.6 : 0) : 0, dt);
-      const selected = i === this.index;
-      s.material.color.set(COLORS.capDark).lerp(new THREE.Color(COLORS.accent), selected ? 0.85 : s.hover * 0.3);
-      s.material.emissive.set(COLORS.accent).multiplyScalar(selected ? 0.15 : s.hover * 0.08);
+      this.paintSegment(s, i);
       placeCursor(s.cursor, s.poke, REST + DEPTH - s.shown, this.enabled);
     });
     this.fade(dt);
   }
+
+  private paintSegment(s: Segment, i: number): void {
+    const colors = this.theme.colors, selected = i === this.index;
+    s.material.color.set(colors.capDark).lerp(new THREE.Color(colors.accent), selected ? 0.85 : s.hover * 0.3);
+    s.material.emissive.set(colors.accent).multiplyScalar(selected ? 0.15 : s.hover * 0.08);
+  }
+  protected refreshTheme(): void { this.segments.forEach((s, i) => this.paintSegment(s, i)); this.fade(0); }
 }

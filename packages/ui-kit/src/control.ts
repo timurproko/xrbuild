@@ -7,6 +7,7 @@ import { PokeTarget, type AnyTarget, type EventSource, type Interactor } from '@
 import { Label } from './label.ts';
 import { COLORS } from './theme.ts';
 import { VisualResources } from './resources.ts';
+import { defaultTheme, registerVisualStyle, resolveUiKitTheme, styleMesh, type UiKitThemeSelection } from './visual-theme.ts';
 
 /** Disabled look: colours move this far toward the tint; opacity stays (nothing goes see-through). */
 const DISABLED_STRENGTH = 0.35;
@@ -18,6 +19,14 @@ export const sourceOf = (s: EventSource): 'hand' | 'mouse' => (s === 'mouse' ? '
 
 export abstract class Control extends THREE.Group {
   enabled = true;
+  protected theme = defaultTheme;
+  get themeId(): string { return this.theme.id; }
+
+  setTheme(selection: UiKitThemeSelection): void {
+    if (resolveUiKitTheme(selection) === this.theme) return;
+    this.visuals.setTheme(selection);
+  }
+  protected refreshTheme(): void { this.fade(0); }
   readonly title: Label;
   readonly status: Label;
   protected readonly targets: AnyTarget[] = [];
@@ -32,6 +41,7 @@ export abstract class Control extends THREE.Group {
   constructor(title: string, labelY: number) {
     super();
     this.userData.control = this;
+    registerVisualStyle(this, { prepare: theme => ({ commit: () => { this.theme = theme; }, discard() {}, refresh: () => this.refreshTheme() }) });
     this.title = new Label(title, { size: 0.0085, weight: 700 });
     this.title.position.set(0, labelY, 0.001);
     this.status = new Label('', { size: 0.0068, weight: 500, color: COLORS.muted });
@@ -147,11 +157,11 @@ export abstract class Control extends THREE.Group {
 }
 
 /** The touch cursor: a ring on a surface under the hovering fingertip, tightening as it nears. */
-export function touchCursor(): THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial> {
-  const m = new THREE.Mesh(
+export function touchCursor(): THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> {
+  const m = styleMesh(new THREE.Mesh(
     new THREE.RingGeometry(0.0042, 0.0056, 32),
     new THREE.MeshBasicMaterial({ color: COLORS.accent, transparent: true, opacity: 0, depthWrite: false }),
-  );
+  ), 'touchCursor', { shape: 'ring', args: [0.0042, 0.0056, 32] }, {}, { opacity: true });
   m.userData.keepLook = true;
   m.raycast = () => {};
   m.renderOrder = 5;
@@ -159,7 +169,7 @@ export function touchCursor(): THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMat
 }
 
 /** Places the touch cursor from a poke target's hover state (fingertip position and proximity). */
-export function placeCursor(cursor: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>, poke: PokeTarget, z: number, enabled: boolean): void {
+export function placeCursor(cursor: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>, poke: PokeTarget, z: number, enabled: boolean): void {
   const s = poke.state;
   const p = enabled && (s.hovering || (s.held && s.holder !== -1)) ? Math.max(s.proximity, s.held ? 1 : 0) : 0;
   cursor.visible = p > 0.01;

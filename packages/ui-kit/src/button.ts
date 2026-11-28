@@ -7,9 +7,10 @@ import { Control, placeCursor, sourceOf, touchCursor } from './control.ts';
 import type { IconNode } from './icon.ts';
 import { buttonVisual } from './default-visuals.ts';
 import { play } from './sound.ts';
-import { COLORS, approach, material, roundedBox, roundedDisc } from './theme.ts';
+import { approach } from './theme.ts';
+import type { ThemeOptions } from './visual-theme.ts';
 
-export interface ButtonOptions {
+export interface ButtonOptions extends ThemeOptions {
   title: string;
   shape: 'pill' | 'round';
   /** text (pill) or glyph (round) on the cap */
@@ -53,6 +54,7 @@ export class Button extends Control {
     });
     this.status.set('Clicks: 0');
     this.visuals.capture(this);
+    if (options.theme) this.setTheme(options.theme);
   }
 
   update(dt: number): void {
@@ -63,11 +65,16 @@ export class Button extends Control {
     this.cap.position.z = REST - this.shown;
     const hoverTarget = this.enabled ? Math.max(s.proximity, s.mouseOver ? 0.6 : 0) : 0;
     this.hover = approach(this.hover, hoverTarget, dt);
-    const pressed = s.held;
-    this.capMaterial.color.set(COLORS.cap).lerp(new THREE.Color(COLORS.accent), pressed ? 0.55 : this.hover * 0.25);
-    this.capMaterial.emissive.set(COLORS.accent).multiplyScalar(pressed ? 0.25 : this.hover * 0.08);
+    this.refreshTheme();
     placeCursor(this.cursor, this.poke, this.top - this.shown, this.enabled);
     this.fade(dt);
+  }
+
+  protected refreshTheme(): void {
+    const colors = this.theme.colors, pressed = this.poke.state.held;
+    this.capMaterial.color.set(colors.cap).lerp(new THREE.Color(colors.accent), pressed ? 0.55 : this.hover * 0.25);
+    this.capMaterial.emissive.set(colors.accent).multiplyScalar(pressed ? 0.25 : this.hover * 0.08);
+    this.fade(0);
   }
 
   private click(source: 'hand' | 'mouse'): void {

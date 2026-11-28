@@ -10,9 +10,10 @@ import { PinchTarget, PokeTarget, type TargetEvent } from '@xr-build/sdk';
 import { Control, sourceOf } from './control.ts';
 import { pitchOf, play } from './sound.ts';
 import { sliderVisual } from './default-visuals.ts';
-import { COLORS, approach, disc, material, roundedBox } from './theme.ts';
+import { approach } from './theme.ts';
+import { replaceStyledGeometry, type ThemeOptions } from './visual-theme.ts';
 
-export interface SliderOptions {
+export interface SliderOptions extends ThemeOptions {
   title: string;
   length?: number;
   /** number of positions (>= 2) for a stepped slider; omit for a continuous one */
@@ -76,6 +77,7 @@ export class Slider extends Control {
     this.listen(this.track, (e) => this.onTarget(e, 'touch', false));
     this.showStatus();
     this.visuals.capture(this);
+    if (options.theme) this.setTheme(options.theme);
   }
 
   private onTarget(e: TargetEvent, handMode: SliderMode, fromHandle: boolean): void {
@@ -136,21 +138,25 @@ export class Slider extends Control {
     this.press = approach(this.press, this.grab ? 1 : 0, dt);
     this.hover = approach(this.hover, this.enabled ? hoverFrom : 0, dt);
     this.handle.position.set(this.shownX, 0, HANDLE_Z + this.press * 0.003 - (this.grab?.mode === 'touch' ? Math.min(this.touch.state.depth, TOUCH_TRAVEL) * 0.5 : 0));
-    this.handleMaterial.color.set(COLORS.cap).lerp(new THREE.Color(COLORS.accent), this.press * 0.5 + this.hover * 0.2);
-    this.handleMaterial.emissive.set(COLORS.accent).multiplyScalar(this.press * 0.2 + this.hover * 0.08);
+    this.refreshTheme();
     if (!this.steps) {
       // Fully round ends, from the track's left end to under the handle; rebuilt every 0.5 mm of change.
       const fh = FILL_H, left = -this.length / 2 - fh / 2;
       const w = Math.max(fh, this.shownX + fh / 2 - left);
       if (Math.abs(w - this.fillBuiltW) > 0.0005) {
-        const next = roundedBox(w, fh, TRACK_D + 0.0006, fh / 2);
-        this.visuals.replace(this.fill.geometry, next);
-        this.fill.geometry = next;
+        replaceStyledGeometry(this.fill, { shape: 'box', args: [w, fh, TRACK_D + 0.0006, fh / 2] }, this.theme);
         this.fillBuiltW = w;
       }
       this.fill.position.x = left + this.fillBuiltW / 2;
     }
     this.fade(dt);
+  }
+
+  protected refreshTheme(): void {
+    const colors = this.theme.colors;
+    this.handleMaterial.color.set(colors.cap).lerp(new THREE.Color(colors.accent), this.press * 0.5 + this.hover * 0.2);
+    this.handleMaterial.emissive.set(colors.accent).multiplyScalar(this.press * 0.2 + this.hover * 0.08);
+    this.fade(0);
   }
 
   private begin(mode: SliderMode, offset: number): void {

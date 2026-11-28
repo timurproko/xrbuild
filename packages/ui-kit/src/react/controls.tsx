@@ -2,12 +2,12 @@ import { useLayoutEffect, useRef, useImperativeHandle, type Ref, type ReactNode 
 import * as THREE from 'three';
 import { useXrb, useXrbFrame } from '../../../react/src/index.ts';
 import * as Kit from '../index.ts';
-import { VisualResources } from '../resources.ts';
+import { useUiKitTheme } from './theme.tsx';
 
 type Detail = Record<string, unknown>;
 type Handler = (detail: Detail) => void;
-type Owned = THREE.Object3D & { dispose(): void };
-export interface ComponentProps<T> {
+type Owned = THREE.Object3D & { dispose(): void; setTheme(theme: Kit.UiKitThemeSelection): void };
+export interface ComponentProps<T> extends Kit.ThemeOptions {
   ref?: Ref<T>;
   children?: ReactNode;
   position?: [number, number, number];
@@ -33,6 +33,7 @@ const eventProp = (name: typeof events[number]) => `on${name[0].toUpperCase()}${
 /** Adapter ownership is independent of default mesh construction and of the SDK input state machine. */
 function useObject<T extends Owned>(create: () => T, props: ComponentProps<T>, update?: (object: T) => void) {
   const app = useXrb();
+  const theme = useUiKitTheme(props.theme);
   const host = useRef<THREE.Group>(null);
   const object = useRef<T | null>(null);
   const latest = useRef(props);
@@ -41,6 +42,7 @@ function useObject<T extends Owned>(create: () => T, props: ComponentProps<T>, u
   useLayoutEffect(() => {
     if (app.xrb.icon) return;
     const owned = create();
+    owned.setTheme(theme);
     object.current = owned;
     host.current!.add(owned);
     props.configure?.(owned);
@@ -66,6 +68,7 @@ function useObject<T extends Owned>(create: () => T, props: ComponentProps<T>, u
   useLayoutEffect(() => {
     const owned = object.current;
     if (!owned) return;
+    owned.setTheme(theme);
     if (props.visible !== undefined) owned.visible = props.visible;
     if (owned instanceof Kit.Control) {
       owned.setEnabled(props.enabled ?? true);
@@ -99,8 +102,11 @@ export function Dial(props: DialProps) { return <Adapter {...props} create={() =
 export type TrackballProps = ComponentProps<Kit.Trackball> & { title: string; radius: number; axis?: Kit.Trackball['axis'] };
 export function Trackball(props: TrackballProps) { return <Adapter {...props} create={() => new Kit.Trackball(props.title, props.radius)} apply={object => { if (props.axis !== undefined) object.axis = props.axis; }} />; }
 export type DialogProps = ComponentProps<Kit.Dialog> & Kit.DialogOptions & { open?: boolean; closeButtonVisible?: boolean };
-export function Dialog(props: DialogProps) { return <Adapter {...props} create={() => new Kit.Dialog(props)} apply={object => {
-  if (props.open !== undefined) props.open ? object.open() : object.close();
+export function Dialog(props: DialogProps) {
+  const declared = useRef<{ object: Kit.Dialog; open: boolean | undefined } | null>(null);
+  return <Adapter {...props} create={() => new Kit.Dialog(props)} apply={object => {
+  if (props.open !== undefined && (declared.current?.object !== object || declared.current.open !== props.open)) props.open ? object.open() : object.close();
+  declared.current = { object, open: props.open };
   if (props.closeButtonVisible !== undefined) { object.closeButton.visible = props.closeButtonVisible; if (!props.closeButtonVisible) object.closeButton.setEnabled(false); }
 }} />; }
 export type LabelProps = ComponentProps<Kit.Label> & Kit.LabelOptions & { text: string };
@@ -110,16 +116,6 @@ export function Icon(props: IconProps) { return <Adapter {...props} create={() =
 export type GlassEdgeProps = ComponentProps<Kit.GlassEdge> & Kit.GlassEdgeOptions;
 export function GlassEdge(props: GlassEdgeProps) { return <Adapter {...props} create={() => new Kit.GlassEdge(props)} />; }
 
-export interface BoardOptions { width: number; height: number; depth?: number; radius?: number; color?: THREE.ColorRepresentation; material?: THREE.MeshStandardMaterialParameters }
-class BoardObject extends THREE.Group {
-  private readonly resources = new VisualResources();
-  constructor(options: BoardOptions) {
-    super();
-    this.add(new THREE.Mesh(Kit.roundedBox(options.width, options.height, options.depth ?? 0.006, options.radius ?? 0.014), Kit.material(options.color ?? '#1c222b', { roughness: 0.72, metalness: 0.03, ...options.material })));
-    // Material parameters can contain caller-owned texture maps.
-    this.resources.capture(this, false);
-  }
-  dispose() { this.resources.dispose(); this.removeFromParent(); }
-}
-export type BoardProps = ComponentProps<BoardObject> & BoardOptions;
-export function Board(props: BoardProps) { return <Adapter {...props} create={() => new BoardObject(props)} />; }
+export type BoardOptions = Kit.BoardOptions;
+export type BoardProps = ComponentProps<Kit.Board> & BoardOptions;
+export function Board(props: BoardProps) { return <Adapter {...props} create={() => new Kit.Board(props)} />; }

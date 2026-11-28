@@ -64,10 +64,14 @@ export async function componentApp(root, options = {}) {
     if(key.endsWith('.json')){const module=new SyntheticModule(['default'],function(){this.setExport('default',JSON.parse(source));},{context});cache.set(key,module);return module;}
     const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.ReactJSX},fileName:key}).outputText;
     const module=new SourceTextModule(code,{context,identifier:key,initializeImportMeta(meta){meta.env={VITE_XRB_LOCAL_PUBLICATIONS:{},...options.env};}});
-    cache.set(key,module);await module.link((specifier)=>load(specifier,key));return module;
+    // Return unlinked children: the VM links the shared graph exactly once. Recursively
+    // linking here races when two app barrels import the same still-linking producer.
+    cache.set(key,module);return module;
   }
-  const module=await load(`./${options.entry??'main.tsx'}`);await module.evaluate();await settle();
+  const link=module=>module.link((specifier,parent)=>load(specifier,parent.identifier));
+  const module=await load(`./${options.entry??'main.tsx'}`);await link(module);await module.evaluate();await settle();
   return {...state,window,classes,location,exports:module.namespace,get app(){return app;},get handle(){return handle;},pending,
+    async importEntry(entry='index.ts'){const imported=await load(`./${entry}`);if(imported.status==='unlinked')await link(imported);if(imported.status!=='evaluated')await imported.evaluate();return imported.namespace;},
     clock(value){now=value;},async fire(delay){for(const [id,timer]of [...pending])if(timer.delay===delay){if(!timer.repeat)pending.delete(id);timer.fn();}await settle();},
     async dispose(){await handle?.dispose();app?.dispose();},
   };

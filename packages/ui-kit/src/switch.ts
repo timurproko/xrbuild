@@ -5,7 +5,8 @@ import { PokeTarget } from '@xr-build/sdk';
 import { Control, placeCursor, sourceOf, touchCursor } from './control.ts';
 import { play } from './sound.ts';
 import { switchVisual } from './default-visuals.ts';
-import { COLORS, approach, material, roundedBox, roundedDisc } from './theme.ts';
+import { approach } from './theme.ts';
+import type { ThemeOptions } from './visual-theme.ts';
 
 const W = 0.064, H = 0.03;
 const KNOB_R = 0.0115, KNOB_DEPTH = 0.008, KNOB_REST = 0.008;
@@ -25,7 +26,7 @@ export class Switch extends Control {
   private shown = 0;
   private hover = 0;
 
-  constructor(title: string, on = false) {
+  constructor(title: string, on = false, options: ThemeOptions = {}) {
     super(title, -H / 2 - 0.016);
     this.isOn = on;
     this.x = on ? SLIDE : -SLIDE;
@@ -38,6 +39,7 @@ export class Switch extends Control {
     this.listen(this.poke, (e) => { if (e.type === 'start') this.set(!this.isOn, sourceOf(e.source)); });
     this.showStatus();
     this.visuals.capture(this);
+    if (options.theme) this.setTheme(options.theme);
   }
 
   set(on: boolean, source: 'hand' | 'mouse' | 'code' = 'code'): void {
@@ -58,11 +60,17 @@ export class Switch extends Control {
     this.shown = depth > this.shown ? depth : approach(this.shown, depth, dt);
     this.x = approach(this.x, this.isOn ? SLIDE : -SLIDE, dt, 14);
     this.knob.position.set(this.x, 0, KNOB_REST - this.shown);
-    const t = (this.x + SLIDE) / (2 * SLIDE);  // 0 off .. 1 on, follows the knob
-    this.trackMaterial.color.set(COLORS.track).lerp(new THREE.Color(COLORS.accent), t);
+
     this.hover = approach(this.hover, this.enabled ? Math.max(s.proximity, s.mouseOver ? 0.6 : 0) : 0, dt);
-    this.knobMaterial.emissive.set(COLORS.accent).multiplyScalar(this.hover * 0.12);
+    this.refreshTheme();
     placeCursor(this.cursor, this.poke, this.top - this.shown, this.enabled);
     this.fade(dt);
+  }
+
+  protected refreshTheme(): void {
+    const colors = this.theme.colors, t = (this.x + SLIDE) / (2 * SLIDE);
+    this.trackMaterial.color.set(colors.track).lerp(new THREE.Color(colors.accent), t);
+    this.knobMaterial.emissive.set(colors.accent).multiplyScalar(this.hover * 0.12);
+    this.fade(0);
   }
 }

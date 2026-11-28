@@ -21,6 +21,11 @@ function hand(x=0,y=0,z=0.08,pinching=false):SceneHand {
 const definitions=[
  {name:'pill',C:UI.Button,props:{title:'b',text:'Press',shape:'pill'},make:()=>new Kit.Button({title:'b',text:'Press',shape:'pill'})},
  {name:'round',C:UI.Button,props:{title:'b',text:'',shape:'round',icon:ArrowRight},make:()=>new Kit.Button({title:'b',text:'',shape:'round',icon:ArrowRight})},
+ {name:'round-text',C:UI.Button,props:{title:'b',text:'+',shape:'round'},make:()=>new Kit.Button({title:'b',text:'+',shape:'round'})},
+ {name:'switch-on',C:UI.Switch,props:{title:'s',initialOn:true},make:()=>new Kit.Switch('s',true)},
+ {name:'segments-latched',C:UI.Segmented,props:{title:'s',options:['Full','X','Y','Z']},make:()=>new Kit.Segmented('s',['Full','X','Y','Z'])},
+ {name:'segments-reselect',C:UI.Segmented,props:{title:'s',options:['Full','X','Y','Z'],initialIndex:1,reselectIndex:0},make:()=>new Kit.Segmented('s',['Full','X','Y','Z'],1,{reselectIndex:0})},
+ ...(['x','y','z'] as const).map(axis=>({name:`trackball-${axis}`,C:UI.Trackball,props:{title:'t',radius:0.056,axis},make:()=>{const object=new Kit.Trackball('t',0.056);object.axis=axis;return object;}})),
  {name:'switch',C:UI.Switch,props:{title:'s'},make:()=>new Kit.Switch('s')},
  {name:'segmented',C:UI.Segmented,props:{title:'s',options:['Full','X','Y','Z'],latchSelected:false},make:()=>new Kit.Segmented('s',['Full','X','Y','Z'],0,{latchSelected:false})},
  {name:'slider',C:UI.Slider,props:{title:'s',value:0.5,length:0.13},make:()=>new Kit.Slider({title:'s',value:0.5,length:0.13})},
@@ -49,10 +54,10 @@ function replay(control:Kit.Control,ix:Interactor,input:'mouse'|'hand') {
  if(control instanceof Kit.Trackball)for(const axis of ['x','y','z','free'] as const){control.axis=axis;ix.pointerDown(ray());ix.pointerMove(ray(0.02,0.02));ix.pointerUp();frame();}
  const result={events,state:snapshot(control)};off.forEach(f=>f());return result;
 }
-for(const projection of ['perspective','orthographic','stereo'] as const)for(const input of ['mouse','hand'] as const)for(const definition of definitions)test(`${definition.name}: ${projection} ${input} matches imperative behavior`,async()=>{
+for(const theme of ['default','chamfer'] as const)for(const projection of ['perspective','orthographic','stereo'] as const)for(const input of ['mouse','hand'] as const)for(const definition of definitions)test(`${theme} ${definition.name}: ${projection} ${input} matches imperative behavior`,async()=>{
  const f=fixture();f.app.setProjection(projection==='orthographic'?'orthographic':'perspective');if(projection==='stereo')f.app.xrb.setStereo(true);
  const ref=createRef<Kit.Control>();const C=definition.C as React.ComponentType<any>;
- const mount=mountXrbApp(f.container,<C {...definition.props} ref={ref}/>,{app:f.app});await mount.ready;
+ const mount=mountXrbApp(f.container,<C {...definition.props} theme={theme} ref={ref}/>,{app:f.app});await mount.ready;
  assert.ok(ref.current);
  const baseline=definition.make();const ix=new Interactor();baseline.attach(ix);
  const expected=replay(baseline,ix,input),actual=replay(ref.current,f.app.xrb.interaction,input);
@@ -62,13 +67,15 @@ for(const projection of ['perspective','orthographic','stereo'] as const)for(con
  baseline.dispose();f.app.dispose();
 });
 
-for(const projection of ['perspective','orthographic','stereo'] as const)for(const mouse of [false,true])for(const definition of definitions)test(`${definition.name}: SDK sampled hands, ${projection}, Mouse=${mouse}`,async()=>{
+const handTraces = new Map<string, unknown>();
+for(const theme of ['default','chamfer'] as const)for(const projection of ['perspective','orthographic','stereo'] as const)for(const mouse of [false,true])for(const definition of definitions)test(`${theme} ${definition.name}: SDK sampled hands, ${projection}, Mouse=${mouse}`,async()=>{
  const restore=installPointerEvents();const f=fixture();f.app.dispose();
  Object.assign(document,{elementFromPoint:()=>f.canvas});
  const app=createXrbApp(f.renderer,{autoStart:false,camera:{position:[0,0,0.6]},xrb:{mouse,mapping:{mode:'world',center:new THREE.Vector3(),scale:1},xr:{button:false}}});
  app.setProjection(projection==='orthographic'?'orthographic':'perspective');if(projection==='stereo')app.xrb.setStereo(true);
- const ref=createRef<Kit.Control>(),C=definition.C as React.ComponentType<any>;const got:string[]=[];
- const mount=mountXrbApp(f.container,<C {...definition.props} ref={ref} onClick={()=>got.push('click')} onChange={()=>got.push('change')} onGrab={()=>got.push('grab')} onRotate={()=>got.push('rotate')} onClose={()=>got.push('close')}/>,{app});
+ const ref=createRef<Kit.Control>(),C=definition.C as React.ComponentType<any>;const got:unknown[]=[];
+ const record=(type:string)=>(detail:Record<string,unknown>)=>got.push({type,...detail});
+ const mount=mountXrbApp(f.container,<C {...definition.props} theme={theme} ref={ref} onClick={record('click')} onChange={record('change')} onGrab={record('grab')} onRotate={record('rotate')} onRelease={record('release')} onClose={record('close')}/>,{app});
  try{
   await mount.ready;let sample=hand(0,0,0.08);app.xrb.hands.sample=()=>[sample.hand];
   let time=1000;const frame=(x:number,z:number,pinching=false,y=0)=>{sample=hand(x+(definition.name==='stepped'?-0.0325:0),y,z,pinching);f.tick(time);time+=16;};
@@ -77,6 +84,8 @@ for(const projection of ['perspective','orthographic','stereo'] as const)for(con
   if(definition.name==='dialog'){for(let n=0;n<60;n++)frame(0,0.2);frame(0,0.16,false,-0.032);frame(0,0.09,false,-0.032);frame(0,0.16,false,-0.032);}
   assert.ok(got.length,`${definition.name} responds to sampled physical hands`);
   assert.ok(got.length<20,'physical capture cannot echo through component pointer handlers');
+  const traceKey=`${definition.name}:${projection}:${mouse}`;
+  if(theme==='default')handTraces.set(traceKey,got.slice());else assert.deepEqual(got,handTraces.get(traceKey),'sampled hand event order, sources and values match Default');
   if(!mouse){const before=got.length;for(const type of ['pointerdown','pointermove','pointerup','click'])f.canvas.dispatchEvent(new PointerEvent(type,{clientX:400,clientY:225,pointerId:1,pointerType:'mouse'}));assert.equal(got.length,before);assert.equal(app.xrb.interaction.pointer,null);}
  }finally{await mount.dispose();app.dispose();restore();}
 });

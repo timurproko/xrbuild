@@ -4,10 +4,11 @@
 import * as THREE from 'three';
 import type { IconNode } from 'lucide';
 import { VisualResources } from './resources.ts';
+import { defaultTheme, registerVisualStyle, resolveUiKitTheme, styleMesh, type ThemeOptions, type UiKitThemeSelection } from './visual-theme.ts';
 
 export type { IconNode } from 'lucide';
 
-export interface IconOptions {
+export interface IconOptions extends ThemeOptions {
   /** icon size in metres (the 24-unit box) */
   size?: number;
   color?: string;
@@ -21,28 +22,43 @@ export class Icon extends THREE.Object3D {
   private readonly canvas = document.createElement('canvas');
   private readonly texture = new THREE.CanvasTexture(this.canvas);
   private readonly mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
-  private readonly o: Required<IconOptions>;
+  private readonly o: Required<Omit<IconOptions, 'theme'>>;
+  private theme = defaultTheme;
+  private icon: IconNode;
+  private color: string;
+  get themeId(): string { return this.theme.id; }
   private readonly resources = new VisualResources();
 
+  private readonly options: IconOptions;
   constructor(icon: IconNode, options: IconOptions = {}) {
     super();
+    this.options = options;
     const given = Object.fromEntries(Object.entries(options).filter(([, v]) => v !== undefined));  // an undefined option must not override a default
     this.o = { size: 0.022, color: '#30363f', stroke: 2.1, ...given };
+    this.icon = icon; this.color = this.o.color;
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.anisotropy = 4;
     // No mipmaps: a mip-blurred stroke reads lighter than the solid geometry of the dial's marker.
     this.texture.generateMipmaps = false;
     this.texture.minFilter = THREE.LinearFilter;
-    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(this.o.size, this.o.size), new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, depthWrite: false }));
+    this.mesh = styleMesh(new THREE.Mesh(new THREE.PlaneGeometry(this.o.size, this.o.size), new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, depthWrite: false })), 'icon', { shape: 'plane', args: [this.o.size, this.o.size] });
+    registerVisualStyle(this, { prepare: theme => ({ commit: () => {
+      this.theme = theme; this.o.stroke = this.options.stroke ?? theme.icon.stroke;
+      this.set(this.icon, this.color);
+    }, discard() {} }) });
     this.mesh.raycast = () => {};
     this.add(this.mesh);
     this.set(icon);
     this.resources.capture(this);
+    if (options.theme) this.setTheme(options.theme);
   }
+
+  setTheme(theme: UiKitThemeSelection): void { if (resolveUiKitTheme(theme) !== this.theme) this.resources.setTheme(theme); }
 
   dispose(): void { this.resources.dispose(); this.removeFromParent(); }
 
   set(icon: IconNode, color = this.o.color): void {
+    this.icon = icon; this.color = color;
     const c = this.canvas;
     c.width = c.height = PX;
     const ctx = c.getContext('2d')!;
@@ -51,8 +67,8 @@ export class Icon extends THREE.Object3D {
     ctx.scale(PX / 24, PX / 24);
     ctx.strokeStyle = color;
     ctx.lineWidth = this.o.stroke;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    ctx.lineCap = this.theme.icon.lineCap;
+    ctx.lineJoin = this.theme.icon.lineJoin;
     for (const [tag, a] of icon) {
       const n = (k: string) => Number(a[k] ?? 0);
       ctx.beginPath();

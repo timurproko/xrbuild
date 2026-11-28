@@ -41,13 +41,53 @@ export function Controls() {
 }
 ```
 
-The optional entry exports Board, Button, Switch, Segmented, Slider, Dial, Trackball, Dialog, Label, Icon and GlassEdge. Existing control options become props; Switch uses `initialOn`, Segmented uses `initialIndex`, Label uses `text`, and Trackball requires `radius`. Construction options (including initial slider value) remain stable for a mounted instance: use a React key to deliberately construct a replacement. Transforms, visibility, enabled state, callbacks, text/icon content, Trackball `axis` and Dialog `open` update in place. `ref` exposes the existing object; `configure` is a construction-only callback. `compact` hides a control's title/status. Dialog `interactive={false}` draws a visual-only sheet with no blocker/Close registrations; `closeButtonVisible={false}` hides and disables Close.
+The optional entry exports Board, Button, Switch, Segmented, Slider, Dial, Trackball, Dialog, Label, Icon and GlassEdge. Existing control options become props; Switch uses `initialOn`, Segmented uses `initialIndex`, Label uses `text`, and Trackball requires `radius`. Construction options (including initial slider value) remain stable for a mounted instance: use a React key to deliberately construct a replacement. Theme selection is mutable and never requires a key. Transforms, visibility, enabled state, callbacks, text/icon content, Trackball `axis` and Dialog `open` update in place. `ref` exposes the existing object; `configure` is a construction-only callback. `compact` hides a control's title/status. Dialog `interactive={false}` draws a visual-only sheet with no blocker/Close registrations; `closeButtonVisible={false}` hides and disables Close.
 
-Adapters attach existing SDK targets, never duplicate their mesh events. They update once per SDK frame with delta capped at 0.1 seconds, including stereo; Dialog alone updates its internal Close button. Callback changes retain object identity/capture. Unmount removes subscriptions/capture and disposes construction-owned geometry, materials and textures, not consumer-added children or the SDK renderer. Default visual builders remain separate from input behavior; no theme provider or settings registry is included.
+Adapters attach existing SDK targets, never duplicate their mesh events. They update once per SDK frame with delta capped at 0.1 seconds, including stereo; Dialog alone updates its internal Close button. Callback changes retain object identity/capture. Unmount removes subscriptions/capture and disposes construction-owned geometry, materials and textures, not consumer-added children or the SDK renderer. Theme visuals remain separate from input behavior; no settings registry or persistence is included.
 
 For source aliases, match `@xr-build/ui-kit/react` exactly to `packages/ui-kit/src/react/index.ts` before the imperative root alias. Also alias `@xr-build/react` to `packages/react/src/index.ts` and deduplicate `three`, `react`, `react-dom`, `@react-three/fiber`. Use the React bridge's pinned versions and JSX tooling. Run `pnpm --filter @xr-build/ui-kit test:react` for the component fixtures.
 
 Imperative callers retain chainable `on`; `off(type, handler)` selectively removes one listener, and `subscribe(type, handler)` returns an idempotent unsubscribe function. `detach()` is reversible; `dispose()` is final and idempotent. Only construction-owned resources are disposed.
+
+## Visual theme contract
+
+`defaultTheme` is the current authored look, unchanged. Omitting a theme preserves existing constructors, helper exports, control bounds and React-free imperative imports. `resolveUiKitTheme` accepts a built-in ID or a complete immutable `UiKitTheme` definition; unknown IDs and missing visual roles fail before retiring live graphics.
+
+A theme supplies every `visualRoles` entry through geometry/material recipes, plus state colours, typography and icon stroke defaults. Roles include all controls, Board, text/icons, glass edges, feedback cues and dynamic Slider fill. Factories receive readonly visual dimensions and geometry-local orientation, never targets or interaction tuning. The same material class is required for each role so existing animation handles remain compatible. Independently styled roles have separate stable material handles, even when their reference appearance used a shared material. Reusable material handles stay live; temporary material copies and replaced geometry are disposed. Factories must not allocate textures or untracked resources, register input or start work; return only the owned geometry/material being requested.
+
+Visuals must fit the original footprint, text allocation and contact plane. Target bounds, poke depth/travel, pinch positions, volume radius, state, animation timing, sounds and layout are not theme options. Explicit consumer options remain authoritative. Board is also available imperatively, with the same options and owned/borrowed-map rules as its React adapter.
+
+### Built-in styles
+
+`default` retains the original rounded controls. `chamfer` keeps their graphite/ivory/blue vocabulary but uses crisp single bevels, clipped corners, inset satin faces and faceted profiles:
+
+| Elements | Chamfer mesh treatment |
+| --- | --- |
+| Board, pill Button, Segmented | Clipped slabs/wells and stepped inset key faces |
+| Round Button, Switch, Dial | Faceted caps/puck/rotor and collars; rectangular dial ticks |
+| Continuous/stepped Slider | Straight clipped channel/fill, inset handle, single horizontal grip and squared detents |
+| Trackball | Chamfered robot head, faceted sockets/eyes/hoops and square shell dots |
+| Dialog and GlassEdge | Clipped frosted sheet/film, stepped rim and matching per-eye highlight profile |
+| Label, Icon, touch cues | Fixed text metrics, squared icon strokes and a faceted touch ring |
+
+Both styles cover every variant and state, including Dialog's Close button. They have identical targets, contact depths, animation timing, sounds and event semantics. Typography keeps the same allocation so apps never reflow; explicit text/icon/material options override theme defaults.
+
+### Selecting and switching a theme
+
+```tsx
+import { UiKitThemeProvider, Button } from '@xr-build/ui-kit/react';
+
+<UiKitThemeProvider theme="chamfer">
+  <Button title="Action" shape="pill" text="Press" />
+  <Button theme="default" title="Reference" shape="round" text="+" />
+</UiKitThemeProvider>
+```
+
+Resolution is a control's explicit `theme`, nearest explicit provider, inherited provider value, app `defaultTheme` fallback, then library Default. `useUiKitTheme()` exposes the resolved definition. Removing an override restores inheritance; separate providers do not share mutable style. A provider's `defaultTheme` never masks an inherited choice.
+
+Imperative callers use `new Button({ title: 'Action', shape: 'pill', text: 'Press', theme: 'chamfer' })` and `button.setTheme('default')`. Positional constructors accept trailing theme options: `new Switch('Switch', false, { theme: 'chamfer' })`, `new Dial('Dial', { theme: 'chamfer' })`, `new Trackball('Trackball', 0.056, { theme: 'chamfer' })`; Segmented accepts `theme` in its existing behavior options. Board, Dialog, Label, Icon and GlassEdge also accept `theme` and `setTheme`.
+
+Provider/prop updates retain the control, targets, held press/pinch/grab, current values, animation phase, dialog state and trackball rotation. Dialog synchronizes `open` when that prop changes, not on unrelated theme/callback renders. Switching stages replacement geometry/material recipes before retiring old geometry, reuses compatible animated material handles, refreshes current colours without advancing a frame and disposes temporary materials. Failed staging keeps the previous style live. Static `transparent`/`opacity` values belong to the theme unless explicitly overridden by constructor material options or later consumer edits. Use `setVisualComposition(root, { transparent: true })` for explicit composition intent even when the current value is already true; Launcher content and Dialog Close use this path. Only declared animated channels (touch/shell/ring opacity and glass-edge uniforms) retain their live phase instead of recipe defaults. Disabled controls reapply their existing fade without advancing time. Final teardown releases only owned resources; borrowed maps and caller-added children survive. Do not retain or mutate a theme-owned mesh expecting its geometry to survive a style change; customize stable control hosts or supply explicit supported options. `configure` remains construction-only and is not rerun by theming.
 
 ## Controls and events
 

@@ -1,6 +1,6 @@
 // Launcher-authored decoration. Shared controls come only from the UI Kit app export.
 import * as THREE from 'three';
-import { COLORS, material, roundedBox, roundedDisc } from '@xr-build/ui-kit';
+import { COLORS, material, roundedBox, roundedDisc, setVisualComposition } from '@xr-build/ui-kit';
 export function disposeObject(root) {
   const resources = new Set();
   root.traverse(object => {
@@ -13,9 +13,7 @@ export function disposeObject(root) {
   root.removeFromParent();
 }
 export function transparent(root) {
-  root.traverse(object => {
-    for (const entry of Array.isArray(object.material) ? object.material : object.material ? [object.material] : []) entry.transparent = true;
-  });
+  setVisualComposition(root, { transparent: true });
 }
 export function wrapLines(text, maxLength, maxLines = 2) {
   const lines = []; let line = '';

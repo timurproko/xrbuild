@@ -6,7 +6,8 @@ import { PinchTarget } from '@xr-build/sdk';
 import { Control } from './control.ts';
 import { pitchOf, play } from './sound.ts';
 import { dialVisual } from './default-visuals.ts';
-import { COLORS, approach, disc, material, roundedBox, roundedDisc } from './theme.ts';
+import { approach } from './theme.ts';
+import type { ThemeOptions } from './visual-theme.ts';
 
 const R = 0.022, KNOB_D = 0.014, KNOB_Z = 0.003;
 const SWEEP = THREE.MathUtils.degToRad(270);
@@ -28,7 +29,7 @@ export class Dial extends Control {
   private hover = 0;
   private press = 0;
 
-  constructor(title: string) {
+  constructor(title: string, options: ThemeOptions = {}) {
     super(title, -R - 0.024);
     const visual = dialVisual(R, KNOB_D, KNOB_Z, TICKS, START, SWEEP);
     this.knob = visual.knob;
@@ -64,6 +65,7 @@ export class Dial extends Control {
     });
     this.showStatus();
     this.visuals.capture(this);
+    if (options.theme) this.setTheme(options.theme);
   }
 
   private showStatus(): void {
@@ -95,11 +97,17 @@ export class Dial extends Control {
     this.press = approach(this.press, s.held ? 1 : 0, dt);
     this.hover = approach(this.hover, this.enabled ? Math.max(s.proximity * 0.6, s.mouseOver ? 0.6 : 0) : 0, dt);
     this.knob.position.z = KNOB_Z + this.press * 0.002;
-    this.knobMaterial.color.set(COLORS.cap).lerp(new THREE.Color(COLORS.accent), this.press * 0.55 + this.hover * 0.25);
-    this.knobMaterial.emissive.set(COLORS.accent).multiplyScalar(this.press * 0.25 + this.hover * 0.08);
-    const lit = this.value * (TICKS - 1);
-    this.ticks.forEach((t, i) => t.material.color.set(i <= lit + 1e-6 ? COLORS.accent : COLORS.track));
+    this.refreshTheme();
     this.fade(dt);
+  }
+
+  protected refreshTheme(): void {
+    const colors = this.theme.colors;
+    this.knobMaterial.color.set(colors.cap).lerp(new THREE.Color(colors.accent), this.press * 0.55 + this.hover * 0.25);
+    this.knobMaterial.emissive.set(colors.accent).multiplyScalar(this.press * 0.25 + this.hover * 0.08);
+    const lit = this.value * (TICKS - 1);
+    this.ticks.forEach((t, i) => t.material.color.set(i <= lit + 1e-6 ? colors.accent : colors.track));
+    this.fade(0);
   }
 
   protected cancel(): void {

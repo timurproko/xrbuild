@@ -58,9 +58,29 @@ Full exported scenes include their authored lights/background. When composing se
 
 Adapters reuse the existing control state machines. The SDK remains the only target arbiter, mouse binder, hand pipeline, camera/resize owner and final renderer. Controls update once per SDK frame, not per eye; Dialog owns its Close button. Callback changes do not cancel capture. Unmount removes subscriptions and cancels held targets before disposing owned resources; borrowed maps/children and the SDK renderer survive. No compatibility mouse echo is registered as another component click.
 
-Constructor options are stable for an instance; use a React key for intentional reconstruction. Mutable transforms, enabled/visible state, documented setters and event handlers update in place. A ref exposes the existing control, including dialog open/close and trackball axis. The Interactable showcase still disables controls immediately at the SDK boundary, while React keeps the declared state coherent.
+Constructor options are stable for an instance; use a React key for intentional reconstruction, never for a theme change. Mutable transforms, enabled/visible state, documented setters and event handlers update in place. A ref exposes the existing control, including dialog open/close and trackball axis. The Interactable showcase still disables controls immediately at the SDK boundary, while React keeps the declared state coherent.
 
-Default geometry/material builders are separated from target and interaction behavior. A later theme can supply different mesh shapes/materials/colours at the construction boundary through React context; no selectable theme, provider, alternate shape or global mutable style is implemented here.
+## Mesh themes and app defaults
+
+UI Kit supplies `default` (the unchanged rounded reference) and `chamfer` (clipped, bevelled/inset satin meshes), covering every control, variant and primitive. Their layouts, target/contact bounds, timing, sounds and interaction traces are identical. Only visuals differ. See the [theme contract and selection guide](../packages/ui-kit/README.md#visual-theme-contract).
+
+Each UI Kit-consuming app exports a plain, side-effect-free `uiKitTheme` declaration with `defaultTheme: 'default'` from its public entry. This is only a default ID, not an exposed-settings declaration, storage policy or registry. The app's run entry uses the same scene boundary as composition:
+
+```tsx
+import { UiKitThemeProvider } from '@xr-build/ui-kit-app';
+import { LauncherScene, uiKitTheme } from '@scene/launcher';
+
+// Use the app-declared default when there is no surrounding selection.
+<LauncherScene />;
+// A controlled prop selects a style for this app only.
+<LauncherScene theme="chamfer" />;
+// A surrounding consumer can select all inheriting UI Kit components.
+<UiKitThemeProvider theme="chamfer"><LauncherScene /></UiKitThemeProvider>;
+```
+
+`UiKitSceneProps` and `LauncherSceneProps` accept an optional theme ID or complete immutable definition. Resolution is explicit control override, nearest explicit scene/provider choice, inherited choice, app-declared fallback, then library Default. A scene's fallback never masks a surrounding explicit provider. Runtime updates use the existing mount's `update` with the same component type, not a new key or SDK runtime. They retain values, capture, modal/axis state and Launcher's catalog/page/accepted navigation deadline while replacing only owned visuals. The future settings tab can read the plain default ID and drive this existing prop/provider; this task adds no panel UI, persistence, query switch or settings-discovery mechanism.
+
+Theme-owned geometry can change, so construction-time mesh mutations are not a persistent theme override. Stable control hosts, explicit supported visual options and borrowed maps/children retain their ownership. Standalone app icons and app-specific branding/environment remain unchanged.
 
 ## Checking a migration
 
