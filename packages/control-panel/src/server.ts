@@ -635,7 +635,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       if (method === 'PUT' && rest[0] === 'manifest' && rest.length === 1) {
         const body = await readJson<{ manifest?: Manifest; mtimeMs?: number; revision?: string; confirm?: string[] }>(req);
         if (!body.manifest) throw new HttpError(400, 'manifest missing');
-        const componentErrors = await projectComponentErrors(core, workspace, projects, body.manifest);
+        const componentErrors = await projectComponentErrors(core, workspace, projects, body.manifest, p.manifest);
         if (componentErrors.length) return sendJson(res, 400, { error: 'invalid component settings', fields: componentErrors });
         const publicationErrors = panel.publicationErrors(body.manifest);
         if (publicationErrors.length) return sendJson(res, 400, { error: 'invalid publication settings', fields: publicationErrors });

@@ -11,6 +11,7 @@ import * as Fiber from '@react-three/fiber';
 import * as bridge from '../src/index.ts';
 import * as sdk from '../../sdk/src/index.ts';
 import * as kit from '../../ui-kit/src/index.ts';
+import * as themeChoices from '../../ui-kit/src/theme-choices.ts';
 import * as controls from '../../ui-kit/src/react/index.ts';
 import '../../ui-kit/test/dom-shim.ts';
 import { fixture, settle } from './fixture.ts';
@@ -36,7 +37,7 @@ export async function componentApp(root, options = {}) {
   const context = createContext({ window, document:{body:state.container}, console, URL, URLSearchParams, AbortController,
     performance:{now:()=>now}, fetch:options.fetch ?? (async()=>Response.json({version:1,publications:[]})), Response, location, ...timers });
   const dependencies = { react:{...React,default:React}, 'react/jsx-runtime':jsx, three:THREE,
-    '@react-three/fiber':Fiber, '@xr-build/sdk':sdk, '@xr-build/ui-kit':kit, '@xr-build/ui-kit/react':controls,
+    '@react-three/fiber':Fiber, '@xr-build/sdk':sdk, '@xr-build/ui-kit':kit, '@xr-build/ui-kit/react':controls, '@xr-build/ui-kit/theme-choices':themeChoices,
     '@xr-build/react':{...bridge,mountXrbApp(container,children,config){
       app=sdk.createXrbApp(state.renderer,{...config,xrb:{...config.xrb,...options.input},autoStart:false});
       handle=bridge.mountXrbApp(container,children,{...config,app});return handle;

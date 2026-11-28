@@ -36,6 +36,7 @@ const source = (name) => path.join(core, 'packages', name, 'src', 'index.ts');
 resolve: {
   alias: {
     '@xr-build/ui-kit/react': path.join(core, 'packages/ui-kit/src/react/index.ts'),
+    '@xr-build/ui-kit/theme-choices': path.join(core, 'packages/ui-kit/src/theme-choices.ts'),
     '@xr-build/ui-kit-app': path.join(core, 'embedded/projects/core/ui-kit/src/index.ts'),
     '@xr-build/react': source('react'),
     '@xr-build/sdk': source('sdk'),
@@ -84,7 +85,7 @@ Theme-owned geometry can change, so construction-time mesh mutations are not a p
 
 ## Exposed component parameters
 
-Libraries declare optional `componentLibrary.parameters` in `xrb-project.json`. Each choice has `type: 'choice'`, `label`, `options: [{ value, label }]` and `default`. The graphics-free `ComponentLibrary` / `ComponentMetadata` SDK types let authors check the same plain declaration in public code. UI Kit exports its typed `componentLibrary`; its manifest declaration is checked against registered theme metadata.
+Libraries declare optional `componentLibrary.parameters` in `xrb-project.json`. Each choice has `type: 'choice'`, `label`, `options: [{ value, label }]` and `default`. The graphics-free `ComponentLibrary` / `ComponentMetadata` SDK types let authors check the same plain declaration in public code. UI Kit exports its typed `componentLibrary`; its manifest declaration is checked against registered theme metadata. That graphics-free metadata is available through the core-resolved `@xr-build/ui-kit/theme-choices` alias above, so relocated embedded app sources never traverse back into an assumed checkout layout.
 
 Consumers explicitly declare origin-qualified library identities and parameter-to-scene-prop bindings:
 
@@ -99,7 +100,7 @@ Consumers explicitly declare origin-qualified library identities and parameter-t
 }
 ```
 
-The per-app **Components** tab appears directly after **Develop** only for consumers of exposed parameters. Fields are grouped by library and autosave through the normal project settings writer/API. Choices live in the consuming manifest's `componentSettings`, keyed by library identity and parameter, including user-owned effective settings for bundled apps. Saved values override consumer defaults, which override library defaults; other consumers and installed library sources are unchanged.
+The per-app **Components** tab appears directly after **Develop** only for consumers of exposed parameters. Fields are grouped by library and autosave through the normal project settings writer/API. Choices live in the consuming manifest's `componentSettings`, keyed by library identity and parameter, including user-owned effective settings for bundled apps. Saved values override consumer defaults, which override library defaults; other consumers and installed library sources are unchanged. If a referenced library is missing or archived, its fields are omitted without extra UI. Unrelated saves preserve its unchanged reference, defaults and saved selections; new selections or changed unavailable declarations are rejected until the library resolves again.
 
 Discovery reads data only: no app entry executes, and a `workspace:` library never silently resolves to a `bundled:` library. Another library or choice parameter needs only declarations, not library-specific panel code. Existing source aliases still determine which components are bundled.
 

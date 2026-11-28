@@ -42,3 +42,20 @@ test('bundled settings survive ordinary materialization, copy and source refresh
   assert.deepEqual(refreshed.componentSettings, result.json.manifest.componentSettings);
   assert.equal(refreshed.description, 'New product copy');
 });
+
+test('bundled consumers keep normal settings writable when their unchanged library becomes unavailable', async t => {
+  const f = await componentSettingsFixture(t);
+  const selected = await f.save(await f.get('bundled:launcher'), 'chamfer');
+  assert.equal(selected.status, 200, JSON.stringify(selected));
+  await fs.rm(path.join(f.core, 'embedded/projects/unsorted/ui-kit'), { recursive: true });
+  const current = await f.get('bundled:launcher');
+  assert.deepEqual(current.componentGroups, []);
+  const saved = await f.request('PUT', '/api/projects/bundled%3Alauncher/manifest', {
+    manifest: { ...current.manifest, description: 'Unrelated bundled edit' },
+    mtimeMs: current.manifestMtimeMs, revision: current.manifestRevision,
+  });
+  assert.equal(saved.status, 200, JSON.stringify(saved));
+  assert.deepEqual(saved.json.manifest.componentLibraries, current.manifest.componentLibraries);
+  assert.deepEqual(saved.json.manifest.componentSettings, current.manifest.componentSettings);
+  assert.deepEqual(saved.json.componentGroups, []);
+});

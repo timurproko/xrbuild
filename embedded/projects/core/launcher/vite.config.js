@@ -33,7 +33,7 @@ export default defineConfig(() => {
       'import.meta.env.VITE_XRB_PUBLICATION_SLUG': JSON.stringify(publication.slug),
     },
     // Source-aliased app externals belong to this consumer, not an installed producer.
-    resolve: { alias: { '@xr-build/ui-kit-app': path.join(core, 'embedded/projects/core/ui-kit/src/index.ts'), '@xr-build/ui-kit/react': path.join(core, 'packages/ui-kit/src/react/index.ts'), '@xr-build/react': source('react'), '@xr-build/sdk': source('sdk'), '@xr-build/ui-kit': source('ui-kit') }, dedupe: ['three', 'react', 'react-dom', '@react-three/fiber', 'lucide'] },
+    resolve: { alias: { '@xr-build/ui-kit/theme-choices': path.join(core, 'packages/ui-kit/src/theme-choices.ts'), '@xr-build/ui-kit-app': path.join(core, 'embedded/projects/core/ui-kit/src/index.ts'), '@xr-build/ui-kit/react': path.join(core, 'packages/ui-kit/src/react/index.ts'), '@xr-build/react': source('react'), '@xr-build/sdk': source('sdk'), '@xr-build/ui-kit': source('ui-kit') }, dedupe: ['three', 'react', 'react-dom', '@react-three/fiber', 'lucide'] },
     build: { target: 'es2022', rollupOptions: {
       input: { main: 'index.html', icon: 'src/icon.js' }, preserveEntrySignatures: 'exports-only',
       output: { entryFileNames: (chunk) => chunk.name === 'icon' ? 'icon.js' : 'assets/[name]-[hash].js' },
