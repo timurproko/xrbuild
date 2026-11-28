@@ -36,6 +36,7 @@ import { refreshManifest } from './embedded-source-refresh.ts';
 import { projectWritableRoot, withEmbeddedProjectLock, embeddedProjectRoot, embeddedManifestRevision } from './embedded-project-state.ts';
 import { effectiveProjectOutput, effectiveOutputRoot } from './embedded-project-output.ts';
 import { discoverProjectCatalog } from './extension-catalog.ts';
+import { projectComponentGroups, projectComponentErrors } from './component-settings.ts';
 import { bundledBuildPlan, resolveProjectOutput, requireProjectOutput, projectPreviewRoute, projectBuildRoot } from './project-build.ts';
 import { copyBundledProject, projectFile, projectPath } from './embedded-projects.ts';
 import { projectIconSource } from './project-icons.ts';
@@ -249,6 +250,7 @@ export async function describeProject(projects: string, p: Project, panel: Panel
     section: p.section,
     dir: path.relative(await fs.realpath(p.readOnly ? panel.repo : projects), p.dir).split(path.sep).join('/'),
     manifest: m,
+    componentGroups: m ? await projectComponentGroups(panel.repo, panel.workspace, projects, m) : [],
     errors: [...p.errors, ...(p.stateProblem ? [{ field: '', message: p.stateProblem }] : []), ...(runSettings?.problem ? [{ field: '', message: `${runSettings.problem} (${projectRunSettingsFile(panel.repo, panel.workspace, p)})` }] : [])],
     manifestMtimeMs: p.manifestMtimeMs,
     manifestRevision: p.origin === 'bundled' ? embeddedManifestRevision(p, runSettings?.value?.revision) : undefined,
@@ -523,6 +525,15 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       hub.send('run', panel.runner.state());
       return;
     }
+    if (is('GET', 'component-settings')) {
+      if (!panel.componentSettingsScope(url.searchParams)) throw new HttpError(404, 'Component settings scope is not active');
+      const p = await findProject(url.searchParams.get('project')!);
+      const groups = p.manifest ? await projectComponentGroups(core, workspace, projects, p.manifest) : [];
+      // Discovery yields: recheck the run before exposing its values.
+      if (!panel.componentSettingsScope(url.searchParams)) throw new HttpError(404, 'Component settings scope is not active');
+      res.setHeader('cache-control', 'no-store');
+      return sendJson(res, 200, Object.fromEntries(groups.map(group => [group.id, group.values])));
+    }
     if (is('GET', 'projects')) {
       const catalog = await discoverProjectCatalog(core, workspace, projects);
       const liveProjects = catalog.projects.map(record => record.project).filter(p => !isArchivedId(p.id));
@@ -624,6 +635,8 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       if (method === 'PUT' && rest[0] === 'manifest' && rest.length === 1) {
         const body = await readJson<{ manifest?: Manifest; mtimeMs?: number; revision?: string; confirm?: string[] }>(req);
         if (!body.manifest) throw new HttpError(400, 'manifest missing');
+        const componentErrors = await projectComponentErrors(core, workspace, projects, body.manifest, p.manifest);
+        if (componentErrors.length) return sendJson(res, 400, { error: 'invalid component settings', fields: componentErrors });
         const publicationErrors = panel.publicationErrors(body.manifest);
         if (publicationErrors.length) return sendJson(res, 400, { error: 'invalid publication settings', fields: publicationErrors });
         const editTime = p.manifestMtimeMs;
@@ -722,7 +735,7 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
   server = http.createServer((req, res) => {
     const mutation = !['GET', 'HEAD', 'OPTIONS'].includes(req.method ?? 'GET') && !/^\/api\/(?:restart|quit)\/?(?:\?|$)/.test(req.url ?? '');
     if (mutation) activeMutations++;
-    const localRead = req.url === '/api/projects' || /^\/api\/projects\/(?:[^/?]+\/){1,2}icon(?:\?|$)/.test(req.url ?? '')
+    const localRead = req.url === '/api/projects' || /^\/api\/component-settings(?:\?|$)/.test(req.url ?? '') || /^\/api\/projects\/(?:[^/?]+\/){1,2}icon(?:\?|$)/.test(req.url ?? '')
       || /^\/preview\//.test(req.url ?? '');
     const previewProjectionRead = /^\/api\/preview\/(?:projection|hands)(?:\?|$)/.test(req.url ?? '');
     let loopbackOrigin = '';

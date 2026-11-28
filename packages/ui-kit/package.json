@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./react": "./src/react/index.ts"
+    "./react": "./src/react/index.ts",
+    "./theme-choices": "./src/theme-choices.ts"
   },
   "scripts": {
     "test": "node --test \"test/**/*.test.ts\" && tsx --test test/*.test.tsx",

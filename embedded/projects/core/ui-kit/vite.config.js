@@ -16,7 +16,7 @@ const appIcon = { name: 'app-icon', generateBundle() { if (fs.existsSync('icon.p
 // base './': the build is served from https://app.local/ by xrb-host (and later from a package).
 export default defineConfig({
   plugins: [react(), appIcon],
-  server: { fs: { allow: [searchForWorkspaceRoot(process.cwd()), core] } }, base: './', resolve: { alias: { '@xr-build/ui-kit/react': path.join(core, 'packages/ui-kit/src/react/index.ts'), '@xr-build/react': sdk('react'), '@xr-build/sdk': sdk('sdk'), '@xr-build/ui-kit': sdk('ui-kit') }, dedupe: ['three', 'react', 'react-dom', '@react-three/fiber'] },
+  server: { fs: { allow: [searchForWorkspaceRoot(process.cwd()), core] } }, base: './', resolve: { alias: { '@xr-build/ui-kit/theme-choices': path.join(core, 'packages/ui-kit/src/theme-choices.ts'), '@xr-build/ui-kit/react': path.join(core, 'packages/ui-kit/src/react/index.ts'), '@xr-build/react': sdk('react'), '@xr-build/sdk': sdk('sdk'), '@xr-build/ui-kit': sdk('ui-kit') }, dedupe: ['three', 'react', 'react-dom', '@react-three/fiber'] },
   build: {
     target: 'es2022',
     rollupOptions: {

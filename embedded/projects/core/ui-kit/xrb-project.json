@@ -1,6 +1,19 @@
 {
   "name": "UI Kit",
   "kind": "app",
+  "componentLibrary": {
+    "parameters": {
+      "theme": {
+        "type": "choice",
+        "label": "Theme",
+        "options": [
+          { "value": "default", "label": "Default" },
+          { "value": "chamfer", "label": "Chamfer" }
+        ],
+        "default": "default"
+      }
+    }
+  },
   "description": "Library of spatial UI controls.",
   "entry": "dist",
   "scripts": {

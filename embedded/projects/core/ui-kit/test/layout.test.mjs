@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import React from 'react';
@@ -11,6 +12,17 @@ test('public entry exports scene and controls without running the showcase',asyn
  const state=await componentApp(root,{entry:'index.ts'});assert.equal(typeof state.exports.UiKitScene,'function');
  for(const name of ['Board','Button','Slider','Switch','Segmented','Dial','Trackball','Dialog','Label','Icon','GlassEdge'])assert.equal(typeof state.exports[name],'function',name);
  assert.equal(state.exports.uiKitTheme.defaultTheme,'default');assert.equal(typeof state.exports.UiKitThemeProvider,'function');
+ assert.equal(state.app,undefined);assert.equal(state.pending.size,0);assert.deepEqual(state.calls,[]);
+});
+test('relocated public entry resolves core metadata without checkout-relative traversal',async t=>{
+ const artifacts=process.env.XRB_TEST_ROOT??path.join(process.env.XRB_CORE,'.artifacts');
+ await fs.mkdir(artifacts,{recursive:true});
+ const relocated=await fs.mkdtemp(path.join(artifacts,'ui-kit-public-'));
+ t.after(()=>fs.rm(relocated,{recursive:true,force:true}));
+ await fs.cp(path.join(root,'src'),path.join(relocated,'src'),{recursive:true});
+ const state=await componentApp(relocated,{entry:'index.ts'});
+ assert.equal(typeof state.exports.UiKitScene,'function');
+ assert.deepEqual(Array.from(state.exports.componentLibrary.parameters.theme.options,option=>option.value),['default','chamfer']);
  assert.equal(state.app,undefined);assert.equal(state.pending.size,0);assert.deepEqual(state.calls,[]);
 });
 for(const theme of ['default','chamfer'])test(`${theme} component composition retains authored layout, axes, dialog and Interactable policy`,async()=>{
