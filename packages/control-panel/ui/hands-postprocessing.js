@@ -3,6 +3,7 @@ import { menuKeyboard, isPanelUnavailable } from './navigation.js';
 import { openMeshSetup } from './hands-mesh-setup.js';
 import { handsLog } from './hands-log.js';
 import { toast, closeToast } from './toast.js';
+import { pendingSwitch } from './pending-switch.js';
 const key = p => p ? `${p.owner}/${p.id}` : '';
 const identity = value => value ? { owner: value.slice(0, value.lastIndexOf('/')), id: value.slice(value.lastIndexOf('/') + 1) } : null;
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -35,7 +36,20 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
   const gear = root.querySelector('[data-mesh-gear]'), menu = root.querySelector('[role="menu"]'), reset = root.querySelector('[data-mesh-reset]');
   const layers = root.querySelector('[data-mesh-layers]'), layerValue = root.querySelector('[data-mesh-layer-value]'), layer = root.querySelector('[data-mesh-layer]');
   const ready = root.querySelector('[data-mesh-ready]'), install = root.querySelector('[data-mesh-install]'), layerOn = root.querySelector('[data-mesh-layer-enabled]');
-  let switching = false, shownProblem = '';
+  let shownProblem = '';
+  // The layer switch moves and locks on click, the badge follows the request, and it unlocks once the saved state matches.
+  const layerSwitch = pendingSwitch(layerOn, {
+    onPending: () => { if (!disposed) render(); },
+    onError: error => { if (!disposed && !isPanelUnavailable(error)) { failure = `Couldn't switch the layer. ${error.message}`; buttons(); } },
+    commit: async next => {
+      epoch++; // Answers to reads that started before the click can no longer repaint the old state.
+      const current = await load(), target = key(current.choice?.selected);
+      if (!target) throw new Error('No layer is selected');
+      const values = current.choice?.settings?.[target]?.values ?? {};
+      const result = await save({ selected: identity(target), enabled: next, values, revision: current.revision, registryRevision: current.registryRevision });
+      if (!disposed) { failure = null; epoch++; incorporate({ ...current, ...result }); }
+    },
+  });
   const events = new AbortController(), document = root.ownerDocument, edits = new Map();
   // On the Hands page the gear sits in the tab bar beside the Post-process tab, like Transform and Display.
   const slot = document.querySelector('[data-tab-action="post"]');
@@ -113,11 +127,11 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     const prerequisite = !!(p?.setup && (p.needsSetup || p.setupNeeded));
     install.hidden = !prerequisite;
     layer.classList.toggle('is-prerequisite', prerequisite);
-    onLayer(p && snapshot.choice?.enabled !== false ? p.label : null);
+    onLayer(p && (layerSwitch.pending ?? snapshot.choice?.enabled !== false) ? p.label : null);
     // The switch shows the saved state; off keeps the layer and its settings but runs nothing.
-    if (!switching) layerOn.checked = snapshot.choice?.enabled !== false;
-    layer.classList.toggle('is-off', !layerOn.checked);
-    layerOn.disabled = busy || switching || prerequisite || !selected || key(snapshot.choice?.selected) !== selected || !!snapshot.problem;
+    const shownOn = layerSwitch.sync(snapshot.choice?.enabled !== false,
+      { disabled: busy || prerequisite || !selected || key(snapshot.choice?.selected) !== selected || !!snapshot.problem });
+    layer.classList.toggle('is-off', !shownOn);
     for (const control of layer.querySelectorAll('#hands-mesh-brightness, #hands-mesh-brightness-range, #hands-mesh-color')) control.disabled = prerequisite;
     install.disabled = installing;
     for (const field of fields.querySelectorAll('[data-mesh-field]')) {
@@ -181,7 +195,9 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     const percent = /(\d+)%/.exec(text)?.[1];
     // Shown from the first render, also while a layer choice saves, so Install never appears before its badge.
     const prerequisite = !!(p?.setup && (p.needsSetup || p.setupNeeded));
-    const [label, tone] = prerequisite ? ['Prerequisite', 'busy'] : !p?.available ? ['', ''] : snapshot?.choice?.enabled === false ? ['Off', 'neutral'] : state === 'preparing' ? [percent ? `Preparing ${percent}%` : 'Preparing', 'busy']
+    // While the switch waits, the badge already names the requested state.
+    const requested = layerSwitch.pending, on = requested ?? snapshot?.choice?.enabled !== false;
+    const [label, tone] = prerequisite ? ['Prerequisite', 'busy'] : !p?.available ? ['', ''] : !on ? ['Off', 'neutral'] : requested === true ? ['Starting', 'busy'] : state === 'preparing' ? [percent ? `Preparing ${percent}%` : 'Preparing', 'busy']
       : state === 'applying' ? ['Starting', 'busy'] : state === 'applied' ? ['Running', 'ok'] : state === 'failed' ? ['Failed', 'err']
       : state === 'saving' ? ['Saving', 'neutral'] : ['Ready', 'ok'];
     badge.textContent = label; badge.className = `state ${tone}`; badge.hidden = !label || root.querySelector('[data-mesh-layer]').hidden;
@@ -206,7 +222,7 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     incorporate(data);
   }
   async function read(discardEdits = false) {
-    if (disposed || busy || reading || retrying) return;
+    if (disposed || busy || reading || retrying || layerSwitch.pending !== null) return;
     reading = true; const token = ++epoch;
     try {
       const data = await load();
@@ -372,18 +388,6 @@ export function mountHandsPostprocessing(root, { load = () => request('GET'), sa
     select.value = next; choose();
   });
   on(root.querySelector('[data-mesh-layer-remove]'), 'click', () => { select.value = ''; choose(); });
-  on(layerOn, 'change', async () => {
-    if (switching || busy || !snapshot) return;
-    switching = true; render();
-    try {
-      const current = await load(), target = key(current.choice?.selected);
-      if (!target) return;
-      const values = current.choice?.settings?.[target]?.values ?? {};
-      const result = await save({ selected: identity(target), enabled: layerOn.checked, values, revision: current.revision, registryRevision: current.registryRevision });
-      if (!disposed) incorporate({ ...current, ...result });
-    } catch (error) { if (!disposed && !isPanelUnavailable(error)) { failure = `Couldn't switch the layer. ${error.message}`; } }
-    finally { switching = false; if (!disposed) render(); }
-  });
   on(install, 'click', async () => {
     const p = plugin(); if (!p || installing) return;
     installing = true; buttons(); render();

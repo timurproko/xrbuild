@@ -77,3 +77,34 @@ test('a missing prerequisite shows Prerequisite and leaves only Install and the 
     assert.deepEqual([ready.badge, ready.install], ['Ready', null]);
   });
 });
+
+test('the layer switch moves and locks on click, never flashes back, and unlocks once the saved state matches', { skip, timeout: 30000 }, async () => {
+  await withPostprocessing(async browser => {
+    const { evaluate } = browser;
+    // A save that waits for the test and records enabled like the real server does.
+    await evaluate(`component.dispose();options.save=async body=>{requests.push(structuredClone(body));await new Promise(r=>window.releaseSave=r);if(window.saveError)throw saveError;
+      snapshot={...snapshot,revision:String.fromCharCode(97+requests.length).repeat(64),choice:{...snapshot.choice,enabled:body.enabled}};return structuredClone(snapshot)};
+      component=mountMesh(root,options)`);
+    await evaluate('new Promise(resolve=>setTimeout(resolve,0))');
+    const look = () => evaluate(`(()=>{const s=root.querySelector('[data-mesh-layer-enabled]');return {checked:s.checked,disabled:s.disabled,badge:root.querySelector('[data-mesh-ready]').textContent}})()`);
+    assert.deepEqual(await look(), { checked: true, disabled: false, badge: 'Ready' });
+    await evaluate(`root.querySelector('[data-mesh-layer-enabled]').click()`);
+    await evaluate('new Promise(resolve=>setTimeout(resolve,20))');
+    assert.deepEqual(await look(), { checked: false, disabled: true, badge: 'Off' }, 'off at once, and locked');
+    await evaluate(`component.reload?.()`);
+    await evaluate('new Promise(resolve=>setTimeout(resolve,20))');
+    assert.deepEqual(await look(), { checked: false, disabled: true, badge: 'Off' }, 'a repaint from older data cannot move it back');
+    await evaluate('window.releaseSave()'); await evaluate('new Promise(resolve=>setTimeout(resolve,20))');
+    assert.deepEqual(await look(), { checked: false, disabled: false, badge: 'Off' }, 'unlocked once saved');
+    await evaluate(`root.querySelector('[data-mesh-layer-enabled]').click()`);
+    await evaluate('new Promise(resolve=>setTimeout(resolve,20))');
+    assert.deepEqual(await look(), { checked: true, disabled: true, badge: 'Starting' });
+    await evaluate('window.releaseSave()'); await evaluate('new Promise(resolve=>setTimeout(resolve,20))');
+    assert.deepEqual(await look(), { checked: true, disabled: false, badge: 'Ready' });
+    // A failed save puts the switch back where it was and unlocks it.
+    await evaluate(`window.saveError=new Error('offline');root.querySelector('[data-mesh-layer-enabled]').click()`);
+    await evaluate('new Promise(resolve=>setTimeout(resolve,20))');
+    await evaluate('window.releaseSave()'); await evaluate('new Promise(resolve=>setTimeout(resolve,20))');
+    assert.deepEqual(await look(), { checked: true, disabled: false, badge: 'Ready' });
+  });
+});

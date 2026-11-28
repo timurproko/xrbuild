@@ -1,6 +1,7 @@
 // XR Build control panel UI: plain ES module, no build step. Talks to the panel server
 // (same origin) over JSON and a Server-Sent Events stream.
-import { listenForToasts } from './toast.js';
+import { listenForToasts, toast } from './toast.js';
+import { pendingSwitch } from './pending-switch.js';
 import { SettingsWriter } from './settings-writer.js';
 import {installJobLogCopy, readJobLog} from './job-log.js';
 import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
@@ -3222,15 +3223,17 @@ function renderManagedPlugins() {
     const sample = samples.find((item) => item.id === button.dataset.importSample);
     return sample ? importPluginSample(p, sample) : Promise.resolve();
   })));
-  el.querySelector('.plugin-enable').addEventListener('change', action(async (event) => {
-    event.target.disabled = true;
-    try {
-      await api('PUT', `/api/plugins/manage/${encodeURIComponent(p.id)}`, { enabled: event.target.checked });
+  // Same switch behaviour as every plugin toggle: it moves and locks on click, the label follows the request, and the
+  // reloaded page shows the confirmed state; a failure puts it back and reports why.
+  const enable = el.querySelector('.plugin-enable');
+  pendingSwitch(enable, { label: enable.parentElement.querySelector('span'), labels: ['Disabled', 'Enabled'],
+    onError: error => toast({ title: managerName(p), message: error.message, tone: 'err' }),
+    commit: async next => {
+      await api('PUT', `/api/plugins/manage/${encodeURIComponent(p.id)}`, { enabled: next });
       await loadHost();
       await loadProjects();
       await loadManagedPlugins();
-    } catch (e) { event.target.checked = !event.target.checked; event.target.disabled = false; throw e; }
-  }));
+    } });
 }
 
 const APPS_GLYPH = '🎛️';

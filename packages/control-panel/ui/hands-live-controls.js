@@ -1,5 +1,6 @@
 import { handsLog, clearHandsLog } from './hands-log.js';
 import { isPanelUnavailable } from './navigation.js';
+import { toast, closeToast } from './toast.js';
 const key = source => source ? `${source.owner}/${source.id}` : '';
 /** Only acquisition controls: no source writes, status paragraphs, recorder or adjustment editor. */
 export function mountHandsLiveControls({ session, view, load, provider = document.getElementById('hands-provider') }) {
@@ -43,6 +44,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     const stoppingNow = stopping || session.stopping || phase === 'stopping';
     button.textContent = cleanupPending && !stopping ? 'Retry cleanup' : stoppingNow ? 'Stop' : active ? 'Stop' : status.takeoverAvailable ? 'Take over' : 'Start';
     button.disabled = stopping || !cleanupPending && (stoppingNow || !active && (!!unavailable || phase === 'occupied' && !status.takeoverAvailable || !!view?.replaying));
+    explainBlocked(!active && !cleanupPending && data && view?.profile ? unavailable : '');
     const labels = { 'not-started': 'Not started', starting: 'Starting…', waiting: 'Waiting', running: 'Running', 'no-hands': 'No hands', rejected: 'Observation dropped', stalled: 'Stalled', stopping: 'Stopping…', stopped: 'Stopped', failed: 'Failed', cleanup: 'Cleanup', occupied: 'Busy' };
     let label = labels[phase] ?? 'Not started';
     if (active && status.source && key(status.source) !== provider.value) label += ` · ${status.source.label}`;
@@ -51,6 +53,18 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     const fps = Number.isFinite(status.trackingFps) && ['running', 'no-hands'].includes(phase) ? status.trackingFps.toFixed(1) : '—';
     if (rates.textContent !== fps) rates.textContent = fps;
     rates.parentElement.dataset.tooltip = fps === '—' ? 'No fresh live provider frames' : `Unique received frames/s · Capture age ${status.frameAgeMs?.toFixed(1)} ms ± ${status.uncertaintyMs?.toFixed(1)} ms · Delivery gaps ${status.dropped ?? 0} · Provider-reported ${status.reportedHz ?? '—'} Hz`;
+  }
+  // Why Start cannot be used, as a lasting notice in the corner: shown once the page has loaded, replaced when the reason
+  // changes and closed when Start becomes usable. A dismissed notice stays closed until the reason changes.
+  let blockedReason = '';
+  function explainBlocked(reason) {
+    button.title = reason;
+    if (reason === blockedReason) return;
+    blockedReason = reason;
+    if (!reason) { closeToast('hands-start-blocked'); return; }
+    const setup = document.querySelector('.hands-adjustment-tabs [data-tab="setup"]');
+    toast({ id: 'hands-start-blocked', title: "Hands can't start", message: reason, tone: 'warn', timeoutMs: 0,
+      actions: setup ? [{ label: 'Open Setup', onClick: () => setup.click() }] : [] });
   }
   // Provider lifecycle in the Log: one line per start, start confirmation and stop, not per running/no-hands flip.
   const LIVE = ['waiting', 'running', 'no-hands', 'rejected', 'stalled'];
@@ -108,5 +122,5 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   };
   const timer = setInterval(() => { if (session.active) render(); else void poll(); }, 1000);
   render(); void poll();
-  return { update, dispose() { closed = true; generation++; clearInterval(timer); unsubscribe(); provider.removeEventListener('change', changed); button.removeEventListener('click', click); root.remove(); } };
+  return { update, dispose() { closed = true; generation++; clearInterval(timer); closeToast('hands-start-blocked'); unsubscribe(); provider.removeEventListener('change', changed); button.removeEventListener('click', click); root.remove(); } };
 }
