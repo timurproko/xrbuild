@@ -47,6 +47,8 @@ function puck(radius: number, depth: number): THREE.BufferGeometry {
  * rotating square bounds allow inside the dial's footprint. Smaller dials scale with it.
  */
 const DIAL_TO_ROUND = 0.024 / 0.022;
+/** The slider thumb widens from 0.022 to 0.027 m; its 0.032 m height is already the slider's full footprint height. */
+const THUMB_WIDEN = 0.027 / 0.022;
 /** The switch thumb (radius 0.0115) fills its capsule track (radius 0.015) with an even 1.5 mm rim. */
 const SWITCH_FILL = 0.0135 / 0.0115;
 const MARK_W = 0.00205, MARK_L = 0.011, MARK_D = 0.0006;
@@ -71,7 +73,7 @@ function geometry(role: VisualRole, input: GeometryInput): THREE.BufferGeometry 
     case 'box': {
       const [w, h, d, r = Math.min(w, h) / 2] = a;
       // The slider thumb is an upright capsule, the pill Button's shape turned on end; its one mark is the grip line below.
-      result = slab(w, h, d, role === 'sliderHandle' ? Math.min(w, h) / 2 : r);
+      result = role === 'sliderHandle' ? slab(w * THUMB_WIDEN, h, d, Math.min(w * THUMB_WIDEN, h) / 2) : slab(w, h, d, r);
       break;
     }
     case 'roundedDisc': result = puck(a[0] * (role === 'dialKnob' ? DIAL_TO_ROUND : role === 'switchKnob' ? SWITCH_FILL : 1), a[1]); break;
