@@ -9,7 +9,8 @@ import { play } from './sound.ts';
 import { COLORS, approach, material } from './theme.ts';
 import type { ThemeOptions } from './visual-theme.ts';
 
-const SEG_W = 0.034, SEG_H = 0.024, GAP = 0.003, DEPTH = 0.007, REST = 0.006, TRAVEL = 0.006;
+// Keys are as tall as the pill Button (0.028), so the mode switcher reads as a row of regular buttons.
+const SEG_W = 0.034, SEG_H = 0.028, GAP = 0.003, DEPTH = 0.007, REST = 0.006, TRAVEL = 0.006;
 const LATCHED = 0.003;  // the selected segment sits this far in
 
 interface Segment {

@@ -42,3 +42,7 @@
 ## 10. Accent theme replaces Chamfer
 
 - [x] 10.1 Replace the Chamfer style with Accent: solid accent bodies with filleted edges and a satin finish, an optional on-body ink for text and icons, a slider that fills inside its dark channel with a half-accent fill and an upright capsule slider thumb with one white line; resolve a saved Chamfer choice to Accent; cover it in UI Kit, panel and embedded tests.
+
+## 11. Segmented keys at button height
+
+- [x] 11.1 Make Segmented keys as tall as the pill Button (0.028 m) in every theme, growing the control and its touch areas, without changing key width.
