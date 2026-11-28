@@ -57,3 +57,17 @@ A theme switch SHALL dispose retired owned geometry, materials and textures exac
 #### Scenario: Callback and development updates
 - **WHEN** callbacks change, strict development effects replay or hot replacement occurs under a provider
 - **THEN** the latest callbacks receive live events, no extra frame loop or duplicate Close update starts and retired callbacks cannot run after cleanup
+
+## ADDED Requirements
+
+### Requirement: Rows share a title line and disabled controls hide input cues
+
+A control SHALL accept a title offset below its centre, so controls of different sizes in one row share a title line, without changing their targets. A disabled trackball SHALL hide its axis guide and show it again when enabled.
+
+#### Scenario: Middle row of the showcase
+- **WHEN** the round Button, Trackball and Dial share a row with one title offset
+- **THEN** their titles and statuses sit on one line while their centres stay aligned
+
+#### Scenario: Controls turned off
+- **WHEN** the trackball is disabled
+- **THEN** its axis guide fades out, and it returns when the trackball is enabled again

@@ -54,3 +54,11 @@
 ## 13. Stale project locks recover
 
 - [x] 13.1 Clear an embedded project's operation lock when its owning panel process no longer exists, so a restart during a run cannot block later saves; keep refusing while a live owner holds it; cover both in the lock workflow test.
+
+## 14. Settings errors are toasts
+
+- [x] 14.1 Show a failed or conflicting project settings save as one error toast with a single Retry or Reload action instead of an inline status beside Run; cover it in the settings save browser test.
+
+## 15. UI Kit showcase rows and input cues
+
+- [x] 15.1 Let a control's title sit at a chosen offset below its centre so a row shares one title line, give the showcase's trackball axis switcher its own title, align its rows, and hide the trackball axis guide while the trackball is disabled; cover it in UI Kit and embedded layout tests.

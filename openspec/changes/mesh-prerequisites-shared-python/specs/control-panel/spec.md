@@ -37,3 +37,11 @@ Every plugin or post-processing layer on/off switch SHALL use one shared behavio
 #### Scenario: Change refused
 - **WHEN** saving the change fails
 - **THEN** the switch returns to its previous side, unlocks, and a notice names the reason
+
+### Requirement: Settings save errors are toasts
+
+A project settings save that fails or conflicts with another editor SHALL be reported as one error toast naming the reason with a single action (Retry for a failed write, Reload for a conflict), and SHALL NOT add an inline status beside Run. The toast SHALL close when a later save succeeds.
+
+#### Scenario: Save refused
+- **WHEN** a settings change cannot be saved
+- **THEN** an error toast says Not saved with the reason and offers Retry, Run does not move, and no inline status row appears
