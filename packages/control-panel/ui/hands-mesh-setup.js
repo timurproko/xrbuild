@@ -43,7 +43,10 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
       <span class="xrb-progress-error">${iconSvg('error-circle')}</span>
     </span><div><h3 id="hands-mesh-setup-title">Install prerequisites</h3><p class="muted" data-setup-message role="status">Reading the setup plan…</p></div></div>
     <div class="xrb-copy-block"><button type="button" class="xrb-icon-button xrb-copy-action" data-setup-copy aria-label="Copy setup log">${iconSvg('copy')}</button><pre class="log" data-setup-output aria-label="Setup details">Reading the setup plan…</pre></div>
-    <label class="xrb-field-label hands-mesh-setup-file" data-setup-file hidden><span data-setup-file-label></span><input type="file" data-setup-file-input></label>
+    <div class="hands-mesh-setup-file" data-setup-file hidden><span class="xrb-field-label" data-setup-file-label></span>
+      <div class="row hands-mesh-setup-file-row"><button type="button" class="action-button" data-setup-choose>${iconSvg('folder')}<span>Choose file…</span></button>
+      <span class="muted hands-mesh-setup-file-name" data-setup-file-name>No file chosen</span></div>
+      <input type="file" data-setup-file-input hidden></div>
     <div class="row ask-buttons"><span class="spacer"></span>
       <button type="button" class="action-button" data-setup-cancel>Cancel</button>
       <button type="button" class="action-button primary" data-setup-install disabled>Install</button></div>`;
@@ -52,7 +55,14 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
     const output = dialog.querySelector('[data-setup-output]'), cancel = dialog.querySelector('[data-setup-cancel]'), install = dialog.querySelector('[data-setup-install]');
     const fileRow = dialog.querySelector('[data-setup-file]'), fileInput = dialog.querySelector('[data-setup-file-input]');
     // Install waits for the file a setup asks for (for example a licensed archive that cannot be downloaded).
-    const fileReady = () => { install.disabled = !plan || !!plan.input && !fileInput.files?.length; };
+    const choose = dialog.querySelector('[data-setup-choose]'), fileName = dialog.querySelector('[data-setup-file-name]');
+    const fileReady = () => {
+      const file = fileInput.files?.[0];
+      fileName.textContent = file ? `${file.name} · ${size(file.size)}` : 'No file chosen'; fileName.title = file?.name ?? '';
+      install.disabled = !plan || !!plan.input && !file;
+    };
+    // The native picker stays hidden; a design-system button opens it and the chosen name shows beside it.
+    choose.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', fileReady);
     let plan = null, running = false, done = false;
     installJobLogCopy(dialog.querySelector('[data-setup-copy]'), async () => output.textContent);
@@ -90,7 +100,7 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
     })();
     install.addEventListener('click', async () => {
       if (!plan || running) return;
-      running = true; install.hidden = true; fileInput.disabled = true; state('running');
+      running = true; install.hidden = true; fileInput.disabled = choose.disabled = true; state('running');
       let stepLine = '', stepStarted = Date.now();
       message.textContent = `Installing ${label}…`; output.textContent = 'Starting…';
       try {
@@ -114,7 +124,7 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
         if (cancelling && !done) {
           // A cancel is not a failure: back to the plan, ready to continue from the kept downloads.
           state('idle'); message.textContent = `Install cancelled. Install again to continue where it stopped.`;
-          install.hidden = false; install.textContent = 'Install'; fileInput.disabled = false;
+          install.hidden = false; install.textContent = 'Install'; fileInput.disabled = choose.disabled = false;
         } else {
           state(done ? 'done' : 'failed');
           message.textContent = done ? `${label} is ready.` : job.error || 'Install failed; review the output and try again.';

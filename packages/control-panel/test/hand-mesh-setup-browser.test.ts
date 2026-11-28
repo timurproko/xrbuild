@@ -31,6 +31,8 @@ test('the setup dialog asks for a required file, waits for it, then copies it be
       assert.deepEqual(before, { row: true, label: 'Licensed model archive (models.zip)', accept: '.zip', install: true, scroll: false }, 'Install waits for the file');
       await evaluate(`(()=>{const i=document.querySelector('[data-setup-file-input]'),t=new DataTransfer();t.items.add(new File(['licensed'],'models.zip'));i.files=t.files;i.dispatchEvent(new Event('change'))})()`);
       assert.equal(await evaluate(`document.querySelector('[data-setup-install]').disabled`), false);
+      assert.match(String(await evaluate(`document.querySelector('[data-setup-file-name]').textContent`)), /^models\.zip · /, 'the chosen file shows beside the button');
+      assert.equal(await evaluate(`document.querySelector('[data-setup-file-input]').hidden`), true, 'the native picker is never shown');
       await evaluate(`document.querySelector('[data-setup-install]').click()`);
       await evaluate(`new Promise(r=>{const t=setInterval(()=>{if(document.querySelector('.xrb-progress-status-icon').dataset.state==='done'){clearInterval(t);r()}},50)})`);
       assert.equal(received.length, 1);
