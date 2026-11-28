@@ -5,6 +5,24 @@ import { installJobLogCopy } from './job-log.js';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const size = bytes => bytes >= 2 ** 30 ? `${(bytes / 2 ** 30).toFixed(2)} GB` : `${(bytes / 2 ** 20).toFixed(1)} MB`;
 
+/** Copies a chosen file to the panel's private setup folder, reporting progress; resolves with its input id. */
+function upload(owner, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', '/api/hands/postprocessing/setup-input');
+    request.setRequestHeader('content-type', 'application/octet-stream');
+    request.setRequestHeader('x-xrb-setup-owner', owner);
+    request.setRequestHeader('x-xrb-setup-name', file.name);
+    request.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.floor(event.loaded * 100 / event.total)); };
+    request.onload = () => {
+      let data = {}; try { data = JSON.parse(request.responseText); } catch { /* reported below */ }
+      if (request.status === 200 && typeof data.input === 'string') resolve(data.input); else reject(new Error(data.error ?? `Request failed (${request.status})`));
+    };
+    request.onerror = () => reject(new Error('The file could not be sent to the panel'));
+    request.send(file);
+  });
+}
+
 async function post(route, body) {
   const response = await fetch(route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const data = await response.json().catch(() => ({}));
@@ -25,12 +43,27 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
       <span class="xrb-progress-error">${iconSvg('error-circle')}</span>
     </span><div><h3 id="hands-mesh-setup-title">Install prerequisites</h3><p class="muted" data-setup-message role="status">Reading the setup plan…</p></div></div>
     <div class="xrb-copy-block"><button type="button" class="xrb-icon-button xrb-copy-action" data-setup-copy aria-label="Copy setup log">${iconSvg('copy')}</button><pre class="log" data-setup-output aria-label="Setup details">Reading the setup plan…</pre></div>
+    <div class="hands-mesh-setup-file" data-setup-file hidden><span class="xrb-field-label" data-setup-file-label></span>
+      <div class="row hands-mesh-setup-file-row"><button type="button" class="action-button" data-setup-choose>${iconSvg('folder')}<span>Choose file…</span></button>
+      <span class="muted hands-mesh-setup-file-name" data-setup-file-name>No file chosen</span></div>
+      <input type="file" data-setup-file-input hidden></div>
     <div class="row ask-buttons"><span class="spacer"></span>
       <button type="button" class="action-button" data-setup-cancel>Cancel</button>
       <button type="button" class="action-button primary" data-setup-install disabled>Install</button></div>`;
     doc.body.append(dialog);
     const status = dialog.querySelector('.xrb-progress-status-icon'), message = dialog.querySelector('[data-setup-message]');
     const output = dialog.querySelector('[data-setup-output]'), cancel = dialog.querySelector('[data-setup-cancel]'), install = dialog.querySelector('[data-setup-install]');
+    const fileRow = dialog.querySelector('[data-setup-file]'), fileInput = dialog.querySelector('[data-setup-file-input]');
+    // Install waits for the file a setup asks for (for example a licensed archive that cannot be downloaded).
+    const choose = dialog.querySelector('[data-setup-choose]'), fileName = dialog.querySelector('[data-setup-file-name]');
+    const fileReady = () => {
+      const file = fileInput.files?.[0];
+      fileName.textContent = file ? `${file.name} · ${size(file.size)}` : 'No file chosen'; fileName.title = file?.name ?? '';
+      install.disabled = !plan || !!plan.input && !file;
+    };
+    // The native picker stays hidden; a design-system button opens it and the chosen name shows beside it.
+    choose.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', fileReady);
     let plan = null, running = false, done = false;
     installJobLogCopy(dialog.querySelector('[data-setup-copy]'), async () => output.textContent);
     new MutationObserver(() => { message.title = message.textContent; }).observe(message, { childList: true, characterData: true, subtree: true });
@@ -54,17 +87,26 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
         message.textContent = `${what}: downloads ${size(plan.downloadBytes)} in ${plan.items.length} files, about ${size(plan.installedBytes)} on disk.`;
         output.textContent = [`Destination: ${plan.destination}`, '', ...plan.items.map(i => `${i.publisher} · ${i.name} ${i.version} · ${size(i.bytes)} · ${i.licence}`),
           '', 'Files come from their publishers under the licences listed above.'].join('\n');
-        install.disabled = false;
-        if (plan.installed) { message.textContent = `${label} is already installed.`; install.textContent = 'Reinstall'; }
+        if (plan.input) {
+          fileRow.hidden = false; fileInput.accept = plan.input.accept;
+          dialog.querySelector('[data-setup-file-label]').textContent = plan.input.label;
+          message.textContent = `${what}: choose ${plan.input.label}. It is copied to your user folder only for this install.`;
+        }
+        fileReady();
+        // Installed but bound to an older plugin version: Install re-checks it without downloading.
+        if (plan.refresh) { message.textContent = `${label} is installed. Install checks it again for this plugin version; nothing is downloaded.`; output.textContent = `Destination: ${plan.destination}`; }
+        else if (plan.installed) { message.textContent = `${label} is already installed.`; install.textContent = 'Reinstall'; }
       } catch (error) { state('failed'); message.textContent = 'Could not read the setup plan.'; output.textContent = error.message; }
     })();
     install.addEventListener('click', async () => {
       if (!plan || running) return;
-      running = true; install.hidden = true; state('running');
+      running = true; install.hidden = true; fileInput.disabled = choose.disabled = true; state('running');
       let stepLine = '', stepStarted = Date.now();
       message.textContent = `Installing ${label}…`; output.textContent = 'Starting…';
       try {
-        let job = await post('/api/hands/postprocessing/setup', { owner, consent: plan.consent });
+        const chosen = plan.input ? fileInput.files[0] : null;
+        const input = chosen ? await upload(owner, chosen, percent => { message.textContent = `Installing ${label} · copy ${percent}%`; }) : undefined;
+        let job = await post('/api/hands/postprocessing/setup', { owner, consent: plan.consent, ...(input ? { input } : {}) });
         while (job.state === 'running' || job.state === 'queued') {
           await new Promise(r => setTimeout(r, 500));
           const jobs = (await (await fetch('/api/jobs', { cache: 'no-store' })).json()).jobs ?? [];
@@ -82,7 +124,7 @@ export function openMeshSetup({ owner, label, document: doc = globalThis.documen
         if (cancelling && !done) {
           // A cancel is not a failure: back to the plan, ready to continue from the kept downloads.
           state('idle'); message.textContent = `Install cancelled. Install again to continue where it stopped.`;
-          install.hidden = false; install.textContent = 'Install';
+          install.hidden = false; install.textContent = 'Install'; fileInput.disabled = choose.disabled = false;
         } else {
           state(done ? 'done' : 'failed');
           message.textContent = done ? `${label} is ready.` : job.error || 'Install failed; review the output and try again.';

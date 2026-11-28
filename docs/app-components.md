@@ -63,7 +63,7 @@ Constructor options are stable for an instance; use a React key for intentional 
 
 ## Mesh themes and app defaults
 
-UI Kit supplies `default` (the unchanged rounded reference) and `chamfer` (clipped, bevelled/inset satin meshes), covering every control, variant and primitive. Their layouts, target/contact bounds, timing, sounds and interaction traces are identical. Only visuals differ. See the [theme contract and selection guide](../packages/ui-kit/README.md#visual-theme-contract).
+UI Kit supplies `default` (the unchanged rounded reference) and `accent` (solid accent bodies with soft fillets and a satin finish), covering every control, variant and primitive. Their layouts, target/contact bounds, timing, sounds and interaction traces are identical. Only visuals differ. See the [theme contract and selection guide](../packages/ui-kit/README.md#visual-theme-contract).
 
 Each UI Kit-consuming app exports a plain, side-effect-free `uiKitTheme` declaration with `defaultTheme: 'default'` from its public entry. This remains a default ID; the separate manifest declaration below identifies exposed parameters and consumers. The app's run entry uses the same scene boundary as composition:
 
@@ -74,12 +74,12 @@ import { LauncherScene, uiKitTheme } from '@scene/launcher';
 // Use the app-declared default when there is no surrounding selection.
 <LauncherScene />;
 // A controlled prop selects a style for this app only.
-<LauncherScene theme="chamfer" />;
+<LauncherScene theme="accent" />;
 // A surrounding consumer can select all inheriting UI Kit components.
-<UiKitThemeProvider theme="chamfer"><LauncherScene /></UiKitThemeProvider>;
+<UiKitThemeProvider theme="accent"><LauncherScene /></UiKitThemeProvider>;
 ```
 
-`UiKitSceneProps` and `LauncherSceneProps` accept an optional theme ID or complete immutable definition. Resolution is explicit control override, nearest explicit scene/provider choice, inherited choice, app-declared fallback, then library Default. A scene's fallback never masks a surrounding explicit provider. Runtime updates use the existing mount's `update` with the same component type, not a new key or SDK runtime. They retain values, capture, modal/axis state and Launcher's catalog/page/accepted navigation deadline while replacing only owned visuals. The optional Components settings surface drives this existing prop/provider without changing rendering ownership.
+`UiKitSceneProps` and `LauncherSceneProps` accept an optional theme ID or complete immutable definition. Resolution is explicit control override, nearest explicit scene/provider choice, inherited choice, app-declared fallback, then library Default. A scene's fallback never masks a surrounding explicit provider. Runtime updates use the existing mount's `update` with the same component type, not a new key or SDK runtime. They retain values, capture, modal/axis state and Launcher's catalog/page/accepted navigation deadline while replacing only owned visuals. The optional Settings tab drives this existing prop/provider without changing rendering ownership.
 
 Theme-owned geometry can change, so construction-time mesh mutations are not a persistent theme override. Stable control hosts, explicit supported visual options and borrowed maps/children retain their ownership. Standalone app icons and app-specific branding/environment remain unchanged.
 
@@ -100,7 +100,7 @@ Consumers explicitly declare origin-qualified library identities and parameter-t
 }
 ```
 
-The per-app **Components** tab appears directly after **Develop** only for consumers of exposed parameters. Fields are grouped by library and autosave through the normal project settings writer/API. Choices live in the consuming manifest's `componentSettings`, keyed by library identity and parameter, including user-owned effective settings for bundled apps. Saved values override consumer defaults, which override library defaults; other consumers and installed library sources are unchanged. If a referenced library is missing or archived, its fields are omitted without extra UI. Unrelated saves preserve its unchanged reference, defaults and saved selections; new selections or changed unavailable declarations are rejected until the library resolves again.
+The per-app **Settings** tab appears as the last tab only for consumers of exposed parameters. A library app can consume its own parameters: UI Kit does, so its Settings tab chooses the theme it shows when it runs. While an app runs, a change in its Settings tab is temporary, like a play mode: it applies to the running app at once, is not saved, and resets when the app stops. Settings that only take effect on the next start (Platform, Display, Input) are locked during a run. Fields are grouped by library and autosave through the normal project settings writer/API. Choices live in the consuming manifest's `componentSettings`, keyed by library identity and parameter, including user-owned effective settings for bundled apps. Saved values override consumer defaults, which override library defaults; other consumers and installed library sources are unchanged. If a referenced library is missing or archived, its fields are omitted without extra UI. Unrelated saves preserve its unchanged reference, defaults and saved selections; new selections or changed unavailable declarations are rejected until the library resolves again.
 
 Discovery reads data only: no app entry executes, and a `workspace:` library never silently resolves to a `bundled:` library. Another library or choice parameter needs only declarations, not library-specific panel code. Existing source aliases still determine which components are bundled.
 

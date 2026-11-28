@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import type { IconNode } from 'lucide';
 import { VisualResources } from './resources.ts';
-import { defaultTheme, registerVisualStyle, resolveUiKitTheme, styleMesh, type ThemeOptions, type UiKitThemeSelection } from './visual-theme.ts';
+import { defaultTheme, onCapColor, registerVisualStyle, resolveUiKitTheme, styleMesh, type ThemeOptions, type UiKitThemeSelection } from './visual-theme.ts';
 
 export type { IconNode } from 'lucide';
 
@@ -44,7 +44,9 @@ export class Icon extends THREE.Object3D {
     this.mesh = styleMesh(new THREE.Mesh(new THREE.PlaneGeometry(this.o.size, this.o.size), new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, depthWrite: false })), 'icon', { shape: 'plane', args: [this.o.size, this.o.size] });
     registerVisualStyle(this, { prepare: theme => ({ commit: () => {
       this.theme = theme; this.o.stroke = this.options.stroke ?? theme.icon.stroke;
-      this.set(this.icon, this.color);
+      // Without an explicit colour an icon sits on a control body and takes the theme's ink for it.
+      if (this.options.color === undefined) this.o.color = onCapColor(theme);
+      this.set(this.icon, this.options.color === undefined ? this.o.color : this.color);
     }, discard() {} }) });
     this.mesh.raycast = () => {};
     this.add(this.mesh);

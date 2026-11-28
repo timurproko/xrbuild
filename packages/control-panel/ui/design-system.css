@@ -528,6 +528,8 @@ button.xrb-dialog-close:hover:not(:disabled), button.xrb-dialog-close:focus-visi
 .xrb-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 .xrb-visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 .xrb-progress-status { display: flex; align-items: center; gap: 16px; }
+/* The text column may shrink, so a long message ellipsizes or wraps inside the dialog instead of widening it. */
+.xrb-progress-status > div { flex: 1 1 auto; min-width: 0; }
 .xrb-progress-status h3, .xrb-progress-status p { margin: 0; }
 .xrb-progress-status p { margin-top: 4px; }
 .xrb-progress-spinner { width: 28px; height: 28px; flex: none; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: xrb-spin .8s linear infinite; }
@@ -567,6 +569,7 @@ dialog.xrb-rebuild-dialog, dialog.xrb-job-progress-dialog { width: min(660px, ca
 .xrb-toast-body > strong { font-size: .88rem; color: var(--fg); }
 .xrb-toast-body > span { font-size: .82rem; color: var(--muted); }
 .xrb-toast-actions { display: flex; gap: 8px; margin-top: 8px; }
-.xrb-toast-close { align-self: start; margin: -4px -2px 0 0; }
+/* Beats the general icon-button centring: the close button sits in the top-right corner, level with the title. */
+.xrb-toast > button.xrb-toast-close { align-self: start; margin: -5px -4px 0 0; }
 @keyframes xrb-toast-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) { .xrb-toast { animation: none; } .xrb-toast[data-leaving] { transition: none; } }

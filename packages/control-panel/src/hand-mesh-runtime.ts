@@ -8,7 +8,10 @@ import type { HandMeshDeclaration } from './hand-mesh-contract.ts';
 export const MESH_RUNTIME_RECEIPT = '.xrb-hand-mesh-runtime.json';
 export const meshUserRoot = () => path.join(os.homedir(), '.xrbuild');
 export interface MeshRuntimeOwner { owner: string; sourceRoot: string; declaration: HandMeshDeclaration }
-export interface MeshRuntimeOptions { userRoot?: string; verify?: boolean; signal?: AbortSignal }
+/** `inputs` passively compares only the receipt's source fingerprint (a plugin update), without hashing the runtime output. */
+export interface MeshRuntimeOptions { userRoot?: string; verify?: boolean; inputs?: boolean; signal?: AbortSignal }
+/** The plugin source changed since its runtime was prepared, for example after a plugin update. */
+export class MeshRuntimeStale extends Error {}
 export interface MeshRuntimeReceipt {
   version: 1; status: 'complete'; owner: string; id: string; source: string; inputs: string; declaration: string;
   files: { file: string; bytes: number; sha256: string }[];
@@ -105,6 +108,7 @@ export async function resolveMeshRuntime(owner: MeshRuntimeOwner, options: MeshR
       || !hash(f.sha256) || !Number.isSafeInteger(f.bytes) || f.bytes < 0)
     || new Set(r.files.map(f => f.file)).size !== r.files.length || !r.files.some(f => f.file === d.program)) throw new Error('Mesh runtime receipt is incomplete, stale or belongs to another source');
   const program = await containedModule(root, root, d.program);
+  if (options.inputs && !options.verify && r.inputs !== await meshSourceFingerprint(owner.sourceRoot, options.signal)) throw new MeshRuntimeStale('Mesh runtime was prepared for another plugin version');
   if (options.verify) {
     if (r.inputs !== await meshSourceFingerprint(owner.sourceRoot, options.signal)
       || JSON.stringify(r.files) !== JSON.stringify(await inventory(root, false, options.signal))) throw new Error('Mesh runtime inputs/output changed; prepare explicitly');

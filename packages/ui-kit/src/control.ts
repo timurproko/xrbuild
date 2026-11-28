@@ -49,6 +49,11 @@ export abstract class Control extends THREE.Group {
     this.add(this.title, this.status);
   }
 
+  /** Places the title (and the status under it) this far below the control's centre, so a row can share one title line. */
+  setTitleOffset(offset: number): void {
+    this.title.position.y = -offset; this.status.position.y = -offset - 0.0115;
+  }
+
   /** Retains Group.attach for scene objects; an Interactor registers this control's targets. */
   attach(object: THREE.Object3D): this;
   attach(interactor: Interactor): this;

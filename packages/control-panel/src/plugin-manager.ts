@@ -8,6 +8,7 @@ import path from 'node:path';
 import { MANIFEST, validateManifest, type ProjectKind } from './projects.ts';
 import { handProviderDeclarations, type HandProviderDeclaration } from './hand-provider-contract.ts';
 import { handMeshDeclaration, type HandMeshDeclaration } from './hand-mesh-contract.ts';
+import { pythonDeclaration, type PythonDeclaration } from './python-env.ts';
 
 export const PLUGIN_PREFS = 'xrb-plugins.json';
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
@@ -39,7 +40,7 @@ export const PLUGIN_TYPES = ['display', 'input', 'platform', 'publisher', 'post-
 export type PluginType = typeof PLUGIN_TYPES[number];
 export const PLUGIN_PANEL_TARGETS = ['webxr'] as const;
 export type PluginPanelTarget = typeof PLUGIN_PANEL_TARGETS[number];
-export interface PluginMeta { handMesh?: HandMeshDeclaration; handProviders?: HandProviderDeclaration[]; title?: string; type?: PluginType; version?: string; hidden?: boolean; /** legacy display title */ name?: string; description?: string; settingsDescription?: string; icon?: string; glyph?: string; screenName?: string; displayMode?: string; settings?: PluginSetting[]; panelSettings?: PluginSetting[]; panelTools?: unknown[]; panelTargets?: PluginPanelTarget[]; panelProviderNames?: Record<string, string>; panelHiddenProviders?: string[]; panelSamples?: PluginSample[]; /** User-owned config/plugins/<id>/config.json schema. */ config?: PluginSetting[]; exports?: Record<string, string>; references?: Record<string, { plugin: string; export: string }> }
+export interface PluginMeta { handMesh?: HandMeshDeclaration; /** Core-provisioned Python environment the plugin's setup may ask for. */ python?: PythonDeclaration; handProviders?: HandProviderDeclaration[]; title?: string; type?: PluginType; version?: string; hidden?: boolean; /** legacy display title */ name?: string; description?: string; settingsDescription?: string; icon?: string; glyph?: string; screenName?: string; displayMode?: string; settings?: PluginSetting[]; panelSettings?: PluginSetting[]; panelTools?: unknown[]; panelTargets?: PluginPanelTarget[]; panelProviderNames?: Record<string, string>; panelHiddenProviders?: string[]; panelSamples?: PluginSample[]; /** User-owned config/plugins/<id>/config.json schema. */ config?: PluginSetting[]; exports?: Record<string, string>; references?: Record<string, { plugin: string; export: string }> }
 export interface PluginPrefs { disabled: string[]; settings: Record<string, Record<string, SettingValue>>; panelSettings: Record<string, Record<string, SettingValue>>; origins?: Record<string, 'bundled' | 'workspace'> }
 const empty = (): PluginPrefs => ({ disabled: [], settings: {}, panelSettings: {} });
 
@@ -287,6 +288,7 @@ export async function pluginMeta(workspace: string, id: string): Promise<PluginM
     displayMode: typeof raw.displayMode === 'string' ? raw.displayMode.trim().slice(0, 32) : undefined,
     ...(raw.handProviders === undefined ? {} : { handProviders: handProviderDeclarations(raw.handProviders) }),
     ...(raw.handMesh === undefined ? {} : { handMesh: handMeshDeclaration(raw.handMesh) }),
+    ...(raw.python === undefined ? {} : { python: pythonDeclaration(raw.python) }),
     panelTools: panelTools as unknown[] | undefined,
     panelSettings,
     panelTargets: panelTargets as PluginPanelTarget[] | undefined,

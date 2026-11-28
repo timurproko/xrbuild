@@ -7,10 +7,26 @@
         "type": "choice",
         "label": "Theme",
         "options": [
-          { "value": "default", "label": "Default" },
-          { "value": "chamfer", "label": "Chamfer" }
+          {
+            "value": "default",
+            "label": "Default"
+          },
+          {
+            "value": "accent",
+            "label": "Accent"
+          }
         ],
         "default": "default"
+      }
+    }
+  },
+  "componentLibraries": {
+    "bundled:ui-kit": {
+      "props": {
+        "theme": "theme"
+      },
+      "defaults": {
+        "theme": "default"
       }
     }
   },

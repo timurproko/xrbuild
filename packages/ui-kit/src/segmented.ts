@@ -9,7 +9,8 @@ import { play } from './sound.ts';
 import { COLORS, approach, material } from './theme.ts';
 import type { ThemeOptions } from './visual-theme.ts';
 
-const SEG_W = 0.034, SEG_H = 0.024, GAP = 0.003, DEPTH = 0.007, REST = 0.006, TRAVEL = 0.006;
+// Keys are as tall as the pill Button (0.028), so the mode switcher reads as a row of regular buttons.
+const SEG_W = 0.034, SEG_H = 0.028, GAP = 0.003, DEPTH = 0.007, REST = 0.006, TRAVEL = 0.006;
 const LATCHED = 0.003;  // the selected segment sits this far in
 
 interface Segment {
@@ -88,6 +89,8 @@ export class Segmented extends Control {
 
   private paintSegment(s: Segment, i: number): void {
     const colors = this.theme.colors, selected = i === this.index;
+    // A theme may name the selected colour exactly; without one the selected key blends toward the accent highlight.
+    if (selected && colors.selected) { s.material.color.set(colors.selected); s.material.emissive.set(0x000000); return; }
     s.material.color.set(colors.capDark).lerp(new THREE.Color(colors.accent), selected ? 0.85 : s.hover * 0.3);
     s.material.emissive.set(colors.accent).multiplyScalar(selected ? 0.15 : s.hover * 0.08);
   }

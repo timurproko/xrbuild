@@ -18,6 +18,8 @@ test('typed declarations match UI Kit registration and consumer defaults without
   assert.deepEqual(kit.componentLibrary, library);
   assert.equal(kit.componentLibrary.parameters.theme.default, kitTheme.defaultTheme);
   assert.equal(launcher.componentLibraries['bundled:ui-kit'].defaults.theme, launcherTheme.defaultTheme);
+  // UI Kit consumes its own library, so its Settings tab chooses the theme it shows when run.
+  assert.deepEqual(kit.componentLibraries, { 'bundled:ui-kit': { props: { theme: 'theme' }, defaults: { theme: kitTheme.defaultTheme } } });
   assert.deepEqual(launcher.componentLibraries, consumer.componentLibraries);
   assert.deepEqual(validateManifest(kit, root), []);
   assert.deepEqual(validateManifest(launcher, root), []);
@@ -27,12 +29,12 @@ test('typed declarations match UI Kit registration and consumer defaults without
 
 test('explicit references resolve defaults, saved values and scene props independently', () => {
   assert.equal(resolveComponentGroups(consumer, libraries)[0].values.theme, 'default');
-  assert.equal(resolveComponentGroups({ componentLibraries: { 'bundled:ui-kit': { props: { theme: 'theme' }, defaults: { theme: 'chamfer' } } } }, libraries)[0].values.theme, 'chamfer');
+  assert.equal(resolveComponentGroups({ componentLibraries: { 'bundled:ui-kit': { props: { theme: 'theme' }, defaults: { theme: 'accent' } } } }, libraries)[0].values.theme, 'accent');
   assert.deepEqual(resolveComponentGroups(consumer, new Map([['bundled:ui-kit', { name: 'Empty', componentLibrary: { parameters: {} } }]])), []);
-  const selected = { ...consumer, componentSettings: { 'bundled:ui-kit': { theme: 'chamfer' } } };
+  const selected = { ...consumer, componentSettings: { 'bundled:ui-kit': { theme: 'accent' } } };
   const groups = resolveComponentGroups(selected, libraries);
-  assert.equal(groups[0].values.theme, 'chamfer');
-  assert.deepEqual(componentSceneProps(consumer, Object.fromEntries(groups.map(g => [g.id, g.values]))), { theme: 'chamfer' });
+  assert.equal(groups[0].values.theme, 'accent');
+  assert.deepEqual(componentSceneProps(consumer, Object.fromEntries(groups.map(g => [g.id, g.values]))), { theme: 'accent' });
   assert.equal(resolveComponentGroups(consumer, libraries)[0].values.theme, 'default');
   assert.deepEqual(resolveComponentGroups({}, libraries), []);
   assert.deepEqual(resolveComponentGroups(consumer, new Map([['workspace:ui-kit', libraries.get('bundled:ui-kit')!]])), []);

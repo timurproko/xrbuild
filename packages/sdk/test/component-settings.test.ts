@@ -19,17 +19,17 @@ test('only existing bounded managed launch identities produce a settings endpoin
 
 test('saved standalone startup uses compiled project settings and never starts polling', async () => {
   let requests = 0;
-  const connection = await connectComponentSettings({ ...metadata, componentSettings: { 'bundled:ui-kit': { theme: 'chamfer' } } }, { href: 'https://example.test/apps/launcher/', fetch: async () => { requests++; throw new Error(); } });
-  assert.deepEqual(connection.props, { theme: 'chamfer' });
+  const connection = await connectComponentSettings({ ...metadata, componentSettings: { 'bundled:ui-kit': { theme: 'accent' } } }, { href: 'https://example.test/apps/launcher/', fetch: async () => { requests++; throw new Error(); } });
+  assert.deepEqual(connection.props, { theme: 'accent' });
   connection.subscribe(() => assert.fail('standalone subscription'));
   connection.dispose(); assert.equal(requests, 0);
 });
 
 test('initial snapshot and live values retain last good props through disconnect and stop on retirement', async t => {
-  let value: unknown = { 'bundled:ui-kit': { theme: 'chamfer' } }, status = 200, requests = 0;
+  let value: unknown = { 'bundled:ui-kit': { theme: 'accent' } }, status = 200, requests = 0;
   const connection = await connectComponentSettings(metadata, { href, intervalMs: 5, fetch: async () => { requests++; return Response.json(value, { status }); } });
   t.after(() => connection.dispose());
-  assert.deepEqual(connection.props, { theme: 'chamfer' });
+  assert.deepEqual(connection.props, { theme: 'accent' });
   const events: Record<string, string>[] = [];
   connection.subscribe(props => events.push(props));
   value = { 'bundled:ui-kit': { theme: 'default' } };
@@ -41,7 +41,7 @@ test('initial snapshot and live values retain last good props through disconnect
   await sleep(20); assert.equal(events.length, 1);
   status = 404;
   await sleep(20); const retiredRequests = requests;
-  value = { 'bundled:ui-kit': { theme: 'chamfer' } }; status = 200;
+  value = { 'bundled:ui-kit': { theme: 'accent' } }; status = 200;
   await sleep(20); assert.equal(requests, retiredRequests); assert.equal(events.length, 1);
 });
 
@@ -68,6 +68,6 @@ test('disposal aborts pending reads and forbids callbacks from the retired conne
   for (let i = 0; i < 50 && !respond; i++) await sleep(5);
   assert.ok(respond);
   connection.dispose(); assert.equal(signal?.aborted, true);
-  respond!(Response.json({ 'bundled:ui-kit': { theme: 'chamfer' } }));
+  respond!(Response.json({ 'bundled:ui-kit': { theme: 'accent' } }));
   await sleep(20); assert.deepEqual(connection.props, { theme: 'default' });
 });

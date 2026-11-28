@@ -20,16 +20,16 @@ function native(state, type, control) {
 
 test('a standalone/package start applies the saved build snapshot without panel access', async () => {
   const manifest = JSON.parse(await fs.readFile(path.join(root, 'xrb-project.json'), 'utf8'));
-  const state = await componentApp(root, { env: { VITE_XRB_COMPONENTS: { ...manifest, componentSettings: { 'bundled:ui-kit': { theme: 'chamfer' } } } } });
+  const state = await componentApp(root, { env: { VITE_XRB_COMPONENTS: { ...manifest, componentSettings: { 'bundled:ui-kit': { theme: 'accent' } } } } });
   try {
     for (let i = 0; i < 60; i++) state.tick(i * 16);
     assert.ok(controls(state).length);
-    assert.ok(controls(state).every(control => control.themeId === 'chamfer'));
+    assert.ok(controls(state).every(control => control.themeId === 'accent'));
   } finally { await state.exports.dispose(); await state.dispose(); }
 });
 
 test('saved managed theme updates the actual run entry without remount, capture loss or navigation reset', async () => {
-  let theme = 'chamfer', requests = 0;
+  let theme = 'accent', requests = 0;
   const manifest = JSON.parse(await fs.readFile(path.join(root, 'xrb-project.json'), 'utf8'));
   const state = await componentApp(root, { href, env: { VITE_XRB_COMPONENTS: manifest }, fetch: async () => Response.json({ projects: Array.from({ length: 5 }, (_, i) => ({ id: `scene-${i + 1}`, entryExists: true, manifest: { kind: 'app', name: `Scene ${i + 1}` } })) }),
     dependencies: { '@xr-build/sdk': { ...sdk, connectComponentSettings: metadata => sdk.connectComponentSettings(metadata, { href, intervalMs: 5, fetch: async () => { requests++; return Response.json({ 'bundled:ui-kit': { theme } }); } }) } } });
@@ -38,7 +38,7 @@ test('saved managed theme updates the actual run entry without remount, capture 
     state.app.setProjection('orthographic');
     for (let i = 0; i < 60; i++) state.tick(i * 16);
     const app = state.app, mount = state.handle, next = controls(state).find(c => c.title.text === 'Next page');
-    assert.equal(next.themeId, 'chamfer', 'saved selection is applied on the initial mount');
+    assert.equal(next.themeId, 'accent', 'saved selection is applied on the initial mount');
     native(state, 'pointermove', next); native(state, 'pointerdown', next);
     const held = state.app.xrb.interaction.captured(-1); assert.ok(held);
     theme = 'default';
@@ -52,9 +52,9 @@ test('saved managed theme updates the actual run entry without remount, capture 
     const open = controls(state).find(c => c.title.text === 'Open Scene 4');
     native(state, 'pointermove', open); native(state, 'pointerdown', open); native(state, 'pointerup', open); await state.fire(60);
     const accepted = [...state.pending].find(([, timer]) => timer.delay === 1150); assert.ok(accepted);
-    const original = cards(state)[0]; theme = 'chamfer';
+    const original = cards(state)[0]; theme = 'accent';
     for (let i = 0; i < 50 && open.themeId !== theme; i++) await sleep(10);
-    assert.equal(open.themeId, 'chamfer'); assert.equal(cards(state)[0], original);
+    assert.equal(open.themeId, 'accent'); assert.equal(cards(state)[0], original);
     assert.equal(state.pending.get(accepted[0]), accepted[1], 'the accepted URL/deadline is not replaced');
     await state.fire(1150);
     assert.equal(state.calls.filter(c => c.startsWith('navigate:')).length, 1);

@@ -54,6 +54,12 @@ export class HandMeshClient {
   private inFlight: MeshFrame | null = null;
   private pending: MeshFrame | null = null;
   private accepted: { frame: MeshFrame; meshes: MeshSurface[] } | null = null;
+  /**
+   * Each hand's latest valid surface with the frame it was fitted for. A result without a hand (a processor that skips
+   * a repeated sample, or weak evidence) leaves that hand's surface in place: it is fitted to the current skeleton every
+   * render until its source age passes the hold bound, so processors that answer only some frames never flicker.
+   */
+  private held = new Map<number, { frame: MeshFrame; surface: MeshSurface }>();
   private controller: AbortController | null = null;
   private topologies = new Map<number, MeshSurface>();
   // The browser's fetch must be called on the window: stored as a method it throws "Illegal invocation".
@@ -84,7 +90,7 @@ export class HandMeshClient {
     if (value.requestedGeneration < this.settingsGeneration) return;
     if (value.requestedGeneration !== this.settingsGeneration) { this.settingsGeneration = value.requestedGeneration; this.invalidate(); }
     this.configuration = { ...value };
-    if (value.phase !== 'Ready' || value.appliedGeneration !== value.requestedGeneration) { this.accepted = null; this.drawing = null; this.topologies.clear(); }
+    if (value.phase !== 'Ready' || value.appliedGeneration !== value.requestedGeneration) { this.accepted = null; this.held.clear(); this.drawing = null; this.topologies.clear(); }
   }
   private frame(hands: Hand[], sampleMs: number): MeshFrame {
     const frame: MeshFrame = { type: 'frame', epoch: this.epoch, sequence: this.sequence++, revision: this.revision, sentMs: this.now(), sampleMs,
@@ -99,7 +105,7 @@ export class HandMeshClient {
     const key = [...ids].sort((a, b) => a - b).join(',');
     if (key !== this.ids) { this.ids = key; this.invalidate(); }
   }
-  invalidate(): void { this.revision++; this.pending = null; this.accepted = null; this.drawing = null; this.topologies.clear(); }
+  invalidate(): void { this.revision++; this.pending = null; this.accepted = null; this.held.clear(); this.drawing = null; this.topologies.clear(); }
   /** Drops carried meshes too (a new session or settings), unlike a routine hand-set change. */
   private reset(): void { this.carried.clear(); this.invalidate(); }
   update(hands: Hand[], sampleMs: number, generation = 0, drawingEnabled = true): MeshDrawSurface[] {
@@ -107,12 +113,16 @@ export class HandMeshClient {
     if (generation !== this.generation) { this.generation = generation; this.reset(); }
     const shown = hands.filter(h => !h.coasting).slice(0, 2);
     let meshes: MeshDrawSurface[] = [];
-    const accepted = this.accepted, age = accepted ? this.sourceAge(accepted.frame) : Infinity;
-    if (accepted && age >= 0 && age <= this.maxAgeMs && accepted.frame.revision === this.revision) {
-      for (const surface of accepted.meshes) {
-        const hand = shown.find(h => h.id === surface.id), input = accepted.frame.hands.find(h => h.id === surface.id);
-        const motion = hand && input ? meshMotion(input, hand) : null;
-        if (motion && motion.residualM <= this.maxResidualM) meshes.push({ ...surface, ...motion, sourceAgeMs: age });
+    let drawnFrame: MeshFrame | null = null;
+    for (const [id, held] of this.held) {
+      const age = this.sourceAge(held.frame);
+      // Age comes only from the source sample, never from render or dispatch activity.
+      if (age < 0 || age > this.maxAgeMs || held.frame.revision !== this.revision) { this.held.delete(id); continue; }
+      const hand = shown.find(h => h.id === id), input = held.frame.hands.find(h => h.id === id);
+      const motion = hand && input ? meshMotion(input, hand) : null;
+      if (motion && motion.residualM <= this.maxResidualM) {
+        meshes.push({ ...held.surface, ...motion, sourceAgeMs: age });
+        if (!drawnFrame || this.sourceAge(held.frame) < this.sourceAge(drawnFrame)) drawnFrame = held.frame;
       }
     }
     // Bridge single bad frames (a coasting hand, pose noise, a late result) with the last drawn mesh of a hand that is still there.
@@ -126,11 +136,11 @@ export class HandMeshClient {
       }
     }
     if (shown.length) this.handsSeenAt = now;
-    if (!shown.length && now - this.handsSeenAt > this.carryMs) { this.accepted = null; this.topologies.clear(); this.carried.clear(); }
+    if (!shown.length && now - this.handsSeenAt > this.carryMs) { this.accepted = null; this.held.clear(); this.topologies.clear(); this.carried.clear(); }
     this.status = meshes.length ? 'Running' : this.configuration?.phase === 'Preparing' ? 'Preparing'
       : this.configuration?.reason ? `Skeleton fallback: ${this.configuration.reason}` : 'Skeleton fallback: mesh not ready or current';
-    this.drawing = this.protocol === 2 && meshes.length && drawingEnabled && accepted
-      ? { generation: this.settingsGeneration, frame: accepted.frame } : null;
+    this.drawing = this.protocol === 2 && meshes.length && drawingEnabled && drawnFrame
+      ? { generation: this.settingsGeneration, frame: drawnFrame } : null;
     this.pending = this.frame(shown, sampleMs);
     if (this.protocol === 2) this.pending.drawingGeneration = this.drawing?.generation ?? null;
     this.pump();
@@ -170,11 +180,15 @@ export class HandMeshClient {
           mesh.indices = cached.indices;
         } else if (!mesh.indices.length) throw new Error('unknown mesh topology');
       }
-      this.topologies = new Map(result.meshes.map(m => [m.id, m]));
+      // Topology stays cached per hand, so a result that skips a hand does not force the next one to resend indices.
+      for (const mesh of result.meshes) this.topologies.set(mesh.id, mesh);
+      for (const id of [...this.topologies.keys()]) if (!frame.hands.some(h => h.id === id)) this.topologies.delete(id);
+      for (const mesh of result.meshes) this.held.set(mesh.id, { frame, surface: mesh });
       this.accepted = { frame, meshes: result.meshes };
-    })().catch(() => { if (!this.closed) { this.accepted = null; this.drawing = null; this.status = 'Skeleton fallback: mesh unavailable or invalid'; } }).finally(() => {
+    // A failed or malformed exchange stops drawing at once; only a valid result that leaves a hand out keeps its held surface.
+    })().catch(() => { if (!this.closed) { this.accepted = null; this.held.clear(); this.drawing = null; this.status = 'Skeleton fallback: mesh unavailable or invalid'; } }).finally(() => {
       clearTimeout(timer); if (this.inFlight === frame) this.inFlight = null; if (!this.closed) this.pump();
     });
   }
-  close(): void { this.closed = true; this.controller?.abort(); this.pending = null; this.accepted = null; this.drawing = null; this.topologies.clear(); }
+  close(): void { this.closed = true; this.controller?.abort(); this.pending = null; this.accepted = null; this.held.clear(); this.drawing = null; this.topologies.clear(); }
 }

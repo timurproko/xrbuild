@@ -77,15 +77,45 @@ Discovery reads a bounded receipt and checks the launch file. Launch revalidates
 ## Setup export (`mesh-runtime-setup`)
 
 A hand mesh plugin whose runtime is installed separately can export `mesh-runtime-setup`. The Hands Post-process tab then shows
-**Install** on its layer while the runtime is missing, and runs the setup as a panel job that Restart waits for.
+**Prerequisite** and **Install** on its layer while the runtime is missing, or was prepared for another version of the
+plugin source, and runs the setup as a panel job that Restart waits for. While the layer waits for Install, only Install
+and the setting that asks for an optional runtime stay active.
 
 The module exports:
 
 - `plan()`: what would be downloaded, without downloading. Returns `consent`, `destination`, `downloadBytes`,
   `installedBytes`, `licences` and `items` (`name`, `version`, `publisher`, `licence`, `bytes`). The dialog shows sizes and
-  licences, never URLs.
+  licences, never URLs. Optional fields:
+  - `input: { label, accept }`: one local file the person must choose, such as a licensed archive that cannot be
+    downloaded (`accept` is a comma list like `.zip`). The dialog shows a file picker; the panel copies the file to
+    `~/.xrbuild/setup-inputs/` for this install only and passes its path as `install({ from })`.
+  - `python`: core's shared Python, declared in the manifest (below). `true` asks for a reusable environment and
+    `install` receives `python` as its `python.exe`; `{ into: 'runtime', set?, interpreter? }` places Python inside the
+    plugin's runtime folder and `install` receives `python.install(dest, { findLinks? })`.
 - `status()` (optional): `{ cpu: { installed } }`, so the dialog can say the runtime is already installed.
-- `install({ consent, core, workspace, owner, onProgress })`: installs the exact plan the person accepted.
+- `install({ consent, core, workspace, owner, onProgress, from?, python? })`: installs the exact plan the person accepted.
+- `refresh({ core, workspace, owner })` (optional): after a plugin source update, re-checks an installed runtime and
+  writes a new receipt without downloading. Install calls it instead of `install` while the runtime is installed.
+
+### Shared Python (`python` in xrb-plugin.json)
+
+A plugin that needs Python declares it instead of shipping an installer for it:
+
+```json
+"python": {
+  "version": "3.12.12",
+  "wheels": [{ "name": "numpy", "version": "2.2.6", "sha256": "<64 hex>", "bytes": 12614190, "publisher": "NumPy (PyPI)", "licence": "BSD-3-Clause" }],
+  "sets": { "gpu": { "index": "https://download.example/whl", "wheels": [] } }
+}
+```
+
+Versions are exact and every wheel is pinned by SHA-256; `sets` are optional named groups with an optional https index.
+Core downloads one pinned uv (checked by size and SHA-256) into `~/.xrbuild/python`, installs the exact standalone CPython,
+and installs only the listed wheels with `--require-hashes --no-deps --only-binary :all:`. It never uses a Python or uv
+already on the machine and changes neither PATH nor the registry. Whatever is not ready yet joins the Install plan and its
+consent. A reusable environment lives in `~/.xrbuild/python/envs/`; a runtime placement copies the interpreter into the
+plugin's runtime folder with a `._pth` file and installs the set into its `site-packages`, so the plugin's receipt covers
+every file that runs.
 
 ### Progress
 

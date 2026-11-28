@@ -1,6 +1,7 @@
 // XR Build control panel UI: plain ES module, no build step. Talks to the panel server
 // (same origin) over JSON and a Server-Sent Events stream.
-import { listenForToasts } from './toast.js';
+import { listenForToasts, toast, closeToast } from './toast.js';
+import { pendingSwitch } from './pending-switch.js';
 import { SettingsWriter } from './settings-writer.js';
 import {installJobLogCopy, readJobLog} from './job-log.js';
 import { defaultProjectSlug, hasProjectPublishers, renderProjectHero } from './project-workflow.js';
@@ -83,26 +84,21 @@ const settingsWriter = new SettingsWriter({
   changed: (id) => { if (selected()?.id === id) renderSettingsStatus(); },
 });
 
+/** The last failure shown per project, so repaints never re-raise the same toast. */
+const shownSaveErrors = new Map();
 function renderSettingsStatus() {
-  const p = selected(), form = $('#settings');
-  if (!p || !form) return;
-  let status = $('#detail [data-settings-status]');
-  const entry = settingsWriter.entry(p.id);
-  // Pending/successful writes have no UI at all. Failure feedback shares the existing
-  // action row's height instead of inserting a block between the form and Run.
-  if (!entry?.error) { status?.remove(); return; }
-  const actions = $('#detail .project-actions');
-  if (!actions) return;
-  if (!status) { status = document.createElement('div'); status.dataset.settingsStatus = ''; status.className = 'project-save-status'; actions.append(status); }
-  status.replaceChildren();
-  const text = document.createElement('span'); text.className = 'xrb-help field-error'; text.setAttribute('role', 'status');
+  const p = selected();
+  if (!p) return;
+  $('#detail [data-settings-status]')?.remove();
+  const entry = settingsWriter.entry(p.id), id = `settings-save-${p.id}`;
+  // Pending/successful writes have no UI at all; a failure is a toast with Retry, like every other recoverable error.
+  if (!entry?.error) { if (shownSaveErrors.delete(p.id)) closeToast(id); return; }
   const message = String(entry.error.message).replace(/^Not saved[:.]?\s*/i, '');
-  text.textContent = 'Not saved.'; text.title = message;
-  const detail = document.createElement('span'); detail.className = 'xrb-visually-hidden'; detail.textContent = ` ${message}`; text.append(detail);status.append(text);
-  for (const [label, glyph, run] of [['Retry', 'reset', async () => { await settingsWriter.retry(p.id); await loadProjects(); }], ['Reload', 'rewind', async () => { settingsWriter.discard(p.id); state.dirty = false; await loadProjects(); renderDetail(true); }]]) {
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'xrb-icon-button'; button.innerHTML = iconSvg(glyph);button.setAttribute('aria-label',label);
-    button.addEventListener('click', action(run)); status.append(button);
-  }
+  if (shownSaveErrors.get(p.id) === message) return;
+  shownSaveErrors.set(p.id, message);
+  toast({ id, title: 'Not saved', message, tone: 'err', actions: [{ label: 'Retry', onClick: action(async () => {
+    shownSaveErrors.delete(p.id); await settingsWriter.retry(p.id); await loadProjects();
+  }) }] });
 }
 
 async function api(method, path, body) {
@@ -1109,6 +1105,29 @@ enhanceHelpText(document);
  * Stop (no extra button); while another project runs, both wait.
  */
 const projectRunning = (p) => state.run?.projectId === p.id && state.run.phase !== 'idle';
+/** Temporary settings of this project's current run (play-mode style), by kind, or null when it is not running. */
+const runOverrides = (p) => {
+  const held = state.runtime?.[p.id];
+  return projectRunning(p) && held && held.startedMs === state.run?.startedMs ? held.values : null;
+};
+/** Applies one kind of live-capable setting to the running app only; nothing is saved. */
+async function applyRuntimeSettings(p, values) {
+  const startedMs = state.run.startedMs;
+  try {
+    const result = await api('PUT', `/api/projects/${encodeURIComponent(p.id)}/runtime-settings`, values);
+    state.runtime = { ...state.runtime, [p.id]: { startedMs, values: result } };
+  } catch (error) { toast({ id: `runtime-settings-${p.id}`, title: 'Not applied', message: error.message, tone: 'err' }); renderDetail(true); }
+}
+/** While an app runs, settings that only take effect on the next start are locked; live-capable ones stay editable. */
+const LIVE_SETTINGS = /^componentSettings\./;
+function lockSavedSettingsWhileRunning(p) {
+  if (!projectRunning(p)) return;
+  for (const input of document.querySelectorAll('#settings [name], #build-settings [name]')) {
+    if (LIVE_SETTINGS.test(input.name)) continue;
+    input.disabled = true; input.closest('label, .field, .dropdown')?.setAttribute('data-tooltip', 'Stop the app to change this');
+  }
+  for (const button of document.querySelectorAll('#detail [data-choice]')) { button.disabled = true; button.title = 'Stop the app to change this'; }
+}
 
 function runButtons(p, busy) {
   const running = projectRunning(p);
@@ -1841,9 +1860,9 @@ function renderDetail(force = false) {
   const publicationLink = m ? publicationHeroLink(p) : '';
   const workflowTabs = m ? `<div class="project-workflow-tabs xrb-tabs" role="tablist" aria-label="Project workflow" data-xrb-tabs-id="project-workflow-${p.id}">
       <button type="button" class="xrb-tab" role="tab" data-surface="display" data-view="display" aria-selected="${displaySurface}" ${displaySurface ? 'data-active' : ''} ${displayChoices.length ? '' : 'disabled'}>Develop</button>
-      ${p.componentGroups?.length ? `<button type="button" class="xrb-tab" role="tab" data-surface="components" aria-selected="${componentsSurface}" ${componentsSurface ? 'data-active' : ''}>Components</button>` : ''}
       ${hasProjectPublishers(p) ? `<button type="button" class="xrb-tab" role="tab" data-surface="publish" data-view="publish" aria-selected="${publishSurface}" ${publishSurface ? 'data-active' : ''}>Publish</button>` : ''}
       <button type="button" class="xrb-tab" role="tab" data-surface="build" data-view="build" aria-selected="${surface === 'build'}" ${surface === 'build' ? 'data-active' : ''} ${buildChoices.length ? '' : 'disabled'}>Build</button>
+      ${p.componentGroups?.length ? `<button type="button" class="xrb-tab" role="tab" data-surface="components" aria-selected="${componentsSurface}" ${componentsSurface ? 'data-active' : ''}>Settings</button>` : ''}
       ${publicationLink ? `<span class="spacer"></span>${publicationLink}` : ''}
     </div>` : '';
   const manifestButton = m && p.origin === 'bundled'
@@ -1891,7 +1910,8 @@ function renderDetail(force = false) {
   const runtimeSettings = displaySurface
     ? `${displayField(m, { monitorsOnly: headset })}${inputField(m)}`
     : '';
-  const componentFields = componentsSurface ? p.componentGroups.map(group => `<div class="xrb-stack"><h2 class="xrb-section-label">${esc(group.label)}</h2><div class="settings-grid">${Object.entries(group.parameters).map(([name, parameter]) => field(esc(parameter.label), `componentSettings.${group.id}.${name}`, m.componentSettings?.[group.id]?.[name] ?? group.values[name], { options: parameter.options.map(option => option.value), optionLabels: Object.fromEntries(parameter.options.map(option => [option.value, option.label])), raw: true })).join('')}</div></div>`).join('') : '';
+  const live = componentsSurface ? runOverrides(p)?.componentSettings : null;
+  const componentFields = componentsSurface ? p.componentGroups.map(group => `<div class="xrb-stack component-settings-group"><h2>${esc(group.label)}</h2><div class="settings-grid">${Object.entries(group.parameters).map(([name, parameter]) => field(esc(parameter.label), `componentSettings.${group.id}.${name}`, live?.[group.id]?.[name] ?? m.componentSettings?.[group.id]?.[name] ?? group.values[name], { options: parameter.options.map(option => option.value), optionLabels: Object.fromEntries(parameter.options.map(option => [option.value, option.label])), raw: true })).join('')}</div></div>`).join('') : '';
   const settings = componentsSurface ? `<form id="settings" class="xrb-stack">${componentFields}</form>` : publishSurface ? '' : `<form id="settings">
       <div class="row settings-toolbar">${m.kind === 'app' ? platformField(m, surface) : ''}<div class="settings-tools"><span class="display-options">${displaySurface ? `${controls?.view ?? ''}${controls?.dev ?? ''}` : ''}</span></div></div>
       ${runtimeSettings ? `<div class="settings-grid runtime-settings">${runtimeSettings}</div>` : ''}
@@ -2063,6 +2083,7 @@ function renderDetail(force = false) {
   }));
   if (platformGroup) wirePlatformDrag(platformGroup);
   syncRunDock(p);
+  lockSavedSettingsWhileRunning(p);
   renderSettingsStatus();
   // The optional Publish form saves independently: Display/Input edits must not overwrite package or publication fields.
   // A title saves on Enter or blur, never while half typed.
@@ -2228,6 +2249,11 @@ async function saveSettings(p, form, changedName) {
     const group = p.componentGroups?.find(group => Object.keys(group.parameters).some(name => changedName === `componentSettings.${group.id}.${name}`));
     if (!group) return;
     const name = Object.keys(group.parameters).find(name => changedName === `componentSettings.${group.id}.${name}`);
+    if (projectRunning(p)) {
+      // Play-mode style: while the app runs, a change reaches that run only and is never saved.
+      const current = runOverrides(p)?.componentSettings ?? {};
+      return applyRuntimeSettings(p, { componentSettings: { ...current, [group.id]: { ...current[group.id], [name]: get(changedName) } } });
+    }
     m.componentSettings = { ...m.componentSettings, [group.id]: { ...m.componentSettings?.[group.id], [name]: get(changedName) } };
   }
   if (changedName === 'platform-choice') m = selectPlatform(m, get('platform-choice'));
@@ -2364,7 +2390,10 @@ async function saveSettings(p, form, changedName) {
         await loadProjects();
         return;
       }
-      showFieldErrors({ '': `Not saved. ${error.message}` });
+      // A conflicting edit elsewhere: a toast whose one action loads the saved state, never an inline row.
+      toast({ id: `settings-save-${p.id}`, title: 'Not saved', message: error.message, tone: 'err', actions: [{ label: 'Reload', onClick: action(async () => {
+        state.dirty = false; await loadProjects(); renderDetail(true);
+      }) }] });
       return;
     }
     clearPublicationSave();
@@ -3222,15 +3251,17 @@ function renderManagedPlugins() {
     const sample = samples.find((item) => item.id === button.dataset.importSample);
     return sample ? importPluginSample(p, sample) : Promise.resolve();
   })));
-  el.querySelector('.plugin-enable').addEventListener('change', action(async (event) => {
-    event.target.disabled = true;
-    try {
-      await api('PUT', `/api/plugins/manage/${encodeURIComponent(p.id)}`, { enabled: event.target.checked });
+  // Same switch behaviour as every plugin toggle: it moves and locks on click, the label follows the request, and the
+  // reloaded page shows the confirmed state; a failure puts it back and reports why.
+  const enable = el.querySelector('.plugin-enable');
+  pendingSwitch(enable, { label: enable.parentElement.querySelector('span'), labels: ['Disabled', 'Enabled'],
+    onError: error => toast({ title: managerName(p), message: error.message, tone: 'err' }),
+    commit: async next => {
+      await api('PUT', `/api/plugins/manage/${encodeURIComponent(p.id)}`, { enabled: next });
       await loadHost();
       await loadProjects();
       await loadManagedPlugins();
-    } catch (e) { event.target.checked = !event.target.checked; event.target.disabled = false; throw e; }
-  }));
+    } });
 }
 
 const APPS_GLYPH = '🎛️';
@@ -3771,10 +3802,12 @@ function connect() {
   const on = (type, fn) => es.addEventListener(type, (e) => fn(JSON.parse(e.data)));
   on('run', (r) => {
     if (r.phase === 'starting' && r.startedMs !== state.run?.startedMs) state.runLog = [];
+    // Starting or stopping changes which settings are editable and drops a stopped run's temporary values.
+    const toggled = (state.run?.phase === 'idle') !== (r.phase === 'idle') || state.run?.startedMs !== r.startedMs;
     state.run = r;
-    if (r.phase === 'idle') state.status = null;
+    if (r.phase === 'idle') { state.status = null; state.runtime = {}; }
     renderRun();
-    renderDetail();
+    renderDetail(toggled);
   });
   on('status', (s) => {
     const wasUp = state.status?.pageFps != null;

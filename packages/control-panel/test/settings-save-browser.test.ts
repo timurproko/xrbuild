@@ -7,7 +7,7 @@ import { freePort } from '../src/host-runner.ts';
 import { REPO } from '../src/env.ts';
 import { withBrowser, sleep } from './browser-fixture.ts';
 
-test('first embedded and rapid ordinary input edits persist without a reload modal; conflicts remain inline', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
+test('first embedded and rapid ordinary input edits persist without a reload modal; conflicts show a toast with Retry', { skip: !process.env.XRB_TEST_BROWSER, timeout: 60000 }, async t => {
   const parent = process.env.XRB_TEST_ROOT ?? path.join(REPO, '.artifacts');
   await fs.mkdir(parent, { recursive: true });
   const root = await fs.mkdtemp(path.join(parent, 'settings-save-'));
@@ -48,19 +48,16 @@ test('first embedded and rapid ordinary input edits persist without a reload mod
     await fs.writeFile(manifestFile, JSON.stringify({ ...manifest, inputs: ['mouse'] }));
     const beforeFailure = await evaluate(`document.querySelector('#act-run').getBoundingClientRect().top`);
     await evaluate(`const input=document.querySelector('#settings [name="inputs"]');input.value='[]';input.dispatchEvent(new Event('change',{bubbles:true}))`);
-    await until(`document.querySelector('[data-settings-status]')?.textContent.includes('another editor')`);
+    // A failed save is a toast with one Retry action, never an inline row beside Run.
+    await until(`[...document.querySelectorAll('.xrb-toast')].some(t=>/Not saved/.test(t.textContent)&&/another editor/.test(t.textContent))`);
     assert.equal(await evaluate(`document.querySelector('#act-run').getBoundingClientRect().top`), beforeFailure, 'failure feedback does not move Run');
-    for (const width of [1500, 500, 320]) {
-      await send('Emulation.setDeviceMetricsOverride', {width,height:900,deviceScaleFactor:1,mobile:false});
-      await sleep(100);
-      const geometry = await evaluate(`(()=>{const run=document.querySelector('#act-run').getBoundingClientRect(),status=document.querySelector('[data-settings-status]').getBoundingClientRect();return {top:Math.abs(run.top-status.top),overlap:run.right>status.left,right:status.right,width:innerWidth};})()`);
-      assert.ok(geometry.top < 8, JSON.stringify(geometry));assert.equal(geometry.overlap,false);assert.ok(geometry.right <= geometry.width);
-    }
+    assert.equal(await evaluate(`!!document.querySelector('[data-settings-status]')`), false, 'no inline status beside Run');
+    assert.deepEqual(await evaluate(`[...document.querySelector('.xrb-toast[data-tone="err"] .xrb-toast-actions').querySelectorAll('button')].map(b=>b.textContent)`), ['Retry']);
     await evaluate(`window.runCalls=0;const beforeFetch=fetch;window.fetch=(input,options)=>{if(new URL(input,location.href).pathname.endsWith('/run')){runCalls++;return Promise.resolve(Response.json({error:'Fixture blocked'},{status:409}));}return beforeFetch(input,options);};document.querySelector('#act-run').click()`);
     await sleep(100);assert.equal(await evaluate('runCalls'),0,'failed settings never launch stale saved choices');
     assert.deepEqual((await current()).manifest.inputs, ['mouse']);
     assert.equal(await evaluate(`document.querySelector('#ask').open`), false);
-    await evaluate(`document.querySelector('[data-settings-status] button[aria-label="Retry"]').click()`);
+    await evaluate(`document.querySelector('.xrb-toast[data-tone="err"] .xrb-toast-actions button').click()`);
     for (let i = 0; i < 100 && (await current()).manifest.inputs.length; i++) await sleep(50);
     assert.deepEqual((await current()).manifest.inputs, []);
     await navigate(panel.url, `!!document.querySelector('#settings [name="inputs"]')`);

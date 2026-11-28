@@ -189,6 +189,14 @@ async function refreshProject(core: string, workspace: string, projects: string,
   return effective;
 }
 
+/** True only when the lock names a panel process that is gone; an unreadable lock or a live owner is never stale. */
+async function staleLock(file: string): Promise<boolean> {
+  try {
+    const { pid } = JSON.parse(await fs.readFile(file, 'utf8')) as { pid?: unknown };
+    if (!Number.isSafeInteger(pid) || (pid as number) <= 0 || pid === process.pid) return false;
+    try { process.kill(pid as number, 0); return false; } catch (error) { return (error as NodeJS.ErrnoException).code === 'ESRCH'; }
+  } catch { return false; }
+}
 const operationContext = new AsyncLocalStorage<Set<string>>();
 export async function withEmbeddedProjectLock<T>(core: string, projects: string, p: Project, work: () => Promise<T>, retain?: (release: () => Promise<void>) => boolean): Promise<T> {
   if (p.origin !== 'bundled') return work();
@@ -198,8 +206,12 @@ export async function withEmbeddedProjectLock<T>(core: string, projects: string,
   if (operationContext.getStore()?.has(file)) return work();
   assertWritablePath(core, projects, file);
   await fs.mkdir(path.dirname(file), { recursive: true });
-  const handle = await fs.open(file, 'wx').catch((e: NodeJS.ErrnoException) => {
-    if (e.code === 'EEXIST') throw new HttpError(409, 'Embedded project is busy or has an interrupted operation; inspect its operation lock'); throw e;
+  const open = () => fs.open(file, 'wx');
+  const handle = await open().catch(async (e: NodeJS.ErrnoException) => {
+    if (e.code !== 'EEXIST') throw e;
+    // A lock whose owning panel process no longer exists (for example after a restart during a run) is stale: clear it once.
+    if (await staleLock(file)) { await fs.unlink(file).catch(() => {}); return open().catch(() => { throw new HttpError(409, 'Embedded project is busy or has an interrupted operation; inspect its operation lock'); }); }
+    throw new HttpError(409, 'Embedded project is busy or has an interrupted operation; inspect its operation lock');
   });
   let succeeded = false, released = false;
   const release = async () => { if (!released) { released = true; await handle.close(); await fs.unlink(file); } };

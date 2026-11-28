@@ -10,15 +10,16 @@ export const boxVisual = (role: VisualRole, w: number, h: number, d: number, r: 
   styleMesh(new THREE.Mesh(roundedBox(w, h, d, r, bevel), m), role, { shape: 'box', args: [w, h, d, r, ...(bevel === undefined ? [] : [bevel])] });
 const roundVisual = (role: VisualRole, r: number, d: number, m: THREE.MeshStandardMaterial) =>
   styleMesh(new THREE.Mesh(roundedDisc(r, d), m), role, { shape: 'roundedDisc', args: [r, d] });
-const dotVisual = (role: VisualRole, r: number, d: number, segments: number, m: THREE.MeshStandardMaterial) =>
-  styleMesh(new THREE.Mesh(disc(r, d, segments), m), role, { shape: 'disc', args: [r, d, segments] });
+/** `ring`: a dot placed on a ring (angle, ring radius, outer footprint radius), so a theme may move it along its radius. */
+const dotVisual = (role: VisualRole, r: number, d: number, segments: number, m: THREE.MeshStandardMaterial, ring: number[] = []) =>
+  styleMesh(new THREE.Mesh(disc(r, d, segments), m), role, { shape: 'disc', args: [r, d, segments, ...ring] });
 
 export function buttonVisual(options: ButtonOptions, w: number, h: number, depth: number, rest: number) {
   const pill = options.shape === 'pill';
   const base = pill ? boxVisual('buttonWellPill', w + 0.008, h + 0.008, 0.004, (h + 0.008) / 2, material(COLORS.well)) : roundVisual('buttonWellRound', w / 2 + 0.004, 0.004, material(COLORS.well));
   const cap = new THREE.Group(), capMaterial = material(COLORS.cap, { roughness: 0.35 });
   const capMesh = pill ? boxVisual('buttonPill', w, h, depth, h / 2, capMaterial) : roundVisual('buttonRound', w / 2, depth, capMaterial);
-  const glyph = !pill && options.icon ? new Icon(options.icon, { size: 0.022, stroke: options.iconStroke }) : new Label(options.text, { size: pill ? 0.0085 : 0.019, color: '#30363f', weight: pill ? 600 : 900 });
+  const glyph = !pill && options.icon ? new Icon(options.icon, { size: 0.022, stroke: options.iconStroke }) : new Label(options.text, { size: pill ? 0.0085 : 0.019, tone: 'onCap', weight: pill ? 600 : 900 });
   glyph.position.z = depth + 0.0003; cap.add(capMesh, glyph); cap.position.z = rest;
   return { base, cap, capMaterial };
 }
@@ -57,7 +58,7 @@ export function dialVisual(radius: number, depth: number, z: number, tickCount: 
   root.add(roundVisual('dialWell', radius + 0.012, 0.004, material(COLORS.well)));
   for (let i = 0; i < tickCount; i++) {
     const a = start - (i / (tickCount - 1)) * sweep;
-    const dot = dotVisual('dialTick', 0.0013, 0.0008, 12, material(COLORS.track)); dot.position.set(Math.cos(a) * (radius + 0.0065), Math.sin(a) * (radius + 0.0065), 0.004); ticks.push(dot); root.add(dot);
+    const dot = dotVisual('dialTick', 0.0013, 0.0008, 12, material(COLORS.track), [a, radius + 0.0065, radius + 0.012]); dot.position.set(Math.cos(a) * (radius + 0.0065), Math.sin(a) * (radius + 0.0065), 0.004); ticks.push(dot); root.add(dot);
   }
   const body = roundVisual('dialKnob', radius, depth, knobMaterial), notchWidth = 0.00205;
   const notch = boxVisual('dialPointer', notchWidth, radius * 0.5, 0.0008, notchWidth / 2, material('#30363f', { roughness: 0.6 })); notch.position.set(0, radius * 0.6, depth - 0.0001);

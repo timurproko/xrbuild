@@ -22,22 +22,22 @@ test('relocated public entry resolves core metadata without checkout-relative tr
  await fs.cp(path.join(root,'src'),path.join(relocated,'src'),{recursive:true});
  const state=await componentApp(relocated,{entry:'index.ts'});
  assert.equal(typeof state.exports.UiKitScene,'function');
- assert.deepEqual(Array.from(state.exports.componentLibrary.parameters.theme.options,option=>option.value),['default','chamfer']);
+ assert.deepEqual(Array.from(state.exports.componentLibrary.parameters.theme.options,option=>option.value),['default','accent']);
  assert.equal(state.app,undefined);assert.equal(state.pending.size,0);assert.deepEqual(state.calls,[]);
 });
-for(const theme of ['default','chamfer'])test(`${theme} component composition retains authored layout, axes, dialog and Interactable policy`,async()=>{
+for(const theme of ['default','accent'])test(`${theme} component composition retains authored layout, axes, dialog and Interactable policy`,async()=>{
  const state=await componentApp(root);try{
  const {UiKitScene}=await state.importEntry();state.handle.update(React.createElement(UiKitScene,{theme}));await new Promise(r=>setTimeout(r,35));
  const controls=all(state),find=title=>controls.find(c=>c.title.text===title);
  assert.ok(controls.every(c=>c.themeId===theme));
  assert.equal(controls.length,12); // eleven top-level controls plus Dialog's owned Close
- for(const [name,position]of [['Button (pill)',[-0.215,0.105,0]],['Dialog',[-0.075,0.105,0]],['Switch',[0.075,0.105,0]],['Interactable',[0.215,0.105,0]],['Stepped slider',[-0.19,-0.105,0]],['Slider',[0.19,-0.105,0]],['Trackball',[0,-0.01,0.02]],['Button (round)',[-0.215,-0.01,0]],['Dial',[0.215,-0.01,0]]])assert.deepEqual(find(name).getWorldPosition(state.app.camera.position.clone()).toArray(),position,name);
- const mode=controls.find(c=>Array.isArray(c.options));assert.equal(mode.latchSelected,false);assert.equal(mode.title.visible,false);assert.equal(mode.status.visible,false);
+ for(const [name,position]of [['Button (pill)',[-0.215,0.125,0]],['Dialog',[-0.075,0.125,0]],['Switch',[0.075,0.125,0]],['Interactable',[0.215,0.125,0]],['Stepped slider',[-0.19,-0.105,0]],['Slider',[0.19,-0.105,0]],['Trackball',[0,0.018,0.02]],['Segmented',[0,-0.105,0]],['Button (round)',[-0.215,0.018,0]],['Dial',[0.215,0.018,0]]])assert.deepEqual(find(name).getWorldPosition(state.app.camera.position.clone()).toArray(),position,name);
+ const mode=controls.find(c=>Array.isArray(c.options));assert.equal(mode.latchSelected,false);assert.equal(mode.title.visible,true,'the axis switcher has its own title');assert.equal(mode.status.visible,true);
  mode.select(2,'hand');assert.equal(find('Trackball').axis,'y');mode.select(2,'hand');assert.equal(find('Trackball').axis,'y');mode.select(0,'mouse');assert.equal(find('Trackball').axis,'free');
- find('Dialog').emit('click',{source:'hand'});assert.equal(find('Glass dialog').isOpen,true);
- find('Interactable').set(false,'hand');assert.equal(find('Slider').enabled,false);assert.equal(find('Glass dialog').enabled,true);assert.equal(find('Interactable').status.text,'Off: other controls ignore input');
- const identities=all(state);state.handle.update(React.createElement(UiKitScene,{theme:theme==='default'?'chamfer':'default'}));await new Promise(r=>setTimeout(r,35));
- assert.deepEqual(all(state),identities);assert.equal(find('Slider').enabled,false);assert.equal(find('Glass dialog').isOpen,true);assert.equal(find('Trackball').axis,'free');
+ find('Dialog').emit('click',{source:'hand'});assert.equal(find('Dialog Title').isOpen,true);
+ find('Interactable').set(false,'hand');assert.equal(find('Slider').enabled,false);assert.equal(find('Dialog Title').enabled,true);assert.equal(find('Interactable').status.text,'Off: other controls ignore input');
+ const identities=all(state);state.handle.update(React.createElement(UiKitScene,{theme:theme==='default'?'accent':'default'}));await new Promise(r=>setTimeout(r,35));
+ assert.deepEqual(all(state),identities);assert.equal(find('Slider').enabled,false);assert.equal(find('Dialog Title').isOpen,true);assert.equal(find('Trackball').axis,'free');
  find('Interactable').set(true,'mouse');assert.equal(find('Slider').enabled,true);assert.equal(find('Interactable').status.text,'On');
  state.tick(1000);state.tick(1016);state.tick(1032);assert.ok(state.classes.has('ready'));assert.equal(state.app.camera.near,0.01);assert.equal(state.app.camera.far,5);
  const targets=controls.flatMap(c=>c.targets);await state.exports.dispose();for(const target of targets)assert.equal(state.app.xrb.interaction.has(target),false);

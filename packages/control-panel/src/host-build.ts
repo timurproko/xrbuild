@@ -199,6 +199,8 @@ export async function nativePluginPlan(repo: string, workspace: string, includeD
   const catalog = await resolvePluginCatalog(workspace, repo, includeDisabled, undefined, origin ? [origin] : undefined), projects: NativePluginProject[] = [];
   const problems = [...catalog.problems];
   for (const plugin of catalog.selected) {
+    // A hand-mesh plugin's CMake project builds its own program through its runtime setup, never a host DLL.
+    if (plugin.meta.handMesh) continue;
     const own: NativePluginProject[] = [];
     try {
       for (const sub of ['', 'runtime']) {

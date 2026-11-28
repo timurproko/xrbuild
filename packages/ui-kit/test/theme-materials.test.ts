@@ -28,7 +28,7 @@ test('independently styled robot roles have separate stable handles and retire o
   const retired = new Map([...new Set(handles)].map(material => [material, 0]));
   for (const material of retired.keys()) material.addEventListener('dispose', () => retired.set(material, retired.get(material)! + 1));
   const theme = distinctRobot();
-  for (const selected of [theme, K.chamferTheme, K.defaultTheme, theme]) {
+  for (const selected of [theme, K.accentTheme, K.defaultTheme, theme]) {
     ball.setTheme(selected);
     assert.deepEqual(robot.children.map(node => (node as THREE.Mesh).material), handles, 'live animation/material handles remain stable');
     if (selected === theme) handles.forEach((material, i) => assert.equal(material.color.getHexString(), colors[robotRoles[i]].slice(1), robotRoles[i]));
@@ -52,7 +52,7 @@ test('actual constructor and later consumer overrides survive theme material rec
   const material = (board.children[0] as THREE.Mesh).material as THREE.Material;
   assert.equal(material.transparent, false); assert.equal(material.opacity, 1);
   material.transparent = true; material.opacity = 0.3;
-  board.setTheme('chamfer'); assert.equal(material.transparent, true); assert.equal(material.opacity, 0.3);
+  board.setTheme('accent'); assert.equal(material.transparent, true); assert.equal(material.opacity, 0.3);
   board.setTheme('default'); assert.equal(material.transparent, true); assert.equal(material.opacity, 0.3);
   board.dispose();
 });
@@ -101,7 +101,7 @@ test('disabled Trackball reapplies the retained fade immediately without advanci
     for (let i = 0; i < frames; i++) ball.update(1 / 60);
     const head = ball.object.children[0].children[6] as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
     const color = head.material.color.clone(), dim = (ball as any).dim, quaternion = ball.object.quaternion.toArray();
-    ball.setTheme('chamfer');
+    ball.setTheme('accent');
     assert.ok(head.material.color.equals(color), 'no one-frame enabled-colour flash');
     assert.equal((ball as any).dim, dim); assert.deepEqual(ball.object.quaternion.toArray(), quaternion); ball.dispose();
   }

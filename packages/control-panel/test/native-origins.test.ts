@@ -353,6 +353,17 @@ test('build selection never combines duplicate origins; core-only skips optional
   assert.equal((await nativePluginPlan(f.core, f.workspace, true)).projects.length, 1);
 });
 
+test('hand-mesh plugins build their own program, so native rebuild and freshness skip them', async t => {
+  const f = await fixture(t);
+  await f.plugin(f.workspace, 'tracker');
+  const mesh = await f.plugin(f.workspace, 'mesh');
+  await f.write(mesh, 'xrb-plugin.json', { title: 'mesh', type: 'plugin', version: '0.1.0', handMesh: { version: 1, id: 'surface', label: 'Mesh', program: 'bin/mesh-engine.exe', settingsVersion: 1 } });
+  assert.deepEqual((await nativePluginPlan(f.core, f.workspace)).projects.map(p => p.plugin.key), ['workspace:tracker']);
+  await rebuildNativePlugins(f.core, f.workspace, f.ctx, 'cmake', 'fixture');
+  assert.ok(f.calls.every(args => !args.some(arg => arg.includes(`${path.sep}mesh`) || arg.includes('/mesh'))));
+  assert.deepEqual((await resolvedHostFreshness(f.core, f.workspace)).plugins.map(p => p.key), ['workspace:tracker']);
+});
+
 test('native output junctions and existing build locks refuse commands without touching their targets', async t => {
   const f = await fixture(t); await f.plugin(f.embedded, 'product');
   const plugin = (await resolvePluginCatalog(f.workspace, f.core)).selected[0], outside = path.join(f.root, 'outside');

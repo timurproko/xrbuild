@@ -99,7 +99,10 @@ test('top-level Start/Stop and SDK pinch/drag use actual native frames, preserve
       await wait(`document.querySelector('#hands-start-stop').textContent==='Start'`);
       assert.equal(await evaluate('livePage.view.currentHands.length'), 0); assert.equal(await evaluate('livePage.view.testState.drag.held'), false); assert.equal(await evaluate('livePage.view.testState.pinch.held'), false);
       assert.equal(await evaluate(`document.querySelector('#hands-tracking-fps').textContent`), '—'); assert.equal(app.panel.handSessions.busy, false);
-      assert.equal(await evaluate(`document.querySelector('#hands-start-stop').disabled`), true, 'WebXR choice remains explicit app-only guidance, never a native/synthetic fallback');
+      // WebXR stays app-only guidance, never a native/synthetic fallback: Start explains instead of starting.
+      await evaluate(`document.querySelector('#hands-start-stop').click()`);
+      await wait(`/WebXR requires its explicit app XR session/.test(document.querySelector('.xrb-toast')?.textContent ?? '')`);
+      assert.equal(app.panel.handSessions.busy, false, 'no session starts for a WebXR choice');
       await send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', x: 300, y: 220, clickCount: 1 }); await send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', x: 300, y: 220, clickCount: 1 });
       assert.equal(await evaluate('livePage.view.testState.pinch.starts + livePage.view.testState.drag.starts'), 0, 'mouse cannot count as a tracked-hand check');
       await evaluate(`(()=>{const s=document.querySelector('#hands-provider');s.value='workspace:fixture/fixture';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);

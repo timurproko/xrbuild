@@ -4,7 +4,7 @@
 // calls control.update(dt) each frame.
 export { Board, type BoardOptions } from './board.ts';
 export { setVisualComposition, type VisualComposition } from './visual-theme.ts';
-export { defaultTheme, chamferTheme, resolveUiKitTheme, visualRoles, type UiKitTheme, type UiKitThemeId, type UiKitThemeSelection, type ThemeOptions, type VisualRole, type VisualRecipe, type GeometryInput } from './visual-theme.ts';
+export { defaultTheme, accentTheme, resolveUiKitTheme, visualRoles, type UiKitTheme, type UiKitThemeId, type UiKitThemeSelection, type ThemeOptions, type VisualRole, type VisualRecipe, type GeometryInput } from './visual-theme.ts';
 export { Button, type ButtonOptions } from './button.ts';
 export { Control, sourceOf, touchCursor, placeCursor, type Listener } from './control.ts';
 export { Dial } from './dial.ts';

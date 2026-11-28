@@ -532,7 +532,9 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
       // Discovery yields: recheck the run before exposing its values.
       if (!panel.componentSettingsScope(url.searchParams)) throw new HttpError(404, 'Component settings scope is not active');
       res.setHeader('cache-control', 'no-store');
-      return sendJson(res, 200, Object.fromEntries(groups.map(group => [group.id, group.values])));
+      // Temporary values chosen while this run is live override the saved ones for this run only.
+      const runtime = panel.runtimeSettings(p.id)?.componentSettings ?? {};
+      return sendJson(res, 200, Object.fromEntries(groups.map(group => [group.id, { ...group.values, ...runtime[group.id] }])));
     }
     if (is('GET', 'projects')) {
       const catalog = await discoverProjectCatalog(core, workspace, projects);
@@ -632,6 +634,20 @@ export function createServer(opts: ServerOptions = {}): PanelServer {
         if ((await fs.stat(path.join(p.dir, MANIFEST))).mtimeMs !== writeRevision) throw new ManifestConflictError('Project settings changed; reload before saving');
       };
       if (method === 'GET' && rest.length === 0) return sendJson(res, 200, await describeProject(projects, p, panel));
+      // While the app runs, live-capable settings change only that run (never saved); idle edits save through the manifest.
+      if (rest[0] === 'runtime-settings' && rest.length === 1 && (method === 'GET' || method === 'PUT')) {
+        if (method === 'PUT') {
+          const body = await readJson<Record<string, unknown>>(req);
+          if (Object.keys(body).some(kind => kind !== 'componentSettings')) throw new HttpError(400, 'Only library settings change at runtime');
+          const values = body.componentSettings;
+          if (!values || typeof values !== 'object' || Array.isArray(values)) throw new HttpError(400, 'componentSettings missing');
+          if (!p.manifest) throw new HttpError(409, 'Project manifest unavailable');
+          const errors = await projectComponentErrors(core, workspace, projects, { ...p.manifest, componentSettings: values as Manifest['componentSettings'] }, p.manifest);
+          if (errors.length) return sendJson(res, 400, { error: 'invalid component settings', fields: errors });
+          panel.setRuntimeSettings(p.id, { componentSettings: values as Record<string, Record<string, string>> });
+        }
+        return sendJson(res, 200, panel.runtimeSettings(p.id) ?? {});
+      }
       if (method === 'PUT' && rest[0] === 'manifest' && rest.length === 1) {
         const body = await readJson<{ manifest?: Manifest; mtimeMs?: number; revision?: string; confirm?: string[] }>(req);
         if (!body.manifest) throw new HttpError(400, 'manifest missing');

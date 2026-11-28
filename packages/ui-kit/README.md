@@ -41,7 +41,7 @@ export function Controls() {
 }
 ```
 
-The optional entry exports Board, Button, Switch, Segmented, Slider, Dial, Trackball, Dialog, Label, Icon and GlassEdge. Existing control options become props; Switch uses `initialOn`, Segmented uses `initialIndex`, Label uses `text`, and Trackball requires `radius`. Construction options (including initial slider value) remain stable for a mounted instance: use a React key to deliberately construct a replacement. Theme selection is mutable and never requires a key. Transforms, visibility, enabled state, callbacks, text/icon content, Trackball `axis` and Dialog `open` update in place. `ref` exposes the existing object; `configure` is a construction-only callback. `compact` hides a control's title/status. Dialog `interactive={false}` draws a visual-only sheet with no blocker/Close registrations; `closeButtonVisible={false}` hides and disables Close.
+The optional entry exports Board, Button, Switch, Segmented, Slider, Dial, Trackball, Dialog, Label, Icon and GlassEdge. Existing control options become props; Switch uses `initialOn`, Segmented uses `initialIndex`, Label uses `text`, and Trackball requires `radius`. Construction options (including initial slider value) remain stable for a mounted instance: use a React key to deliberately construct a replacement. Theme selection is mutable and never requires a key. Transforms, visibility, enabled state, callbacks, text/icon content, Trackball `axis` and Dialog `open` update in place. `ref` exposes the existing object; `configure` is a construction-only callback. `compact` hides a control's title/status. `titleOffset` (metres below the centre; imperatively `setTitleOffset`) moves the title and status so controls of different sizes in a row share one title line. Dialog `interactive={false}` draws a visual-only sheet with no blocker/Close registrations; `closeButtonVisible={false}` hides and disables Close.
 
 Adapters attach existing SDK targets, never duplicate their mesh events. They update once per SDK frame with delta capped at 0.1 seconds, including stereo; Dialog alone updates its internal Close button. Callback changes retain object identity/capture. Unmount removes subscriptions/capture and disposes construction-owned geometry, materials and textures, not consumer-added children or the SDK renderer. Theme visuals remain separate from input behavior; no settings registry or persistence is included.
 
@@ -59,16 +59,21 @@ Visuals must fit the original footprint, text allocation and contact plane. Targ
 
 ### Built-in styles
 
-`default` retains the original rounded controls. `chamfer` keeps their graphite/ivory/blue vocabulary but uses crisp single bevels, clipped corners, inset satin faces and faceted profiles:
+`default` retains the original rounded controls. `accent` builds every control around one accent colour: solid accent
+bodies with soft filleted edges and a satin finish, white text and icons on them (the theme's optional `onCap` ink),
+and a slider that fills inside its dark channel with a half-accent, half-white fill:
 
-| Elements | Chamfer mesh treatment |
+| Elements | Accent mesh treatment |
 | --- | --- |
-| Board, pill Button, Segmented | Clipped slabs/wells and stepped inset key faces |
-| Round Button, Switch, Dial | Faceted caps/puck/rotor and collars; rectangular dial ticks |
-| Continuous/stepped Slider | Straight clipped channel/fill, inset handle, single horizontal grip and squared detents |
-| Trackball | Chamfered robot head, faceted sockets/eyes/hoops and square shell dots |
-| Dialog and GlassEdge | Clipped frosted sheet/film, stepped rim and matching per-eye highlight profile |
-| Label, Icon, touch cues | Fixed text metrics, squared icon strokes and a faceted touch ring |
+| Board, pill Button, Segmented | Filleted slabs; pill Buttons as solid accent capsules without wells; Segmented as capsule keys in a capsule tray, neutral until selected, then solid accent (the theme's optional `selected` colour) |
+| Round Button, Dial | Solid accent pucks with a quarter-round fillet into the face, without wells; the dial knob matches the round Button's size and its value dots sit further out |
+| Switch | A capsule track like the pill Button with an accent puck thumb that fills it |
+| Continuous/stepped Slider | Dark filleted channel filled inside with a half-accent fill, upright accent capsule thumb with one white line the size of the dial's pointer |
+| Trackball | The faceted open sample head from the three.js examples (MIT, notice in `src/sample-head.ts`) as its model; its own dot shell shows while it turns |
+| Dialog and GlassEdge | A solid dark satin panel with a faint accent tint instead of frosted glass; no glass highlight edge |
+| Label, Icon, touch cues | Fixed text metrics; text and icons on control bodies take the `onCap` ink |
+
+A saved `chamfer` choice, the style Accent replaced, resolves to `accent`.
 
 Both styles cover every variant and state, including Dialog's Close button. They have identical targets, contact depths, animation timing, sounds and event semantics. Typography keeps the same allocation so apps never reflow; explicit text/icon/material options override theme defaults.
 
@@ -77,7 +82,7 @@ Both styles cover every variant and state, including Dialog's Close button. They
 ```tsx
 import { UiKitThemeProvider, Button } from '@xr-build/ui-kit/react';
 
-<UiKitThemeProvider theme="chamfer">
+<UiKitThemeProvider theme="accent">
   <Button title="Action" shape="pill" text="Press" />
   <Button theme="default" title="Reference" shape="round" text="+" />
 </UiKitThemeProvider>
@@ -85,7 +90,7 @@ import { UiKitThemeProvider, Button } from '@xr-build/ui-kit/react';
 
 Resolution is a control's explicit `theme`, nearest explicit provider, inherited provider value, app `defaultTheme` fallback, then library Default. `useUiKitTheme()` exposes the resolved definition. Removing an override restores inheritance; separate providers do not share mutable style. A provider's `defaultTheme` never masks an inherited choice.
 
-Imperative callers use `new Button({ title: 'Action', shape: 'pill', text: 'Press', theme: 'chamfer' })` and `button.setTheme('default')`. Positional constructors accept trailing theme options: `new Switch('Switch', false, { theme: 'chamfer' })`, `new Dial('Dial', { theme: 'chamfer' })`, `new Trackball('Trackball', 0.056, { theme: 'chamfer' })`; Segmented accepts `theme` in its existing behavior options. Board, Dialog, Label, Icon and GlassEdge also accept `theme` and `setTheme`.
+Imperative callers use `new Button({ title: 'Action', shape: 'pill', text: 'Press', theme: 'accent' })` and `button.setTheme('default')`. Positional constructors accept trailing theme options: `new Switch('Switch', false, { theme: 'accent' })`, `new Dial('Dial', { theme: 'accent' })`, `new Trackball('Trackball', 0.056, { theme: 'accent' })`; Segmented accepts `theme` in its existing behavior options. Board, Dialog, Label, Icon and GlassEdge also accept `theme` and `setTheme`.
 
 Provider/prop updates retain the control, targets, held press/pinch/grab, current values, animation phase, dialog state and trackball rotation. Dialog synchronizes `open` when that prop changes, not on unrelated theme/callback renders. Switching stages replacement geometry/material recipes before retiring old geometry, reuses compatible animated material handles, refreshes current colours without advancing a frame and disposes temporary materials. Failed staging keeps the previous style live. Static `transparent`/`opacity` values belong to the theme unless explicitly overridden by constructor material options or later consumer edits. Use `setVisualComposition(root, { transparent: true })` for explicit composition intent even when the current value is already true; Launcher content and Dialog Close use this path. Only declared animated channels (touch/shell/ring opacity and glass-edge uniforms) retain their live phase instead of recipe defaults. Disabled controls reapply their existing fade without advancing time. Final teardown releases only owned resources; borrowed maps and caller-added children survive. Do not retain or mutate a theme-owned mesh expecting its geometry to survive a style change; customize stable control hosts or supply explicit supported options. `configure` remains construction-only and is not rerun by theming.
 

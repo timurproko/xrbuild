@@ -1,5 +1,29 @@
 import fs from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { pipeline } from 'node:stream/promises';
+import type { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
+import { meshUserRoot } from './hand-mesh-runtime.ts';
+import { ensurePythonEnv, installPythonRuntime, pythonEnvPlan, pythonRuntimePlan, DEFAULT_SET, type PythonDeclaration } from './python-env.ts';
+
+/**
+ * How a setup uses core's shared Python. `env`: a reusable environment; install receives `python` as its python.exe.
+ * `runtime`: placed inside the plugin's own runtime folder; install receives `python.install(dest, { findLinks })`.
+ */
+export type MeshPythonRequest = { placement: 'env' } | { placement: 'runtime'; set: string; interpreter: boolean };
+function pythonRequest(value: unknown, declaration: PythonDeclaration | undefined): MeshPythonRequest | null {
+  if (value === undefined || value === false || value === null) return null;
+  if (!declaration) throw new MeshSetupUnavailable('Plugin setup asks for Python but declares no python environment');
+  if (value === true) return { placement: 'env' };
+  const v = value as Record<string, unknown>;
+  if (!v || typeof v !== 'object' || v.into !== 'runtime' || v.set !== undefined && typeof v.set !== 'string' || v.interpreter !== undefined && typeof v.interpreter !== 'boolean')
+    throw new MeshSetupUnavailable('Plugin setup has an invalid python request');
+  const set = (v.set as string | undefined) ?? DEFAULT_SET;
+  if (set !== DEFAULT_SET && !declaration.sets?.[set]) throw new MeshSetupUnavailable(`Plugin setup asks for an undeclared python wheel set "${set}"`);
+  return { placement: 'runtime', set, interpreter: v.interpreter === true };
+}
 import { resolvePluginCatalog } from './extension-catalog.ts';
 import { resolvePluginModule } from './component-resolver.ts';
 import type { JobContext } from './jobs.ts';
@@ -11,17 +35,32 @@ export const MESH_SETUP_EXPORT = 'mesh-runtime-setup';
 
 export interface MeshSetupItem { name: string; version: string; publisher: string; licence: string; bytes: number }
 /**
+ * A local file the person must choose for this install, for example a licensed archive that cannot be downloaded.
+ * The setup declares it in `plan().input`; the panel copies the chosen file to a private folder and passes its path
+ * to `install({ from })`, then deletes the copy.
+ */
+export interface MeshSetupInput { label: string; accept: string }
+/**
  * Optional install kinds a setup declares (`export const setupKinds`): each kind is a separate runtime, needed always or
  * only while one of the plugin's settings has a given value. Without it the setup has one kind, installed by `plan()`.
  */
 export interface MeshSetupKind { id: string; label: string; requires?: { setting: string; value: unknown } }
 export interface MeshSetupPlan {
-  owner: string; kind: string | null; label: string | null; consent: string; installed: boolean; destination: string;
+  owner: string; kind: string | null; label: string | null; consent: string; installed: boolean;
+  /** Installed, and the setup can re-check it for the current plugin version without downloading. */
+  refresh: boolean; destination: string;
+  /** The local file this install needs the person to choose, or null. */
+  input: MeshSetupInput | null;
+  /** How this install uses core's shared Python, or null. */
+  python: MeshPythonRequest | null;
   downloadBytes: number; installedBytes: number; licences: string[]; items: MeshSetupItem[];
 }
 interface SetupModule {
-  plan(options?: object): { consent: string; destination: string; downloadBytes: number; installedBytes: number; licences: string[]; items: MeshSetupItem[] };
+  /** `python: true` (a reusable environment) or `{ into: 'runtime', set?, interpreter? }` asks for core's shared Python. */
+  plan(options?: object): { consent: string; destination: string; downloadBytes: number; installedBytes: number; licences: string[]; items: MeshSetupItem[]; input?: unknown; python?: unknown };
   install(options: object): Promise<unknown>;
+  /** Re-binds an installed runtime to the current plugin source after an update; downloads nothing. */
+  refresh?(options: object): Promise<unknown>;
   status?(options?: object): Promise<Record<string, { installed?: boolean } | null | unknown>>;
   setupKinds?: MeshSetupKind[];
 }
@@ -67,10 +106,40 @@ export async function neededKind(module: SetupModule, settings: Record<string, u
   return kinds.find(k => (!k.requires || settings[k.requires.setting] === k.requires.value) && !installedKind(status, k.id)) ?? null;
 }
 
-/** Which declared runtime the plugin's saved settings still need, for the layer card's Install. */
-export async function meshSetupNeeded(core: string, workspace: string, owner: string): Promise<{ kind: string; label: string } | null> {
-  try { const { module } = await setupModule(core, workspace, owner); const kind = await neededKind(module, await savedSettings(core, workspace, owner)); return kind && { kind: kind.id, label: kind.label }; }
+/** Which declared runtime the plugin's saved settings still need, and the setting that asks for it, for the layer card's Install. */
+export async function meshSetupNeeded(core: string, workspace: string, owner: string): Promise<{ kind: string; label: string; setting: string | null } | null> {
+  try { const { module } = await setupModule(core, workspace, owner); const kind = await neededKind(module, await savedSettings(core, workspace, owner)); return kind && { kind: kind.id, label: kind.label, setting: kind.requires?.setting ?? null }; }
   catch { return null; }
+}
+
+const setupInput = (value: unknown): MeshSetupInput | null => {
+  if (!value || typeof value !== 'object') return null;
+  const { label, accept } = value as Record<string, unknown>;
+  return typeof label === 'string' && label.trim() && label.length <= 80 && !/[\x00-\x1f\x7f]/.test(label)
+    && typeof accept === 'string' && /^\.[a-z0-9]{1,8}(,\.[a-z0-9]{1,8}){0,3}$/i.test(accept) ? { label: label.trim(), accept: accept.toLowerCase() } : null;
+};
+
+/** Private copies of chosen setup files, outside every repository and workspace, removed after their install. */
+export const meshSetupInputRoot = (userRoot = meshUserRoot()) => path.join(userRoot, 'setup-inputs');
+const SETUP_INPUT_LIMIT = 4 * 2 ** 30;
+const SETUP_INPUT_MAX_AGE_MS = 24 * 3600 * 1000;
+/** Streams one chosen file into the private folder and returns its id; abandoned copies older than a day are removed. */
+export async function receiveMeshSetupInput(body: Readable, extension: string, userRoot?: string): Promise<{ id: string; file: string }> {
+  if (!/^\.[a-z0-9]{1,8}$/i.test(extension)) throw new Error('Unsupported setup file type');
+  const root = meshSetupInputRoot(userRoot); await fs.mkdir(root, { recursive: true });
+  for (const entry of await fs.readdir(root, { withFileTypes: true })) {
+    const old = path.join(root, entry.name);
+    if (entry.isFile() && Date.now() - (await fs.stat(old)).mtimeMs > SETUP_INPUT_MAX_AGE_MS) await fs.rm(old, { force: true });
+  }
+  const id = randomUUID(), file = path.join(root, `${id}${extension.toLowerCase()}`);
+  let bytes = 0;
+  try {
+    await pipeline(body, async function* (source) {
+      for await (const chunk of source) { bytes += (chunk as Buffer).length; if (bytes > SETUP_INPUT_LIMIT) throw new Error('The chosen file is larger than 4 GB'); yield chunk; }
+    }, createWriteStream(file, { flags: 'wx' }));
+    if (!bytes) throw new Error('The chosen file is empty');
+  } catch (error) { await fs.rm(file, { force: true }); throw error; }
+  return { id, file };
 }
 
 /** What the setup would download, from where and under which licences. Downloads nothing. */
@@ -80,9 +149,16 @@ export async function meshSetupPlan(core: string, workspace: string, owner: stri
   const kind = needed ?? kinds[0] ?? null;
   const plan = module.plan(kind ? { kind: kind.id } : {});
   const status = await module.status?.({}).catch(() => null) as Record<string, unknown> | null;
-  return { owner: plugin.key, kind: kind?.id ?? null, label: kind?.label ?? null, consent: plan.consent, installed: kind ? !needed && installedKind(status, kind.id) : installedKind(status, 'cpu'), destination: plan.destination,
-    downloadBytes: plan.downloadBytes, installedBytes: plan.installedBytes, licences: plan.licences,
-    items: plan.items.map(({ name, version, publisher, licence, bytes }) => ({ name, version, publisher, licence, bytes })) };
+  const installed = kind ? !needed && installedKind(status, kind.id) : installedKind(status, 'cpu');
+  // Python downloads join the same plan and consent: they are listed with the plugin's, and the lock binds the consent.
+  const python = installed ? null : pythonRequest(plan.python, plugin.meta.python);
+  const needs = !python ? null : python.placement === 'env' ? await pythonEnvPlan(plugin.key, plugin.meta.python!)
+    : await pythonRuntimePlan(plugin.meta.python!, { set: python.set, interpreter: python.interpreter });
+  const extra = needs && !needs.ready ? needs : null;
+  return { owner: plugin.key, kind: kind?.id ?? null, label: kind?.label ?? null, consent: extra ? `${plan.consent}+${extra.key}` : plan.consent, installed,
+    refresh: installed && typeof module.refresh === 'function', destination: plan.destination, input: installed ? null : setupInput(plan.input), python,
+    downloadBytes: plan.downloadBytes + (extra?.downloadBytes ?? 0), installedBytes: plan.installedBytes, licences: [...new Set([...plan.licences, ...(extra?.items.map(i => i.licence) ?? [])])],
+    items: [...plan.items, ...(extra?.items ?? [])].map(({ name, version, publisher, licence, bytes }) => ({ name, version, publisher, licence, bytes })) };
 }
 
 /**
@@ -121,16 +197,32 @@ export function formatSetupProgress(event: SetupProgress & { percent: number | n
 }
 
 /** Runs the plugin's installer for the exact plan the person agreed to, reporting progress as job lines. */
-export async function installMeshSetup(core: string, workspace: string, owner: string, consent: string, ctx: JobContext, signal?: AbortSignal, kind: string | null = null): Promise<void> {
+export async function installMeshSetup(core: string, workspace: string, owner: string, consent: string, ctx: JobContext, signal?: AbortSignal, kind: string | null = null, refresh = false, from: string | null = null, python: MeshPythonRequest | null = null): Promise<void> {
   const { module, plugin } = await setupModule(core, workspace, owner);
+  if (refresh && module.refresh) {
+    // Already installed: re-check its files and bind them to the current plugin version instead of downloading again.
+    ctx.line(`Checking the installed ${plugin.meta.title ?? plugin.id} runtime for this plugin version.`);
+    await module.refresh({ core, workspace, owner: plugin.key, signal });
+    ctx.line(`${plugin.meta.title ?? plugin.id} is ready.`);
+    return;
+  }
   let last = '';
   ctx.line(`Installing ${plugin.meta.title ?? plugin.id}.`);
-  await module.install({ ...(kind ? { kind } : {}), consent, core, workspace, owner: plugin.key, signal, onProgress: (raw: unknown) => {
+  const onProgress = (raw: unknown) => {
     const event = setupProgress(raw); if (!event) return;
     // Byte counters fire per chunk: log a new line only when the visible text changes.
     const line = formatSetupProgress(event.unit === 'bytes' ? { ...event, detail: undefined } : event);
     if (line !== last) { ctx.line(line); last = line; }
-  } });
+  };
+  if (python && !plugin.meta.python) throw new Error('Plugin setup asks for Python but declares no python environment');
+  const declaration = plugin.meta.python!;
+  let interpreter: string | { version: string; install(dest: string, options?: { findLinks?: string }): Promise<{ python: string | null; sitePackages: string }> } | null = null;
+  if (python?.placement === 'env') { interpreter = await ensurePythonEnv(plugin.key, declaration, { onProgress, signal }); signal?.throwIfAborted(); }
+  else if (python?.placement === 'runtime') interpreter = { version: declaration.version,
+    install: (dest, options = {}) => installPythonRuntime(declaration, dest, { set: python.set, interpreter: python.interpreter, findLinks: options.findLinks, onProgress, signal }) };
+  // The plugin consented to its own plan; a '+' suffix only binds the shared Python part of the same consent.
+  await module.install({ ...(kind ? { kind } : {}), ...(from ? { from } : {}), ...(interpreter ? { python: interpreter } : {}),
+    consent: consent.split('+')[0], core, workspace, owner: plugin.key, signal, onProgress });
   // A setup that ignores the signal still finishes, so report the cancel only when it actually stopped.
   signal?.throwIfAborted();
   ctx.line(`${plugin.meta.title ?? plugin.id} installed.`);

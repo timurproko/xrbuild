@@ -29,7 +29,7 @@ import { log } from './env.ts';
 import { resolvedHostFreshness, listProviders, resolvedPluginBinDirs, rebuildHost, clearProviderCache } from './host-build.ts';
 import { DesktopSetup } from './desktop-setup.ts';
 import { setPanelNotifier } from './plugin-service.ts';
-import { installMeshSetup, meshSetupNeeded, meshSetupOwners, meshSetupPlan, MeshSetupUnavailable } from './hand-mesh-setup.ts';
+import { installMeshSetup, meshSetupNeeded, meshSetupOwners, meshSetupPlan, MeshSetupUnavailable, receiveMeshSetupInput } from './hand-mesh-setup.ts';
 import { panelFreshness, panelSourceRoots, type PanelFreshness } from './panel-freshness.ts';
 import { HostRunner, type RunMode, type RunState } from './host-runner.ts';
 import { effectiveSettings, pluginIcon, updatePluginPrefs, pluginPrefsRevision, validateSettings, type PluginSetting, type SettingValue } from './plugin-manager.ts';
@@ -217,6 +217,9 @@ export async function packageGraphReady(root: string): Promise<boolean> {
   return stamp?.trim() === await packageGraphFingerprint(root, files) && await packageLinksReady(root, files);
 }
 
+/** Temporary run settings by kind; each kind is validated by its own endpoint and read by its own delivery. */
+export interface RuntimeSettings { componentSettings?: Record<string, Record<string, string>> }
+
 export class Panel {
   readonly handSessions: HandSessions;
   readonly jobs = new JobRunner();
@@ -249,6 +252,8 @@ export class Panel {
   private savingHands = false;
   /** Aborts the running post-processing install; its downloads are kept for the next Install. */
   private meshSetupAbort: AbortController | null = null;
+  /** Chosen setup files by id: a private copy each, removed once its install ends. */
+  private meshSetupInputs = new Map<string, { owner: string; file: string }>();
   private preparingNativeRun = false;
   private preparingPreview = false;
   private changingPlugins = false;
@@ -1600,6 +1605,25 @@ export class Panel {
     finally { this.preparingPreview = false; }
   }
 
+  /**
+   * Settings changed while an app runs are temporary, like a play mode: one store for every live-capable kind of
+   * setting (`componentSettings` first), reaching that run only, never saved, and dropped when the run ends or another
+   * starts (keyed by project and run start). Delivery of each kind reads its part through `runtimeSettings`.
+   */
+  private runtime: { projectId: string; startedMs: number; values: RuntimeSettings } | null = null;
+  runtimeSettings(projectId: string): RuntimeSettings | null {
+    const run = this.runner.state(), held = this.runtime;
+    if (!held || !this.runner.busy || run.projectId !== held.projectId || run.startedMs !== held.startedMs) { this.runtime = null; return null; }
+    return held.projectId === projectId ? held.values : null;
+  }
+  setRuntimeSettings(projectId: string, values: RuntimeSettings): RuntimeSettings {
+    const run = this.runner.state();
+    if (!this.runner.busy || run.projectId !== projectId || run.startedMs === null) throw new HttpError(409, 'The app is not running; settings save normally');
+    const current = this.runtimeSettings(projectId) ?? {};
+    this.runtime = { projectId, startedMs: run.startedMs, values: { ...current, ...values } };
+    return this.runtime.values;
+  }
+
   /** Reuse existing managed launch identity; never authorize a bare project ID. */
   componentSettingsScope(query: URLSearchParams): boolean {
     if (!this.runner.busy || query.get('project') !== this.runner.projectId) return false;
@@ -2117,21 +2141,37 @@ export class Panel {
         catch (e) { if (e instanceof MeshSetupUnavailable) throw new HttpError(404, e.message); throw e; }
         return true;
       }
+      case 'POST hands/postprocessing/setup-input': {
+        const owner = String(req.headers['x-xrb-setup-owner'] ?? ''), name = String(req.headers['x-xrb-setup-name'] ?? '');
+        const plan = await meshSetupPlan(this.repo, this.workspace, owner).catch(e => { throw e instanceof MeshSetupUnavailable ? new HttpError(404, e.message) : e; });
+        const extension = path.extname(name).toLowerCase();
+        if (!plan.input || !plan.input.accept.split(',').includes(extension)) throw new HttpError(400, plan.input ? `Choose a ${plan.input.accept} file` : 'This install needs no file');
+        for (const [id, entry] of this.meshSetupInputs) if (entry.owner === owner) { this.meshSetupInputs.delete(id); await fs.rm(entry.file, { force: true }); }
+        const received = await receiveMeshSetupInput(req, extension).catch(e => { throw new HttpError(400, (e as Error).message); });
+        this.meshSetupInputs.set(received.id, { owner, file: received.file });
+        sendJson(res, 200, { input: received.id }); return true;
+      }
       case 'POST hands/postprocessing/setup': {
-        const body = await readJson<{ owner?: unknown; consent?: unknown }>(req);
+        const body = await readJson<{ owner?: unknown; consent?: unknown; input?: unknown }>(req);
         if (typeof body.owner !== 'string' || typeof body.consent !== 'string') throw new HttpError(400, 'Setup needs a plugin and its consent code');
         if (this.jobs.active().some(job => job.kind === 'mesh-setup')) throw new HttpError(409, 'A post-processing install is already running');
         const owner = body.owner, consent = body.consent;
         const plan = await meshSetupPlan(this.repo, this.workspace, owner).catch(e => { throw e instanceof MeshSetupUnavailable ? new HttpError(404, e.message) : e; });
         if (plan.consent !== consent) throw new HttpError(409, 'The setup plan changed; review it again');
+        const input = typeof body.input === 'string' ? this.meshSetupInputs.get(body.input) : undefined;
+        if (plan.input && (!input || input.owner !== owner)) throw new HttpError(400, `Choose ${plan.input.label} first`);
+        if (input) this.meshSetupInputs.delete(body.input as string);
         const kind = plan.kind;
         const abort = new AbortController(); this.meshSetupAbort = abort;
         const job = this.startJob('mesh-setup', null, 'install post-processing prerequisites', async ctx => {
-          try { await installMeshSetup(this.repo, this.workspace, owner, consent, ctx, abort.signal, kind); }
+          try { await installMeshSetup(this.repo, this.workspace, owner, consent, ctx, abort.signal, kind, plan.refresh, input?.file ?? null, plan.python); }
           catch (error) {
             if (abort.signal.aborted) { ctx.line('Install cancelled. Downloaded files are kept, so Install continues where it stopped.'); throw new Error('Install cancelled'); }
             throw error;
-          } finally { if (this.meshSetupAbort === abort) this.meshSetupAbort = null; }
+          } finally {
+            if (this.meshSetupAbort === abort) this.meshSetupAbort = null;
+            if (input) await fs.rm(input.file, { force: true }); // The private copy of the chosen file never outlives its install.
+          }
           this.hub.send('hands-changed', {});
         });
         sendJson(res, 200, job); return true;

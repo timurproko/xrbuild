@@ -12,7 +12,7 @@ for (const state of ['missing', 'archived', 'archived-defaults-only']) {
     const library = 'workspace:local-ui-kit', p = await f.get();
     const enrolled = await f.request('PUT', '/api/projects/launcher/manifest', {
       manifest: { ...p.manifest, componentLibraries: { [library]: { props: { theme: 'theme' }, defaults: { theme: 'default' } } },
-        ...(state === 'archived-defaults-only' ? {} : { componentSettings: { [library]: { theme: 'chamfer' } } }) },
+        ...(state === 'archived-defaults-only' ? {} : { componentSettings: { [library]: { theme: 'accent' } } }) },
       mtimeMs: p.manifestMtimeMs,
     });
     assert.equal(enrolled.status, 200, JSON.stringify(enrolled));
@@ -35,11 +35,11 @@ for (const state of ['missing', 'archived', 'archived-defaults-only']) {
       const changed = await save({ ...next.manifest, componentSettings: { [library]: { theme } } }, next);
       assert.equal(changed.status, 400, 'new selections cannot be validated against an unavailable library');
     }
-    const defaults = await save({ ...next.manifest, componentLibraries: { [library]: { props: { theme: 'theme' }, defaults: { theme: 'chamfer' } } } }, next);
+    const defaults = await save({ ...next.manifest, componentLibraries: { [library]: { props: { theme: 'theme' }, defaults: { theme: 'accent' } } } }, next);
     assert.equal(defaults.status, 400, 'new unavailable defaults are rejected');
     const binding = await save({ ...next.manifest, componentLibraries: { [library]: { props: { theme: 'other' }, defaults: { theme: 'default' } } } }, next);
     assert.equal(binding.status, 400, 'changed unavailable declarations are not grandfathered');
-    const invalidShape = await save({ ...next.manifest, componentSettings: { [library]: ['chamfer'] } }, next);
+    const invalidShape = await save({ ...next.manifest, componentSettings: { [library]: ['accent'] } }, next);
     assert.equal(invalidShape.status, 400, 'structural validation still applies');
     const reloaded = await f.get();
     assert.equal(reloaded.manifest.description, 'Unrelated edit');

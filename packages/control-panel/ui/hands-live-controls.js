@@ -1,5 +1,6 @@
 import { handsLog, clearHandsLog } from './hands-log.js';
 import { isPanelUnavailable } from './navigation.js';
+import { toast, closeToast } from './toast.js';
 const key = source => source ? `${source.owner}/${source.id}` : '';
 /** Only acquisition controls: no source writes, status paragraphs, recorder or adjustment editor. */
 export function mountHandsLiveControls({ session, view, load, provider = document.getElementById('hands-provider') }) {
@@ -26,7 +27,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     widest = Math.max(widest, document.getElementById('hands-view-reset')?.getBoundingClientRect().width ?? 0);
     button.textContent = current; if (widest) button.style.minWidth = `${widest}px`; };
   provider.title = 'Provider changes are saved for the next Start or app launch; the active session is not switched.';
-  let status = { phase: 'not-started' }, data = null, supported = true, starting = false, stopping = false, closed = false, polling = false, generation = 0, lastDiagnostic = '';
+  let status = { phase: 'not-started' }, data = null, supported = true, starting = false, stopping = false, closed = false, polling = false, generation = 0, lastDiagnostic = '', blockedReason = '';
   const rates = document.getElementById('hands-tracking-fps');
   function render() {
     if (closed) return;
@@ -42,7 +43,10 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     const cleanupPending = session.blocked || status.cleanupPending;
     const stoppingNow = stopping || session.stopping || phase === 'stopping';
     button.textContent = cleanupPending && !stopping ? 'Retry cleanup' : stoppingNow ? 'Stop' : active ? 'Stop' : status.takeoverAvailable ? 'Take over' : 'Start';
-    button.disabled = stopping || !cleanupPending && (stoppingNow || !active && (!!unavailable || phase === 'occupied' && !status.takeoverAvailable || !!view?.replaying));
+    // Start stays clickable when only the provider is missing or unavailable; a click explains why instead.
+    button.disabled = stopping || !cleanupPending && (stoppingNow || !active && (!data || !view?.profile || phase === 'occupied' && !status.takeoverAvailable || !!view?.replaying));
+    blockedReason = !active && !cleanupPending ? unavailable : '';
+    if (!blockedReason) closeToast('hands-start-blocked');
     const labels = { 'not-started': 'Not started', starting: 'Starting…', waiting: 'Waiting', running: 'Running', 'no-hands': 'No hands', rejected: 'Observation dropped', stalled: 'Stalled', stopping: 'Stopping…', stopped: 'Stopped', failed: 'Failed', cleanup: 'Cleanup', occupied: 'Busy' };
     let label = labels[phase] ?? 'Not started';
     if (active && status.source && key(status.source) !== provider.value) label += ` · ${status.source.label}`;
@@ -51,6 +55,13 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
     const fps = Number.isFinite(status.trackingFps) && ['running', 'no-hands'].includes(phase) ? status.trackingFps.toFixed(1) : '—';
     if (rates.textContent !== fps) rates.textContent = fps;
     rates.parentElement.dataset.tooltip = fps === '—' ? 'No fresh live provider frames' : `Unique received frames/s · Capture age ${status.frameAgeMs?.toFixed(1)} ms ± ${status.uncertaintyMs?.toFixed(1)} ms · Delivery gaps ${status.dropped ?? 0} · Provider-reported ${status.reportedHz ?? '—'} Hz`;
+  }
+  // Why Start cannot run right now. Start stays clickable; a click shows the reason as a toast with Open Setup, which
+  // closes by itself once Start can run.
+  function explainBlocked() {
+    const setup = document.querySelector('.hands-adjustment-tabs [data-tab="setup"]');
+    toast({ id: 'hands-start-blocked', title: "Hands can't start", message: blockedReason, tone: 'warn', timeoutMs: 0,
+      actions: setup ? [{ label: 'Open Setup', onClick: () => setup.click() }] : [] });
   }
   // Provider lifecycle in the Log: one line per start, start confirmation and stop, not per running/no-hands flip.
   const LIVE = ['waiting', 'running', 'no-hands', 'rejected', 'stalled'];
@@ -67,6 +78,7 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   const unsubscribe = session.subscribeLifecycle(update);
   const changed = () => render(); provider.addEventListener('change', changed);
   const click = async () => {
+    if (blockedReason) { explainBlocked(); return; }
     if (status.cleanupPending && !session.active && !session.blocked) {
       generation++; stopping = true; render();
       try { update(await session.recover(status.sessionId)); } catch (error) { update({ ...status, phase: 'failed', reason: error.message, cleanupPending: true }); }
@@ -108,5 +120,5 @@ export function mountHandsLiveControls({ session, view, load, provider = documen
   };
   const timer = setInterval(() => { if (session.active) render(); else void poll(); }, 1000);
   render(); void poll();
-  return { update, dispose() { closed = true; generation++; clearInterval(timer); unsubscribe(); provider.removeEventListener('change', changed); button.removeEventListener('click', click); root.remove(); } };
+  return { update, dispose() { closed = true; generation++; clearInterval(timer); closeToast('hands-start-blocked'); unsubscribe(); provider.removeEventListener('change', changed); button.removeEventListener('click', click); root.remove(); } };
 }
