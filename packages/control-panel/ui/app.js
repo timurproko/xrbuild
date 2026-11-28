@@ -1105,6 +1105,29 @@ enhanceHelpText(document);
  * Stop (no extra button); while another project runs, both wait.
  */
 const projectRunning = (p) => state.run?.projectId === p.id && state.run.phase !== 'idle';
+/** Temporary settings of this project's current run (play-mode style), by kind, or null when it is not running. */
+const runOverrides = (p) => {
+  const held = state.runtime?.[p.id];
+  return projectRunning(p) && held && held.startedMs === state.run?.startedMs ? held.values : null;
+};
+/** Applies one kind of live-capable setting to the running app only; nothing is saved. */
+async function applyRuntimeSettings(p, values) {
+  const startedMs = state.run.startedMs;
+  try {
+    const result = await api('PUT', `/api/projects/${encodeURIComponent(p.id)}/runtime-settings`, values);
+    state.runtime = { ...state.runtime, [p.id]: { startedMs, values: result } };
+  } catch (error) { toast({ id: `runtime-settings-${p.id}`, title: 'Not applied', message: error.message, tone: 'err' }); renderDetail(true); }
+}
+/** While an app runs, settings that only take effect on the next start are locked; live-capable ones stay editable. */
+const LIVE_SETTINGS = /^componentSettings\./;
+function lockSavedSettingsWhileRunning(p) {
+  if (!projectRunning(p)) return;
+  for (const input of document.querySelectorAll('#settings [name], #build-settings [name]')) {
+    if (LIVE_SETTINGS.test(input.name)) continue;
+    input.disabled = true; input.closest('label, .field, .dropdown')?.setAttribute('data-tooltip', 'Stop the app to change this');
+  }
+  for (const button of document.querySelectorAll('#detail [data-choice]')) { button.disabled = true; button.title = 'Stop the app to change this'; }
+}
 
 function runButtons(p, busy) {
   const running = projectRunning(p);
@@ -1887,7 +1910,8 @@ function renderDetail(force = false) {
   const runtimeSettings = displaySurface
     ? `${displayField(m, { monitorsOnly: headset })}${inputField(m)}`
     : '';
-  const componentFields = componentsSurface ? p.componentGroups.map(group => `<div class="xrb-stack component-settings-group"><h2>${esc(group.label)}</h2><div class="settings-grid">${Object.entries(group.parameters).map(([name, parameter]) => field(esc(parameter.label), `componentSettings.${group.id}.${name}`, m.componentSettings?.[group.id]?.[name] ?? group.values[name], { options: parameter.options.map(option => option.value), optionLabels: Object.fromEntries(parameter.options.map(option => [option.value, option.label])), raw: true })).join('')}</div></div>`).join('') : '';
+  const live = componentsSurface ? runOverrides(p)?.componentSettings : null;
+  const componentFields = componentsSurface ? (projectRunning(p) ? '<p class="xrb-help component-settings-live">The app is running: changes apply to this run only and reset when it stops.</p>' : '') + p.componentGroups.map(group => `<div class="xrb-stack component-settings-group"><h2>${esc(group.label)}</h2><div class="settings-grid">${Object.entries(group.parameters).map(([name, parameter]) => field(esc(parameter.label), `componentSettings.${group.id}.${name}`, live?.[group.id]?.[name] ?? m.componentSettings?.[group.id]?.[name] ?? group.values[name], { options: parameter.options.map(option => option.value), optionLabels: Object.fromEntries(parameter.options.map(option => [option.value, option.label])), raw: true })).join('')}</div></div>`).join('') : '';
   const settings = componentsSurface ? `<form id="settings" class="xrb-stack">${componentFields}</form>` : publishSurface ? '' : `<form id="settings">
       <div class="row settings-toolbar">${m.kind === 'app' ? platformField(m, surface) : ''}<div class="settings-tools"><span class="display-options">${displaySurface ? `${controls?.view ?? ''}${controls?.dev ?? ''}` : ''}</span></div></div>
       ${runtimeSettings ? `<div class="settings-grid runtime-settings">${runtimeSettings}</div>` : ''}
@@ -2059,6 +2083,7 @@ function renderDetail(force = false) {
   }));
   if (platformGroup) wirePlatformDrag(platformGroup);
   syncRunDock(p);
+  lockSavedSettingsWhileRunning(p);
   renderSettingsStatus();
   // The optional Publish form saves independently: Display/Input edits must not overwrite package or publication fields.
   // A title saves on Enter or blur, never while half typed.
@@ -2224,6 +2249,11 @@ async function saveSettings(p, form, changedName) {
     const group = p.componentGroups?.find(group => Object.keys(group.parameters).some(name => changedName === `componentSettings.${group.id}.${name}`));
     if (!group) return;
     const name = Object.keys(group.parameters).find(name => changedName === `componentSettings.${group.id}.${name}`);
+    if (projectRunning(p)) {
+      // Play-mode style: while the app runs, a change reaches that run only and is never saved.
+      const current = runOverrides(p)?.componentSettings ?? {};
+      return applyRuntimeSettings(p, { componentSettings: { ...current, [group.id]: { ...current[group.id], [name]: get(changedName) } } });
+    }
     m.componentSettings = { ...m.componentSettings, [group.id]: { ...m.componentSettings?.[group.id], [name]: get(changedName) } };
   }
   if (changedName === 'platform-choice') m = selectPlatform(m, get('platform-choice'));
@@ -3772,10 +3802,12 @@ function connect() {
   const on = (type, fn) => es.addEventListener(type, (e) => fn(JSON.parse(e.data)));
   on('run', (r) => {
     if (r.phase === 'starting' && r.startedMs !== state.run?.startedMs) state.runLog = [];
+    // Starting or stopping changes which settings are editable and drops a stopped run's temporary values.
+    const toggled = (state.run?.phase === 'idle') !== (r.phase === 'idle') || state.run?.startedMs !== r.startedMs;
     state.run = r;
-    if (r.phase === 'idle') state.status = null;
+    if (r.phase === 'idle') { state.status = null; state.runtime = {}; }
     renderRun();
-    renderDetail();
+    renderDetail(toggled);
   });
   on('status', (s) => {
     const wasUp = state.status?.pageFps != null;

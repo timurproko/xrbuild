@@ -46,3 +46,7 @@
 ## 11. Segmented keys at button height
 
 - [x] 11.1 Make Segmented keys as tall as the pill Button (0.028 m) in every theme, growing the control and its touch areas, without changing key width.
+
+## 12. Temporary settings while an app runs
+
+- [x] 12.1 Hold settings changed during a run in one panel store keyed by the run, deliver them to the running app without saving, drop them when the run ends, and lock next-start settings while running; cover it in a panel test.

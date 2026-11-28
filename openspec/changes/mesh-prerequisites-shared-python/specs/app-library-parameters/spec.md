@@ -69,3 +69,17 @@ Supported live-settings sessions SHALL apply saved parameter values without rest
 #### Scenario: Session retirement
 - **WHEN** an app session stops or another project becomes active
 - **THEN** the retired session cannot read or apply the replacement project's values and its subscriptions are released
+
+## ADDED Requirements
+
+### Requirement: Settings changed during a run are temporary
+
+While an app runs, a change to a live-capable setting (library parameters) SHALL apply to that run only, like a play mode: it SHALL reach the running app without restarting it and SHALL NOT be saved. Stopping the app, or starting another run, SHALL drop the temporary values so the tab and the next run show the saved values. Settings that take effect only on the next start SHALL be locked while the app runs. One panel mechanism SHALL hold temporary values for every live-capable kind of setting.
+
+#### Scenario: Trying a theme while the app runs
+- **WHEN** the person changes the Theme in Settings while the app runs
+- **THEN** the running app switches theme in place, nothing is written to the project, and after Stop the tab shows the saved theme again
+
+#### Scenario: Setting that needs a restart
+- **WHEN** the app runs
+- **THEN** Platform, Display, Input and other next-start settings are locked with a note to stop the app first

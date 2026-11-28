@@ -217,6 +217,9 @@ export async function packageGraphReady(root: string): Promise<boolean> {
   return stamp?.trim() === await packageGraphFingerprint(root, files) && await packageLinksReady(root, files);
 }
 
+/** Temporary run settings by kind; each kind is validated by its own endpoint and read by its own delivery. */
+export interface RuntimeSettings { componentSettings?: Record<string, Record<string, string>> }
+
 export class Panel {
   readonly handSessions: HandSessions;
   readonly jobs = new JobRunner();
@@ -1600,6 +1603,25 @@ export class Panel {
       }, release => this.holdProjectRun(release));
     }
     finally { this.preparingPreview = false; }
+  }
+
+  /**
+   * Settings changed while an app runs are temporary, like a play mode: one store for every live-capable kind of
+   * setting (`componentSettings` first), reaching that run only, never saved, and dropped when the run ends or another
+   * starts (keyed by project and run start). Delivery of each kind reads its part through `runtimeSettings`.
+   */
+  private runtime: { projectId: string; startedMs: number; values: RuntimeSettings } | null = null;
+  runtimeSettings(projectId: string): RuntimeSettings | null {
+    const run = this.runner.state(), held = this.runtime;
+    if (!held || !this.runner.busy || run.projectId !== held.projectId || run.startedMs !== held.startedMs) { this.runtime = null; return null; }
+    return held.projectId === projectId ? held.values : null;
+  }
+  setRuntimeSettings(projectId: string, values: RuntimeSettings): RuntimeSettings {
+    const run = this.runner.state();
+    if (!this.runner.busy || run.projectId !== projectId || run.startedMs === null) throw new HttpError(409, 'The app is not running; settings save normally');
+    const current = this.runtimeSettings(projectId) ?? {};
+    this.runtime = { projectId, startedMs: run.startedMs, values: { ...current, ...values } };
+    return this.runtime.values;
   }
 
   /** Reuse existing managed launch identity; never authorize a bare project ID. */

@@ -43,3 +43,26 @@ test('managed built/dev preview and native scopes expose only the active project
     assert.equal(cors.headers.get('access-control-allow-origin'), 'https://app.local');
   } finally { panel.liveHands = null; panel.nativeHandPolicy = null; }
 });
+
+test('settings changed while the app runs apply to that run only, are never saved and drop when it ends', async t => {
+  const f = await componentSettingsFixture(t), panel = f.server.panel as any;
+  let active = false, startedMs = 1000;
+  t.mock.getter(panel.runner, 'busy', () => active);
+  t.mock.getter(panel.runner, 'projectId', () => active ? 'launcher' : null);
+  t.mock.method(panel.runner, 'state', () => ({ projectId: active ? 'launcher' : null, startedMs: active ? startedMs : null, phase: active ? 'running' : 'idle' }));
+  panel.previewProjection = { route: '/preview/launcher/', token: 'token', session: 'session', projectId: 'launcher' };
+  const endpoint = '/api/component-settings?project=launcher&route=/preview/launcher/&token=token&session=session';
+  const runtime = (theme: string, extra: object = {}) => f.request('PUT', '/api/projects/launcher/runtime-settings', { componentSettings: { 'bundled:ui-kit': { theme } }, ...extra });
+  assert.equal((await runtime('accent')).status, 409, 'idle edits save normally instead');
+  active = true;
+  assert.equal((await runtime('purple')).status, 400, 'values are validated like saved ones');
+  assert.equal((await runtime('accent', { display: 'desktop' })).status, 400, 'only live-capable kinds change at runtime');
+  const applied = await runtime('accent');
+  assert.equal(applied.status, 200); assert.equal(applied.json.componentSettings['bundled:ui-kit'].theme, 'accent');
+  assert.equal((await f.request('GET', endpoint)).json['bundled:ui-kit'].theme, 'accent', 'the running app receives it');
+  assert.equal((await f.get()).manifest.componentSettings?.['bundled:ui-kit']?.theme ?? 'default', 'default', 'nothing is saved');
+  startedMs = 2000;
+  assert.equal((await f.request('GET', endpoint)).json['bundled:ui-kit'].theme, 'default', 'a new run starts from saved values');
+  await runtime('accent'); active = false;
+  assert.deepEqual((await f.request('GET', '/api/projects/launcher/runtime-settings')).json, {}, 'stopping drops the temporary values');
+});
