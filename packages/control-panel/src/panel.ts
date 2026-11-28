@@ -14,7 +14,7 @@ import { defaultIcon } from '../../app-icon/src/icon.ts';
 import { APP_FAVICON_FILE, finalizeBrowserBuild } from './browser-build.ts';
 import { projectFile } from './embedded-projects.ts';
 import { staticSourcesMatchBaseline, trackSourceFinalization } from './embedded-source-refresh.ts';
-import { prepareEmbeddedProject, prepareEmbeddedDependencies, projectWritableRoot, embeddedProjectEnvironment, withEmbeddedProjectLock, runEmbeddedProjectScript } from './embedded-project-state.ts';
+import { prepareEmbeddedProject, refreshEmbeddedProject, embeddedSourcesChanged, prepareEmbeddedDependencies, projectWritableRoot, embeddedProjectEnvironment, withEmbeddedProjectLock, runEmbeddedProjectScript } from './embedded-project-state.ts';
 import { effectiveInputFingerprint, effectiveProjectOutput, publishEffectiveOutput, markEffectiveBuildFailed } from './embedded-project-output.ts';
 import { metadataText } from './embedded-inputs.ts';
 import { stagePackagerInputs } from './package-staging.ts';
@@ -367,7 +367,12 @@ export class Panel {
     this.remoteUpdates = new RemoteUpdates(repo, workspace, () => this.jobs.active().length > 0 || this.runner.busy || this.restartPending,
       status => hub.send('remote-update', status));
     this.jobs.beforeStart = () => this.remoteUpdates.pause();
-    this.jobs.on('end', (job: Job) => { void this.remoteUpdates.checkWhenStarted(job.kind === 'update'); });
+    this.jobs.on('end', (job: Job) => {
+      void this.remoteUpdates.checkWhenStarted(job.kind === 'update');
+      // Rebuild and Update finish by bringing existing embedded working copies up to the installed sources.
+      if (job.state === 'done' && (job.kind === 'update' || job.kind === 'host-rebuild')) this.refreshEmbeddedWorkingCopies(job.kind === 'update' ? 'after Update' : 'after Rebuild');
+      else if (job.kind !== 'project-refresh') this.retryDeferredWorkingCopyRefresh();
+    });
     this.packages = new PackageList(path.join(workspace, 'builds'));
     this.jobs.on('change', (j: Job) => {
       hub.send('job', jobSummary(j));
@@ -414,6 +419,10 @@ export class Panel {
   /** Explicit Rebuild and automatic action preparation share this recipe. Discovery never installs. */
   rebuildDeps = { setupServices: setupEmbeddedServices, rebuildNative: rebuildHost };
   private preparingRebuild = false;
+  /** Why an existing embedded working copy is still behind its installed source, by stable project key. */
+  private workingCopyRefresh = new Map<string, string>();
+  /** A busy project skipped a refresh; retry once apps and jobs are idle. */
+  private workingCopyRefreshDeferred = false;
 
   private async preparationNeeded(native = false): Promise<boolean> {
     try { if ((await embeddedServiceReadiness(this.repo, this.workspace)).needsBuild) return true; }
@@ -601,7 +610,7 @@ export class Panel {
     args[3] = work;
     // These jobs own explicit preparation; ordinary input staleness must not veto their logs.
     const prepares = ['host-rebuild', 'run', 'preview-run', 'web-build', 'icon-render', 'package'].includes(kind);
-    if (this.servicesPending && kind !== 'update' && !prepares) throw this.servicesRefusal('Plugin discovery is awaiting refresh');
+    if (this.servicesPending && kind !== 'update' && kind !== 'project-refresh' && !prepares) throw this.servicesRefusal('Plugin discovery is awaiting refresh');
     if (this.preparingRebuild) throw new HttpError(409, 'Rebuild is preparing application components; wait for it to finish.');
     if (this.changingPlugins) throw new HttpError(409, 'Plugin services are changing; retry after the update');
     if (kind === 'update') {
@@ -643,7 +652,73 @@ export class Panel {
   }
 
   async prepareProject(p: Project): Promise<Project> {
-    return prepareEmbeddedProject(this.repo, this.workspace, this.projects, p);
+    const prepared = await prepareEmbeddedProject(this.repo, this.workspace, this.projects, p);
+    if (p.origin === 'bundled') this.workingCopyRefresh.delete(p.key ?? p.id); // Run/Build performed the same refresh
+    return prepared;
+  }
+
+  /** The visible reason an embedded project's working copy did not follow its installed source, or null. */
+  workingCopyRefreshProblem(p: Project): string | null {
+    return p.origin === 'bundled' ? this.workingCopyRefresh.get(p.key ?? p.id) ?? null : null;
+  }
+
+  /**
+   * After start, Rebuild and Update: one visible job that refreshes every existing embedded working copy whose
+   * installed source changed, through the same locked merge as Run/Build. Never-materialized projects stay so.
+   */
+  refreshEmbeddedWorkingCopies(reason: string): Job | null {
+    this.workingCopyRefreshDeferred = false;
+    try { return this.startJob('project-refresh', null, `update embedded projects (${reason})`, ctx => this.refreshWorkingCopies(ctx)); }
+    catch (error) {
+      // Another job or an app owns the panel now; the refresh follows when it becomes idle.
+      this.workingCopyRefreshDeferred = true;
+      log(`[panel] embedded project update deferred: ${(error as Error).message}`);
+      return null;
+    }
+  }
+
+  private retryDeferredWorkingCopyRefresh(): void {
+    if (!this.workingCopyRefreshDeferred || this.runner.busy || this.preparingNativeRun || this.preparingPreview || this.restartPending || this.jobs.active().length) return;
+    this.refreshEmbeddedWorkingCopies('after the busy project became idle');
+  }
+
+  private async refreshWorkingCopies(ctx: JobContext): Promise<{ updated: string[]; deferred: string[]; refused: string[] }> {
+    const result = { updated: [] as string[], deferred: [] as string[], refused: [] as string[] };
+    const catalog = await discoverProjectCatalog(this.repo, this.workspace, this.projects);
+    for (const { project } of catalog.projects) {
+      if (project.origin !== 'bundled') continue;
+      const key = project.key ?? project.id, name = project.manifest?.name ?? project.id;
+      if (project.stateProblem) {
+        // Invalid or interrupted state is already shown with the project; never reset it here.
+        this.workingCopyRefresh.delete(key); result.refused.push(name);
+        ctx.line(`${name}: not updated: ${project.stateProblem}`); continue;
+      }
+      if (!project.workingRoot) { this.workingCopyRefresh.delete(key); continue; } // never materialized: nothing to follow
+      try {
+        if (!await embeddedSourcesChanged(this.repo, this.workspace, this.projects, project)) { this.workingCopyRefresh.delete(key); continue; }
+        const busy = this.runner.projectId === project.id && this.runner.busy || this.jobs.active().some(job => job.projectId === project.id);
+        if (busy) throw new HttpError(409, 'Embedded project is busy');
+        ctx.line(`${name}: updating to the installed sources…`);
+        await refreshEmbeddedProject(this.repo, this.workspace, this.projects, project);
+        this.workingCopyRefresh.delete(key); result.updated.push(name);
+        ctx.line(`${name}: updated.`);
+      } catch (error) {
+        const message = (error as Error).message;
+        if (/busy|operation lock/i.test(message) && (this.runner.busy || this.jobs.active().some(job => job.kind !== 'project-refresh'))) {
+          this.workingCopyRefresh.set(key, 'Installed sources changed while this project was in use; it updates when it is idle, or on its next Run or Build.');
+          this.workingCopyRefreshDeferred = true; result.deferred.push(name);
+          ctx.line(`${name}: in use; the update follows when it is idle.`);
+        } else {
+          this.workingCopyRefresh.set(key, `Installed sources changed but this working copy was not updated: ${message}. Your files are unchanged (${project.workingRoot}); resolve this, then Run or Build to retry.`);
+          result.refused.push(name);
+          ctx.line(`${name}: not updated: ${message}`);
+        }
+      }
+    }
+    this.hub.send('projects-changed', {});
+    if (!result.updated.length && !result.deferred.length && !result.refused.length) ctx.line('Embedded projects already match the installed sources.');
+    if (result.refused.length) throw new JobFailure(`Not updated: ${result.refused.join(', ')}; see each project for how to recover`, result);
+    return result;
   }
 
   private async reloadPreparedProject(p: Project): Promise<Project> {
@@ -1553,7 +1628,7 @@ export class Panel {
     const idle = (state: { phase: string }) => {
       if (state.phase !== 'idle') return;
       this.runner.off('state', idle);
-      void release().catch(error => log(`[panel] Could not release project lock: ${(error as Error).message}`));
+      void release().then(() => this.retryDeferredWorkingCopyRefresh(), error => log(`[panel] Could not release project lock: ${(error as Error).message}`));
     };
     this.runner.on('state', idle);
     return true;

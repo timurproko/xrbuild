@@ -290,6 +290,99 @@ test('shared SDK changes refresh working generations and settings saves rebase o
   assert.equal(saved.json.manifest.name, 'Rename during update');
 });
 
+async function refreshWorkingCopies(f: Awaited<ReturnType<typeof fixture>>) {
+  const job = f.server.panel.refreshEmbeddedWorkingCopies('test');
+  assert.ok(job, 'the refresh runs as a visible job');
+  return f.server.panel.jobs.wait(job);
+}
+
+test('start and Rebuild refresh stale existing working copies so the listing shows new manifest fields at once', async t => {
+  const f = await fixture(t), p = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  const record = path.join(embeddedProjectRoot(f.core, f.workspace, f.projects, p), 'state.json'), before = await fs.readFile(record, 'utf8');
+  const componentLibraries = { 'bundled:ui-kit': { props: { theme: 'theme' }, defaults: { theme: 'default' } } };
+  await f.write(path.join(f.source, 'xrb-project.json'), { ...JSON.parse(await fs.readFile(path.join(f.source, 'xrb-project.json'), 'utf8')), componentLibraries });
+  const stale = (await f.catalog()).projects.find((item: any) => item.id === 'bundled:sample');
+  assert.equal(stale.manifest.componentLibraries, undefined, 'discovery shows the existing working copy');
+  assert.equal(await fs.readFile(record, 'utf8'), before, 'discovery never refreshes');
+  const done = await refreshWorkingCopies(f);
+  assert.equal(done.state, 'done', done.error ?? ''); assert.deepEqual((done.result as any).updated, ['sample']);
+  const listed = (await f.catalog()).projects.find((item: any) => item.id === 'bundled:sample');
+  assert.deepEqual(listed.manifest.componentLibraries, componentLibraries); assert.equal(listed.refreshProblem, null);
+  await f.write(path.join(f.source, 'dist/index.html'), '<html><head></head><body>after rebuild</body></html>');
+  f.server.panel.desktopSetup.isBusy = async () => false;
+  f.server.panel.desktopSetup.deps.tools = async () => ({ cmake: 'checked', generator: 'checked' } as never);
+  f.server.panel.rebuildDeps.rebuildNative = async () => ({}) as never;
+  const rebuild = await f.request('POST', '/api/host/rebuild');
+  assert.equal(rebuild.status, 202, rebuild.text);
+  assert.equal((await f.server.panel.jobs.wait(f.server.panel.jobs.get(rebuild.json.id)!)).state, 'done');
+  const followUp = f.server.panel.jobs.list().find(job => job.kind === 'project-refresh' && job.id > rebuild.json.id);
+  assert.ok(followUp, 'Rebuild finishes with the working-copy refresh');
+  assert.equal((await f.server.panel.jobs.wait(f.server.panel.jobs.get(followUp.id)!)).state, 'done');
+  assert.match(await fs.readFile(path.join((await f.bundled()).dir, 'dist/index.html'), 'utf8'), /after rebuild/);
+  const again = await refreshWorkingCopies(f);
+  assert.deepEqual((again.result as any).updated, [], 'a current working copy is left alone');
+});
+
+test('discovery and the refresh job never materialize a project that has no working copy', async t => {
+  const f = await fixture(t);
+  await f.write(path.join(f.source, 'dist/index.html'), '<html><head></head><body>changed</body></html>');
+  await f.catalog(); await f.request('GET', '/api/projects/bundled%3Asample');
+  await assert.rejects(fs.access(path.join(f.projects, '.xrb')), 'discovery alone never writes');
+  const done = await refreshWorkingCopies(f);
+  assert.equal(done.state, 'done', done.error ?? ''); assert.deepEqual((done.result as any).updated, []);
+  await assert.rejects(fs.access(path.join(f.projects, '.xrb')), 'unmaterialized projects stay unmaterialized');
+});
+
+test('a conflicting local edit refuses the automatic refresh visibly and leaves state unchanged until resolved', async t => {
+  const f = await fixture(t);
+  await f.write(path.join(f.source, 'local.txt'), 'base');
+  const p = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+  await f.write(path.join(p.dir, 'local.txt'), 'my edit'); await f.write(path.join(f.source, 'local.txt'), 'conflicting upstream');
+  const record = path.join(embeddedProjectRoot(f.core, f.workspace, f.projects, p), 'state.json'), before = await fs.readFile(record, 'utf8');
+  const failed = await refreshWorkingCopies(f);
+  assert.equal(failed.state, 'failed'); assert.match(failed.error!, /sample/);
+  assert.ok(failed.lines.some(line => /local.txt.*conflicting local changes/.test(line)), failed.lines.join('\n'));
+  assert.equal(await fs.readFile(record, 'utf8'), before); assert.equal(await fs.readFile(path.join(p.dir, 'local.txt'), 'utf8'), 'my edit');
+  const listed = (await f.request('GET', '/api/projects/bundled%3Asample')).json;
+  assert.match(listed.refreshProblem, /conflicting local changes.*Run or Build to retry/);
+  assert.ok(listed.errors.some((e: any) => e.message === listed.refreshProblem), 'the reason is shown with the project');
+  await assert.rejects(f.server.panel.prepareProject(await f.bundled()), /conflicting local changes/, 'the next Run/Build behaves as before');
+  await f.write(path.join(p.dir, 'local.txt'), 'conflicting upstream');
+  await f.server.panel.prepareProject(await f.bundled());
+  assert.equal((await f.request('GET', '/api/projects/bundled%3Asample')).json.refreshProblem, null);
+});
+
+test('a running project is not refreshed under it and follows once it is idle', async t => {
+  const f = await fixture(t);
+  await f.write(path.join(f.source, 'xrb-project.json'), { name: 'Native sample', kind: 'app', entry: 'dist' });
+  await f.write(path.join(f.core, 'native/host/build/Release/xrb-host.exe'), 'synthetic host; launch is intercepted');
+  const runner = f.server.panel.runner;
+  runner.start = async request => {
+    Object.defineProperty(runner, 'busy', { configurable: true, value: true });
+    Object.defineProperty(runner, 'projectId', { configurable: true, value: request.projectId });
+  };
+  try {
+    await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());
+    const started = await f.request('POST', '/api/projects/bundled%3Asample/run', { mode: 'built' });
+    assert.equal(started.status, 200, started.text);
+    for (let i = 0; i < 100 && f.server.panel.jobs.active().length; i++) await sleep(10);
+    const p = await f.bundled(), record = path.join(embeddedProjectRoot(f.core, f.workspace, f.projects, p), 'state.json'), before = await fs.readFile(record, 'utf8');
+    await f.write(path.join(f.source, 'dist/index.html'), '<html><head></head><body>while running</body></html>');
+    const deferred = await refreshWorkingCopies(f);
+    assert.equal(deferred.state, 'done', deferred.error ?? ''); assert.deepEqual((deferred.result as any).deferred, ['Native sample']);
+    assert.equal(await fs.readFile(record, 'utf8'), before, 'the running working copy is untouched');
+    assert.match((await f.request('GET', '/api/projects/bundled%3Asample')).json.refreshProblem, /in use.*when it is idle/);
+    Reflect.deleteProperty(runner, 'busy'); Reflect.deleteProperty(runner, 'projectId'); runner.emit('state', { phase: 'idle' });
+    for (let i = 0; i < 300 && await fs.readFile(record, 'utf8') === before; i++) await sleep(20);
+    for (let i = 0; i < 300 && f.server.panel.jobs.active().length; i++) await sleep(20);
+    assert.notEqual(await fs.readFile(record, 'utf8'), before, 'the refresh follows when the project is idle');
+    assert.match(await fs.readFile(path.join((await f.bundled()).dir, 'dist/index.html'), 'utf8'), /while running/);
+    assert.equal((await f.request('GET', '/api/projects/bundled%3Asample')).json.refreshProblem, null);
+  } finally {
+    Reflect.deleteProperty(runner, 'busy'); Reflect.deleteProperty(runner, 'projectId'); runner.emit('state', { phase: 'idle' });
+  }
+});
+
 test('source update revalidates concurrent input edits and rejects unsafe links without losing the previous generation', async t => {
   const f = await fixture(t); await f.write(path.join(f.source, 'source.txt'), 'base');
   const p = await prepareEmbeddedProject(f.core, f.workspace, f.projects, await f.bundled());

@@ -117,14 +117,48 @@ async function prepareProject(core: string, workspace: string, projects: string,
   if (effective.stateProblem || effective.readOnly) throw new HttpError(409, effective.stateProblem ?? 'Embedded project preparation is incomplete');
   if ((p.workingRoot && (p.workingRoot !== effective.workingRoot || effective.manifestMtimeMs !== p.manifestMtimeMs || JSON.stringify(effective.manifest) !== JSON.stringify(p.manifest))) || (exists && p.readOnly && inputHash(JSON.stringify(effective.manifest)) !== state.saved.initialManifest))
     throw new HttpError(409, 'Effective project settings changed; reload before continuing');
+  if (await installedSourcesChanged(core, p, state, scope)) return refreshProject(core, workspace, projects, effective, state, scope);
+  return effective;
+}
+
+async function installedSourcesChanged(core: string, p: Project, state: Awaited<ReturnType<typeof stateRecord>>, scope: ReturnType<typeof identity>): Promise<boolean> {
   const installed = await readProject(scope.source, p.id, p.section);
   const baseline = state.saved.version === 2 ? await readSourceBaseline(state.work, state.saved.baseline, state.scope.relative) : null;
   // Static dist/ files are intentionally absent from the shared package-build digest,
   // but are real installed inputs for an app with no compilation step.
-  if (!baseline || state.scope.relative !== scope.relative || state.saved.inputs !== (await embeddedInputs(core, state.saved.excluded)).fingerprint
-    || inputHash(JSON.stringify(baseline.files)) !== inputHash(JSON.stringify(await sourceFiles(path.join(core, 'embedded'), state.saved.excluded, scope.relative, installed?.manifest ?? null))))
-    return refreshProject(core, workspace, projects, effective, state, scope);
-  return effective;
+  return !baseline || state.scope.relative !== scope.relative || state.saved.inputs !== (await embeddedInputs(core, state.saved.excluded)).fingerprint
+    || inputHash(JSON.stringify(baseline.files)) !== inputHash(JSON.stringify(await sourceFiles(path.join(core, 'embedded'), state.saved.excluded, scope.relative, installed?.manifest ?? null)));
+}
+
+/**
+ * Read-only: whether an existing working copy is behind its installed source. False for a project that was
+ * never materialized. Invalid state throws, so it stays visible instead of being treated as current.
+ */
+export async function embeddedSourcesChanged(core: string, workspace: string, projects: string, p: Project): Promise<boolean> {
+  if (p.origin !== 'bundled') return false;
+  const owned = { ...p, productDir: p.productDir ?? p.dir, integrationWorkspace: workspace };
+  if (owned.stateProblem) throw new HttpError(409, owned.stateProblem);
+  const root = embeddedProjectRoot(core, workspace, projects, owned);
+  assertWritablePath(core, projects, root);
+  if (!await fs.lstat(root).catch((e: NodeJS.ErrnoException) => { if (e.code === 'ENOENT') return null; throw e; })) return false;
+  return installedSourcesChanged(core, owned, await stateRecord(core, workspace, projects, owned), identity(core, workspace, projects, owned));
+}
+
+/**
+ * Brings an existing working copy up to its installed source through the same locked merge as Run/Build.
+ * Returns null, without creating anything, when the project was never materialized.
+ */
+export async function refreshEmbeddedProject(core: string, workspace: string, projects: string, p: Project): Promise<Project | null> {
+  if (p.origin !== 'bundled') return null;
+  const owned = { ...p, productDir: p.productDir ?? p.dir, integrationWorkspace: workspace };
+  try {
+    return await withEmbeddedProjectLock(core, projects, owned, async () => {
+      const root = embeddedProjectRoot(core, workspace, projects, owned);
+      assertWritablePath(core, projects, root);
+      if (!await fs.lstat(root).catch((e: NodeJS.ErrnoException) => { if (e.code === 'ENOENT') return null; throw e; })) return null;
+      return prepareProject(core, workspace, projects, owned);
+    });
+  } catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(409, `Embedded project update failed: ${(error as Error).message}`); }
 }
 
 async function installedStage(core: string, projects: string, root: string, before: Awaited<ReturnType<typeof embeddedInputs>>, excluded: string[], relative: string, source: Project) {

@@ -242,6 +242,7 @@ export async function describeProject(projects: string, p: Project, panel: Panel
     canDelete: p.origin !== 'bundled',
     preferenceKey: p.origin === 'bundled' ? `bundled:${path.basename(embeddedProjectRoot(panel.repo, panel.workspace, projects, p))}` : p.id,
     stateProblem: p.stateProblem ?? null,
+    refreshProblem: panel.workingCopyRefreshProblem(p),
     runDefaults: p.runDefaults ?? runSettings?.value?.values ?? null,
     build: output ? { path: path.relative(panel.workspace, projectBuildRoot(panel.repo, panel.workspace, p)).split(path.sep).join('/'), origin: output.origin, generation: output.generation, problem: output.problem, canRebuild: buildPlan?.available ?? false, reason: buildPlan?.reason ?? null } : null,
     runSettings: runSettings?.value ?? null,
@@ -251,7 +252,7 @@ export async function describeProject(projects: string, p: Project, panel: Panel
     dir: path.relative(await fs.realpath(p.readOnly ? panel.repo : projects), p.dir).split(path.sep).join('/'),
     manifest: m,
     componentGroups: m ? await projectComponentGroups(panel.repo, panel.workspace, projects, m) : [],
-    errors: [...p.errors, ...(p.stateProblem ? [{ field: '', message: p.stateProblem }] : []), ...(runSettings?.problem ? [{ field: '', message: `${runSettings.problem} (${projectRunSettingsFile(panel.repo, panel.workspace, p)})` }] : [])],
+    errors: [...p.errors, ...(p.stateProblem ? [{ field: '', message: p.stateProblem }] : []), ...(panel.workingCopyRefreshProblem(p) ? [{ field: '', message: panel.workingCopyRefreshProblem(p)! }] : []), ...(runSettings?.problem ? [{ field: '', message: `${runSettings.problem} (${projectRunSettingsFile(panel.repo, panel.workspace, p)})` }] : [])],
     manifestMtimeMs: p.manifestMtimeMs,
     manifestRevision: p.origin === 'bundled' ? embeddedManifestRevision(p, runSettings?.value?.revision) : undefined,
     entryExists: webBuildMs !== null,
@@ -947,6 +948,8 @@ export async function launch(opts: { port: number; open: boolean; repo?: string;
     s.server.listen(opts.port, '127.0.0.1', () => resolve());
   });
   log(`[panel] listening on ${url} (core ${s.panel.repo}, workspace ${s.panel.workspace}, projects ${s.panel.projects})`);
+  // Existing embedded working copies follow installed source changes (git pull, Update) without waiting for a Run.
+  s.panel.refreshEmbeddedWorkingCopies('after start');
   if (opts.open) browser(url);
   return { result: 'started', server: s };
 }
