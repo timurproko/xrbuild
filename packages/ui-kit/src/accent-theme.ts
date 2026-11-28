@@ -9,7 +9,8 @@ const ACCENT = '#4a7dff';
 const COLORS = {
   background: '#15181d', base: '#262c36', well: '#1a1e25',
   // Bodies are the accent; hover and press tint them toward a lighter accent.
-  cap: ACCENT, capDark: '#2f4f9e', track: '#39414f', accent: '#8fb0ff',
+  // capDark: unselected segments, neutral like the switch's off track, so only the selected one carries the accent.
+  cap: ACCENT, capDark: '#38404d', track: '#39414f', accent: '#8fb0ff',
   text: '#e8ecf2', muted: '#8a94a6', done: '#5bd18b', onCap: '#ffffff',
 } as const;
 /** The slider fill: half accent, half white, so it is never a flat, harsh accent. */
@@ -76,7 +77,9 @@ function geometry(role: VisualRole, input: GeometryInput): THREE.BufferGeometry 
     case 'box': {
       const [w, h, d, r = Math.min(w, h) / 2] = a;
       // The slider thumb is an upright capsule, the pill Button's shape turned on end; its one mark is the grip line below.
-      result = role === 'sliderHandle' ? slab(w * THUMB_WIDEN, h, d, Math.min(w * THUMB_WIDEN, h) / 2) : slab(w, h, d, r);
+      // Segmented: a capsule tray holding capsule keys, like the switch track and the pill Button.
+      result = role === 'sliderHandle' ? slab(w * THUMB_WIDEN, h, d, Math.min(w * THUMB_WIDEN, h) / 2)
+        : role === 'segmentWell' || role === 'segmentCap' ? slab(w, h, d, Math.min(w, h) / 2) : slab(w, h, d, r);
       break;
     }
     case 'roundedDisc': result = puck(a[0] * (role === 'dialKnob' ? DIAL_TO_ROUND : role === 'switchKnob' ? SWITCH_FILL : 1), a[1]); break;

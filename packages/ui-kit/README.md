@@ -65,7 +65,7 @@ and a slider that fills inside its dark channel with a half-accent, half-white f
 
 | Elements | Accent mesh treatment |
 | --- | --- |
-| Board, pill Button, Segmented | Filleted slabs; pill Buttons as solid accent capsules without wells |
+| Board, pill Button, Segmented | Filleted slabs; pill Buttons as solid accent capsules without wells; Segmented as capsule keys in a capsule tray, neutral until selected |
 | Round Button, Dial | Solid accent pucks with a quarter-round fillet into the face, without wells; the dial knob matches the round Button's size and its value dots sit further out |
 | Switch | A capsule track like the pill Button with an accent puck thumb that fills it |
 | Continuous/stepped Slider | Dark filleted channel filled inside with a half-accent fill, upright accent capsule thumb with one white line the size of the dial's pointer |

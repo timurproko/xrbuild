@@ -34,10 +34,10 @@ for(const theme of ['default','accent'])test(`${theme} component composition ret
  for(const [name,position]of [['Button (pill)',[-0.215,0.105,0]],['Dialog',[-0.075,0.105,0]],['Switch',[0.075,0.105,0]],['Interactable',[0.215,0.105,0]],['Stepped slider',[-0.19,-0.105,0]],['Slider',[0.19,-0.105,0]],['Trackball',[0,-0.01,0.02]],['Button (round)',[-0.215,-0.01,0]],['Dial',[0.215,-0.01,0]]])assert.deepEqual(find(name).getWorldPosition(state.app.camera.position.clone()).toArray(),position,name);
  const mode=controls.find(c=>Array.isArray(c.options));assert.equal(mode.latchSelected,false);assert.equal(mode.title.visible,false);assert.equal(mode.status.visible,false);
  mode.select(2,'hand');assert.equal(find('Trackball').axis,'y');mode.select(2,'hand');assert.equal(find('Trackball').axis,'y');mode.select(0,'mouse');assert.equal(find('Trackball').axis,'free');
- find('Dialog').emit('click',{source:'hand'});assert.equal(find('Glass dialog').isOpen,true);
- find('Interactable').set(false,'hand');assert.equal(find('Slider').enabled,false);assert.equal(find('Glass dialog').enabled,true);assert.equal(find('Interactable').status.text,'Off: other controls ignore input');
+ find('Dialog').emit('click',{source:'hand'});assert.equal(find('Dialog Title').isOpen,true);
+ find('Interactable').set(false,'hand');assert.equal(find('Slider').enabled,false);assert.equal(find('Dialog Title').enabled,true);assert.equal(find('Interactable').status.text,'Off: other controls ignore input');
  const identities=all(state);state.handle.update(React.createElement(UiKitScene,{theme:theme==='default'?'accent':'default'}));await new Promise(r=>setTimeout(r,35));
- assert.deepEqual(all(state),identities);assert.equal(find('Slider').enabled,false);assert.equal(find('Glass dialog').isOpen,true);assert.equal(find('Trackball').axis,'free');
+ assert.deepEqual(all(state),identities);assert.equal(find('Slider').enabled,false);assert.equal(find('Dialog Title').isOpen,true);assert.equal(find('Trackball').axis,'free');
  find('Interactable').set(true,'mouse');assert.equal(find('Slider').enabled,true);assert.equal(find('Interactable').status.text,'On');
  state.tick(1000);state.tick(1016);state.tick(1032);assert.ok(state.classes.has('ready'));assert.equal(state.app.camera.near,0.01);assert.equal(state.app.camera.far,5);
  const targets=controls.flatMap(c=>c.targets);await state.exports.dispose();for(const target of targets)assert.equal(state.app.xrb.interaction.has(target),false);

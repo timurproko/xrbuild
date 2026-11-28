@@ -47,6 +47,6 @@ function UiKitContent() {
     <Dial ref={remember('dial')} title="Dial" position={[0.215, -0.01, 0]} enabled={enabled} />
     <Button ref={remember('dialogButton')} title="Dialog" shape="pill" text="Open" position={[-0.075, 0.105, 0]} enabled={enabled}
       onClick={event => dialog.current?.open(event.source as 'hand' | 'mouse')} />
-    <Dialog ref={dialog} title="Glass dialog" text={'A sheet 7 cm in front of the board.\nThe board shows through, blurred.'} />
+    <Dialog ref={dialog} title="Dialog Title" text={'A sheet 7 cm in front of the board.\nThe board shows through, blurred.'} />
   </>;
 }
